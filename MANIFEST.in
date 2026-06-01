@@ -1,0 +1,15 @@
+include LICENSE
+include NOTICE
+include README.md
+include CHANGELOG.md
+include pyproject.toml
+graft src
+prune src/qcoder/pro_v0
+prune tests
+prune docs
+exclude docs/pro-v0-install.md
+exclude docs/private-alpha-quickstart.md
+exclude docs/private-alpha-release-candidate-validation.md
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude .DS_Store

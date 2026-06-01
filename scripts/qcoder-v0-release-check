@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/qcoder-public-release-check.XXXXXX")"
+BUILD_VENV="$TMP_ROOT/build-venv"
+RUN_VENV="$TMP_ROOT/run-venv"
+DIST_DIR="$TMP_ROOT/dist"
+QASM_PATH="$TMP_ROOT/demo.qasm"
+COUNTS_PATH="$TMP_ROOT/counts.json"
+CTX_JSON="$TMP_ROOT/preflight.context.json"
+CTX_MD="$TMP_ROOT/preflight.context.md"
+REV_JSON="$TMP_ROOT/execution.review.json"
+REV_MD="$TMP_ROOT/execution.review.md"
+
+cleanup() {
+  rm -rf "$TMP_ROOT"
+}
+trap cleanup EXIT
+
+run_cmd() {
+  echo "+ $*"
+  "$@"
+}
+
+echo "==> qCoder public release rehearsal (Free + Pro shell)"
+echo "==> workspace: $ROOT_DIR"
+echo "==> temp dir: $TMP_ROOT"
+
+if ! python3 - <<'PY'
+import sys
+raise SystemExit(0 if sys.version_info >= (3, 11) else 1)
+PY
+then
+  echo "release-check: python3 must be >= 3.11 (current: $(python3 --version 2>&1))" >&2
+  exit 1
+fi
+
+python3 -m venv "$BUILD_VENV"
+python3 -m venv "$RUN_VENV"
+
+run_cmd "$BUILD_VENV/bin/python" -m pip install --upgrade pip setuptools wheel build
+run_cmd "$BUILD_VENV/bin/python" -m build --sdist --wheel --outdir "$DIST_DIR" "$ROOT_DIR"
+
+WHEEL_PATH="$(ls "$DIST_DIR"/qcoder-*.whl | head -n 1)"
+SDIST_PATH="$(ls "$DIST_DIR"/qcoder-*.tar.gz | head -n 1)"
+if [[ -z "${WHEEL_PATH:-}" || -z "${SDIST_PATH:-}" ]]; then
+  echo "release-check: expected wheel and sdist were not produced" >&2
+  exit 1
+fi
+
+echo "==> built wheel: $WHEEL_PATH"
+echo "==> built sdist: $SDIST_PATH"
+
+run_cmd "$RUN_VENV/bin/python" -m pip install --upgrade pip
+export PYTHONPATH=
+run_cmd "$RUN_VENV/bin/python" -m pip install --force-reinstall --no-deps "$WHEEL_PATH"
+if [[ ! -x "$RUN_VENV/bin/qcoder" ]]; then
+  echo "release-check: qcoder console script missing after wheel install" >&2
+  exit 1
+fi
+
+cat > "$QASM_PATH" <<'QASM'
+OPENQASM 2.0;
+include "qelib1.inc";
+qreg q[2];
+creg c[2];
+h q[0];
+cx q[0],q[1];
+measure q[0] -> c[0];
+measure q[1] -> c[1];
+QASM
+
+cat > "$COUNTS_PATH" <<'JSON'
+{"00": 5, "11": 3}
+JSON
+
+run_cmd "$RUN_VENV/bin/qcoder" --help
+run_cmd "$RUN_VENV/bin/qcoder" analyze "$QASM_PATH" --json
+run_cmd "$RUN_VENV/bin/qcoder" context "$QASM_PATH" --out-json "$CTX_JSON" --out-md "$CTX_MD"
+run_cmd "$RUN_VENV/bin/qcoder" review --counts-json "$COUNTS_PATH" --format qiskit_counts --preflight-json "$CTX_JSON" --out-json "$REV_JSON" --out-md "$REV_MD"
+run_cmd "$RUN_VENV/bin/qcoder" pro --help
+run_cmd "$RUN_VENV/bin/qcoder" pro signup
+run_cmd "$RUN_VENV/bin/qcoder" pro status
+
+if "$RUN_VENV/bin/qcoder" pro workflow --qasm "$QASM_PATH" --project-dir "$TMP_ROOT/project"; then
+  echo "release-check: expected pro workflow stub to fail without hosted service" >&2
+  exit 1
+fi
+
+python3 - <<PY
+import tarfile
+import zipfile
+from pathlib import Path
+
+wheel = Path("$WHEEL_PATH")
+sdist = Path("$SDIST_PATH")
+
+forbidden = (
+    "qcoder/pro_v0/",
+    "test_pro_v0_",
+    "docs/pro-v0-install.md",
+    "docs/private-alpha-quickstart.md",
+    "docs/private-alpha-release-candidate-validation.md",
+)
+
+with zipfile.ZipFile(wheel) as zf:
+    names = zf.namelist()
+    for fragment in forbidden:
+        if any(fragment in name for name in names):
+            raise SystemExit(f"release-check: forbidden wheel content: {fragment}")
+
+with tarfile.open(sdist, "r:gz") as tf:
+    names = tf.getnames()
+    for fragment in forbidden:
+        if any(fragment in name for name in names):
+            raise SystemExit(f"release-check: forbidden sdist content: {fragment}")
+PY
+
+echo "==> public package checks passed"

@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.dist-info/
+build/
+dist/
+
+# venv
+.venv/
+
+# local outputs
+artifacts/**/*
+analysis/**/*
+runs/
+
+# Local generated circuit corpora
+circuits/tmp_*/
+circuits/algorithms_generated/
+circuits/synthetic_diagnostics/
+circuits/generated_corpus_manifest.jsonl
+
+# Local generated feature/training artifacts
+data/artifacts/
+data/experiments/
+data/features/generated_features.jsonl
+data/features/*.jsonl
+data/training/joined_observations*.jsonl
+data/training/joined_observations*.csv
+data/training/generated_feature_coverage_summary.json
+data/training/*.jsonl
+data/runs/**/*.json
+data/runs/**/*.jsonl
+
+# Windows zone identifier (e.g. file.qasm:Zone.Identifier)
+*:Zone.Identifier
+*Zone.Identifier*
+
+# editor
+.vscode/
+.cursor/

@@ -1,0 +1,54 @@
+from __future__ import annotations
+
+import io
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
+
+from qcoder.cli import main
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = REPO_ROOT / "src" / "qcoder"
+
+
+def _read(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def test_public_source_tree_excludes_pro_implementation() -> None:
+    pro_dir = SRC_ROOT / "pro_v0"
+    assert not any(pro_dir.glob("*.py"))
+
+
+def test_cli_has_no_pro_v0_imports() -> None:
+    cli_text = _read(SRC_ROOT / "cli.py")
+    assert "qcoder.pro_v0" not in cli_text
+
+
+def test_manifest_excludes_private_alpha_docs() -> None:
+    manifest = _read(REPO_ROOT / "MANIFEST.in")
+    assert "exclude docs/pro-v0-install.md" in manifest
+    assert "exclude docs/private-alpha-quickstart.md" in manifest
+    assert "exclude docs/private-alpha-release-candidate-validation.md" in manifest
+    assert "prune src/qcoder/pro_v0" in manifest
+    assert "graft tests" not in manifest
+
+
+def test_pro_shell_help_mentions_service_backed_preview() -> None:
+    out = io.StringIO()
+    with redirect_stdout(out):
+        try:
+            rc = main(["pro", "--help"])
+        except SystemExit as exc:
+            rc = int(exc.code)
+    assert rc == 0
+    text = out.getvalue().lower()
+    assert "service-backed" in text
+    assert "preview" in text
+
+
+def test_pro_workflow_stub_fails_cleanly_without_service() -> None:
+    err = io.StringIO()
+    with redirect_stderr(err):
+        rc = main(["pro", "workflow", "--qasm", "demo.qasm", "--project-dir", "/tmp/project"])
+    assert rc == 2
+    assert "not configured" in err.getvalue().lower()

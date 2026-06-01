@@ -1,0 +1,183 @@
+{
+  "model_pack_schema_version": "resource_guidance_pack.v0",
+  "model_pack_id": "resource_guidance_local_v0",
+  "model_pack_version": "0.1.0-candidate",
+  "target_feature_schema_versions": [
+    "0.4.0"
+  ],
+  "targets": [
+    "mps_pressure",
+    "mps_bond_ladder"
+  ],
+  "rule_evaluation": "first_match",
+  "condition_logic": "all",
+  "no_match_behavior": "fallback_deterministic",
+  "training_data": {
+    "curriculum_id": "synthetic_public_mps_curriculum_candidate_v0",
+    "allowed_data": [
+      "synthetic_public_curriculum_only",
+      "qcoder_owned_generated_variants"
+    ],
+    "excluded_data": [
+      "real_user_telemetry",
+      "pro_private_workflows",
+      "unaudited_archive_data"
+    ]
+  },
+  "features": [
+    "n_qubits",
+    "n_cbits",
+    "n_measure_ops",
+    "n_2q_gate_ops",
+    "n_param_ops",
+    "real_depth",
+    "entangling_depth",
+    "n_entangling_layers",
+    "cut_max",
+    "cut_mean",
+    "cut_entropy",
+    "n_active_cuts",
+    "span_avg",
+    "span_max",
+    "span_long_range_ratio",
+    "ig_edge_density",
+    "ig_avg_degree",
+    "ig_is_connected"
+  ],
+  "support_bounds": {
+    "n_qubits": {
+      "min": 1,
+      "max": 64
+    }
+  },
+  "outputs": {
+    "mps_ladders": {
+      "low": [
+        16,
+        32
+      ],
+      "medium": [
+        32,
+        64,
+        128
+      ],
+      "high": [
+        64,
+        128,
+        256
+      ]
+    }
+  },
+  "output_mapping": {
+    "mps_pressure": "simulation_guidance.mps_bond_dimension.pressure",
+    "mps_ladder": "simulation_guidance.mps_bond_dimension.starting_points"
+  },
+  "rules": [
+    {
+      "rule_id": "candidate_mps_low_structural_v0",
+      "description": "Hand-authored validation example: modest entanglement and small cuts map to low MPS pressure ladder.",
+      "conditions": [
+        {
+          "feature": "entangling_depth",
+          "op": "<",
+          "value": 20
+        },
+        {
+          "feature": "cut_max",
+          "op": "<",
+          "value": 8
+        }
+      ],
+      "output": {
+        "mps_pressure": "low",
+        "mps_ladder": "low"
+      },
+      "confidence": "medium",
+      "caveats": [
+        "structural_proxy_only",
+        "simulator_implementation_dependent"
+      ]
+    },
+    {
+      "rule_id": "candidate_mps_medium_structural_v0",
+      "description": "Hand-authored validation example: moderate entanglement and cuts below high-only structural thresholds.",
+      "conditions": [
+        {
+          "feature": "entangling_depth",
+          "op": "<",
+          "value": 80
+        },
+        {
+          "feature": "cut_max",
+          "op": "<",
+          "value": 32
+        }
+      ],
+      "output": {
+        "mps_pressure": "medium",
+        "mps_ladder": "medium"
+      },
+      "confidence": "medium",
+      "caveats": [
+        "structural_proxy_only",
+        "ordering_dependent_in_real_simulators"
+      ]
+    },
+    {
+      "rule_id": "candidate_mps_high_entangling_depth_v0",
+      "description": "Hand-authored validation example: large entangling depth suggests high MPS pressure ladder (narrow threshold).",
+      "conditions": [
+        {
+          "feature": "entangling_depth",
+          "op": ">=",
+          "value": 80
+        }
+      ],
+      "output": {
+        "mps_pressure": "high",
+        "mps_ladder": "high"
+      },
+      "confidence": "low",
+      "caveats": [
+        "single_signal_threshold_only",
+        "prefer_deterministic_baseline_when_no_match_elsewhere"
+      ]
+    },
+    {
+      "rule_id": "candidate_mps_high_cut_max_v0",
+      "description": "Hand-authored validation example: large cut width suggests high MPS pressure ladder (narrow threshold).",
+      "conditions": [
+        {
+          "feature": "cut_max",
+          "op": ">=",
+          "value": 32
+        }
+      ],
+      "output": {
+        "mps_pressure": "high",
+        "mps_ladder": "high"
+      },
+      "confidence": "low",
+      "caveats": [
+        "single_signal_threshold_only",
+        "prefer_deterministic_baseline_when_no_match_elsewhere"
+      ]
+    }
+  ],
+  "fallback": {
+    "use_deterministic_heuristics_when": [
+      "unsupported_feature_schema",
+      "out_of_support_bounds",
+      "no_matching_rule",
+      "low_coverage"
+    ]
+  },
+  "non_claims": [
+    "not_optimality_proof",
+    "not_fidelity_proof",
+    "not_hardware_correctness_proof",
+    "not_runtime_guarantee",
+    "not_backend_ranking",
+    "not_causal_savings"
+  ]
+}
