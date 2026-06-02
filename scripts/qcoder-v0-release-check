@@ -93,8 +93,26 @@ run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro status
 run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro validate
 run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro workflow --qasm "$QASM_PATH" --project-dir "$TMP_ROOT/project" --dry-run-manifest "$WORKFLOW_MANIFEST_JSON"
 
+# Pro Preview unit tests (no live service)
+run_cmd python3 -m pytest \
+  "$ROOT_DIR/tests/test_pro_preview_config.py" \
+  "$ROOT_DIR/tests/test_pro_preview_manifest.py" \
+  "$ROOT_DIR/tests/test_pro_preview_client.py" \
+  "$ROOT_DIR/tests/test_pro_preview_cli.py" \
+  -q
+
 if env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro workflow --qasm "$QASM_PATH" --project-dir "$TMP_ROOT/project"; then
-  echo "release-check: expected pro workflow stub to fail without hosted service" >&2
+  echo "release-check: expected pro workflow without flags to fail" >&2
+  exit 1
+fi
+
+if env HOME="$PRO_HOME" QCODER_PRO_TOKEN="$PRO_CHECK_TOKEN" "$RUN_VENV/bin/qcoder" pro workflow \
+  --qasm "$QASM_PATH" --submit 2>"$TMP_ROOT/submit-blocked.err"; then
+  echo "release-check: expected submit without configured service URL to fail" >&2
+  exit 1
+fi
+if ! grep -q "No production hosted Pro service" "$TMP_ROOT/submit-blocked.err"; then
+  echo "release-check: submit guardrail message missing production-hosted clarification" >&2
   exit 1
 fi
 

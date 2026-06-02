@@ -59,5 +59,5 @@ def test_pro_workflow_stub_fails_cleanly_without_service() -> None:
         rc = main(["pro", "workflow", "--qasm", "demo.qasm", "--project-dir", "/tmp/project"])
     assert rc == 2
     text = err.getvalue().lower()
-    assert "not available" in text
+    assert "dry-run-manifest" in text
     assert "--dry-run-manifest" in text

@@ -215,8 +215,8 @@ def test_workflow_without_dry_run_still_fails_cleanly(tmp_path: Path, monkeypatc
     _write_qasm(qasm)
     rc, _out, err = _capture(["pro", "workflow", "--qasm", str(qasm)])
     assert rc == 2
-    assert "not available" in err.lower()
-    assert "--dry-run-manifest" in err
+    assert "dry-run-manifest" in err
+    assert "production hosted pro service" in err.lower()
 
 
 def test_workflow_dry_run_requires_single_or_pair_mode(tmp_path: Path, monkeypatch) -> None:
@@ -325,7 +325,8 @@ def test_workflow_submit_requires_non_default_service_url(tmp_path: Path, monkey
     _write_qasm(qasm)
     rc, _out, err = _capture(["pro", "workflow", "--qasm", str(qasm), "--submit"])
     assert rc == 2
-    assert "service submit URL is not configured" in err
+    assert "production hosted pro service" in err.lower()
+    assert "service submit url is not configured" in err.lower()
 
 
 def test_workflow_submit_posts_entitlements_then_workflow_and_strips_sensitive_fields(

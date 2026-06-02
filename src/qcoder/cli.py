@@ -277,7 +277,10 @@ def _cmd_pro(argv: list[str]) -> int:
     p_validate = sub.add_parser("validate", help="Validate local Pro bootstrap config and public boundary posture.")
     p_validate.set_defaults(pro_command="validate")
 
-    p_workflow = sub.add_parser("workflow", help="Submit a Pro workflow to the hosted service (not yet available).")
+    p_workflow = sub.add_parser(
+        "workflow",
+        help="Prepare or explicitly submit a Pro workflow manifest to a configured service.",
+    )
     p_workflow.add_argument("--qasm", default=None, help="Path to a single QASM file.")
     p_workflow.add_argument("--before-qasm", default=None, help="Path to before QASM file.")
     p_workflow.add_argument("--after-qasm", default=None, help="Path to after QASM file.")
@@ -478,8 +481,9 @@ def _cmd_pro(argv: list[str]) -> int:
 
             if not service_url or service_url == DEFAULT_PRO_API_URL:
                 print(
-                    "qcoder pro workflow: service submit URL is not configured; "
-                    "use --service-url or QCODER_PRO_API_URL",
+                    "qcoder pro workflow: No production hosted Pro service is configured for "
+                    "this release. Service submit URL is not configured; use --service-url or "
+                    "QCODER_PRO_API_URL only if QRS provided one.",
                     file=sys.stderr,
                 )
                 return 2
@@ -553,10 +557,11 @@ def _cmd_pro(argv: list[str]) -> int:
             return 0
 
     print(
-        "qcoder pro workflow: hosted Pro Preview submission is not available in this build.\n"
-        "Use `qcoder pro workflow --dry-run-manifest <path>` for local contract rehearsal.\n"
-        "Use `qcoder pro workflow --submit --service-url <url>` for explicit service submit.\n"
-        f"Run `qcoder pro signup` for access details: {PREVIEW_SIGNUP_URL}",
+        "qcoder pro workflow: use --dry-run-manifest for local contract rehearsal (no network).\n"
+        "For manifest-only submit, pass --submit with --service-url (or QCODER_PRO_API_URL) "
+        "only if QRS provided a non-default service URL and token.\n"
+        "No generally available production hosted Pro service is configured in this release.\n"
+        f"Run `qcoder pro signup` for preview information: {PREVIEW_SIGNUP_URL}",
         file=sys.stderr,
     )
     return 2

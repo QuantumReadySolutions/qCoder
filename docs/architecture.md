@@ -16,11 +16,13 @@ The public `qcoder` package on `main` ships:
 - Optional **`--profiles`** on **`analyze --json`** and **`context`** — derived structural taxonomy from `feature_map`.
 - **`qcoder context`** — preflight context artifacts (JSON + Markdown).
 - **`qcoder review`** — post-run review artifacts from user-supplied counts (`qcoder` or `qiskit_counts` formats).
-- **`qcoder pro`** — **service-backed Pro bootstrap shell** (`signup`, `login`, `install`, `status`, `validate`, `workflow` dry-run manifest + hosted stub). Local commands provide non-confidential entitlement/bootstrap plumbing only; confidential Pro analysis and cards are **not** bundled in this package.
+- **`qcoder pro`** — **Pro bootstrap and client contract** (`signup`, `login`, `install`, `status`, `validate`, `workflow` dry-run manifest, optional configured manifest submit). Local commands provide non-confidential entitlement/bootstrap plumbing only; confidential Pro analysis and cards are **not** bundled in this package.
 
-Free commands are **local/offline**: no LLM calls, no telemetry upload, no QPU/simulator execution, and no card generation in the public package.
+Free commands are **local/offline**: no LLM calls, no telemetry upload, no QPU/simulator execution, and no card generation in the public package. Free commands, `pro status`, and `pro validate` perform **no upload**.
 
-Token-gating in this slice is access control only, not a secrecy boundary. `qcoder pro workflow --dry-run-manifest` builds a local contract artifact and performs no upload or hosted execution. `qcoder pro workflow --submit --service-url <url>` is an explicit manifest-only submit path to a configured service. This submit slice does not perform artifact upload, background upload, or local confidential analysis, and source contents are excluded by default.
+Token-gating in this slice is access control only, not a secrecy boundary. `qcoder pro workflow --dry-run-manifest` builds a local contract artifact and performs no upload or network calls. `qcoder pro workflow --submit --service-url <url>` is an explicit **manifest-only** client path to a **configured** service URL (not the default marketing URL). This submit slice does not perform artifact upload, background upload, source upload, or local confidential analysis.
+
+**Not in this public package:** a generally available production hosted Pro service; public account/token issuance; Cloud Run/GCS deployment; sellable hosted Pro product behavior. Those are separate/future surfaces. The public package is a bootstrap/client contract, not the hosted analyzer.
 
 ## Canonical schemas
 
@@ -32,7 +34,7 @@ Optional **`guidance`** and **`feature_profiles`** blocks are separately version
 
 qCoder is a **local evidence layer** for AI-assisted quantum development. It supplies grounded local facts for humans and bring-your-own (BYO) LLM workflows — not algorithm identity proofs, correctness proofs, speedup claims, or QPU performance claims.
 
-Public Free qCoder focuses on **structure and user-supplied execution counts**. Pro Preview (paid product offered free during Preview) will add card-enabled analysis through a protected service boundary; that logic is not distributed in PyPI wheels or this public source tree. The dry-run workflow manifest is a bootstrap/public contract surface, not the sellable hosted Pro product.
+Public Free qCoder focuses on **structure and user-supplied execution counts**. Pro Preview (paid product offered free during Preview) will add card-enabled analysis through a protected service boundary; that logic is not distributed in PyPI wheels or this public source tree. The dry-run workflow manifest and configured manifest-only submit are **client contract surfaces**, not the sellable hosted Pro product. PyPI `0.5.0a1` does not include manifest submit; newer submit behavior may exist on public `main` before the next alpha release.
 
 ## Local Pro / cards
 
