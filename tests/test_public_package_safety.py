@@ -24,6 +24,11 @@ def test_cli_has_no_pro_v0_imports() -> None:
     assert "qcoder.pro_v0" not in cli_text
 
 
+def test_pro_preview_manifest_has_no_pro_v0_imports() -> None:
+    manifest_text = _read(SRC_ROOT / "pro_preview" / "manifest.py")
+    assert "qcoder.pro_v0" not in manifest_text
+
+
 def test_manifest_excludes_private_alpha_docs() -> None:
     manifest = _read(REPO_ROOT / "MANIFEST.in")
     assert "exclude docs/pro-v0-install.md" in manifest
@@ -53,4 +58,6 @@ def test_pro_workflow_stub_fails_cleanly_without_service() -> None:
     with redirect_stderr(err):
         rc = main(["pro", "workflow", "--qasm", "demo.qasm", "--project-dir", "/tmp/project"])
     assert rc == 2
-    assert "not configured" in err.getvalue().lower()
+    text = err.getvalue().lower()
+    assert "not available" in text
+    assert "--dry-run-manifest" in text

@@ -15,6 +15,8 @@ from qcoder.pro_preview.config import (
     resolve_token,
     store_local_bootstrap_config,
 )
+from qcoder.pro_preview.errors import ProPreviewManifestError
+from qcoder.pro_preview.manifest import build_workflow_manifest, write_workflow_manifest
 from qcoder.tools.batch import analyze_qasm_dir_to_jsonl
 
 PREVIEW_SIGNUP_URL = "https://qcoder.ai/preview"
@@ -274,6 +276,11 @@ def _cmd_pro(argv: list[str]) -> int:
     p_workflow.add_argument("--before-qasm", default=None, help="Path to before QASM file.")
     p_workflow.add_argument("--after-qasm", default=None, help="Path to after QASM file.")
     p_workflow.add_argument("--project-dir", default=None, help="Local project directory.")
+    p_workflow.add_argument(
+        "--dry-run-manifest",
+        default=None,
+        help="Write a local workflow manifest JSON and perform no upload.",
+    )
     p_workflow.set_defaults(pro_command="workflow")
 
     args, unknown = p.parse_known_args(argv)
@@ -378,8 +385,41 @@ def _cmd_pro(argv: list[str]) -> int:
             print("  local cards/confidential analysis: absent")
         return 0 if payload["status"] == "ok" else 2
 
+    if cmd == "workflow":
+        if args.dry_run_manifest:
+            try:
+                manifest = build_workflow_manifest(
+                    qasm=args.qasm,
+                    before_qasm=args.before_qasm,
+                    after_qasm=args.after_qasm,
+                    project_dir=args.project_dir,
+                )
+                output_path = write_workflow_manifest(manifest, args.dry_run_manifest)
+            except (ProPreviewManifestError, OSError, RuntimeError, ValueError) as exc:
+                print(f"qcoder pro workflow: {exc}", file=sys.stderr)
+                return 2
+            payload = {
+                "schema_id": manifest["schema_id"],
+                "status": "manifest_written",
+                "manifest_path": str(output_path),
+                "mode": manifest["mode"],
+                "upload_performed": False,
+                "network_performed": False,
+            }
+            if json_output:
+                print(json.dumps(payload, indent=2, sort_keys=True))
+            else:
+                print("qCoder Pro workflow dry-run manifest written.")
+                print(f"  manifest: {output_path}")
+                print(f"  mode: {manifest['mode']}")
+                print("  upload: none performed")
+                print("  network: none performed")
+                print("  confidential Pro analysis: remains service-side")
+            return 0
+
     print(
-        "qcoder pro: hosted Pro Preview service is not configured in this build.\n"
+        "qcoder pro workflow: hosted Pro Preview submission is not available in this build.\n"
+        "Use `qcoder pro workflow --dry-run-manifest <path>` to prepare a local payload contract.\n"
         f"Run `qcoder pro signup` for access details: {PREVIEW_SIGNUP_URL}",
         file=sys.stderr,
     )

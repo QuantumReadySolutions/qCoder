@@ -13,6 +13,7 @@ CTX_JSON="$TMP_ROOT/preflight.context.json"
 CTX_MD="$TMP_ROOT/preflight.context.md"
 REV_JSON="$TMP_ROOT/execution.review.json"
 REV_MD="$TMP_ROOT/execution.review.md"
+WORKFLOW_MANIFEST_JSON="$TMP_ROOT/pro.workflow.manifest.json"
 
 cleanup() {
   rm -rf "$TMP_ROOT"
@@ -90,11 +91,38 @@ echo "+ env HOME=\"$PRO_HOME\" $RUN_VENV/bin/qcoder pro login --token <redacted>
 env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro login --token "$PRO_CHECK_TOKEN"
 run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro status
 run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro validate
+run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro workflow --qasm "$QASM_PATH" --project-dir "$TMP_ROOT/project" --dry-run-manifest "$WORKFLOW_MANIFEST_JSON"
 
 if env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro workflow --qasm "$QASM_PATH" --project-dir "$TMP_ROOT/project"; then
   echo "release-check: expected pro workflow stub to fail without hosted service" >&2
   exit 1
 fi
+
+python3 - <<PY
+import json
+from pathlib import Path
+
+manifest = json.loads(Path("$WORKFLOW_MANIFEST_JSON").read_text(encoding="utf-8"))
+if manifest.get("schema_id") != "qcoder.pro_preview.workflow_manifest.v0":
+    raise SystemExit("release-check: pro workflow manifest schema_id mismatch")
+boundary = manifest.get("boundary", {})
+for key in (
+    "dry_run",
+    "upload_performed",
+    "network_performed",
+    "source_contents_included",
+    "cards_local",
+    "local_pro_analysis",
+    "confidential_analysis_local",
+):
+    if key not in boundary:
+        raise SystemExit(f"release-check: pro workflow manifest missing boundary field {key}")
+if boundary.get("dry_run") is not True:
+    raise SystemExit("release-check: pro workflow manifest dry_run must be true")
+for key in ("upload_performed", "network_performed", "source_contents_included", "cards_local", "local_pro_analysis", "confidential_analysis_local"):
+    if boundary.get(key) is not False:
+        raise SystemExit(f"release-check: pro workflow manifest boundary {key} must be false")
+PY
 
 python3 - <<PY
 import tarfile

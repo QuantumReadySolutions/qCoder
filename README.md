@@ -41,9 +41,12 @@ qcoder pro signup
 qcoder pro install --token local-preview-token
 qcoder pro status
 qcoder pro validate
+qcoder pro workflow --qasm path/to/circuit.qasm --dry-run-manifest pro.workflow.manifest.json
 ```
 
-Token-gating is access control only, not a secrecy boundary. Local `qcoder pro` in this public package configures non-confidential bootstrap plumbing only; confidential Pro analysis is not bundled and remains service-side.
+`qcoder pro workflow --dry-run-manifest` prepares a local JSON payload contract for future hosted submission. It does not upload data, execute hosted service workflows, or bundle confidential Pro analysis.
+
+Token-gating is access control only, not a secrecy boundary. Local `qcoder pro` in this public package configures non-confidential bootstrap plumbing only; confidential Pro analysis remains service-side.
 
 Architecture notes: [`docs/architecture.md`](docs/architecture.md).
 

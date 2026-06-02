@@ -16,11 +16,11 @@ The public `qcoder` package on `main` ships:
 - Optional **`--profiles`** on **`analyze --json`** and **`context`** — derived structural taxonomy from `feature_map`.
 - **`qcoder context`** — preflight context artifacts (JSON + Markdown).
 - **`qcoder review`** — post-run review artifacts from user-supplied counts (`qcoder` or `qiskit_counts` formats).
-- **`qcoder pro`** — **service-backed Pro bootstrap shell** (`signup`, `login`, `install`, `status`, `validate`, `workflow` stub). Local commands provide non-confidential entitlement/bootstrap plumbing only; confidential Pro analysis and cards are **not** bundled in this package.
+- **`qcoder pro`** — **service-backed Pro bootstrap shell** (`signup`, `login`, `install`, `status`, `validate`, `workflow` dry-run manifest + hosted stub). Local commands provide non-confidential entitlement/bootstrap plumbing only; confidential Pro analysis and cards are **not** bundled in this package.
 
 Free commands are **local/offline**: no LLM calls, no telemetry upload, no QPU/simulator execution, and no card generation in the public package.
 
-Token-gating in this slice is access control only, not a secrecy boundary. Pro Preview uploads selected artifacts **only when the user explicitly runs a future hosted Pro service command**. Source file contents are not uploaded by default. The hosted Pro engine is not implemented in the public repo line yet.
+Token-gating in this slice is access control only, not a secrecy boundary. `qcoder pro workflow --dry-run-manifest` builds a local contract artifact and performs no upload or hosted execution. Source file contents are not included. The hosted Pro engine is not implemented in the public repo line yet.
 
 ## Canonical schemas
 
@@ -32,7 +32,7 @@ Optional **`guidance`** and **`feature_profiles`** blocks are separately version
 
 qCoder is a **local evidence layer** for AI-assisted quantum development. It supplies grounded local facts for humans and bring-your-own (BYO) LLM workflows — not algorithm identity proofs, correctness proofs, speedup claims, or QPU performance claims.
 
-Public Free qCoder focuses on **structure and user-supplied execution counts**. Pro Preview (paid product offered free during Preview) will add card-enabled analysis through a protected service boundary; that logic is not distributed in PyPI wheels or this public source tree.
+Public Free qCoder focuses on **structure and user-supplied execution counts**. Pro Preview (paid product offered free during Preview) will add card-enabled analysis through a protected service boundary; that logic is not distributed in PyPI wheels or this public source tree. The dry-run workflow manifest is a bootstrap/public contract surface, not the sellable hosted Pro product.
 
 ## Local Pro / cards
 

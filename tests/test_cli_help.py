@@ -115,6 +115,15 @@ class TestCliHelp(unittest.TestCase):
         self.assertIn("workflow", out)
         self.assertIn("service-backed", out.lower())
 
+    def test_pro_workflow_help_includes_dry_run_manifest_option(self) -> None:
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            with self.assertRaises(SystemExit) as ctx:
+                main(["pro", "workflow", "--help"])
+        self.assertEqual(ctx.exception.code, 0)
+        out = buf.getvalue()
+        self.assertIn("--dry-run-manifest", out)
+
     def test_analyze_profiles_without_json_warns_stderr_and_exit_2(self) -> None:
         root = self._repo_root()
         env = os.environ.copy()
