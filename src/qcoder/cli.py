@@ -9,14 +9,20 @@ from qcoder.pipelines.analyze import analyze_qasm
 from qcoder.pipelines.context import write_preflight_context
 from qcoder.pipelines.review import write_execution_review
 from qcoder.pro_preview.config import (
+    DEFAULT_PRO_API_URL,
     ProPreviewConfigError,
     load_local_config,
     resolve_api_url,
     resolve_token,
     store_local_bootstrap_config,
 )
+from qcoder.pro_preview.client import ProServiceClient, ProServiceClientError
 from qcoder.pro_preview.errors import ProPreviewManifestError
-from qcoder.pro_preview.manifest import build_workflow_manifest, write_workflow_manifest
+from qcoder.pro_preview.manifest import (
+    build_workflow_manifest,
+    sanitize_manifest_for_submit,
+    write_workflow_manifest,
+)
 from qcoder.tools.batch import analyze_qasm_dir_to_jsonl
 
 PREVIEW_SIGNUP_URL = "https://qcoder.ai/preview"
@@ -281,6 +287,21 @@ def _cmd_pro(argv: list[str]) -> int:
         default=None,
         help="Write a local workflow manifest JSON and perform no upload.",
     )
+    p_workflow.add_argument(
+        "--submit",
+        action="store_true",
+        help="Submit a sanitized manifest to configured service (explicit only).",
+    )
+    p_workflow.add_argument(
+        "--service-url",
+        default=None,
+        help="Invocation-only service URL override for --submit.",
+    )
+    p_workflow.add_argument(
+        "--manifest-out",
+        default=None,
+        help="Optional path to write sanitized submit manifest JSON.",
+    )
     p_workflow.set_defaults(pro_command="workflow")
 
     args, unknown = p.parse_known_args(argv)
@@ -417,9 +438,124 @@ def _cmd_pro(argv: list[str]) -> int:
                 print("  confidential Pro analysis: remains service-side")
             return 0
 
+        if args.submit:
+            try:
+                manifest = build_workflow_manifest(
+                    qasm=args.qasm,
+                    before_qasm=args.before_qasm,
+                    after_qasm=args.after_qasm,
+                    project_dir=args.project_dir,
+                )
+                submit_manifest = sanitize_manifest_for_submit(manifest)
+            except (ProPreviewManifestError, OSError, RuntimeError, ValueError) as exc:
+                print(f"qcoder pro workflow: {exc}", file=sys.stderr)
+                return 2
+
+            manifest_out_path = None
+            if args.manifest_out:
+                try:
+                    manifest_out_path = write_workflow_manifest(submit_manifest, args.manifest_out)
+                except (OSError, RuntimeError, ValueError) as exc:
+                    print(f"qcoder pro workflow: {exc}", file=sys.stderr)
+                    return 2
+
+            token = resolve_token()
+            if not token.present:
+                print(
+                    "qcoder pro workflow: --submit requires a configured token.\n"
+                    "Run `qcoder pro login --token <token>` or set QCODER_PRO_TOKEN.",
+                    file=sys.stderr,
+                )
+                return 2
+
+            if args.service_url and str(args.service_url).strip():
+                service_url = str(args.service_url).strip()
+                service_url_source = "flag"
+            else:
+                api_url = resolve_api_url()
+                service_url = (api_url.value or "").strip()
+                service_url_source = api_url.source
+
+            if not service_url or service_url == DEFAULT_PRO_API_URL:
+                print(
+                    "qcoder pro workflow: service submit URL is not configured; "
+                    "use --service-url or QCODER_PRO_API_URL",
+                    file=sys.stderr,
+                )
+                return 2
+
+            client = ProServiceClient(base_url=service_url)
+            try:
+                entitlement = client.post_entitlements_validate(token.value or "")
+            except ProServiceClientError as exc:
+                detail = exc.detail
+                code = f"{detail.error_code}: " if detail.error_code else ""
+                print(f"qcoder pro workflow: {code}{detail.message}", file=sys.stderr)
+                return 2
+            if entitlement.get("valid") is not True:
+                error_code = None
+                message = None
+                if isinstance(entitlement.get("error"), dict):
+                    error_code = entitlement["error"].get("error_code")
+                    message = entitlement["error"].get("message")
+                if not isinstance(error_code, str) or not error_code:
+                    error_code = "ENTITLEMENT_INVALID"
+                if not isinstance(message, str) or not message:
+                    message = "token rejected by configured service"
+                print(f"qcoder pro workflow: {error_code}: {message}", file=sys.stderr)
+                return 2
+
+            try:
+                workflow_payload = client.post_workflow(submit_manifest, token.value or "")
+            except ProServiceClientError as exc:
+                detail = exc.detail
+                code = f"{detail.error_code}: " if detail.error_code else ""
+                print(f"qcoder pro workflow: {code}{detail.message}", file=sys.stderr)
+                return 2
+
+            payload = {
+                "schema_id": "qcoder.pro_preview_submit_result.v0",
+                "submitted": True,
+                "service_url_configured": True,
+                "service_url_source": service_url_source,
+                "service_url": service_url,
+                "manifest_schema_id": submit_manifest.get("schema_id"),
+                "workflow_schema_id": workflow_payload.get("schema_id"),
+                "job_id": workflow_payload.get("job_id"),
+                "state": workflow_payload.get("state"),
+                "result_refs": workflow_payload.get("result_refs", []),
+                "analysis_performed": workflow_payload.get("analysis_performed"),
+                "confidential_analysis_performed": workflow_payload.get("confidential_analysis_performed"),
+                "cards_generated": workflow_payload.get("cards_generated"),
+                "production_execution": workflow_payload.get("production_execution"),
+                "local_fake": workflow_payload.get("local_fake"),
+                "upload_performed": False,
+                "source_contents_included": False,
+                "network_performed": True,
+            }
+            if manifest_out_path:
+                payload["manifest_out_path"] = str(manifest_out_path)
+            if json_output:
+                print(json.dumps(payload, indent=2, sort_keys=True))
+            else:
+                print("qCoder Pro workflow submitted to configured service.")
+                print(f"  service_url: {service_url}")
+                print(f"  job_id: {payload['job_id']}")
+                print(f"  state: {payload['state']}")
+                print(f"  upload_performed: {payload['upload_performed']}")
+                print(f"  source_contents_included: {payload['source_contents_included']}")
+                print(f"  analysis_performed: {payload['analysis_performed']}")
+                print(f"  confidential_analysis_performed: {payload['confidential_analysis_performed']}")
+                print(f"  cards_generated: {payload['cards_generated']}")
+                print(f"  production_execution: {payload['production_execution']}")
+                if manifest_out_path:
+                    print(f"  manifest_out: {manifest_out_path}")
+            return 0
+
     print(
         "qcoder pro workflow: hosted Pro Preview submission is not available in this build.\n"
-        "Use `qcoder pro workflow --dry-run-manifest <path>` to prepare a local payload contract.\n"
+        "Use `qcoder pro workflow --dry-run-manifest <path>` for local contract rehearsal.\n"
+        "Use `qcoder pro workflow --submit --service-url <url>` for explicit service submit.\n"
         f"Run `qcoder pro signup` for access details: {PREVIEW_SIGNUP_URL}",
         file=sys.stderr,
     )

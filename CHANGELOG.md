@@ -10,6 +10,7 @@ The format is based on common practice for pre-1.0 semantic versioning: **`MAJOR
 
 - Add public-safe qCoder Pro bootstrap plumbing: local token config, install/login/status/validate, no confidential Pro analysis bundled.
 - Add `qcoder pro workflow --dry-run-manifest` public contract/bootstrap output: local manifest generation with QASM hashes/bytes plus local Free analysis, no upload, no hosted execution, and no confidential Pro analysis bundled.
+- Add explicit manifest-only service submit path: `qcoder pro workflow --submit` with `--service-url` override and optional `--manifest-out`; submit remains opt-in, strips sensitive fields/paths, and does not implement artifact upload/background upload/confidential local analysis.
 
 ## 0.5.0a1 (alpha — public Free + Pro Preview shell)
 

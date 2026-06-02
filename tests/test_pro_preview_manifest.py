@@ -6,6 +6,7 @@ from pathlib import Path
 from qcoder.pro_preview.manifest import (
     WORKFLOW_MANIFEST_SCHEMA_ID,
     build_workflow_manifest,
+    sanitize_manifest_for_submit,
 )
 
 
@@ -61,3 +62,28 @@ def test_build_workflow_manifest_pair_has_before_after_inputs(tmp_path: Path) ->
     assert payload["inputs"]["before_qasm"]["sha256"] != payload["inputs"]["after_qasm"]["sha256"]
     assert payload["inputs"]["before_qasm"]["local_analysis"]["source_format"] == "qasm2"
     assert payload["inputs"]["after_qasm"]["local_analysis"]["source_format"] == "qasm2"
+
+
+def test_sanitize_manifest_for_submit_strips_paths_and_forbidden_fields(tmp_path: Path) -> None:
+    qasm = tmp_path / "single.qasm"
+    _write_qasm(qasm)
+    payload = build_workflow_manifest(qasm=str(qasm), project_dir=str(tmp_path / "project"))
+    payload["inputs"]["qasm"]["source_contents"] = "forbidden"
+    payload["inputs"]["qasm"]["operations"] = ["forbidden"]
+    payload["nested"] = {"raw_qasm": "forbidden", "source_code": "forbidden"}
+
+    sanitized = sanitize_manifest_for_submit(payload)
+
+    qasm_entry = sanitized["inputs"]["qasm"]
+    assert "supplied_path" not in qasm_entry
+    assert "source_contents" not in qasm_entry
+    assert "operations" not in qasm_entry
+    assert "raw_qasm" not in str(sanitized)
+    assert "source_code" not in str(sanitized)
+    assert sanitized["boundary"]["dry_run"] is False
+    assert sanitized["boundary"]["upload_performed"] is False
+    assert sanitized["boundary"]["source_contents_included"] is False
+    assert sanitized["boundary"]["cards_local"] is False
+    assert sanitized["boundary"]["local_pro_analysis"] is False
+    assert sanitized["boundary"]["confidential_analysis_local"] is False
+    assert sanitized["boundary"]["network_performed"] is False

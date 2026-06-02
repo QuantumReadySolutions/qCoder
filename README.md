@@ -42,9 +42,12 @@ qcoder pro install --token local-preview-token
 qcoder pro status
 qcoder pro validate
 qcoder pro workflow --qasm path/to/circuit.qasm --dry-run-manifest pro.workflow.manifest.json
+qcoder pro workflow --qasm path/to/circuit.qasm --submit --service-url http://127.0.0.1:8765
 ```
 
-`qcoder pro workflow --dry-run-manifest` prepares a local JSON payload contract for future hosted submission. It does not upload data, execute hosted service workflows, or bundle confidential Pro analysis.
+`qcoder pro workflow --dry-run-manifest` prepares a local JSON payload contract and performs no network calls.
+
+`qcoder pro workflow --submit` is an explicit manifest-only submit path to a configured service URL. This slice does not implement artifact upload, background upload, or local confidential Pro analysis. Source contents are not uploaded by default.
 
 Token-gating is access control only, not a secrecy boundary. Local `qcoder pro` in this public package configures non-confidential bootstrap plumbing only; confidential Pro analysis remains service-side.
 

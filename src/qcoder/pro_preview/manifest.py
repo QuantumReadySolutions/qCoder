@@ -11,6 +11,14 @@ from qcoder.pipelines.analyze import analyze_qasm_json
 from qcoder.pro_preview.errors import ProPreviewManifestError
 
 WORKFLOW_MANIFEST_SCHEMA_ID = "qcoder.pro_preview.workflow_manifest.v0"
+FORBIDDEN_SUBMIT_FIELDS = {
+    "source_contents",
+    "source_code",
+    "raw_source",
+    "raw_qasm",
+    "qasm_text",
+    "operations",
+}
 
 
 def build_workflow_manifest(
@@ -71,6 +79,28 @@ def write_workflow_manifest(payload: dict[str, Any], out_path: str) -> Path:
     return path
 
 
+def sanitize_manifest_for_submit(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ProPreviewManifestError("submit manifest must be a JSON object")
+
+    sanitized = _sanitize_node(payload)
+    if not isinstance(sanitized, dict):
+        raise ProPreviewManifestError("submit manifest must be a JSON object")
+
+    boundary = sanitized.get("boundary")
+    if not isinstance(boundary, dict):
+        boundary = {}
+    boundary["dry_run"] = False
+    boundary["upload_performed"] = False
+    boundary["network_performed"] = False
+    boundary["source_contents_included"] = False
+    boundary["cards_local"] = False
+    boundary["local_pro_analysis"] = False
+    boundary["confidential_analysis_local"] = False
+    sanitized["boundary"] = boundary
+    return sanitized
+
+
 def _resolve_mode(*, qasm: str | None, before_qasm: str | None, after_qasm: str | None) -> str:
     has_single = qasm is not None
     has_before = before_qasm is not None
@@ -108,3 +138,20 @@ def _qasm_manifest_entry(path_str: str) -> dict[str, Any]:
         "sha256": sha256,
         "local_analysis": analyze_qasm_json(str(path)),
     }
+
+
+def _sanitize_node(node: Any) -> Any:
+    if isinstance(node, dict):
+        sanitized: dict[str, Any] = {}
+        for key, value in node.items():
+            key_text = str(key)
+            lowered = key_text.lower()
+            if lowered == "supplied_path":
+                continue
+            if lowered in FORBIDDEN_SUBMIT_FIELDS:
+                continue
+            sanitized[key_text] = _sanitize_node(value)
+        return sanitized
+    if isinstance(node, list):
+        return [_sanitize_node(item) for item in node]
+    return node

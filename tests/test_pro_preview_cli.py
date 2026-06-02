@@ -5,8 +5,11 @@ import json
 import socket
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from typing import Any
 
+import pytest
 from qcoder.cli import main
+from qcoder.pro_preview.client import ProServiceClientError, ServiceErrorDetail
 
 
 def _capture(argv: list[str]) -> tuple[int, str, str]:
@@ -292,3 +295,171 @@ def test_workflow_dry_run_missing_qasm_file_fails_cleanly(tmp_path: Path, monkey
     )
     assert rc == 2
     assert "qcoder pro workflow:" in err
+
+
+def test_workflow_submit_requires_token(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("QCODER_PRO_TOKEN", raising=False)
+    qasm = tmp_path / "single.qasm"
+    _write_qasm(qasm)
+    rc, _out, err = _capture(
+        [
+            "pro",
+            "workflow",
+            "--qasm",
+            str(qasm),
+            "--submit",
+            "--service-url",
+            "http://127.0.0.1:8765",
+        ]
+    )
+    assert rc == 2
+    assert "requires a configured token" in err
+
+
+def test_workflow_submit_requires_non_default_service_url(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("QCODER_PRO_TOKEN", "dev-token-123")
+    monkeypatch.delenv("QCODER_PRO_API_URL", raising=False)
+    qasm = tmp_path / "single.qasm"
+    _write_qasm(qasm)
+    rc, _out, err = _capture(["pro", "workflow", "--qasm", str(qasm), "--submit"])
+    assert rc == 2
+    assert "service submit URL is not configured" in err
+
+
+def test_workflow_submit_posts_entitlements_then_workflow_and_strips_sensitive_fields(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("QCODER_PRO_TOKEN", "dev-token-123")
+    qasm = tmp_path / "single.qasm"
+    manifest_out = tmp_path / "sanitized.manifest.json"
+    _write_qasm(qasm)
+
+    calls: list[str] = []
+    captured_manifest: dict[str, Any] = {}
+
+    class FakeClient:
+        def __init__(self, *, base_url: str, timeout_s: float = 10.0) -> None:
+            assert base_url == "http://127.0.0.1:8765"
+
+        def post_entitlements_validate(self, token: str) -> dict[str, Any]:
+            calls.append("entitlements")
+            assert token == "dev-token-123"
+            return {"schema_id": "qcoder.pro_service.entitlements.v0", "valid": True}
+
+        def post_workflow(self, manifest: dict[str, Any], token: str) -> dict[str, Any]:
+            calls.append("workflows")
+            captured_manifest.update(manifest)
+            assert token == "dev-token-123"
+            return {
+                "schema_id": "qcoder.pro_service.workflow_job.v0",
+                "job_id": "job-123",
+                "state": "succeeded",
+                "analysis_performed": False,
+                "confidential_analysis_performed": False,
+                "cards_generated": False,
+                "local_fake": True,
+            }
+
+    monkeypatch.setattr("qcoder.cli.ProServiceClient", FakeClient)
+    rc, out, err = _capture(
+        [
+            "pro",
+            "workflow",
+            "--qasm",
+            str(qasm),
+            "--submit",
+            "--service-url",
+            "http://127.0.0.1:8765",
+            "--manifest-out",
+            str(manifest_out),
+            "--json",
+        ]
+    )
+    assert err == ""
+    assert rc == 0
+    payload = json.loads(out)
+    assert payload["submitted"] is True
+    assert payload["job_id"] == "job-123"
+    assert payload["upload_performed"] is False
+    assert payload["source_contents_included"] is False
+    assert payload["network_performed"] is True
+    assert payload["service_url_source"] == "flag"
+    assert calls == ["entitlements", "workflows"]
+    manifest_text = json.dumps(captured_manifest, sort_keys=True)
+    assert "supplied_path" not in manifest_text
+    assert '"source_contents":' not in manifest_text
+    assert '"source_code":' not in manifest_text
+    assert '"raw_qasm":' not in manifest_text
+    assert '"qasm_text":' not in manifest_text
+    assert '"operations":' not in manifest_text
+    wire_boundary = captured_manifest["boundary"]
+    assert wire_boundary["dry_run"] is False
+    assert wire_boundary["upload_performed"] is False
+    assert wire_boundary["network_performed"] is False
+    assert wire_boundary["source_contents_included"] is False
+    assert manifest_out.exists()
+
+
+def test_workflow_submit_service_error_is_bounded_and_hides_token(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    token = "dev-secret-token-123"
+    monkeypatch.setenv("QCODER_PRO_TOKEN", token)
+    qasm = tmp_path / "single.qasm"
+    _write_qasm(qasm)
+
+    class FailingClient:
+        def __init__(self, *, base_url: str, timeout_s: float = 10.0) -> None:
+            assert base_url == "http://127.0.0.1:8765"
+
+        def post_entitlements_validate(self, token: str) -> dict[str, Any]:
+            raise ProServiceClientError(
+                ServiceErrorDetail(
+                    status_code=None,
+                    error_code="SERVICE_UNAVAILABLE",
+                    message="unable to reach configured service",
+                )
+            )
+
+    monkeypatch.setattr("qcoder.cli.ProServiceClient", FailingClient)
+    rc, out, err = _capture(
+        [
+            "pro",
+            "workflow",
+            "--qasm",
+            str(qasm),
+            "--submit",
+            "--service-url",
+            "http://127.0.0.1:8765",
+        ]
+    )
+    assert rc == 2
+    assert out == ""
+    assert "SERVICE_UNAVAILABLE" in err
+    assert token not in err
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected_rc"),
+    [
+        (["pro", "signup"], 0),
+        (["pro", "status"], 0),
+        (["pro", "validate"], 0),
+        (["pro", "login", "--token", "dev-token"], 0),
+        (["pro", "install", "--token", "dev-token"], 0),
+    ],
+)
+def test_non_workflow_pro_commands_do_not_create_service_client(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str], expected_rc: int
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    class ShouldNotConstruct:
+        def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+            raise AssertionError("service client should not be constructed")
+
+    monkeypatch.setattr("qcoder.cli.ProServiceClient", ShouldNotConstruct)
+    rc, _out, _err = _capture(argv)
+    assert rc == expected_rc

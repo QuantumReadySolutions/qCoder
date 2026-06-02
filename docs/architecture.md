@@ -20,7 +20,7 @@ The public `qcoder` package on `main` ships:
 
 Free commands are **local/offline**: no LLM calls, no telemetry upload, no QPU/simulator execution, and no card generation in the public package.
 
-Token-gating in this slice is access control only, not a secrecy boundary. `qcoder pro workflow --dry-run-manifest` builds a local contract artifact and performs no upload or hosted execution. Source file contents are not included. The hosted Pro engine is not implemented in the public repo line yet.
+Token-gating in this slice is access control only, not a secrecy boundary. `qcoder pro workflow --dry-run-manifest` builds a local contract artifact and performs no upload or hosted execution. `qcoder pro workflow --submit --service-url <url>` is an explicit manifest-only submit path to a configured service. This submit slice does not perform artifact upload, background upload, or local confidential analysis, and source contents are excluded by default.
 
 ## Canonical schemas
 

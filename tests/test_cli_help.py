@@ -123,6 +123,9 @@ class TestCliHelp(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 0)
         out = buf.getvalue()
         self.assertIn("--dry-run-manifest", out)
+        self.assertIn("--submit", out)
+        self.assertIn("--service-url", out)
+        self.assertIn("--manifest-out", out)
 
     def test_analyze_profiles_without_json_warns_stderr_and_exit_2(self) -> None:
         root = self._repo_root()
