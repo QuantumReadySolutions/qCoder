@@ -83,7 +83,11 @@ run_cmd "$RUN_VENV/bin/qcoder" context "$QASM_PATH" --out-json "$CTX_JSON" --out
 run_cmd "$RUN_VENV/bin/qcoder" review --counts-json "$COUNTS_PATH" --format qiskit_counts --preflight-json "$CTX_JSON" --out-json "$REV_JSON" --out-md "$REV_MD"
 run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro --help
 run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro signup
-run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro install --token local-release-check-token
+PRO_CHECK_TOKEN="local-release-check-token"
+echo "+ env HOME=\"$PRO_HOME\" $RUN_VENV/bin/qcoder pro install --token <redacted>"
+env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro install --token "$PRO_CHECK_TOKEN"
+echo "+ env HOME=\"$PRO_HOME\" $RUN_VENV/bin/qcoder pro login --token <redacted>"
+env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro login --token "$PRO_CHECK_TOKEN"
 run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro status
 run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro validate
 

@@ -62,7 +62,17 @@ def store_local_bootstrap_config(
     if api_url and api_url.strip():
         existing["api_url"] = api_url.strip()
     config_path.write_text(json.dumps(existing, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _restrict_config_file_permissions(config_path)
     return config_path
+
+
+def _restrict_config_file_permissions(path: Path) -> None:
+    if os.name == "nt":
+        return
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
 
 
 def resolve_token(path: Path | None = None) -> ValueResolution:

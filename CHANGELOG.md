@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on common practice for pre-1.0 semantic versioning: **`MAJOR.MINOR.PATCH`** with **`aN`** for alpha prereleases.
 
+## Unreleased
+
+### Added
+
+- Add public-safe qCoder Pro bootstrap plumbing: local token config, install/login/status/validate, no confidential Pro analysis bundled.
+
 ## 0.5.0a1 (alpha — public Free + Pro Preview shell)
 
 First public package version for the **Option 3 product line**: local/offline Free CLI plus a service-backed Pro Preview shell. Version **`0.5.0a1`** is distinct from the internal frozen local private-alpha RC **`0.4.0a4`** (not shipped here).

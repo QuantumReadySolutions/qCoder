@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+
+import pytest
 
 from qcoder.pro_preview.config import (
     DEFAULT_PRO_API_URL,
@@ -10,6 +13,16 @@ from qcoder.pro_preview.config import (
     resolve_token,
     store_local_bootstrap_config,
 )
+
+
+def test_store_local_bootstrap_config_restricts_permissions_on_posix(
+    tmp_path: Path, monkeypatch
+) -> None:
+    if os.name == "nt":
+        pytest.skip("POSIX-only config permission hardening")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    cfg_path = store_local_bootstrap_config(token="dev-token-123")
+    assert (cfg_path.stat().st_mode & 0o777) == 0o600
 
 
 def test_store_local_bootstrap_config_writes_outside_repo(tmp_path: Path, monkeypatch) -> None:
