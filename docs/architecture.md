@@ -16,11 +16,11 @@ The public `qcoder` package on `main` ships:
 - Optional **`--profiles`** on **`analyze --json`** and **`context`** — derived structural taxonomy from `feature_map`.
 - **`qcoder context`** — preflight context artifacts (JSON + Markdown).
 - **`qcoder review`** — post-run review artifacts from user-supplied counts (`qcoder` or `qiskit_counts` formats).
-- **`qcoder pro`** — **service-backed Pro Preview shell** (`signup`, `status`, `login`, `workflow` stub). Confidential Pro analysis and cards are **not** bundled in this package.
+- **`qcoder pro`** — **service-backed Pro bootstrap shell** (`signup`, `login`, `install`, `status`, `validate`, `workflow` stub). Local commands provide non-confidential entitlement/bootstrap plumbing only; confidential Pro analysis and cards are **not** bundled in this package.
 
 Free commands are **local/offline**: no LLM calls, no telemetry upload, no QPU/simulator execution, and no card generation in the public package.
 
-Pro Preview uploads selected artifacts **only when the user explicitly runs a future hosted Pro service command**. Source file contents are not uploaded by default. The hosted Pro engine is not implemented in the public repo line yet.
+Token-gating in this slice is access control only, not a secrecy boundary. Pro Preview uploads selected artifacts **only when the user explicitly runs a future hosted Pro service command**. Source file contents are not uploaded by default. The hosted Pro engine is not implemented in the public repo line yet.
 
 ## Canonical schemas
 
@@ -36,7 +36,7 @@ Public Free qCoder focuses on **structure and user-supplied execution counts**. 
 
 ## Local Pro / cards
 
-Local private-alpha Pro implementation (cards, MCP tools, and confidential analysis commands) is **not** distributed in this public repository or PyPI package. **`qcoder pro`** in this release is a service-backed Preview shell only.
+Local private-alpha Pro implementation (cards, MCP tools, and confidential analysis commands) is **not** distributed in this public repository or PyPI package. **`qcoder pro`** in this release is a service-backed bootstrap shell only.
 
 ## Release rehearsal
 

@@ -44,6 +44,8 @@ def test_pro_shell_help_mentions_service_backed_preview() -> None:
     text = out.getvalue().lower()
     assert "service-backed" in text
     assert "preview" in text
+    assert "install" in text
+    assert "validate" in text
 
 
 def test_pro_workflow_stub_fails_cleanly_without_service() -> None:

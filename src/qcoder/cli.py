@@ -3,13 +3,42 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from qcoder.pipelines.analyze import analyze_qasm
 from qcoder.pipelines.context import write_preflight_context
 from qcoder.pipelines.review import write_execution_review
+from qcoder.pro_preview.config import (
+    ProPreviewConfigError,
+    load_local_config,
+    resolve_api_url,
+    resolve_token,
+    store_local_bootstrap_config,
+)
 from qcoder.tools.batch import analyze_qasm_dir_to_jsonl
 
 PREVIEW_SIGNUP_URL = "https://qcoder.ai/preview"
+
+
+def _build_pro_bootstrap_payload(status: str) -> dict[str, object]:
+    token = resolve_token()
+    api_url = resolve_api_url()
+    configured = token.present
+    return {
+        "schema_id": "qcoder.pro_preview_bootstrap.v0",
+        "status": status,
+        "service_backed": True,
+        "configured": configured,
+        "token_present": token.present,
+        "token_source": token.source,
+        "api_url_configured": api_url.present,
+        "api_url_source": api_url.source,
+        "service_validation": "not_available",
+        "cards_local": False,
+        "local_pro_analysis": False,
+        "confidential_analysis_local": False,
+        "upload_performed": False,
+    }
 
 
 def _cmd_analyze(argv: list[str]) -> int:
@@ -227,9 +256,18 @@ def _cmd_pro(argv: list[str]) -> int:
     p_status = sub.add_parser("status", help="Show local Pro Preview client status.")
     p_status.set_defaults(pro_command="status")
 
-    p_login = sub.add_parser("login", help="Store Preview token (service validation not available in this slice).")
-    p_login.add_argument("--token", required=False, help="Preview token (optional in this stub).")
+    p_login = sub.add_parser("login", help="Store Preview token locally (no remote validation in this slice).")
+    p_login.add_argument("--token", required=True, help="Preview token for local entitlement/config bootstrap.")
+    p_login.add_argument("--api-url", required=False, help="Optional service URL override for local config.")
     p_login.set_defaults(pro_command="login")
+
+    p_install = sub.add_parser("install", help="Configure local Pro bootstrap token (no code download in this slice).")
+    p_install.add_argument("--token", required=True, help="Preview token for local bootstrap config.")
+    p_install.add_argument("--api-url", required=False, help="Optional service URL override for local config.")
+    p_install.set_defaults(pro_command="install")
+
+    p_validate = sub.add_parser("validate", help="Validate local Pro bootstrap config and public boundary posture.")
+    p_validate.set_defaults(pro_command="validate")
 
     p_workflow = sub.add_parser("workflow", help="Submit a Pro workflow to the hosted service (not yet available).")
     p_workflow.add_argument("--qasm", default=None, help="Path to a single QASM file.")
@@ -238,8 +276,9 @@ def _cmd_pro(argv: list[str]) -> int:
     p_workflow.add_argument("--project-dir", default=None, help="Local project directory.")
     p_workflow.set_defaults(pro_command="workflow")
 
-    args, _unknown = p.parse_known_args(argv)
+    args, unknown = p.parse_known_args(argv)
     cmd = args.pro_command
+    json_output = args.json or ("--json" in unknown)
 
     if cmd is None:
         p.print_help()
@@ -254,7 +293,7 @@ def _cmd_pro(argv: list[str]) -> int:
             "cards_local": False,
             "status": "signup_required",
         }
-        if args.json:
+        if json_output:
             print(json.dumps(payload, indent=2, sort_keys=True))
         else:
             print("qCoder Pro Preview signup")
@@ -264,22 +303,80 @@ def _cmd_pro(argv: list[str]) -> int:
         return 0
 
     if cmd == "status":
-        payload = {
-            "schema_id": "qcoder.pro_preview_shell.v0",
-            "service_backed": True,
-            "configured": False,
-            "status": "not_configured",
-            "cards_local": False,
-            "upload_on_explicit_pro_command_only": True,
-        }
-        if args.json:
+        payload = _build_pro_bootstrap_payload(status="configured" if resolve_token().present else "not_configured")
+        if json_output:
             print(json.dumps(payload, indent=2, sort_keys=True))
         else:
-            print("qCoder Pro status: not configured.")
-            print("  mode: service-backed preview shell")
+            print(f"qCoder Pro status: {payload['status']}.")
+            print("  mode: service-backed bootstrap shell")
+            print(f"  token: {'present' if payload['token_present'] else 'not set'} ({payload['token_source']})")
+            print(
+                f"  api_url: {'configured' if payload['api_url_configured'] else 'not set'} "
+                f"({payload['api_url_source']})"
+            )
+            print("  service validation: not available in this slice")
             print("  local cards/analysis: disabled in public package")
             print(f"  signup: {PREVIEW_SIGNUP_URL}")
         return 0
+
+    if cmd in {"login", "install"}:
+        try:
+            config_path = store_local_bootstrap_config(token=args.token, api_url=args.api_url)
+        except ProPreviewConfigError as exc:
+            print(f"qcoder pro {cmd}: {exc}", file=sys.stderr)
+            return 2
+        payload = _build_pro_bootstrap_payload(status="configured")
+        payload["operation"] = cmd
+        payload["config_path"] = str(config_path)
+        if json_output:
+            print(json.dumps(payload, indent=2, sort_keys=True))
+        else:
+            print("Configured qCoder Pro Preview/V0 local bootstrap.")
+            print(f"  operation: {cmd}")
+            print(f"  config: {config_path}")
+            print("  token: stored locally (not displayed)")
+            print("  service validation: not performed in this slice")
+            print("  upload: none performed")
+            print("  local package: non-confidential bootstrap plumbing only")
+            print("  confidential Pro analysis: remains service-side")
+        return 0
+
+    if cmd == "validate":
+        token = resolve_token()
+        api_url = resolve_api_url()
+        try:
+            _ = load_local_config()
+            local_config_valid = True
+        except ProPreviewConfigError:
+            local_config_valid = False
+        pro_v0_py_exists = any((Path(__file__).resolve().parent / "pro_v0").glob("*.py"))
+        payload = {
+            "schema_id": "qcoder.pro_preview_validate.v0",
+            "status": "ok" if local_config_valid else "config_error",
+            "configured": token.present and local_config_valid,
+            "token_present": token.present,
+            "token_source": token.source,
+            "api_url_configured": api_url.present,
+            "api_url_source": api_url.source,
+            "service_validation": "not_available",
+            "cards_local": False,
+            "local_pro_analysis": False,
+            "confidential_analysis_local": False,
+            "upload_performed": False,
+            "pro_v0_local_module_present": pro_v0_py_exists,
+            "public_boundary_ok": (not pro_v0_py_exists) and local_config_valid,
+        }
+        if json_output:
+            print(json.dumps(payload, indent=2, sort_keys=True))
+        else:
+            print("qCoder Pro validate")
+            print(f"  status: {payload['status']}")
+            print(f"  token: {'present' if token.present else 'not set'} ({token.source})")
+            print(f"  api_url: {'configured' if api_url.present else 'not set'} ({api_url.source})")
+            print(f"  pro_v0 local module present: {pro_v0_py_exists}")
+            print("  service validation: not available in this slice")
+            print("  local cards/confidential analysis: absent")
+        return 0 if payload["status"] == "ok" else 2
 
     print(
         "qcoder pro: hosted Pro Preview service is not configured in this build.\n"
@@ -299,7 +396,7 @@ def _print_root_help() -> None:
         "  batch            Batch extract a directory to JSONL (requires --out).\n"
         "  context          Build deterministic preflight context artifacts.\n"
         "  review           Build deterministic execution review artifacts from counts.\n"
-        "  pro              Service-backed Pro Preview shell (signup/status/workflow stub).\n\n"
+        "  pro              Service-backed Pro shell (signup/install/status/validate/workflow).\n\n"
         "Run `qcoder <subcommand> --help` for subcommand options.",
         end="",
     )

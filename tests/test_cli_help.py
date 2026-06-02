@@ -105,6 +105,16 @@ class TestCliHelp(unittest.TestCase):
         self.assertIn("--counts-json", out)
         self.assertIn("--format", out)
 
+    def test_python_m_qcoder_pro_help(self) -> None:
+        out = self._run_module_help("pro")
+        self.assertIn("signup", out)
+        self.assertIn("login", out)
+        self.assertIn("install", out)
+        self.assertIn("status", out)
+        self.assertIn("validate", out)
+        self.assertIn("workflow", out)
+        self.assertIn("service-backed", out.lower())
+
     def test_analyze_profiles_without_json_warns_stderr_and_exit_2(self) -> None:
         root = self._repo_root()
         env = os.environ.copy()

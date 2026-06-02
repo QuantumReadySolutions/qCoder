@@ -10,7 +10,7 @@ Free `qcoder` commands run offline and do not call hosted services, upload telem
 - `qcoder batch`
 - `qcoder context`
 - `qcoder review`
-- `qcoder pro` (service-backed Preview shell/stub)
+- `qcoder pro` (service-backed Pro bootstrap shell; non-confidential local plumbing)
 
 ## Quick start
 
@@ -33,15 +33,17 @@ qcoder context path/to/circuit.qasm --out-json preflight.context.json --out-md p
 qcoder review --counts-json counts.json --format qiskit_counts --preflight-json preflight.context.json --out-json execution.review.json --out-md execution.review.md
 ```
 
-Pro Preview shell:
+Pro Preview / V0 bootstrap shell:
 
 ```bash
 qcoder pro --help
 qcoder pro signup
+qcoder pro install --token local-preview-token
 qcoder pro status
+qcoder pro validate
 ```
 
-`qcoder pro workflow` is a service-backed stub in this slice; confidential Pro analysis is not bundled in this package.
+Token-gating is access control only, not a secrecy boundary. Local `qcoder pro` in this public package configures non-confidential bootstrap plumbing only; confidential Pro analysis is not bundled and remains service-side.
 
 Architecture notes: [`docs/architecture.md`](docs/architecture.md).
 

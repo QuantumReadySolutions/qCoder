@@ -6,6 +6,7 @@ TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/qcoder-public-release-check.XXXXXX")"
 BUILD_VENV="$TMP_ROOT/build-venv"
 RUN_VENV="$TMP_ROOT/run-venv"
 DIST_DIR="$TMP_ROOT/dist"
+PRO_HOME="$TMP_ROOT/home"
 QASM_PATH="$TMP_ROOT/demo.qasm"
 COUNTS_PATH="$TMP_ROOT/counts.json"
 CTX_JSON="$TMP_ROOT/preflight.context.json"
@@ -38,6 +39,7 @@ fi
 
 python3 -m venv "$BUILD_VENV"
 python3 -m venv "$RUN_VENV"
+mkdir -p "$PRO_HOME"
 
 run_cmd "$BUILD_VENV/bin/python" -m pip install --upgrade pip setuptools wheel build
 run_cmd "$BUILD_VENV/bin/python" -m build --sdist --wheel --outdir "$DIST_DIR" "$ROOT_DIR"
@@ -79,11 +81,13 @@ run_cmd "$RUN_VENV/bin/qcoder" --help
 run_cmd "$RUN_VENV/bin/qcoder" analyze "$QASM_PATH" --json
 run_cmd "$RUN_VENV/bin/qcoder" context "$QASM_PATH" --out-json "$CTX_JSON" --out-md "$CTX_MD"
 run_cmd "$RUN_VENV/bin/qcoder" review --counts-json "$COUNTS_PATH" --format qiskit_counts --preflight-json "$CTX_JSON" --out-json "$REV_JSON" --out-md "$REV_MD"
-run_cmd "$RUN_VENV/bin/qcoder" pro --help
-run_cmd "$RUN_VENV/bin/qcoder" pro signup
-run_cmd "$RUN_VENV/bin/qcoder" pro status
+run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro --help
+run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro signup
+run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro install --token local-release-check-token
+run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro status
+run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro validate
 
-if "$RUN_VENV/bin/qcoder" pro workflow --qasm "$QASM_PATH" --project-dir "$TMP_ROOT/project"; then
+if env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro workflow --qasm "$QASM_PATH" --project-dir "$TMP_ROOT/project"; then
   echo "release-check: expected pro workflow stub to fail without hosted service" >&2
   exit 1
 fi
