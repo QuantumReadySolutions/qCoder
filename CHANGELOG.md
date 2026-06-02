@@ -6,11 +6,25 @@ The format is based on common practice for pre-1.0 semantic versioning: **`MAJOR
 
 ## Unreleased
 
+## 0.5.0a2 (alpha — public Free + Pro Preview client contract)
+
+Second public alpha for the **Option 3 product line**: unchanged Free local/offline CLI plus an expanded **Pro Preview bootstrap/client contract** (not a generally available hosted Pro product).
+
 ### Added
 
-- Add public-safe qCoder Pro bootstrap plumbing: local token config, install/login/status/validate, no confidential Pro analysis bundled.
-- Add `qcoder pro workflow --dry-run-manifest` public contract/bootstrap output: local manifest generation with QASM hashes/bytes plus local Free analysis, no upload, no hosted execution, and no confidential Pro analysis bundled.
-- Add explicit manifest-only service submit path: `qcoder pro workflow --submit` with `--service-url` override and optional `--manifest-out`; submit remains opt-in, strips sensitive fields/paths, and does not implement artifact upload/background upload/confidential local analysis.
+- Public-safe **Pro Preview bootstrap** commands: `qcoder pro signup`, `login`, `install`, `status`, `validate` with local token/config support only.
+- **`qcoder pro workflow --dry-run-manifest`** — writes `qcoder.pro_preview.workflow_manifest.v0` locally (QASM hashes/bytes plus local Free analysis); no network.
+- **Explicit configured manifest-only service submit** — `qcoder pro workflow --submit --service-url <url>` with optional `--manifest-out`; requires token and a non-default configured service URL; sanitizes manifest before POST.
+- Stronger **public package safety** checks, Pro Preview unit tests, and release rehearsal coverage in CI.
+
+### Scope / boundaries
+
+- **No** generally available production hosted Pro service, public account/token issuance from qcoder.ai, or sellable hosted Pro product behavior.
+- **No** artifact upload, source upload, or background upload in this submit slice.
+- **No** local confidential Pro analysis, cards, or `qcoder.pro_v0` in the wheel.
+- **No** telemetry upload or training delivery.
+- **No** QPU, simulator, or provider execution in CLI flows.
+- Free commands (`analyze`, `batch`, `context`, `review`) remain local/offline and useful without Pro.
 
 ## 0.5.0a1 (alpha — public Free + Pro Preview shell)
 

@@ -34,7 +34,7 @@ Optional **`guidance`** and **`feature_profiles`** blocks are separately version
 
 qCoder is a **local evidence layer** for AI-assisted quantum development. It supplies grounded local facts for humans and bring-your-own (BYO) LLM workflows — not algorithm identity proofs, correctness proofs, speedup claims, or QPU performance claims.
 
-Public Free qCoder focuses on **structure and user-supplied execution counts**. Pro Preview (paid product offered free during Preview) will add card-enabled analysis through a protected service boundary; that logic is not distributed in PyPI wheels or this public source tree. The dry-run workflow manifest and configured manifest-only submit are **client contract surfaces**, not the sellable hosted Pro product. PyPI `0.5.0a1` does not include manifest submit; newer submit behavior may exist on public `main` before the next alpha release.
+Public Free qCoder focuses on **structure and user-supplied execution counts**. Pro Preview (paid product offered free during Preview) will add card-enabled analysis through a protected service boundary; that logic is not distributed in PyPI wheels or this public source tree. The dry-run workflow manifest and configured manifest-only submit are **client contract surfaces**, not the sellable hosted Pro product. **`qcoder==0.5.0a2`** includes the public Pro Preview bootstrap/client contract, dry-run manifest, and explicit configured manifest-only submit; it still does not include a generally available hosted Pro service, artifact upload, or local confidential Pro analysis.
 
 ## Local Pro / cards
 
