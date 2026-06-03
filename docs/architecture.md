@@ -20,9 +20,13 @@ The public `qcoder` package on `main` ships:
 
 Free commands are **local/offline**: no LLM calls, no telemetry upload, no QPU/simulator execution, and no card generation in the public package. Free commands, `pro status`, and `pro validate` perform **no upload**.
 
-Token-gating in this slice is access control only, not a secrecy boundary. `qcoder pro workflow --dry-run-manifest` builds a local contract artifact and performs no upload or network calls. `qcoder pro workflow --submit --service-url <url>` is an explicit **manifest-only** client path to a **configured** service URL (not the default marketing URL). This submit slice does not perform artifact upload, background upload, source upload, or local confidential analysis.
+Token-gating in this slice is access control only, not confidentiality. `qcoder pro workflow --dry-run-manifest` builds a local contract artifact and performs no upload or network calls. `qcoder pro workflow --submit --service-url <url>` is an explicit **manifest-only** client path to a **configured** service URL (not the default marketing URL). This submit slice does not perform artifact upload, background upload, source upload, or local confidential analysis.
 
 **Not in this public package:** a generally available production hosted Pro service; public account/token issuance; Cloud Run/GCS deployment; sellable hosted Pro product behavior. Those are separate/future surfaces. The public package is a bootstrap/client contract, not the hosted analyzer.
+
+For a public pilot path, see the [Pro Preview pilot walkthrough](https://qcoder.ai/manual/pro-preview-pilot-walkthrough/). The public package supplies the `qcoder==0.5.0a2` client surface only; confidential Pro intelligence remains service-side/future and is not distributed in PyPI wheels or this public source tree.
+
+Support-safe context to share for Pro Preview issues: `qcoder --version`, command name, HTTP status or CLI error code, `job_id`, redacted output, and manifest schema/version. Do **not** share bearer tokens, secrets, source code, repository archives, notebooks, private prompts/chat transcripts, or raw QASM/source artifacts through unsupported paths.
 
 ## Canonical schemas
 

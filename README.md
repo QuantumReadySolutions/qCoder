@@ -16,11 +16,13 @@ Free `qcoder` commands run offline and do not call hosted services, upload telem
 
 Public `qcoder` ships **Free local commands** plus a **Pro bootstrap/client contract**. It is **not** the sellable hosted Pro product.
 
-- **Free commands** (`analyze`, `batch`, `context`, `review`) run offline. They do not upload data, call a qCoder hosted service, or run QPU/simulator jobs.
+For a public, pilot-safe walkthrough, see the [Pro Preview pilot walkthrough](https://qcoder.ai/manual/pro-preview-pilot-walkthrough/). The current public PyPI alpha client surface for Pro Preview is **`qcoder==0.5.0a2`**. It is not Pro V0.0 and not a sellable launched Pro product.
+
+- **Free commands** (`analyze`, `batch`, `context`, `review`) are Apache-2.0, local-first/offline, and useful without Pro. They do not upload data, call a qCoder hosted service, or run QPU/simulator jobs.
 - **`qcoder pro` bootstrap** (`signup`, `login`, `install`, `status`, `validate`) stores local token/config only. It does not upload circuits, run confidential analysis, or generate Pro cards locally.
 - **`qcoder pro workflow --dry-run-manifest`** writes a local JSON contract (`qcoder.pro_preview.workflow_manifest.v0`) and performs **no network calls**. This is the default path for most users.
 - **`qcoder pro workflow --submit`** posts a **sanitized manifest only** to an **explicitly configured** `--service-url` (or `QCODER_PRO_API_URL`). Use it only when QRS has given you a service URL and token. The default `https://qcoder.ai/preview` URL is **not** accepted for submit.
-- There is **no generally available production hosted Pro service**, account/token issuance, or artifact upload in this public-main surface. Production hosted service, Cloud Run/GCS, and confidential analysis are separate/future.
+- There is **no generally available production hosted Pro service**, account/token issuance, artifact/source upload, telemetry/training ingest, confidential local analyzer/cards, QPU/provider execution, or launched Pro V0.0 behavior in this public-main surface.
 - **No confidential Pro analysis or cards** are bundled in this package. Token-gating is **access control only**, not a secrecy boundary.
 
 ## Quick start
