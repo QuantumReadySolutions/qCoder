@@ -29,6 +29,13 @@ def test_pro_preview_manifest_has_no_pro_v0_imports() -> None:
     assert "qcoder.pro_v0" not in manifest_text
 
 
+def test_pro_preview_module_docstring_uses_public_wording() -> None:
+    module_text = _read(SRC_ROOT / "pro_preview" / "__init__.py")
+    assert "Pro Preview client surface" in module_text
+    assert "Pro Preview/V0" not in module_text
+    assert "V0 local bootstrap" not in module_text
+
+
 def test_manifest_excludes_private_alpha_docs() -> None:
     manifest = _read(REPO_ROOT / "MANIFEST.in")
     assert "exclude docs/pro-v0-install.md" in manifest

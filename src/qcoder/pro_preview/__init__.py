@@ -1,4 +1,4 @@
-"""Public-safe Pro Preview/V0 bootstrap plumbing (non-confidential only)."""
+"""Public-safe Pro Preview client surface helpers (non-confidential only)."""
 
 from qcoder.pro_preview.config import (
     ProPreviewConfigError,
