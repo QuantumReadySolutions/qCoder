@@ -63,6 +63,27 @@ Use **`--dry-run-manifest`** unless QRS has given you a non-default service URL 
 qcoder pro workflow --qasm path/to/circuit.qasm --submit --service-url <url-qrs-provided>
 ```
 
+**Support-safe checklist for Pro Preview pilots**
+
+Safe to share with QRS support:
+
+- `qcoder --version`
+- command name
+- HTTP status or CLI error code
+- `job_id`, if produced
+- redacted output
+- manifest schema/version
+
+Do not share:
+
+- bearer tokens
+- secrets
+- source code
+- repository archives
+- notebooks
+- private prompts or chat transcripts
+- raw QASM/source artifacts through unsupported paths
+
 Architecture notes: [`docs/architecture.md`](docs/architecture.md).
 
 ## Optional extras
