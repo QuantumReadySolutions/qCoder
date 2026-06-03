@@ -100,6 +100,49 @@ def test_validate_reports_config_and_boundary(tmp_path: Path, monkeypatch) -> No
     assert payload["public_boundary_ok"] is True
 
 
+def test_status_human_output_marks_default_preview_url_not_submit_ready(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("QCODER_PRO_TOKEN", raising=False)
+    monkeypatch.delenv("QCODER_PRO_API_URL", raising=False)
+    rc, out, _err = _capture(["pro", "status"])
+    assert rc == 0
+    assert "submit-ready service URL: not set" in out
+    assert "pilot submit readiness: not ready" in out
+    assert "default Preview URL is informational" in out
+    assert "api_url: configured (default)" not in out
+
+
+def test_validate_human_output_separates_boundary_from_submit_readiness(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("QCODER_PRO_TOKEN", raising=False)
+    monkeypatch.delenv("QCODER_PRO_API_URL", raising=False)
+    rc, out, _err = _capture(["pro", "validate"])
+    assert rc == 0
+    assert "public package boundary checks: ok" in out
+    assert "pilot submit readiness: not ready" in out
+    assert "submit requirement: QRS-provided token + non-default service URL" in out
+    assert "pro_v0" not in out
+
+
+def test_login_and_install_human_output_use_public_wording(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    token = "token-for-wording-check"
+
+    rc_login, out_login, _err_login = _capture(["pro", "login", "--token", token])
+    assert rc_login == 0
+    assert "Configured qCoder Pro Preview local token settings." in out_login
+    assert "token hygiene: do not paste tokens into tickets, screenshots, or chat" in out_login
+    assert "Pro Preview/V0" not in out_login
+    assert "V0 local bootstrap" not in out_login
+
+    rc_install, out_install, _err_install = _capture(["pro", "install", "--token", token])
+    assert rc_install == 0
+    assert "Configured qCoder Pro Preview local token settings." in out_install
+    assert "token hygiene: do not paste tokens into tickets, screenshots, or chat" in out_install
+    assert "Pro Preview/V0" not in out_install
+    assert "V0 local bootstrap" not in out_install
+
+
 def test_no_network_by_default_status(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
 
@@ -315,6 +358,7 @@ def test_workflow_submit_requires_token(tmp_path: Path, monkeypatch) -> None:
     )
     assert rc == 2
     assert "requires a configured token" in err
+    assert "Do not share your token" in err
 
 
 def test_workflow_submit_requires_non_default_service_url(tmp_path: Path, monkeypatch) -> None:
@@ -327,6 +371,7 @@ def test_workflow_submit_requires_non_default_service_url(tmp_path: Path, monkey
     assert rc == 2
     assert "production hosted pro service" in err.lower()
     assert "service submit url is not configured" in err.lower()
+    assert "share only redacted output and error/status codes" in err.lower()
 
 
 def test_workflow_submit_posts_entitlements_then_workflow_and_strips_sensitive_fields(

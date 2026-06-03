@@ -115,6 +115,17 @@ class TestCliHelp(unittest.TestCase):
         self.assertIn("workflow", out)
         self.assertIn("service-backed", out.lower())
 
+    def test_pro_login_and_install_help_include_token_hygiene(self) -> None:
+        for argv in (["pro", "login", "--help"], ["pro", "install", "--help"]):
+            with self.subTest(argv=argv):
+                buf = io.StringIO()
+                with redirect_stdout(buf):
+                    with self.assertRaises(SystemExit) as ctx:
+                        main(argv)
+                self.assertEqual(ctx.exception.code, 0)
+                out = buf.getvalue().lower()
+                self.assertIn("private credential", out)
+
     def test_pro_workflow_help_includes_dry_run_manifest_option(self) -> None:
         buf = io.StringIO()
         with redirect_stdout(buf):

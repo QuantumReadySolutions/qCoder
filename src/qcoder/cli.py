@@ -28,6 +28,12 @@ from qcoder.tools.batch import analyze_qasm_dir_to_jsonl
 PREVIEW_SIGNUP_URL = "https://qcoder.ai/preview"
 
 
+def _is_non_default_service_url(value: str | None) -> bool:
+    if not value:
+        return False
+    return value.strip() != DEFAULT_PRO_API_URL
+
+
 def _build_pro_bootstrap_payload(status: str) -> dict[str, object]:
     token = resolve_token()
     api_url = resolve_api_url()
@@ -265,16 +271,24 @@ def _cmd_pro(argv: list[str]) -> int:
     p_status.set_defaults(pro_command="status")
 
     p_login = sub.add_parser("login", help="Store Preview token locally (no remote validation in this slice).")
-    p_login.add_argument("--token", required=True, help="Preview token for local entitlement/config bootstrap.")
+    p_login.add_argument(
+        "--token",
+        required=True,
+        help="QRS-provided Preview token for local config. Treat as private credential.",
+    )
     p_login.add_argument("--api-url", required=False, help="Optional service URL override for local config.")
     p_login.set_defaults(pro_command="login")
 
-    p_install = sub.add_parser("install", help="Configure local Pro bootstrap token (no code download in this slice).")
-    p_install.add_argument("--token", required=True, help="Preview token for local bootstrap config.")
+    p_install = sub.add_parser("install", help="Configure local Pro Preview token (no code download in this slice).")
+    p_install.add_argument(
+        "--token",
+        required=True,
+        help="QRS-provided Preview token for local config. Treat as private credential.",
+    )
     p_install.add_argument("--api-url", required=False, help="Optional service URL override for local config.")
     p_install.set_defaults(pro_command="install")
 
-    p_validate = sub.add_parser("validate", help="Validate local Pro bootstrap config and public boundary posture.")
+    p_validate = sub.add_parser("validate", help="Validate local Pro Preview config and public package boundaries.")
     p_validate.set_defaults(pro_command="validate")
 
     p_workflow = sub.add_parser(
@@ -335,16 +349,20 @@ def _cmd_pro(argv: list[str]) -> int:
 
     if cmd == "status":
         payload = _build_pro_bootstrap_payload(status="configured" if resolve_token().present else "not_configured")
+        submit_ready = bool(payload["token_present"]) and _is_non_default_service_url(resolve_api_url().value)
         if json_output:
             print(json.dumps(payload, indent=2, sort_keys=True))
         else:
             print(f"qCoder Pro status: {payload['status']}.")
             print("  mode: service-backed bootstrap shell")
             print(f"  token: {'present' if payload['token_present'] else 'not set'} ({payload['token_source']})")
-            print(
-                f"  api_url: {'configured' if payload['api_url_configured'] else 'not set'} "
-                f"({payload['api_url_source']})"
-            )
+            if payload["api_url_source"] == "default":
+                print("  submit-ready service URL: not set (default Preview URL is informational)")
+            else:
+                print("  submit-ready service URL: configured")
+            print(f"  service URL source: {payload['api_url_source']}")
+            print(f"  pilot submit readiness: {'ready' if submit_ready else 'not ready'}")
+            print("  submit requirement: QRS-provided token + non-default service URL")
             print("  service validation: not available in this slice")
             print("  local cards/analysis: disabled in public package")
             print(f"  signup: {PREVIEW_SIGNUP_URL}")
@@ -362,10 +380,11 @@ def _cmd_pro(argv: list[str]) -> int:
         if json_output:
             print(json.dumps(payload, indent=2, sort_keys=True))
         else:
-            print("Configured qCoder Pro Preview/V0 local bootstrap.")
+            print("Configured qCoder Pro Preview local token settings.")
             print(f"  operation: {cmd}")
             print(f"  config: {config_path}")
             print("  token: stored locally (not displayed)")
+            print("  token hygiene: do not paste tokens into tickets, screenshots, or chat")
             print("  service validation: not performed in this slice")
             print("  upload: none performed")
             print("  local package: non-confidential bootstrap plumbing only")
@@ -381,6 +400,7 @@ def _cmd_pro(argv: list[str]) -> int:
         except ProPreviewConfigError:
             local_config_valid = False
         pro_v0_py_exists = any((Path(__file__).resolve().parent / "pro_v0").glob("*.py"))
+        submit_ready = token.present and _is_non_default_service_url(api_url.value)
         payload = {
             "schema_id": "qcoder.pro_preview_validate.v0",
             "status": "ok" if local_config_valid else "config_error",
@@ -403,10 +423,17 @@ def _cmd_pro(argv: list[str]) -> int:
             print("qCoder Pro validate")
             print(f"  status: {payload['status']}")
             print(f"  token: {'present' if token.present else 'not set'} ({token.source})")
-            print(f"  api_url: {'configured' if api_url.present else 'not set'} ({api_url.source})")
-            print(f"  pro_v0 local module present: {pro_v0_py_exists}")
+            if api_url.source == "default":
+                print("  submit-ready service URL: not set (default Preview URL is informational)")
+            else:
+                print("  submit-ready service URL: configured")
+            print(f"  service URL source: {api_url.source}")
+            print(f"  public package boundary checks: {'ok' if payload['public_boundary_ok'] else 'needs attention'}")
+            print(f"  pilot submit readiness: {'ready' if submit_ready else 'not ready'}")
+            print("  submit requirement: QRS-provided token + non-default service URL")
             print("  service validation: not available in this slice")
             print("  local cards/confidential analysis: absent")
+            print("  artifact/source upload: not performed in this command path")
         return 0 if payload["status"] == "ok" else 2
 
     if cmd == "workflow":
@@ -466,7 +493,8 @@ def _cmd_pro(argv: list[str]) -> int:
             if not token.present:
                 print(
                     "qcoder pro workflow: --submit requires a configured token.\n"
-                    "Run `qcoder pro login --token <token>` or set QCODER_PRO_TOKEN.",
+                    "Run `qcoder pro login --token <token>` or set QCODER_PRO_TOKEN.\n"
+                    "Do not share your token in tickets, screenshots, or chat.",
                     file=sys.stderr,
                 )
                 return 2
@@ -483,7 +511,8 @@ def _cmd_pro(argv: list[str]) -> int:
                 print(
                     "qcoder pro workflow: No production hosted Pro service is configured for "
                     "this release. Service submit URL is not configured; use --service-url or "
-                    "QCODER_PRO_API_URL only if QRS provided one.",
+                    "QCODER_PRO_API_URL only if QRS provided one.\n"
+                    "For support, share only redacted output and error/status codes.",
                     file=sys.stderr,
                 )
                 return 2

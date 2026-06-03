@@ -61,3 +61,15 @@ def test_pro_workflow_stub_fails_cleanly_without_service() -> None:
     text = err.getvalue().lower()
     assert "dry-run-manifest" in text
     assert "--dry-run-manifest" in text
+
+
+def test_pro_human_output_avoids_internal_v0_terms(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    out = io.StringIO()
+    with redirect_stdout(out):
+        rc = main(["pro", "validate"])
+    assert rc == 0
+    text = out.getvalue()
+    assert "pro_v0" not in text
+    assert "Pro Preview/V0" not in text
+    assert "V0 local bootstrap" not in text
