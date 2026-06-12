@@ -17,6 +17,12 @@ from qcoder.pro_preview.config import (
     store_local_bootstrap_config,
 )
 from qcoder.pro_preview.client import ProServiceClient, ProServiceClientError
+from qcoder.pro_preview.client import (
+    PreviewClientNetworkError,
+    call_builtin_review_demo,
+    resolve_preview_client_config,
+    summarize_demo_payload,
+)
 from qcoder.pro_preview.errors import ProPreviewManifestError
 from qcoder.pro_preview.manifest import (
     build_workflow_manifest,
@@ -248,6 +254,48 @@ def _cmd_review(argv: list[str]) -> int:
     return 0
 
 
+def _run_pro_preview_demo_check(*, base_url_override: str | None) -> int:
+    try:
+        config = resolve_preview_client_config(base_url_override=base_url_override)
+    except ValueError as exc:
+        print(f"qcoder pro preview: {exc}", file=sys.stderr)
+        return 2
+
+    try:
+        response = call_builtin_review_demo(config)
+    except PreviewClientNetworkError:
+        print(
+            "qCoder Pro Preview demo: FAIL (network). Base URL may be unreachable.",
+            file=sys.stderr,
+        )
+        print(f"  base_url: {config.base_url}", file=sys.stderr)
+        return 2
+
+    if response.status_code == 200:
+        print("qCoder Pro Preview demo: PASS (HTTP 200).")
+        print(f"  base_url: {config.base_url}")
+        for line in summarize_demo_payload(response.payload):
+            print(f"  {line}")
+        return 0
+    if response.status_code == 401:
+        print(
+            "qCoder Pro Preview demo: FAIL (HTTP 401). Token is missing, invalid, or revoked.",
+            file=sys.stderr,
+        )
+        return 1
+    if response.status_code == 403:
+        print(
+            "qCoder Pro Preview demo: FAIL (HTTP 403). Private/outer service access may be blocking access.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"qCoder Pro Preview demo: FAIL (HTTP {response.status_code}).", file=sys.stderr)
+    for line in summarize_demo_payload(response.payload):
+        print(f"  {line}", file=sys.stderr)
+    return 2
+
+
 def _cmd_pro(argv: list[str]) -> int:
     p = argparse.ArgumentParser(
         prog="qcoder pro",
@@ -320,6 +368,31 @@ def _cmd_pro(argv: list[str]) -> int:
         help="Optional path to write sanitized submit manifest JSON.",
     )
     p_workflow.set_defaults(pro_command="workflow")
+
+    p_preview = sub.add_parser("preview", help="Hosted Preview demo connectivity checks.")
+    p_preview_sub = p_preview.add_subparsers(dest="pro_preview_command")
+
+    p_preview_status = p_preview_sub.add_parser(
+        "status",
+        help="Call hosted Preview demo endpoint and print safe connectivity summary.",
+    )
+    p_preview_status.add_argument(
+        "--base-url",
+        default=None,
+        help="Override hosted Preview base URL (default env: QCODER_PREVIEW_BASE_URL or QCODER_PRO_API_URL).",
+    )
+    p_preview_status.set_defaults(pro_command="preview-status")
+
+    p_preview_demo = p_preview_sub.add_parser(
+        "demo",
+        help="Alias of preview status check; calls /v0/demo/builtin-review.",
+    )
+    p_preview_demo.add_argument(
+        "--base-url",
+        default=None,
+        help="Override hosted Preview base URL (default env: QCODER_PREVIEW_BASE_URL or QCODER_PRO_API_URL).",
+    )
+    p_preview_demo.set_defaults(pro_command="preview-demo")
 
     args, unknown = p.parse_known_args(argv)
     cmd = args.pro_command
@@ -435,6 +508,9 @@ def _cmd_pro(argv: list[str]) -> int:
             print("  local cards/confidential analysis: absent")
             print("  artifact/source upload: not performed in this command path")
         return 0 if payload["status"] == "ok" else 2
+
+    if cmd in {"preview-status", "preview-demo"}:
+        return _run_pro_preview_demo_check(base_url_override=args.base_url)
 
     if cmd == "workflow":
         if args.dry_run_manifest:

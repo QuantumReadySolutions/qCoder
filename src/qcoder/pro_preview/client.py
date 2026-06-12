@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import os
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
@@ -120,3 +121,97 @@ def _parse_http_error(exc: HTTPError) -> ServiceErrorDetail:
     else:
         safe_message = f"service returned HTTP {status_code}"
     return ServiceErrorDetail(status_code=status_code, error_code=error_code, message=safe_message)
+
+PREVIEW_BASE_URL_ENV = "QCODER_PREVIEW_BASE_URL"
+PREVIEW_TOKEN_ENV = "QCODER_PREVIEW_TOKEN"
+PRO_API_URL_ENV = "QCODER_PRO_API_URL"
+PRO_TOKEN_ENV = "QCODER_PRO_TOKEN"
+BUILTIN_REVIEW_PATH = "/v0/demo/builtin-review"
+
+
+@dataclass(frozen=True)
+class PreviewClientConfig:
+    base_url: str
+    token: str
+
+
+@dataclass(frozen=True)
+class PreviewClientResponse:
+    status_code: int
+    payload: dict[str, Any] | None
+
+
+class PreviewClientNetworkError(RuntimeError):
+    """Raised when hosted Preview cannot be reached."""
+
+
+def resolve_preview_client_config(
+    *, base_url_override: str | None = None, env_map: Mapping[str, str] | None = None
+) -> PreviewClientConfig:
+    env = os.environ if env_map is None else env_map
+    base_url = _normalize_base_url(
+        base_url_override
+        if base_url_override is not None
+        else str(env.get(PREVIEW_BASE_URL_ENV) or env.get(PRO_API_URL_ENV) or "")
+    )
+    token = str(env.get(PREVIEW_TOKEN_ENV) or env.get(PRO_TOKEN_ENV) or "").strip()
+    if not token:
+        raise ValueError("missing hosted Preview token; set QCODER_PREVIEW_TOKEN or QCODER_PRO_TOKEN")
+    return PreviewClientConfig(base_url=base_url, token=token)
+
+
+def call_builtin_review_demo(
+    config: PreviewClientConfig, *, timeout_s: float = 10.0
+) -> PreviewClientResponse:
+    """Call the hosted Preview builtin-review demo endpoint.
+
+    HTTP 401/403 are valid service responses and must not be treated as
+    network failures.  HTTPError is a subclass of URLError, so keep this
+    handler before the URLError handler.
+    """
+    request = Request(
+        _join_service_url(config.base_url, BUILTIN_REVIEW_PATH),
+        headers={"Authorization": f"Bearer {config.token}"},
+        method="GET",
+    )
+    try:
+        with urlopen(request, timeout=timeout_s) as response:
+            body = response.read().decode("utf-8", errors="replace")
+            status_code = int(getattr(response, "status", 200))
+            return PreviewClientResponse(status_code=status_code, payload=_safe_json_decode(body))
+    except HTTPError as err:
+        body = err.read().decode("utf-8", errors="replace")
+        return PreviewClientResponse(status_code=int(err.code), payload=_safe_json_decode(body))
+    except URLError as exc:
+        raise PreviewClientNetworkError(str(exc)) from exc
+
+def summarize_demo_payload(payload: dict[str, Any] | None) -> list[str]:
+    if not payload:
+        return []
+    lines: list[str] = []
+    for key in ("service", "mode", "status", "demo_level"):
+        value = payload.get(key)
+        if isinstance(value, (str, int, float, bool)):
+            lines.append(f"  {key}: {value}")
+    samples = payload.get("samples")
+    if isinstance(samples, list):
+        lines.append(f"  samples: {len(samples)}")
+    return lines
+
+
+def _normalize_base_url(raw_base_url: str) -> str:
+    base_url = raw_base_url.strip().rstrip("/")
+    if not base_url:
+        raise ValueError(
+            "missing hosted Preview base URL; set QCODER_PREVIEW_BASE_URL or "
+            "QCODER_PRO_API_URL, or pass --base-url"
+        )
+    return base_url
+
+
+def _safe_json_decode(raw: str) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
