@@ -1,5 +1,13 @@
 # Changelog
 
+
+## 0.5.0a3
+
+- Add public hosted Preview client commands: `qcoder pro preview status` and `qcoder pro preview demo`.
+- Support env-based hosted Preview configuration with `QCODER_PREVIEW_BASE_URL` / `QCODER_PREVIEW_TOKEN`, with `QCODER_PRO_API_URL` / `QCODER_PRO_TOKEN` compatibility fallbacks.
+- Keep hosted Preview output bounded and token-safe: no token persistence, no Authorization header printing, and safe handling for 200/401/403/network failures.
+- Preserve public package boundary: no confidential Pro implementation, account service, protected service, uploads, QPU/provider execution, payment, hosted MCP, or Pro V0.0 launch claim is included in this package.
+
 All notable changes to this project will be documented in this file.
 
 The format is based on common practice for pre-1.0 semantic versioning: **`MAJOR.MINOR.PATCH`** with **`aN`** for alpha prereleases.
