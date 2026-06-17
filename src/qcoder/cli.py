@@ -20,6 +20,7 @@ from qcoder.pro_preview.client import ProServiceClient, ProServiceClientError
 from qcoder.pro_preview.client import (
     PreviewClientNetworkError,
     call_builtin_review_demo,
+    call_student_guided_evidence,
     resolve_preview_client_config,
     summarize_demo_payload,
 )
@@ -301,11 +302,74 @@ def _run_pro_preview_demo_check(
     return 2
 
 
+def _format_summary_value(value: str | int | float | bool) -> str:
+    if isinstance(value, bool):
+        return str(value).lower()
+    return str(value)
+
+
+def _summarize_student_evidence_payload(payload: dict[str, object] | None) -> list[str]:
+    if not payload:
+        return []
+    lines: list[str] = []
+    for key in ("schema_id", "mode", "history_ready", "persisted"):
+        value = payload.get(key)
+        if isinstance(value, (str, int, float, bool)):
+            lines.append(f"{key}: {_format_summary_value(value)}")
+    samples = payload.get("samples")
+    if isinstance(samples, list):
+        lines.append(f"samples: {len(samples)}")
+    elif isinstance(payload.get("sample_count"), int):
+        lines.append(f"samples: {payload['sample_count']}")
+    return lines
+
+
+def _run_student_evidence_check(*, base_url_override: str | None) -> int:
+    try:
+        config = resolve_preview_client_config(base_url_override=base_url_override)
+    except ValueError as exc:
+        print(f"qcoder student: {exc}", file=sys.stderr)
+        return 2
+
+    try:
+        response = call_student_guided_evidence(config)
+    except PreviewClientNetworkError:
+        print(
+            "qCoder Student evidence: FAIL (network). Base URL may be unreachable.",
+            file=sys.stderr,
+        )
+        print(f"  base_url: {config.base_url}", file=sys.stderr)
+        return 2
+
+    if response.status_code == 200:
+        print("qCoder Student evidence: PASS (HTTP 200).")
+        for line in _summarize_student_evidence_payload(response.payload):
+            print(f"  {line}")
+        return 0
+    if response.status_code == 401:
+        print(
+            "qCoder Student evidence: FAIL (HTTP 401). Token is missing, invalid, revoked, or lacks required scope.",
+            file=sys.stderr,
+        )
+        return 1
+    if response.status_code == 403:
+        print(
+            "qCoder Student evidence: FAIL (HTTP 403). Student evidence access may be blocked.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"qCoder Student evidence: FAIL (HTTP {response.status_code}).", file=sys.stderr)
+    for line in _summarize_student_evidence_payload(response.payload):
+        print(f"  {line}", file=sys.stderr)
+    return 2
+
+
 def _cmd_student(argv: list[str]) -> int:
     p = argparse.ArgumentParser(
         prog="qcoder student",
         add_help=True,
-        description="Hosted Student status/demo connectivity checks.",
+        description="Hosted Student status/demo/evidence connectivity checks.",
     )
     sub = p.add_subparsers(dest="student_command")
 
@@ -331,6 +395,17 @@ def _cmd_student(argv: list[str]) -> int:
     )
     p_demo.set_defaults(student_command="demo")
 
+    p_evidence = sub.add_parser(
+        "evidence",
+        help="Call hosted Student guided-evidence endpoint and print safe summary.",
+    )
+    p_evidence.add_argument(
+        "--base-url",
+        default=None,
+        help="Override hosted Preview base URL (default env: QCODER_PREVIEW_BASE_URL or QCODER_PRO_API_URL).",
+    )
+    p_evidence.set_defaults(student_command="evidence")
+
     args = p.parse_args(argv)
     if args.student_command is None:
         p.print_help()
@@ -342,6 +417,8 @@ def _cmd_student(argv: list[str]) -> int:
             label="qCoder Student demo",
             error_prefix="qcoder student",
         )
+    if args.student_command == "evidence":
+        return _run_student_evidence_check(base_url_override=args.base_url)
 
     p.print_help()
     return 0
@@ -734,7 +811,7 @@ def _print_root_help() -> None:
         "  context          Build deterministic preflight context artifacts.\n"
         "  review           Build deterministic execution review artifacts from counts.\n"
         "  pro              Service-backed Pro shell (signup/install/status/validate/workflow).\n"
-        "  student          Hosted Student status/demo connectivity checks.\n\n"
+        "  student          Hosted Student status/demo/evidence connectivity checks.\n\n"
         "Run `qcoder <subcommand> --help` for subcommand options.",
         end="",
     )

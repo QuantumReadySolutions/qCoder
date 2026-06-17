@@ -11,7 +11,7 @@ Free `qcoder` commands run offline and do not call hosted services, upload telem
 - `qcoder context`
 - `qcoder review`
 - `qcoder pro` (Pro bootstrap and client contract; non-confidential local plumbing only)
-- `qcoder student` (Student status/demo aliases for hosted Preview connectivity checks)
+- `qcoder student` (Student status/demo/evidence aliases for hosted Preview connectivity checks)
 
 ## Pro Preview boundaries
 
@@ -58,6 +58,7 @@ qcoder pro validate
 qcoder pro workflow --qasm path/to/circuit.qasm --dry-run-manifest pro.workflow.manifest.json
 qcoder student status
 qcoder student demo
+qcoder student evidence
 ```
 
 Use **`--dry-run-manifest`** unless QRS has given you a non-default service URL and token for contract rehearsal. Manifest-only submit (no artifact upload) is opt-in:

@@ -127,6 +127,7 @@ PREVIEW_TOKEN_ENV = "QCODER_PREVIEW_TOKEN"
 PRO_API_URL_ENV = "QCODER_PRO_API_URL"
 PRO_TOKEN_ENV = "QCODER_PRO_TOKEN"
 BUILTIN_REVIEW_PATH = "/v0/demo/builtin-review"
+STUDENT_GUIDED_EVIDENCE_PATH = "/v0/student/guided-evidence"
 
 
 @dataclass(frozen=True)
@@ -184,6 +185,28 @@ def call_builtin_review_demo(
         return PreviewClientResponse(status_code=int(err.code), payload=_safe_json_decode(body))
     except URLError as exc:
         raise PreviewClientNetworkError(str(exc)) from exc
+
+
+def call_student_guided_evidence(
+    config: PreviewClientConfig, *, timeout_s: float = 10.0
+) -> PreviewClientResponse:
+    """Call the hosted Student guided-evidence endpoint."""
+    request = Request(
+        _join_service_url(config.base_url, STUDENT_GUIDED_EVIDENCE_PATH),
+        headers={"Authorization": f"Bearer {config.token}"},
+        method="GET",
+    )
+    try:
+        with urlopen(request, timeout=timeout_s) as response:
+            body = response.read().decode("utf-8", errors="replace")
+            status_code = int(getattr(response, "status", 200))
+            return PreviewClientResponse(status_code=status_code, payload=_safe_json_decode(body))
+    except HTTPError as err:
+        body = err.read().decode("utf-8", errors="replace")
+        return PreviewClientResponse(status_code=int(err.code), payload=_safe_json_decode(body))
+    except URLError as exc:
+        raise PreviewClientNetworkError(str(exc)) from exc
+
 
 def summarize_demo_payload(payload: dict[str, Any] | None) -> list[str]:
     if not payload:

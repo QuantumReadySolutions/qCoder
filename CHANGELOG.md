@@ -4,8 +4,9 @@
 ## 0.5.0a4
 
 - Add public Student aliases: `qcoder student status` and `qcoder student demo`.
+- Add `qcoder student evidence` for the existing deterministic hosted guided-evidence endpoint.
 - Student aliases reuse the hosted Preview client configuration: `QCODER_PREVIEW_BASE_URL` / `QCODER_PREVIEW_TOKEN`, with `QCODER_PRO_API_URL` / `QCODER_PRO_TOKEN` compatibility fallbacks.
-- No new hosted service endpoint or Student-specific environment variables are introduced.
+- No service deployment change or Student-specific environment variables are introduced in this public package slice.
 - Existing `qcoder pro preview status` and `qcoder pro preview demo` commands remain compatible.
 
 ## 0.5.0a3

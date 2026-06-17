@@ -120,6 +120,7 @@ class TestCliHelp(unittest.TestCase):
         out = self._run_module_help("student")
         self.assertIn("status", out)
         self.assertIn("demo", out)
+        self.assertIn("evidence", out)
         self.assertIn("Hosted Student", out)
 
     def test_pro_login_and_install_help_include_token_hygiene(self) -> None:
