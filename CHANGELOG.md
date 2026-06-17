@@ -1,6 +1,13 @@
 # Changelog
 
 
+## 0.5.0a4
+
+- Add public Student aliases: `qcoder student status` and `qcoder student demo`.
+- Student aliases reuse the hosted Preview client configuration: `QCODER_PREVIEW_BASE_URL` / `QCODER_PREVIEW_TOKEN`, with `QCODER_PRO_API_URL` / `QCODER_PRO_TOKEN` compatibility fallbacks.
+- No new hosted service endpoint or Student-specific environment variables are introduced.
+- Existing `qcoder pro preview status` and `qcoder pro preview demo` commands remain compatible.
+
 ## 0.5.0a3
 
 - Add public hosted Preview client commands: `qcoder pro preview status` and `qcoder pro preview demo`.

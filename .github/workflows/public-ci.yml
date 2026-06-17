@@ -26,7 +26,7 @@ jobs:
           pip install pytest
 
       - name: Public package safety smoke tests
-        run: pytest tests/test_public_package_safety.py tests/test_cli_help.py tests/test_smoke.py tests/test_pro_preview_config.py tests/test_pro_preview_manifest.py tests/test_pro_preview_client.py tests/test_pro_preview_cli.py -q
+        run: pytest tests/test_public_package_safety.py tests/test_cli_help.py tests/test_smoke.py tests/test_pro_preview_config.py tests/test_pro_preview_manifest.py tests/test_pro_preview_client.py tests/test_pro_preview_cli.py tests/test_student_cli.py tests/test_pro_preview_hosted_client.py -q
 
       - name: Public release rehearsal
         run: bash scripts/qcoder-v0-release-check

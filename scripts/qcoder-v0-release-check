@@ -83,6 +83,7 @@ run_cmd "$RUN_VENV/bin/qcoder" analyze "$QASM_PATH" --json
 run_cmd "$RUN_VENV/bin/qcoder" context "$QASM_PATH" --out-json "$CTX_JSON" --out-md "$CTX_MD"
 run_cmd "$RUN_VENV/bin/qcoder" review --counts-json "$COUNTS_PATH" --format qiskit_counts --preflight-json "$CTX_JSON" --out-json "$REV_JSON" --out-md "$REV_MD"
 run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro --help
+run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" student --help
 run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro signup
 PRO_CHECK_TOKEN="local-release-check-token"
 echo "+ env HOME=\"$PRO_HOME\" $RUN_VENV/bin/qcoder pro install --token <redacted>"
@@ -99,6 +100,8 @@ run_cmd python3 -m pytest \
   "$ROOT_DIR/tests/test_pro_preview_manifest.py" \
   "$ROOT_DIR/tests/test_pro_preview_client.py" \
   "$ROOT_DIR/tests/test_pro_preview_cli.py" \
+  "$ROOT_DIR/tests/test_student_cli.py" \
+  "$ROOT_DIR/tests/test_pro_preview_hosted_client.py" \
   -q
 
 if env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro workflow --qasm "$QASM_PATH" --project-dir "$TMP_ROOT/project"; then

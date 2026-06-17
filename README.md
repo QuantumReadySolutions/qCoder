@@ -11,12 +11,13 @@ Free `qcoder` commands run offline and do not call hosted services, upload telem
 - `qcoder context`
 - `qcoder review`
 - `qcoder pro` (Pro bootstrap and client contract; non-confidential local plumbing only)
+- `qcoder student` (Student status/demo aliases for hosted Preview connectivity checks)
 
 ## Pro Preview boundaries
 
 Public `qcoder` ships **Free local commands** plus a **Pro bootstrap/client contract**. It is **not** the sellable hosted Pro product.
 
-For a public, pilot-safe walkthrough, see the [Pro Preview pilot walkthrough](https://qcoder.ai/manual/pro-preview-pilot-walkthrough/). The current public PyPI alpha client surface for Pro Preview is **`qcoder==0.5.0a2`**. It is not Pro V0.0 and not a sellable launched Pro product.
+For a public, pilot-safe walkthrough, see the [Pro Preview pilot walkthrough](https://qcoder.ai/manual/pro-preview-pilot-walkthrough/). The current public PyPI alpha client surface for Pro Preview is **`qcoder==0.5.0a4`**. It is not Pro V0.0 and not a sellable launched Pro product.
 
 - **Free commands** (`analyze`, `batch`, `context`, `review`) are Apache-2.0, local-first/offline, and useful without Pro. They do not upload data, call a qCoder hosted service, or run QPU/simulator jobs.
 - **`qcoder pro` bootstrap** (`signup`, `login`, `install`, `status`, `validate`) stores local token/config only. It does not upload circuits, run confidential analysis, or generate Pro cards locally.
@@ -55,6 +56,8 @@ qcoder pro install --token <token-if-provided>
 qcoder pro status
 qcoder pro validate
 qcoder pro workflow --qasm path/to/circuit.qasm --dry-run-manifest pro.workflow.manifest.json
+qcoder student status
+qcoder student demo
 ```
 
 Use **`--dry-run-manifest`** unless QRS has given you a non-default service URL and token for contract rehearsal. Manifest-only submit (no artifact upload) is opt-in:
