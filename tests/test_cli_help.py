@@ -46,6 +46,7 @@ class TestCliHelp(unittest.TestCase):
         self.assertIn("context", out)
         self.assertIn("review", out)
         self.assertIn("pro", out)
+        self.assertIn("student", out)
 
     def test_root_version_prints_package_version(self) -> None:
         for flag in ("--version", "-V"):
@@ -114,6 +115,12 @@ class TestCliHelp(unittest.TestCase):
         self.assertIn("validate", out)
         self.assertIn("workflow", out)
         self.assertIn("service-backed", out.lower())
+
+    def test_python_m_qcoder_student_help(self) -> None:
+        out = self._run_module_help("student")
+        self.assertIn("status", out)
+        self.assertIn("demo", out)
+        self.assertIn("Hosted Student", out)
 
     def test_pro_login_and_install_help_include_token_hygiene(self) -> None:
         for argv in (["pro", "login", "--help"], ["pro", "install", "--help"]):

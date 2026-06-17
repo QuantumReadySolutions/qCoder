@@ -254,46 +254,97 @@ def _cmd_review(argv: list[str]) -> int:
     return 0
 
 
-def _run_pro_preview_demo_check(*, base_url_override: str | None) -> int:
+def _run_pro_preview_demo_check(
+    *,
+    base_url_override: str | None,
+    label: str = "qCoder Pro Preview demo",
+    error_prefix: str = "qcoder pro preview",
+) -> int:
     try:
         config = resolve_preview_client_config(base_url_override=base_url_override)
     except ValueError as exc:
-        print(f"qcoder pro preview: {exc}", file=sys.stderr)
+        print(f"{error_prefix}: {exc}", file=sys.stderr)
         return 2
 
     try:
         response = call_builtin_review_demo(config)
     except PreviewClientNetworkError:
         print(
-            "qCoder Pro Preview demo: FAIL (network). Base URL may be unreachable.",
+            f"{label}: FAIL (network). Base URL may be unreachable.",
             file=sys.stderr,
         )
         print(f"  base_url: {config.base_url}", file=sys.stderr)
         return 2
 
     if response.status_code == 200:
-        print("qCoder Pro Preview demo: PASS (HTTP 200).")
+        print(f"{label}: PASS (HTTP 200).")
         print(f"  base_url: {config.base_url}")
         for line in summarize_demo_payload(response.payload):
             print(f"  {line}")
         return 0
     if response.status_code == 401:
         print(
-            "qCoder Pro Preview demo: FAIL (HTTP 401). Token is missing, invalid, or revoked.",
+            f"{label}: FAIL (HTTP 401). Token is missing, invalid, or revoked.",
             file=sys.stderr,
         )
         return 1
     if response.status_code == 403:
         print(
-            "qCoder Pro Preview demo: FAIL (HTTP 403). Private/outer service access may be blocking access.",
+            f"{label}: FAIL (HTTP 403). Private/outer service access may be blocking access.",
             file=sys.stderr,
         )
         return 1
 
-    print(f"qCoder Pro Preview demo: FAIL (HTTP {response.status_code}).", file=sys.stderr)
+    print(f"{label}: FAIL (HTTP {response.status_code}).", file=sys.stderr)
     for line in summarize_demo_payload(response.payload):
         print(f"  {line}", file=sys.stderr)
     return 2
+
+
+def _cmd_student(argv: list[str]) -> int:
+    p = argparse.ArgumentParser(
+        prog="qcoder student",
+        add_help=True,
+        description="Hosted Student status/demo connectivity checks.",
+    )
+    sub = p.add_subparsers(dest="student_command")
+
+    p_status = sub.add_parser(
+        "status",
+        help="Call hosted Student demo endpoint and print safe connectivity summary.",
+    )
+    p_status.add_argument(
+        "--base-url",
+        default=None,
+        help="Override hosted Preview base URL (default env: QCODER_PREVIEW_BASE_URL or QCODER_PRO_API_URL).",
+    )
+    p_status.set_defaults(student_command="status")
+
+    p_demo = sub.add_parser(
+        "demo",
+        help="Alias of student status check; calls /v0/demo/builtin-review.",
+    )
+    p_demo.add_argument(
+        "--base-url",
+        default=None,
+        help="Override hosted Preview base URL (default env: QCODER_PREVIEW_BASE_URL or QCODER_PRO_API_URL).",
+    )
+    p_demo.set_defaults(student_command="demo")
+
+    args = p.parse_args(argv)
+    if args.student_command is None:
+        p.print_help()
+        return 0
+
+    if args.student_command in {"status", "demo"}:
+        return _run_pro_preview_demo_check(
+            base_url_override=args.base_url,
+            label="qCoder Student demo",
+            error_prefix="qcoder student",
+        )
+
+    p.print_help()
+    return 0
 
 
 def _cmd_pro(argv: list[str]) -> int:
@@ -674,15 +725,16 @@ def _cmd_pro(argv: list[str]) -> int:
 
 def _print_root_help() -> None:
     print(
-        "usage: qcoder [--version | -V] [-h] {analyze,batch,context,review,pro} ...\n\n"
+        "usage: qcoder [--version | -V] [-h] {analyze,batch,context,review,pro,student} ...\n\n"
         "Quantum circuit analysis CLI.\n\n"
         "positional arguments:\n"
-        "  {analyze,batch,context,review,pro}  subcommand\n\n"
+        "  {analyze,batch,context,review,pro,student}  subcommand\n\n"
         "  analyze          Analyze a QASM file (feature extraction + metadata + run config).\n"
         "  batch            Batch extract a directory to JSONL (requires --out).\n"
         "  context          Build deterministic preflight context artifacts.\n"
         "  review           Build deterministic execution review artifacts from counts.\n"
-        "  pro              Service-backed Pro shell (signup/install/status/validate/workflow).\n\n"
+        "  pro              Service-backed Pro shell (signup/install/status/validate/workflow).\n"
+        "  student          Hosted Student status/demo connectivity checks.\n\n"
         "Run `qcoder <subcommand> --help` for subcommand options.",
         end="",
     )
@@ -713,9 +765,11 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_review(rest)
     if cmd == "pro":
         return _cmd_pro(rest)
+    if cmd == "student":
+        return _cmd_student(rest)
 
     print(
-        f"qcoder: unknown subcommand {cmd!r} (expected analyze, batch, context, review, or pro)",
+        f"qcoder: unknown subcommand {cmd!r} (expected analyze, batch, context, review, pro, or student)",
         file=sys.stderr,
     )
     print("Run `qcoder --help` for usage.", file=sys.stderr)
