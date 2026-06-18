@@ -123,6 +123,22 @@ class TestCliHelp(unittest.TestCase):
         self.assertIn("evidence", out)
         self.assertIn("Hosted Student", out)
 
+    def test_student_subcommand_help_includes_json(self) -> None:
+        for argv in (
+            ["student", "status", "--help"],
+            ["student", "demo", "--help"],
+            ["student", "evidence", "--help"],
+        ):
+            with self.subTest(argv=argv):
+                buf = io.StringIO()
+                with redirect_stdout(buf):
+                    with self.assertRaises(SystemExit) as ctx:
+                        main(argv)
+                self.assertEqual(ctx.exception.code, 0)
+                out = buf.getvalue()
+                self.assertIn("--json", out)
+                self.assertIn("--base-url", out)
+
     def test_pro_login_and_install_help_include_token_hygiene(self) -> None:
         for argv in (["pro", "login", "--help"], ["pro", "install", "--help"]):
             with self.subTest(argv=argv):

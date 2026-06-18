@@ -262,7 +262,10 @@ def _run_pro_preview_demo_check(
     error_prefix: str = "qcoder pro preview",
 ) -> int:
     try:
-        config = resolve_preview_client_config(base_url_override=base_url_override)
+        config = resolve_preview_client_config(
+            base_url_override=base_url_override,
+            include_student_aliases=True,
+        )
     except ValueError as exc:
         print(f"{error_prefix}: {exc}", file=sys.stderr)
         return 2
@@ -308,25 +311,199 @@ def _format_summary_value(value: str | int | float | bool) -> str:
     return str(value)
 
 
-def _summarize_student_evidence_payload(payload: dict[str, object] | None) -> list[str]:
+def _print_raw_payload_json(payload: dict[str, object] | None) -> None:
+    print(json.dumps(payload or {}, indent=2, sort_keys=True))
+
+
+def _is_scalar(value: object) -> bool:
+    return isinstance(value, (str, int, float, bool))
+
+
+def _sample_count(payload: dict[str, object] | None) -> int | None:
     if not payload:
-        return []
-    lines: list[str] = []
-    for key in ("schema_id", "mode", "history_ready", "persisted"):
-        value = payload.get(key)
-        if isinstance(value, (str, int, float, bool)):
-            lines.append(f"{key}: {_format_summary_value(value)}")
+        return None
     samples = payload.get("samples")
     if isinstance(samples, list):
-        lines.append(f"samples: {len(samples)}")
-    elif isinstance(payload.get("sample_count"), int):
-        lines.append(f"samples: {payload['sample_count']}")
+        return len(samples)
+    sample_count = payload.get("sample_count")
+    if isinstance(sample_count, int):
+        return sample_count
+    return None
+
+
+def _format_beginner_metrics(value: object) -> str | None:
+    if not isinstance(value, dict):
+        return None
+    parts: list[str] = []
+    for key in sorted(value):
+        metric = value[key]
+        if _is_scalar(metric):
+            parts.append(f"{key}={_format_summary_value(metric)}")
+    return ", ".join(parts) if parts else None
+
+
+def _summarize_student_glossary(value: object) -> list[str]:
+    lines: list[str] = []
+    if isinstance(value, dict):
+        for term in sorted(value)[:4]:
+            definition = value[term]
+            if isinstance(definition, str):
+                lines.append(f"  {term}: {definition}")
+            elif isinstance(definition, dict):
+                text = definition.get("definition") or definition.get("summary")
+                if isinstance(text, str):
+                    lines.append(f"  {term}: {text}")
+    elif isinstance(value, list):
+        for item in value[:4]:
+            if isinstance(item, dict):
+                term = item.get("term") or item.get("name")
+                definition = item.get("definition") or item.get("summary")
+                if isinstance(term, str) and isinstance(definition, str):
+                    lines.append(f"  {term}: {definition}")
+            elif isinstance(item, str):
+                lines.append(f"  {item}")
     return lines
 
 
-def _run_student_evidence_check(*, base_url_override: str | None) -> int:
+def _summarize_student_demo_payload(payload: dict[str, object] | None) -> list[str]:
+    if not payload:
+        return ["summary: built-in teaching demo reached; no summary payload returned"]
+    lines: list[str] = []
+    summary = payload.get("student_summary")
+    if isinstance(summary, str):
+        lines.append(f"summary: {summary}")
+    elif isinstance(summary, dict):
+        for key in ("title", "summary", "next_step"):
+            value = summary.get(key)
+            if _is_scalar(value):
+                lines.append(f"{key}: {_format_summary_value(value)}")
+    mode = payload.get("mode")
+    if _is_scalar(mode):
+        lines.append(f"mode: {_format_summary_value(mode)}")
+    count = _sample_count(payload)
+    if count is not None:
+        lines.append(f"samples: {count}")
+    samples = payload.get("samples")
+    if isinstance(samples, list):
+        for index, sample in enumerate(samples[:2], start=1):
+            if isinstance(sample, dict):
+                plain_summary = sample.get("plain_summary")
+                if isinstance(plain_summary, str):
+                    lines.append(f"sample {index}: {plain_summary}")
+    return lines
+
+
+def _summarize_student_evidence_payload(payload: dict[str, object] | None) -> list[str]:
+    if not payload:
+        return ["summary: Student evidence endpoint reached; no summary payload returned"]
+    lines: list[str] = []
+    summary = payload.get("student_summary")
+    if isinstance(summary, str):
+        lines.append(f"summary: {summary}")
+    elif isinstance(summary, dict):
+        for key in ("title", "summary", "what_this_means", "next_step"):
+            value = summary.get(key)
+            if _is_scalar(value):
+                lines.append(f"{key}: {_format_summary_value(value)}")
+    anatomy_label = payload.get("anatomy_label")
+    if _is_scalar(anatomy_label):
+        lines.append(f"anatomy_label: {_format_summary_value(anatomy_label)}")
+    count = _sample_count(payload)
+    if count is not None:
+        lines.append(f"samples: {count}")
+    samples = payload.get("samples")
+    if isinstance(samples, list):
+        for index, sample in enumerate(samples[:3], start=1):
+            if not isinstance(sample, dict):
+                continue
+            plain_summary = sample.get("plain_summary")
+            if isinstance(plain_summary, str):
+                lines.append(f"sample {index}: {plain_summary}")
+            sample_anatomy = sample.get("anatomy_label")
+            if _is_scalar(sample_anatomy):
+                lines.append(f"sample {index} anatomy: {_format_summary_value(sample_anatomy)}")
+            metrics = _format_beginner_metrics(sample.get("beginner_metrics"))
+            if metrics:
+                lines.append(f"sample {index} beginner_metrics: {metrics}")
+    metrics = _format_beginner_metrics(payload.get("beginner_metrics"))
+    if metrics:
+        lines.append(f"beginner_metrics: {metrics}")
+    glossary = _summarize_student_glossary(payload.get("glossary"))
+    if glossary:
+        lines.append("glossary:")
+        lines.extend(glossary)
+    return lines
+
+
+def _run_student_builtin_review_check(
+    *,
+    base_url_override: str | None,
+    mode: str,
+    json_output: bool,
+) -> int:
     try:
-        config = resolve_preview_client_config(base_url_override=base_url_override)
+        config = resolve_preview_client_config(
+            base_url_override=base_url_override,
+            include_student_aliases=True,
+        )
+    except ValueError as exc:
+        print(f"qcoder student: {exc}", file=sys.stderr)
+        return 2
+
+    try:
+        response = call_builtin_review_demo(config)
+    except PreviewClientNetworkError:
+        print(
+            "qCoder Student: FAIL (network). The service may be unreachable; check your base URL.",
+            file=sys.stderr,
+        )
+        print(f"  base_url: {config.base_url}", file=sys.stderr)
+        return 2
+
+    if json_output:
+        _print_raw_payload_json(response.payload)
+        return 0 if response.status_code == 200 else 1 if response.status_code in {401, 403} else 2
+
+    if response.status_code == 200:
+        if mode == "status":
+            print("qCoder Student access: OK")
+            print(f"  http_status: {response.status_code}")
+            print("  service: available")
+            count = _sample_count(response.payload)
+            if count is not None:
+                print(f"  teaching_demo_samples: {count}")
+            print("Next: try qcoder student demo, then qcoder student evidence.")
+        else:
+            print("qCoder Student built-in teaching demo: PASS (HTTP 200).")
+            for line in _summarize_student_demo_payload(response.payload):
+                print(f"  {line}")
+        return 0
+    if response.status_code == 401:
+        print(
+            "qCoder Student: FAIL (HTTP 401). Your token is missing, invalid, revoked, or lacks Student access.",
+            file=sys.stderr,
+        )
+        return 1
+    if response.status_code == 403:
+        print(
+            "qCoder Student: FAIL (HTTP 403). Your token does not have access to this Student command.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"qCoder Student: FAIL (HTTP {response.status_code}).", file=sys.stderr)
+    if mode == "demo":
+        for line in _summarize_student_demo_payload(response.payload):
+            print(f"  {line}", file=sys.stderr)
+    return 2
+
+
+def _run_student_evidence_check(*, base_url_override: str | None, json_output: bool) -> int:
+    try:
+        config = resolve_preview_client_config(
+            base_url_override=base_url_override,
+            include_student_aliases=True,
+        )
     except ValueError as exc:
         print(f"qcoder student: {exc}", file=sys.stderr)
         return 2
@@ -335,11 +512,15 @@ def _run_student_evidence_check(*, base_url_override: str | None) -> int:
         response = call_student_guided_evidence(config)
     except PreviewClientNetworkError:
         print(
-            "qCoder Student evidence: FAIL (network). Base URL may be unreachable.",
+            "qCoder Student evidence: FAIL (network). The service may be unreachable; check your base URL.",
             file=sys.stderr,
         )
         print(f"  base_url: {config.base_url}", file=sys.stderr)
         return 2
+
+    if json_output:
+        _print_raw_payload_json(response.payload)
+        return 0 if response.status_code == 200 else 1 if response.status_code in {401, 403} else 2
 
     if response.status_code == 200:
         print("qCoder Student evidence: PASS (HTTP 200).")
@@ -348,13 +529,13 @@ def _run_student_evidence_check(*, base_url_override: str | None) -> int:
         return 0
     if response.status_code == 401:
         print(
-            "qCoder Student evidence: FAIL (HTTP 401). Token is missing, invalid, revoked, or lacks required scope.",
+            "qCoder Student evidence: FAIL (HTTP 401). Your token is missing, invalid, revoked, or lacks Student evidence access.",
             file=sys.stderr,
         )
         return 1
     if response.status_code == 403:
         print(
-            "qCoder Student evidence: FAIL (HTTP 403). Student evidence access may be blocked.",
+            "qCoder Student evidence: FAIL (HTTP 403). Your token does not have access to Student evidence.",
             file=sys.stderr,
         )
         return 1
@@ -375,24 +556,26 @@ def _cmd_student(argv: list[str]) -> int:
 
     p_status = sub.add_parser(
         "status",
-        help="Call hosted Student demo endpoint and print safe connectivity summary.",
+        help="Check qCoder Student access and print the next step.",
     )
     p_status.add_argument(
         "--base-url",
         default=None,
-        help="Override hosted Preview base URL (default env: QCODER_PREVIEW_BASE_URL or QCODER_PRO_API_URL).",
+        help="Override qCoder Student base URL (default env: QCODER_STUDENT_BASE_URL, QCODER_PREVIEW_BASE_URL, or QCODER_PRO_API_URL).",
     )
+    p_status.add_argument("--json", action="store_true", help="Emit raw service payload as JSON.")
     p_status.set_defaults(student_command="status")
 
     p_demo = sub.add_parser(
         "demo",
-        help="Alias of student status check; calls /v0/demo/builtin-review.",
+        help="Run the built-in qCoder Student teaching demo.",
     )
     p_demo.add_argument(
         "--base-url",
         default=None,
-        help="Override hosted Preview base URL (default env: QCODER_PREVIEW_BASE_URL or QCODER_PRO_API_URL).",
+        help="Override qCoder Student base URL (default env: QCODER_STUDENT_BASE_URL, QCODER_PREVIEW_BASE_URL, or QCODER_PRO_API_URL).",
     )
+    p_demo.add_argument("--json", action="store_true", help="Emit raw service payload as JSON.")
     p_demo.set_defaults(student_command="demo")
 
     p_evidence = sub.add_parser(
@@ -402,8 +585,9 @@ def _cmd_student(argv: list[str]) -> int:
     p_evidence.add_argument(
         "--base-url",
         default=None,
-        help="Override hosted Preview base URL (default env: QCODER_PREVIEW_BASE_URL or QCODER_PRO_API_URL).",
+        help="Override qCoder Student base URL (default env: QCODER_STUDENT_BASE_URL, QCODER_PREVIEW_BASE_URL, or QCODER_PRO_API_URL).",
     )
+    p_evidence.add_argument("--json", action="store_true", help="Emit raw service payload as JSON.")
     p_evidence.set_defaults(student_command="evidence")
 
     args = p.parse_args(argv)
@@ -412,13 +596,13 @@ def _cmd_student(argv: list[str]) -> int:
         return 0
 
     if args.student_command in {"status", "demo"}:
-        return _run_pro_preview_demo_check(
+        return _run_student_builtin_review_check(
             base_url_override=args.base_url,
-            label="qCoder Student demo",
-            error_prefix="qcoder student",
+            mode=args.student_command,
+            json_output=args.json,
         )
     if args.student_command == "evidence":
-        return _run_student_evidence_check(base_url_override=args.base_url)
+        return _run_student_evidence_check(base_url_override=args.base_url, json_output=args.json)
 
     p.print_help()
     return 0

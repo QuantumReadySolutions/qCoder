@@ -124,6 +124,8 @@ def _parse_http_error(exc: HTTPError) -> ServiceErrorDetail:
 
 PREVIEW_BASE_URL_ENV = "QCODER_PREVIEW_BASE_URL"
 PREVIEW_TOKEN_ENV = "QCODER_PREVIEW_TOKEN"
+STUDENT_BASE_URL_ENV = "QCODER_STUDENT_BASE_URL"
+STUDENT_TOKEN_ENV = "QCODER_STUDENT_TOKEN"
 PRO_API_URL_ENV = "QCODER_PRO_API_URL"
 PRO_TOKEN_ENV = "QCODER_PRO_TOKEN"
 BUILTIN_REVIEW_PATH = "/v0/demo/builtin-review"
@@ -147,17 +149,38 @@ class PreviewClientNetworkError(RuntimeError):
 
 
 def resolve_preview_client_config(
-    *, base_url_override: str | None = None, env_map: Mapping[str, str] | None = None
+    *,
+    base_url_override: str | None = None,
+    env_map: Mapping[str, str] | None = None,
+    include_student_aliases: bool = False,
 ) -> PreviewClientConfig:
     env = os.environ if env_map is None else env_map
+    if include_student_aliases:
+        env_base_url = str(
+            env.get(STUDENT_BASE_URL_ENV)
+            or env.get(PREVIEW_BASE_URL_ENV)
+            or env.get(PRO_API_URL_ENV)
+            or ""
+        )
+        token = str(env.get(STUDENT_TOKEN_ENV) or env.get(PREVIEW_TOKEN_ENV) or env.get(PRO_TOKEN_ENV) or "").strip()
+    else:
+        env_base_url = str(env.get(PREVIEW_BASE_URL_ENV) or env.get(PRO_API_URL_ENV) or "")
+        token = str(env.get(PREVIEW_TOKEN_ENV) or env.get(PRO_TOKEN_ENV) or "").strip()
     base_url = _normalize_base_url(
         base_url_override
         if base_url_override is not None
-        else str(env.get(PREVIEW_BASE_URL_ENV) or env.get(PRO_API_URL_ENV) or "")
+        else env_base_url,
+        include_student_aliases=include_student_aliases,
     )
-    token = str(env.get(PREVIEW_TOKEN_ENV) or env.get(PRO_TOKEN_ENV) or "").strip()
     if not token:
-        raise ValueError("missing hosted Preview token; set QCODER_PREVIEW_TOKEN or QCODER_PRO_TOKEN")
+        if include_student_aliases:
+            raise ValueError(
+                "missing qCoder Student token; set QCODER_STUDENT_TOKEN, "
+                "QCODER_PREVIEW_TOKEN, or QCODER_PRO_TOKEN"
+            )
+        raise ValueError(
+            "missing hosted Preview token; set QCODER_PREVIEW_TOKEN or QCODER_PRO_TOKEN"
+        )
     return PreviewClientConfig(base_url=base_url, token=token)
 
 
@@ -222,9 +245,14 @@ def summarize_demo_payload(payload: dict[str, Any] | None) -> list[str]:
     return lines
 
 
-def _normalize_base_url(raw_base_url: str) -> str:
+def _normalize_base_url(raw_base_url: str, *, include_student_aliases: bool = False) -> str:
     base_url = raw_base_url.strip().rstrip("/")
     if not base_url:
+        if include_student_aliases:
+            raise ValueError(
+                "missing qCoder Student base URL; set QCODER_STUDENT_BASE_URL, "
+                "QCODER_PREVIEW_BASE_URL, or QCODER_PRO_API_URL, or pass --base-url"
+            )
         raise ValueError(
             "missing hosted Preview base URL; set QCODER_PREVIEW_BASE_URL or "
             "QCODER_PRO_API_URL, or pass --base-url"
