@@ -175,7 +175,7 @@ def resolve_preview_client_config(
     if not token:
         if include_student_aliases:
             raise ValueError(
-                "missing qCoder Student token; set QCODER_STUDENT_TOKEN, "
+                "missing qCoder Explorer Beta token; set QCODER_STUDENT_TOKEN, "
                 "QCODER_PREVIEW_TOKEN, or QCODER_PRO_TOKEN"
             )
         raise ValueError(
@@ -250,7 +250,7 @@ def _normalize_base_url(raw_base_url: str, *, include_student_aliases: bool = Fa
     if not base_url:
         if include_student_aliases:
             raise ValueError(
-                "missing qCoder Student base URL; set QCODER_STUDENT_BASE_URL, "
+                "missing qCoder Explorer Beta base URL; set QCODER_STUDENT_BASE_URL, "
                 "QCODER_PREVIEW_BASE_URL, or QCODER_PRO_API_URL, or pass --base-url"
             )
         raise ValueError(

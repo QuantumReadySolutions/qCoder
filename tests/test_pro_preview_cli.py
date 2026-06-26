@@ -108,7 +108,7 @@ def test_status_human_output_marks_default_preview_url_not_submit_ready(tmp_path
     assert rc == 0
     assert "submit-ready service URL: not set" in out
     assert "pilot submit readiness: not ready" in out
-    assert "default Preview URL is informational" in out
+    assert "default archived preview URL is informational" in out
     assert "api_url: configured (default)" not in out
 
 
@@ -130,14 +130,14 @@ def test_login_and_install_human_output_use_public_wording(tmp_path: Path, monke
 
     rc_login, out_login, _err_login = _capture(["pro", "login", "--token", token])
     assert rc_login == 0
-    assert "Configured qCoder Pro Preview local token settings." in out_login
+    assert "Configured archived qCoder Pro pilot local token settings." in out_login
     assert "token hygiene: do not paste tokens into tickets, screenshots, or chat" in out_login
     assert "Pro Preview/V0" not in out_login
     assert "V0 local bootstrap" not in out_login
 
     rc_install, out_install, _err_install = _capture(["pro", "install", "--token", token])
     assert rc_install == 0
-    assert "Configured qCoder Pro Preview local token settings." in out_install
+    assert "Configured archived qCoder Pro pilot local token settings." in out_install
     assert "token hygiene: do not paste tokens into tickets, screenshots, or chat" in out_install
     assert "Pro Preview/V0" not in out_install
     assert "V0 local bootstrap" not in out_install

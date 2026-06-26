@@ -114,14 +114,16 @@ class TestCliHelp(unittest.TestCase):
         self.assertIn("status", out)
         self.assertIn("validate", out)
         self.assertIn("workflow", out)
-        self.assertIn("service-backed", out.lower())
+        self.assertIn("archived", out.lower())
+        self.assertIn("not a current public product", out.lower())
 
     def test_python_m_qcoder_student_help(self) -> None:
         out = self._run_module_help("student")
         self.assertIn("status", out)
         self.assertIn("demo", out)
         self.assertIn("evidence", out)
-        self.assertIn("Hosted Student", out)
+        self.assertIn("qCoder Explorer Beta", out)
+        self.assertIn("compatibility", out)
 
     def test_student_subcommand_help_includes_json(self) -> None:
         for argv in (

@@ -189,8 +189,9 @@ def test_student_status_renders_access_framing_and_next_step(
     monkeypatch.setattr("qcoder.pro_preview.client.urlopen", _fake_urlopen)
     assert main(["student", "status"]) == 0
     out = capsys.readouterr()
-    assert "qCoder Student access: OK" in out.out
-    assert "qCoder Student demo: PASS" not in out.out
+    assert "qCoder Explorer Beta access: OK" in out.out
+    assert "compatibility_command: qcoder student" in out.out
+    assert "qCoder Explorer Beta demo: PASS" not in out.out
     assert "Next: try qcoder student demo, then qcoder student evidence." in out.out
     assert "teaching_demo_samples: 2" in out.out
     assert "demo_level" not in out.out
@@ -218,7 +219,8 @@ def test_student_demo_renders_teaching_demo_and_hides_meta(
     monkeypatch.setattr("qcoder.pro_preview.client.urlopen", _fake_urlopen)
     assert main(["student", "demo"]) == 0
     out = capsys.readouterr()
-    assert "qCoder Student built-in teaching demo: PASS (HTTP 200)" in out.out
+    assert "qCoder Explorer Beta built-in teaching demo: PASS (HTTP 200)" in out.out
+    assert "compatibility_command: qcoder student demo" in out.out
     assert "summary: This demo shows how qCoder explains a built-in circuit." in out.out
     assert "samples: 2" in out.out
     assert "sample 1: A tiny Bell-style example." in out.out
@@ -262,7 +264,8 @@ def test_student_evidence_http_200_prints_safe_summary(
     monkeypatch.setattr("qcoder.pro_preview.client.urlopen", _fake_urlopen)
     assert main(["student", "evidence"]) == 0
     out = capsys.readouterr()
-    assert "qCoder Student evidence: PASS (HTTP 200)" in out.out
+    assert "qCoder Explorer Beta evidence: PASS (HTTP 200)" in out.out
+    assert "compatibility_command: qcoder student evidence" in out.out
     assert "summary: This is a learner-friendly guided evidence summary." in out.out
     assert "anatomy_label: bell_pair_teaching_example" in out.out
     assert "sample 1: This sample creates and checks a two-qubit relationship." in out.out
@@ -312,7 +315,7 @@ def test_student_missing_base_url_returns_existing_actionable_env_error(
     monkeypatch.setenv("QCODER_PREVIEW_TOKEN", "dummy-preview-token-for-test")
     assert main(["student", "status"]) == 2
     err = capsys.readouterr().err
-    assert err.startswith("qcoder student: missing qCoder Student base URL")
+    assert err.startswith("qcoder student: missing qCoder Explorer Beta base URL")
     assert "QCODER_STUDENT_BASE_URL" in err
     assert "QCODER_PREVIEW_BASE_URL" in err
     assert "QCODER_PRO_API_URL" in err
@@ -328,7 +331,7 @@ def test_student_evidence_missing_base_url_returns_student_prefix(
     monkeypatch.setenv("QCODER_PREVIEW_TOKEN", "dummy-preview-token-for-test")
     assert main(["student", "evidence"]) == 2
     err = capsys.readouterr().err
-    assert err.startswith("qcoder student: missing qCoder Student base URL")
+    assert err.startswith("qcoder student: missing qCoder Explorer Beta base URL")
     assert "QCODER_STUDENT_BASE_URL" in err
     assert "QCODER_PREVIEW_BASE_URL" in err
     assert "QCODER_PRO_API_URL" in err
@@ -344,7 +347,7 @@ def test_student_missing_token_returns_existing_actionable_env_error(
     monkeypatch.setenv("QCODER_PREVIEW_BASE_URL", "http://127.0.0.1:18081")
     assert main(["student", "status"]) == 2
     err = capsys.readouterr().err
-    assert err.startswith("qcoder student: missing qCoder Student token")
+    assert err.startswith("qcoder student: missing qCoder Explorer Beta token")
     assert "QCODER_STUDENT_TOKEN" in err
     assert "QCODER_PREVIEW_TOKEN" in err
     assert "QCODER_PRO_TOKEN" in err
@@ -360,7 +363,7 @@ def test_student_evidence_missing_token_returns_student_prefix(
     monkeypatch.setenv("QCODER_PREVIEW_BASE_URL", "http://127.0.0.1:18081")
     assert main(["student", "evidence"]) == 2
     err = capsys.readouterr().err
-    assert err.startswith("qcoder student: missing qCoder Student token")
+    assert err.startswith("qcoder student: missing qCoder Explorer Beta token")
     assert "QCODER_STUDENT_TOKEN" in err
     assert "QCODER_PREVIEW_TOKEN" in err
     assert "QCODER_PRO_TOKEN" in err
@@ -381,7 +384,7 @@ def test_student_http_401_returns_safe_token_message(
     monkeypatch.setattr("qcoder.pro_preview.client.urlopen", _fake_urlopen)
     assert main(["student", "status"]) == 1
     err = capsys.readouterr().err
-    assert "missing, invalid, revoked, or lacks Student access" in err
+    assert "missing, invalid, revoked, or lacks Explorer Beta access" in err
     assert token not in err
     assert "qcoder pro preview" not in err
     assert "Pro Preview" not in err
@@ -406,8 +409,8 @@ def test_student_evidence_http_401_returns_safe_auth_error(
     monkeypatch.setattr("qcoder.pro_preview.client.urlopen", _fake_urlopen)
     assert main(["student", "evidence"]) == 1
     err = capsys.readouterr().err
-    assert "qCoder Student evidence: FAIL (HTTP 401)" in err
-    assert "missing, invalid, revoked, or lacks Student evidence access" in err
+    assert "qCoder Explorer Beta evidence: FAIL (HTTP 401)" in err
+    assert "missing, invalid, revoked, or lacks Explorer Beta evidence access" in err
     assert token not in err
     assert "Bearer" not in err
     assert "Authorization" not in err
@@ -427,8 +430,8 @@ def test_student_evidence_http_403_returns_safe_auth_error(
     monkeypatch.setattr("qcoder.pro_preview.client.urlopen", _fake_urlopen)
     assert main(["student", "evidence"]) == 1
     err = capsys.readouterr().err
-    assert "qCoder Student evidence: FAIL (HTTP 403)" in err
-    assert "does not have access to Student evidence" in err
+    assert "qCoder Explorer Beta evidence: FAIL (HTTP 403)" in err
+    assert "does not have access to Explorer Beta evidence" in err
     assert token not in err
     assert "Authorization" not in err
 
@@ -446,7 +449,7 @@ def test_student_evidence_network_failure_is_student_friendly(
     monkeypatch.setattr("qcoder.pro_preview.client.urlopen", _fake_urlopen)
     assert main(["student", "evidence"]) == 2
     err = capsys.readouterr().err
-    assert "qCoder Student evidence: FAIL (network)" in err
+    assert "qCoder Explorer Beta evidence: FAIL (network)" in err
     assert "check your base URL" in err
     assert token not in err
     assert "Authorization" not in err

@@ -1,49 +1,54 @@
 # qCoder architecture notes (public)
 
-**qCoder** maps circuit sources onto **repeatable structured output**: a **`schema_version`**, **`feature_names`**, and paired numeric **`features`** consumed from the extractor.
+**qCoder** maps circuit sources onto repeatable structured output: a `schema_version`, `feature_names`, and paired numeric `features` consumed from the extractor.
 
-- Primary path: **OpenQASM / QASM** text analyzed on the developer machine.
-- Optional path: **`qcoder[qiskit]`**, **`qcoder[cirq]`**, and **`qcoder[pennylane]`** ingest framework exports into the **same extractor** as OpenQASM.
+- Primary OSS path: OpenQASM / QASM text analyzed on the developer machine.
+- Optional OSS path: `qcoder[qiskit]`, `qcoder[cirq]`, and `qcoder[pennylane]` ingest framework exports into the same extractor as OpenQASM.
 
-The field glossary is defined in **`src/qcoder/engines/feature_extraction/features/schema_v0.py`** (`FEATURE_NAMES_V0`). The [qcoder.ai manual — Feature reference](https://qcoder.ai/manual/feature-reference/) summarizes each field name.
+The field glossary is defined in `src/qcoder/engines/feature_extraction/features/schema_v0.py` (`FEATURE_NAMES_V0`). The qcoder.ai manual summarizes each field name.
 
-## Public package surface (Option 3)
+## Current public package surface
 
 The public `qcoder` package on `main` ships:
 
-- **`qcoder analyze`** and **`qcoder batch`** — deterministic structural extraction.
-- Optional **`--guidance`** — heuristic starting points derived from `feature_map` (non-guaranteed; no backend execution).
-- Optional **`--profiles`** on **`analyze --json`** and **`context`** — derived structural taxonomy from `feature_map`.
-- **`qcoder context`** — preflight context artifacts (JSON + Markdown).
-- **`qcoder review`** — post-run review artifacts from user-supplied counts (`qcoder` or `qiskit_counts` formats).
-- **`qcoder pro`** — **Pro bootstrap and client contract** (`signup`, `login`, `install`, `status`, `validate`, `workflow` dry-run manifest, optional configured manifest submit). Local commands provide non-confidential entitlement/bootstrap plumbing only; confidential Pro analysis and cards are **not** bundled in this package.
+- `qcoder analyze` and `qcoder batch` — deterministic structural extraction for local artifacts.
+- Optional `--guidance` — heuristic starting points derived from `feature_map` (non-guaranteed; no backend execution).
+- Optional `--profiles` on `analyze --json` and `context` — derived structural taxonomy from `feature_map`.
+- `qcoder context` — preflight context artifacts (JSON + Markdown).
+- `qcoder review` — post-run review artifacts from user-supplied counts (`qcoder` or `qiskit_counts` formats).
+- `qcoder student status`, `qcoder student demo`, and `qcoder student evidence` — temporary Explorer Beta compatibility commands for account-backed built-in status/demo/evidence checks.
+- `qcoder pro` — archived pilot/client-contract plumbing only. Pro is not launched and is not a current public product path.
 
-Free commands are **local/offline**: no LLM calls, no telemetry upload, no QPU/simulator execution, and no card generation in the public package. Free commands, `pro status`, and `pro validate` perform **no upload**.
+## OSS boundary
 
-Token-gating in this slice is access control only, not confidentiality. `qcoder pro workflow --dry-run-manifest` builds a local contract artifact and performs no upload or network calls. `qcoder pro workflow --submit --service-url <url>` is an explicit **manifest-only** client path to a **configured** service URL (not the default marketing URL). This submit slice does not perform artifact upload, background upload, source upload, or local confidential analysis.
+qCoder OSS commands are local/offline after package installation: no LLM calls, no telemetry upload, no QPU/simulator execution, and no card generation in the public package. OSS is the current path for user-owned artifacts.
 
-**Not in this public package:** a generally available production hosted Pro service; public account/token issuance; Cloud Run/GCS deployment; sellable hosted Pro product behavior. Those are separate/future surfaces. The public package is a bootstrap/client contract, not the hosted analyzer.
+Portable JSON and Markdown artifacts are intended for humans, chat LLMs, and agentic IDEs to consume in user-managed workflows. Productized Cursor, Claude Code, Codex, or MCP integration is not part of this public package surface unless separately implemented and documented.
 
-For a public pilot path, see the [Pro Preview pilot walkthrough](https://qcoder.ai/manual/pro-preview-pilot-walkthrough/). The public package supplies the `qcoder==0.5.0a2` client surface only; confidential Pro intelligence remains service-side/future and is not distributed in PyPI wheels or this public source tree.
+## Explorer Beta boundary
 
-Support-safe context to share for Pro Preview issues: `qcoder --version`, command name, HTTP status or CLI error code, `job_id`, redacted output, and manifest schema/version. Do **not** share bearer tokens, secrets, source code, repository archives, notebooks, private prompts/chat transcripts, or raw QASM/source artifacts through unsupported paths.
+Explorer Beta is the account-backed beta path. During beta, the public CLI compatibility namespace remains `qcoder student`, and the primary environment variables remain `QCODER_STUDENT_BASE_URL` and `QCODER_STUDENT_TOKEN`.
+
+The current Explorer Beta evidence command uses built-in guided evidence samples. It is not custom hosted analysis of user-owned circuits. Future Explorer custom evidence should use derived qCoder context/features rather than raw hosted QASM upload unless a separate privacy and retention design is approved.
+
+## Archived Pro boundary
+
+`qcoder pro` commands are archived pilot/client-contract surfaces. They may store local token/config, validate local package boundaries, or write local dry-run workflow manifests. They do not make Pro purchasable, open, or current.
+
+Token-gating in this slice is access control only, not confidentiality. `qcoder pro workflow --dry-run-manifest` builds a local contract artifact and performs no upload or network calls. Any explicit configured manifest submit is pilot-only, manifest-only, and not a generally available hosted Pro service.
+
+There is no generally available production hosted Pro service, Pro account/token issuance, artifact/source upload, telemetry/training ingest, confidential local analyzer/cards, QPU/provider execution, or launched Pro V0.0 behavior in this public package.
 
 ## Canonical schemas
 
-The canonical circuit feature schema remains the nested **`features`** payload (`schema_version`, `feature_names`, `features`) produced by extraction. Guidance, context, and review outputs are additive artifact layers and do not change canonical feature schema/version/order.
+The canonical circuit feature schema remains the nested `features` payload (`schema_version`, `feature_names`, `features`) produced by extraction. Guidance, context, and review outputs are additive artifact layers and do not change canonical feature schema/version/order.
 
-Optional **`guidance`** and **`feature_profiles`** blocks are separately versioned and additive. Deterministic guidance values remain authoritative when a bundled local guidance pack is present.
+Optional `guidance` and `feature_profiles` blocks are separately versioned and additive. Deterministic guidance values remain authoritative when a bundled local guidance pack is present.
 
 ## Product stance
 
-qCoder is a **local evidence layer** for AI-assisted quantum development. It supplies grounded local facts for humans and bring-your-own (BYO) LLM workflows — not algorithm identity proofs, correctness proofs, speedup claims, or QPU performance claims.
-
-Public Free qCoder focuses on **structure and user-supplied execution counts**. Pro Preview (paid product offered free during Preview) will add card-enabled analysis through a protected service boundary; that logic is not distributed in PyPI wheels or this public source tree. The dry-run workflow manifest and configured manifest-only submit are **client contract surfaces**, not the sellable hosted Pro product. **`qcoder==0.5.0a2`** includes the public Pro Preview bootstrap/client contract, dry-run manifest, and explicit configured manifest-only submit; it still does not include a generally available hosted Pro service, artifact upload, or local confidential Pro analysis.
-
-## Local Pro / cards
-
-Local private-alpha Pro implementation (cards, MCP tools, and confidential analysis commands) is **not** distributed in this public repository or PyPI package. **`qcoder pro`** in this release is a service-backed bootstrap shell only.
+qCoder is an evidence layer for AI-assisted quantum development. It supplies grounded local facts for humans and bring-your-own LLM or IDE workflows, not algorithm identity proofs, correctness proofs, speedup claims, runtime predictions, backend rankings, fidelity claims, or QPU performance claims.
 
 ## Release rehearsal
 
-Use **`scripts/qcoder-v0-release-check`** before any publish action. It builds wheel/sdist, installs the wheel in a clean virtualenv, smokes Free commands and the Pro Preview shell, and verifies forbidden Pro artifacts are absent from built packages.
+Use `scripts/qcoder-v0-release-check` before any publish action. It builds wheel/sdist, installs the wheel in a clean virtualenv, smokes OSS commands and compatibility shells, and verifies forbidden Pro artifacts are absent from built packages.

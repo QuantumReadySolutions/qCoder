@@ -45,7 +45,7 @@ def test_manifest_excludes_private_alpha_docs() -> None:
     assert "graft tests" not in manifest
 
 
-def test_pro_shell_help_mentions_service_backed_preview() -> None:
+def test_pro_shell_help_marks_archived_public_boundary() -> None:
     out = io.StringIO()
     with redirect_stdout(out):
         try:
@@ -54,8 +54,8 @@ def test_pro_shell_help_mentions_service_backed_preview() -> None:
             rc = int(exc.code)
     assert rc == 0
     text = out.getvalue().lower()
-    assert "service-backed" in text
-    assert "preview" in text
+    assert "archived" in text
+    assert "not a current public product" in text
     assert "install" in text
     assert "validate" in text
 

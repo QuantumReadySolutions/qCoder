@@ -32,7 +32,8 @@ from qcoder.pro_preview.manifest import (
 )
 from qcoder.tools.batch import analyze_qasm_dir_to_jsonl
 
-PREVIEW_SIGNUP_URL = "https://qcoder.ai/preview"
+EXPLORER_BETA_DOCS_URL = "https://qcoder.ai/manual/student-beta/"
+OSS_DOCS_URL = "https://qcoder.ai/manual/oss/"
 
 
 def _is_non_default_service_url(value: str | None) -> bool:
@@ -395,7 +396,7 @@ def _summarize_student_demo_payload(payload: dict[str, object] | None) -> list[s
 
 def _summarize_student_evidence_payload(payload: dict[str, object] | None) -> list[str]:
     if not payload:
-        return ["summary: Student evidence endpoint reached; no summary payload returned"]
+        return ["summary: Explorer Beta evidence endpoint reached; no summary payload returned"]
     lines: list[str] = []
     summary = payload.get("student_summary")
     if isinstance(summary, str):
@@ -454,7 +455,7 @@ def _run_student_builtin_review_check(
         response = call_builtin_review_demo(config)
     except PreviewClientNetworkError:
         print(
-            "qCoder Student: FAIL (network). The service may be unreachable; check your base URL.",
+            "qCoder Explorer Beta: FAIL (network). The service may be unreachable; check your base URL.",
             file=sys.stderr,
         )
         print(f"  base_url: {config.base_url}", file=sys.stderr)
@@ -466,7 +467,8 @@ def _run_student_builtin_review_check(
 
     if response.status_code == 200:
         if mode == "status":
-            print("qCoder Student access: OK")
+            print("qCoder Explorer Beta access: OK")
+            print("  compatibility_command: qcoder student")
             print(f"  http_status: {response.status_code}")
             print("  service: available")
             count = _sample_count(response.payload)
@@ -474,24 +476,25 @@ def _run_student_builtin_review_check(
                 print(f"  teaching_demo_samples: {count}")
             print("Next: try qcoder student demo, then qcoder student evidence.")
         else:
-            print("qCoder Student built-in teaching demo: PASS (HTTP 200).")
+            print("qCoder Explorer Beta built-in teaching demo: PASS (HTTP 200).")
+            print("  compatibility_command: qcoder student demo")
             for line in _summarize_student_demo_payload(response.payload):
                 print(f"  {line}")
         return 0
     if response.status_code == 401:
         print(
-            "qCoder Student: FAIL (HTTP 401). Your token is missing, invalid, revoked, or lacks Student access.",
+            "qCoder Explorer Beta: FAIL (HTTP 401). Your token is missing, invalid, revoked, or lacks Explorer Beta access.",
             file=sys.stderr,
         )
         return 1
     if response.status_code == 403:
         print(
-            "qCoder Student: FAIL (HTTP 403). Your token does not have access to this Student command.",
+            "qCoder Explorer Beta: FAIL (HTTP 403). Your token does not have access to this Explorer Beta command.",
             file=sys.stderr,
         )
         return 1
 
-    print(f"qCoder Student: FAIL (HTTP {response.status_code}).", file=sys.stderr)
+    print(f"qCoder Explorer Beta: FAIL (HTTP {response.status_code}).", file=sys.stderr)
     if mode == "demo":
         for line in _summarize_student_demo_payload(response.payload):
             print(f"  {line}", file=sys.stderr)
@@ -512,7 +515,7 @@ def _run_student_evidence_check(*, base_url_override: str | None, json_output: b
         response = call_student_guided_evidence(config)
     except PreviewClientNetworkError:
         print(
-            "qCoder Student evidence: FAIL (network). The service may be unreachable; check your base URL.",
+            "qCoder Explorer Beta evidence: FAIL (network). The service may be unreachable; check your base URL.",
             file=sys.stderr,
         )
         print(f"  base_url: {config.base_url}", file=sys.stderr)
@@ -523,24 +526,25 @@ def _run_student_evidence_check(*, base_url_override: str | None, json_output: b
         return 0 if response.status_code == 200 else 1 if response.status_code in {401, 403} else 2
 
     if response.status_code == 200:
-        print("qCoder Student evidence: PASS (HTTP 200).")
+        print("qCoder Explorer Beta evidence: PASS (HTTP 200).")
+        print("  compatibility_command: qcoder student evidence")
         for line in _summarize_student_evidence_payload(response.payload):
             print(f"  {line}")
         return 0
     if response.status_code == 401:
         print(
-            "qCoder Student evidence: FAIL (HTTP 401). Your token is missing, invalid, revoked, or lacks Student evidence access.",
+            "qCoder Explorer Beta evidence: FAIL (HTTP 401). Your token is missing, invalid, revoked, or lacks Explorer Beta evidence access.",
             file=sys.stderr,
         )
         return 1
     if response.status_code == 403:
         print(
-            "qCoder Student evidence: FAIL (HTTP 403). Your token does not have access to Student evidence.",
+            "qCoder Explorer Beta evidence: FAIL (HTTP 403). Your token does not have access to Explorer Beta evidence.",
             file=sys.stderr,
         )
         return 1
 
-    print(f"qCoder Student evidence: FAIL (HTTP {response.status_code}).", file=sys.stderr)
+    print(f"qCoder Explorer Beta evidence: FAIL (HTTP {response.status_code}).", file=sys.stderr)
     for line in _summarize_student_evidence_payload(response.payload):
         print(f"  {line}", file=sys.stderr)
     return 2
@@ -550,42 +554,45 @@ def _cmd_student(argv: list[str]) -> int:
     p = argparse.ArgumentParser(
         prog="qcoder student",
         add_help=True,
-        description="Hosted Student status/demo/evidence connectivity checks.",
+        description=(
+            "qCoder Explorer Beta account-backed status/demo/evidence checks. "
+            "The command namespace remains `qcoder student` during beta for compatibility."
+        ),
     )
     sub = p.add_subparsers(dest="student_command")
 
     p_status = sub.add_parser(
         "status",
-        help="Check qCoder Student access and print the next step.",
+        help="Check qCoder Explorer Beta access and print the next step.",
     )
     p_status.add_argument(
         "--base-url",
         default=None,
-        help="Override qCoder Student base URL (default env: QCODER_STUDENT_BASE_URL, QCODER_PREVIEW_BASE_URL, or QCODER_PRO_API_URL).",
+        help="Override qCoder Explorer Beta base URL (default env: QCODER_STUDENT_BASE_URL, QCODER_PREVIEW_BASE_URL, or QCODER_PRO_API_URL).",
     )
     p_status.add_argument("--json", action="store_true", help="Emit raw service payload as JSON.")
     p_status.set_defaults(student_command="status")
 
     p_demo = sub.add_parser(
         "demo",
-        help="Run the built-in qCoder Student teaching demo.",
+        help="Run the built-in qCoder Explorer Beta teaching demo.",
     )
     p_demo.add_argument(
         "--base-url",
         default=None,
-        help="Override qCoder Student base URL (default env: QCODER_STUDENT_BASE_URL, QCODER_PREVIEW_BASE_URL, or QCODER_PRO_API_URL).",
+        help="Override qCoder Explorer Beta base URL (default env: QCODER_STUDENT_BASE_URL, QCODER_PREVIEW_BASE_URL, or QCODER_PRO_API_URL).",
     )
     p_demo.add_argument("--json", action="store_true", help="Emit raw service payload as JSON.")
     p_demo.set_defaults(student_command="demo")
 
     p_evidence = sub.add_parser(
         "evidence",
-        help="Call hosted Student guided-evidence endpoint and print safe summary.",
+        help="Call Explorer Beta built-in guided-evidence endpoint and print safe summary.",
     )
     p_evidence.add_argument(
         "--base-url",
         default=None,
-        help="Override qCoder Student base URL (default env: QCODER_STUDENT_BASE_URL, QCODER_PREVIEW_BASE_URL, or QCODER_PRO_API_URL).",
+        help="Override qCoder Explorer Beta base URL (default env: QCODER_STUDENT_BASE_URL, QCODER_PREVIEW_BASE_URL, or QCODER_PRO_API_URL).",
     )
     p_evidence.add_argument("--json", action="store_true", help="Emit raw service payload as JSON.")
     p_evidence.set_defaults(student_command="evidence")
@@ -613,8 +620,8 @@ def _cmd_pro(argv: list[str]) -> int:
         prog="qcoder pro",
         add_help=True,
         description=(
-            "qCoder Pro Preview shell (service-backed).\n"
-            "Confidential Pro analysis is not shipped in this package."
+            "Archived qCoder Pro client-contract shell.\n"
+            "Pro is not a current public product and confidential Pro analysis is not shipped in this package."
         ),
     )
     p.add_argument(
@@ -624,31 +631,31 @@ def _cmd_pro(argv: list[str]) -> int:
     )
     sub = p.add_subparsers(dest="pro_command")
 
-    p_signup = sub.add_parser("signup", help="Show Pro Preview signup URL.")
+    p_signup = sub.add_parser("signup", help="Show archived Pro status and current public qCoder paths.")
     p_signup.set_defaults(pro_command="signup")
 
-    p_status = sub.add_parser("status", help="Show local Pro Preview client status.")
+    p_status = sub.add_parser("status", help="Show archived Pro client status.")
     p_status.set_defaults(pro_command="status")
 
-    p_login = sub.add_parser("login", help="Store Preview token locally (no remote validation in this slice).")
+    p_login = sub.add_parser("login", help="Store archived pilot token locally (no remote validation in this slice).")
     p_login.add_argument(
         "--token",
         required=True,
-        help="QRS-provided Preview token for local config. Treat as private credential.",
+        help="QRS-provided archived pilot token for local config. Treat as private credential.",
     )
     p_login.add_argument("--api-url", required=False, help="Optional service URL override for local config.")
     p_login.set_defaults(pro_command="login")
 
-    p_install = sub.add_parser("install", help="Configure local Pro Preview token (no code download in this slice).")
+    p_install = sub.add_parser("install", help="Configure archived pilot token (no code download in this slice).")
     p_install.add_argument(
         "--token",
         required=True,
-        help="QRS-provided Preview token for local config. Treat as private credential.",
+        help="QRS-provided archived pilot token for local config. Treat as private credential.",
     )
     p_install.add_argument("--api-url", required=False, help="Optional service URL override for local config.")
     p_install.set_defaults(pro_command="install")
 
-    p_validate = sub.add_parser("validate", help="Validate local Pro Preview config and public package boundaries.")
+    p_validate = sub.add_parser("validate", help="Validate archived Pro client config and public package boundaries.")
     p_validate.set_defaults(pro_command="validate")
 
     p_workflow = sub.add_parser(
@@ -681,17 +688,17 @@ def _cmd_pro(argv: list[str]) -> int:
     )
     p_workflow.set_defaults(pro_command="workflow")
 
-    p_preview = sub.add_parser("preview", help="Hosted Preview demo connectivity checks.")
+    p_preview = sub.add_parser("preview", help="Archived preview demo connectivity checks.")
     p_preview_sub = p_preview.add_subparsers(dest="pro_preview_command")
 
     p_preview_status = p_preview_sub.add_parser(
         "status",
-        help="Call hosted Preview demo endpoint and print safe connectivity summary.",
+        help="Call archived preview demo endpoint and print safe connectivity summary.",
     )
     p_preview_status.add_argument(
         "--base-url",
         default=None,
-        help="Override hosted Preview base URL (default env: QCODER_PREVIEW_BASE_URL or QCODER_PRO_API_URL).",
+        help="Override archived preview base URL (default env: QCODER_PREVIEW_BASE_URL or QCODER_PRO_API_URL).",
     )
     p_preview_status.set_defaults(pro_command="preview-status")
 
@@ -702,7 +709,7 @@ def _cmd_pro(argv: list[str]) -> int:
     p_preview_demo.add_argument(
         "--base-url",
         default=None,
-        help="Override hosted Preview base URL (default env: QCODER_PREVIEW_BASE_URL or QCODER_PRO_API_URL).",
+        help="Override archived preview base URL (default env: QCODER_PREVIEW_BASE_URL or QCODER_PRO_API_URL).",
     )
     p_preview_demo.set_defaults(pro_command="preview-demo")
 
@@ -717,18 +724,21 @@ def _cmd_pro(argv: list[str]) -> int:
     if cmd == "signup":
         payload = {
             "schema_id": "qcoder.pro_preview_shell.v0",
-            "signup_url": PREVIEW_SIGNUP_URL,
-            "service_backed": True,
+            "pro_public_signup": False,
+            "explorer_beta_docs": EXPLORER_BETA_DOCS_URL,
+            "oss_docs": OSS_DOCS_URL,
+            "service_backed": False,
             "local_only": False,
             "cards_local": False,
-            "status": "signup_required",
+            "status": "not_current_public_product",
         }
         if json_output:
             print(json.dumps(payload, indent=2, sort_keys=True))
         else:
-            print("qCoder Pro Preview signup")
-            print(f"  url: {PREVIEW_SIGNUP_URL}")
-            print("  mode: service-backed")
+            print("qCoder Pro is not a current public signup path.")
+            print("  status: archived pilot/client-contract surface only")
+            print(f"  Explorer Beta: {EXPLORER_BETA_DOCS_URL}")
+            print(f"  OSS: {OSS_DOCS_URL}")
             print("  note: no confidential Pro analysis is bundled locally")
         return 0
 
@@ -739,10 +749,10 @@ def _cmd_pro(argv: list[str]) -> int:
             print(json.dumps(payload, indent=2, sort_keys=True))
         else:
             print(f"qCoder Pro status: {payload['status']}.")
-            print("  mode: service-backed bootstrap shell")
+            print("  mode: archived pilot bootstrap shell")
             print(f"  token: {'present' if payload['token_present'] else 'not set'} ({payload['token_source']})")
             if payload["api_url_source"] == "default":
-                print("  submit-ready service URL: not set (default Preview URL is informational)")
+                print("  submit-ready service URL: not set (default archived preview URL is informational)")
             else:
                 print("  submit-ready service URL: configured")
             print(f"  service URL source: {payload['api_url_source']}")
@@ -750,7 +760,7 @@ def _cmd_pro(argv: list[str]) -> int:
             print("  submit requirement: QRS-provided token + non-default service URL")
             print("  service validation: not available in this slice")
             print("  local cards/analysis: disabled in public package")
-            print(f"  signup: {PREVIEW_SIGNUP_URL}")
+            print(f"  current public paths: Explorer Beta {EXPLORER_BETA_DOCS_URL} / OSS {OSS_DOCS_URL}")
         return 0
 
     if cmd in {"login", "install"}:
@@ -765,7 +775,7 @@ def _cmd_pro(argv: list[str]) -> int:
         if json_output:
             print(json.dumps(payload, indent=2, sort_keys=True))
         else:
-            print("Configured qCoder Pro Preview local token settings.")
+            print("Configured archived qCoder Pro pilot local token settings.")
             print(f"  operation: {cmd}")
             print(f"  config: {config_path}")
             print("  token: stored locally (not displayed)")
@@ -809,7 +819,7 @@ def _cmd_pro(argv: list[str]) -> int:
             print(f"  status: {payload['status']}")
             print(f"  token: {'present' if token.present else 'not set'} ({token.source})")
             if api_url.source == "default":
-                print("  submit-ready service URL: not set (default Preview URL is informational)")
+                print("  submit-ready service URL: not set (default archived preview URL is informational)")
             else:
                 print("  submit-ready service URL: configured")
             print(f"  service URL source: {api_url.source}")
@@ -978,7 +988,7 @@ def _cmd_pro(argv: list[str]) -> int:
         "For manifest-only submit, pass --submit with --service-url (or QCODER_PRO_API_URL) "
         "only if QRS provided a non-default service URL and token.\n"
         "No generally available production hosted Pro service is configured in this release.\n"
-        f"Run `qcoder pro signup` for preview information: {PREVIEW_SIGNUP_URL}",
+        f"Run `qcoder pro signup` for current public qCoder paths.",
         file=sys.stderr,
     )
     return 2
@@ -994,8 +1004,8 @@ def _print_root_help() -> None:
         "  batch            Batch extract a directory to JSONL (requires --out).\n"
         "  context          Build deterministic preflight context artifacts.\n"
         "  review           Build deterministic execution review artifacts from counts.\n"
-        "  pro              Service-backed Pro shell (signup/install/status/validate/workflow).\n"
-        "  student          Hosted Student status/demo/evidence connectivity checks.\n\n"
+        "  pro              Archived Pro client-contract shell (not current public product).\n"
+        "  student          Explorer Beta status/demo/evidence checks (compatibility namespace).\n\n"
         "Run `qcoder <subcommand> --help` for subcommand options.",
         end="",
     )
