@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 
@@ -120,6 +121,116 @@ def test_student_evidence_calls_guided_evidence_endpoint(monkeypatch: pytest.Mon
     monkeypatch.setattr("qcoder.pro_preview.client.urlopen", _fake_urlopen)
     assert main(["student", "evidence"]) == 0
     assert captured["url"] == "http://127.0.0.1:18081/v0/student/guided-evidence"
+
+
+def test_student_evidence_qasm_posts_sanitized_derived_context(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    token = "dummy-preview-token-for-test"
+    qasm_text = (
+        "OPENQASM 2.0;\n"
+        'include "qelib1.inc";\n'
+        "qreg q[2];\n"
+        "creg c[2];\n"
+        "h q[0];\n"
+        "cx q[0], q[1];\n"
+        "measure q[0] -> c[0];\n"
+        "measure q[1] -> c[1];\n"
+    )
+    qasm = tmp_path / "private-user-circuit.qasm"
+    out_json = tmp_path / "explorer.evidence.json"
+    out_md = tmp_path / "explorer.evidence.md"
+    qasm.write_text(qasm_text, encoding="utf-8")
+    _set_student_env(monkeypatch, base_url="http://127.0.0.1:18081", token=token)
+    captured: dict[str, str] = {}
+
+    def _fake_urlopen(req: Any, timeout: float = 0) -> _FakeResponse:
+        captured["url"] = req.full_url
+        captured["authorization"] = req.headers["Authorization"]
+        captured["body"] = req.data.decode("utf-8")
+        return _FakeResponse(
+            status=200,
+            body=(
+                '{"schema_id":"qcoder.explorer.custom_guided_evidence.response.v0",'
+                '"mode":"explorer-custom-guided-evidence",'
+                '"status":"ok",'
+                '"student_summary":"Derived Explorer evidence for your local circuit.",'
+                '"ai_grounding_summary":"Use this as portable evidence with a chat LLM.",'
+                '"guided_evidence":["Confirmed structure only."],'
+                '"non_claims_summary":["No runtime prediction."],'
+                '"privacy_boundary":{"raw_qasm_received":false,"local_paths_received":false},'
+                '"history_ready":false,'
+                '"persisted":false}'
+            ),
+        )
+
+    monkeypatch.setattr("qcoder.pro_preview.client.urlopen", _fake_urlopen)
+    assert main(["student", "evidence", "--qasm", str(qasm), "--out-json", str(out_json), "--out-md", str(out_md)]) == 0
+    out = capsys.readouterr()
+    request_payload = json.loads(captured["body"])
+    combined = out.out + out.err + captured["body"] + out_json.read_text(encoding="utf-8") + out_md.read_text(encoding="utf-8")
+
+    assert captured["url"] == "http://127.0.0.1:18081/v0/student/custom-guided-evidence"
+    assert captured["authorization"] == f"Bearer {token}"
+    assert request_payload["schema_id"] == "qcoder.explorer.custom_guided_evidence.request.v0"
+    assert request_payload["privacy_boundary"]["raw_qasm_included"] is False
+    assert request_payload["privacy_boundary"]["local_paths_included"] is False
+    assert request_payload["input_summary"]["raw_artifact_uploaded"] is False
+    assert "evidence_mode: derived_context" in out.out
+    assert "raw_qasm_uploaded: false" in out.out
+    assert "persisted: false" in out.out
+    assert out_json.exists()
+    assert out_md.exists()
+    assert qasm_text.strip() not in combined
+    assert str(qasm) not in combined
+    assert "private-user-circuit.qasm" not in combined
+    assert token not in combined
+    assert f"Bearer {token}" not in combined
+    assert "Authorization" not in combined
+
+
+def test_student_evidence_qasm3_rejected_before_network(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    qasm = tmp_path / "qasm3.qasm"
+    qasm.write_text("OPENQASM 3.0;\nqubit[1] q;\n", encoding="utf-8")
+    _set_student_env(monkeypatch, base_url="http://127.0.0.1:18081", token="dummy-token")
+
+    def _fake_urlopen(_req: Any, timeout: float = 0) -> _FakeResponse:
+        raise AssertionError("network call attempted")
+
+    monkeypatch.setattr("qcoder.pro_preview.client.urlopen", _fake_urlopen)
+    assert main(["student", "evidence", "--qasm", str(qasm)]) == 2
+    err = capsys.readouterr().err
+    assert "OpenQASM 3 is not supported" in err
+
+
+def test_student_evidence_context_json_rejects_raw_qasm(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    context_json = tmp_path / "bad.context.json"
+    context_json.write_text(
+        json.dumps(
+            {
+                "artifact_type": "qcoder.preflight_context",
+                "circuit": {"source_format": "qasm2", "n_qubits": 1, "n_cbits": 0, "n_ops": 1},
+                "hashes": {"qasm_sha256": "abc", "analysis_fingerprint": "def"},
+                "analysis": {"feature_map": {"n_qubits": 1}, "raw_qasm": "OPENQASM 2.0;"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    _set_student_env(monkeypatch, base_url="http://127.0.0.1:18081", token="dummy-token")
+
+    assert main(["student", "evidence", "--context-json", str(context_json)]) == 2
+    err = capsys.readouterr().err
+    assert "cannot be sent" in err
 
 
 def test_student_authorization_header_sent_but_not_printed(

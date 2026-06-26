@@ -1,4 +1,4 @@
-# 07: BYO LLM artifact pack (Free)
+# 07: BYO LLM artifact pack (OSS)
 
 **BYO** means *bring your own*: you open your LLM or coding assistant in an environment **you** control and attach qCoder files (or paste excerpts). qCoder **does not** call an LLM, host LLM compute, upload your prompts, or send circuit data to a qCoder inference service.
 

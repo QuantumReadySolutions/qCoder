@@ -18,9 +18,9 @@ The current public local path is **qCoder OSS**. OSS commands run locally and do
 Public `qcoder` ships **OSS local commands** plus Explorer Beta compatibility commands. Pro is not launched and is not a current public product path.
 
 - **OSS commands** (`analyze`, `batch`, `context`, `review`) are Apache-2.0, local-first/offline, and useful without an account or token. They do not upload data, call a qCoder hosted service, or run QPU/simulator jobs.
-- **Explorer Beta compatibility commands** (`qcoder student status`, `qcoder student demo`, `qcoder student evidence`) use the temporary `qcoder student` namespace during beta. They are account-backed checks for Explorer Beta status and built-in guided evidence samples.
-- Current Explorer Beta built-in evidence is **not** custom hosted analysis of user-owned circuits. Use OSS for user-owned QASM/artifact analysis today.
-- Future Explorer custom evidence should use derived qCoder context/features rather than raw hosted QASM upload unless a separate privacy/retention design is approved.
+- **Explorer Beta compatibility commands** (`qcoder student status`, `qcoder student demo`, `qcoder student evidence`) use the temporary `qcoder student` namespace during beta. They are account-backed checks for Explorer Beta status, built-in guided evidence samples, and derived-context guided evidence for user-owned OpenQASM 2 artifacts.
+- Explorer Beta custom evidence uses locally derived qCoder context/features. The CLI may read QASM locally, but the hosted request must not include raw QASM, raw source text, local paths, operation lists, raw counts, notebooks, prompts, tokens, auth headers, or cookies.
+- Explorer Beta custom evidence is stateless in this v0 slice; it does not create persistent Explorer history.
 - **`qcoder pro` bootstrap/workflow commands** are archived pilot/client-contract surfaces. They are not a Pro purchase path, not a current public signup path, and not generally available hosted Pro.
 - There is **no generally available production hosted Pro service**, Pro account/token issuance, artifact/source upload, telemetry/training ingest, confidential local analyzer/cards, QPU/provider execution, or launched Pro V0.0 behavior in this public-main surface.
 - **No confidential Pro analysis or cards** are bundled in this package. Token-gating is **access control only**, not a secrecy boundary.
@@ -52,6 +52,8 @@ Explorer Beta compatibility checks and archived Pro bootstrap:
 qcoder student status
 qcoder student demo
 qcoder student evidence
+qcoder student evidence --qasm path/to/circuit.qasm
+qcoder student evidence --context-json preflight.context.json
 qcoder pro --help
 ```
 

@@ -130,6 +130,7 @@ PRO_API_URL_ENV = "QCODER_PRO_API_URL"
 PRO_TOKEN_ENV = "QCODER_PRO_TOKEN"
 BUILTIN_REVIEW_PATH = "/v0/demo/builtin-review"
 STUDENT_GUIDED_EVIDENCE_PATH = "/v0/student/guided-evidence"
+STUDENT_CUSTOM_GUIDED_EVIDENCE_PATH = "/v0/student/custom-guided-evidence"
 
 
 @dataclass(frozen=True)
@@ -218,6 +219,35 @@ def call_student_guided_evidence(
         _join_service_url(config.base_url, STUDENT_GUIDED_EVIDENCE_PATH),
         headers={"Authorization": f"Bearer {config.token}"},
         method="GET",
+    )
+    try:
+        with urlopen(request, timeout=timeout_s) as response:
+            body = response.read().decode("utf-8", errors="replace")
+            status_code = int(getattr(response, "status", 200))
+            return PreviewClientResponse(status_code=status_code, payload=_safe_json_decode(body))
+    except HTTPError as err:
+        body = err.read().decode("utf-8", errors="replace")
+        return PreviewClientResponse(status_code=int(err.code), payload=_safe_json_decode(body))
+    except URLError as exc:
+        raise PreviewClientNetworkError(str(exc)) from exc
+
+
+def call_student_custom_guided_evidence(
+    config: PreviewClientConfig,
+    *,
+    payload: dict[str, Any],
+    timeout_s: float = 10.0,
+) -> PreviewClientResponse:
+    """Call the Explorer Beta derived-context guided-evidence endpoint."""
+    request = Request(
+        _join_service_url(config.base_url, STUDENT_CUSTOM_GUIDED_EVIDENCE_PATH),
+        data=json.dumps(payload, sort_keys=True).encode("utf-8"),
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {config.token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
     )
     try:
         with urlopen(request, timeout=timeout_s) as response:

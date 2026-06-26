@@ -8,6 +8,11 @@ from pathlib import Path
 from qcoder.pipelines.analyze import analyze_qasm
 from qcoder.pipelines.context import write_preflight_context
 from qcoder.pipelines.review import write_execution_review
+from qcoder.explorer.derived_evidence import (
+    ExplorerDerivedEvidenceRequestError,
+    build_derived_evidence_request_from_context_json,
+    build_derived_evidence_request_from_qasm,
+)
 from qcoder.pro_preview.config import (
     DEFAULT_PRO_API_URL,
     ProPreviewConfigError,
@@ -20,6 +25,7 @@ from qcoder.pro_preview.client import ProServiceClient, ProServiceClientError
 from qcoder.pro_preview.client import (
     PreviewClientNetworkError,
     call_builtin_review_demo,
+    call_student_custom_guided_evidence,
     call_student_guided_evidence,
     resolve_preview_client_config,
     summarize_demo_payload,
@@ -316,6 +322,12 @@ def _print_raw_payload_json(payload: dict[str, object] | None) -> None:
     print(json.dumps(payload or {}, indent=2, sort_keys=True))
 
 
+def _write_json_payload(path: str, payload: dict[str, object] | None) -> None:
+    out_path = Path(path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(payload or {}, indent=2, sort_keys=True), encoding="utf-8")
+
+
 def _is_scalar(value: object) -> bool:
     return isinstance(value, (str, int, float, bool))
 
@@ -433,7 +445,55 @@ def _summarize_student_evidence_payload(payload: dict[str, object] | None) -> li
     if glossary:
         lines.append("glossary:")
         lines.extend(glossary)
+    ai_summary = payload.get("ai_grounding_summary")
+    if isinstance(ai_summary, str):
+        lines.append(f"ai_grounding_summary: {ai_summary}")
+    guided = payload.get("guided_evidence")
+    if isinstance(guided, list):
+        for index, item in enumerate(guided[:4], start=1):
+            if isinstance(item, str):
+                lines.append(f"guided_evidence {index}: {item}")
+            elif isinstance(item, dict):
+                title = item.get("title")
+                summary_text = item.get("summary")
+                if isinstance(title, str) and isinstance(summary_text, str):
+                    lines.append(f"guided_evidence {index}: {title} - {summary_text}")
+                elif isinstance(summary_text, str):
+                    lines.append(f"guided_evidence {index}: {summary_text}")
     return lines
+
+
+def _render_student_evidence_markdown(payload: dict[str, object] | None) -> str:
+    lines = [
+        "# qCoder Explorer Beta Guided Evidence",
+        "",
+    ]
+    for line in _summarize_student_evidence_payload(payload):
+        lines.append(f"- {line}")
+    if payload:
+        privacy = payload.get("privacy_boundary")
+        if isinstance(privacy, dict):
+            lines.append("")
+            lines.append("## Privacy boundary")
+            for key in sorted(privacy):
+                value = privacy[key]
+                if _is_scalar(value):
+                    lines.append(f"- {key}: {_format_summary_value(value)}")
+        non_claims = payload.get("non_claims_summary")
+        if isinstance(non_claims, list) and non_claims:
+            lines.append("")
+            lines.append("## Non-claims")
+            for item in non_claims[:8]:
+                if isinstance(item, str):
+                    lines.append(f"- {item}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _write_markdown_payload(path: str, payload: dict[str, object] | None) -> None:
+    out_path = Path(path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(_render_student_evidence_markdown(payload), encoding="utf-8")
 
 
 def _run_student_builtin_review_check(
@@ -501,7 +561,32 @@ def _run_student_builtin_review_check(
     return 2
 
 
-def _run_student_evidence_check(*, base_url_override: str | None, json_output: bool) -> int:
+def _run_student_evidence_check(
+    *,
+    base_url_override: str | None,
+    json_output: bool,
+    qasm_path: str | None = None,
+    context_json_path: str | None = None,
+    out_json: str | None = None,
+    out_md: str | None = None,
+) -> int:
+    request_payload: dict[str, object] | None = None
+    if qasm_path and context_json_path:
+        print("qcoder student evidence: choose only one of --qasm or --context-json", file=sys.stderr)
+        return 2
+    if qasm_path:
+        try:
+            request_payload = build_derived_evidence_request_from_qasm(qasm_path)
+        except ExplorerDerivedEvidenceRequestError as exc:
+            print(f"qcoder student evidence: {exc}", file=sys.stderr)
+            return 2
+    elif context_json_path:
+        try:
+            request_payload = build_derived_evidence_request_from_context_json(context_json_path)
+        except ExplorerDerivedEvidenceRequestError as exc:
+            print(f"qcoder student evidence: {exc}", file=sys.stderr)
+            return 2
+
     try:
         config = resolve_preview_client_config(
             base_url_override=base_url_override,
@@ -512,7 +597,10 @@ def _run_student_evidence_check(*, base_url_override: str | None, json_output: b
         return 2
 
     try:
-        response = call_student_guided_evidence(config)
+        if request_payload is None:
+            response = call_student_guided_evidence(config)
+        else:
+            response = call_student_custom_guided_evidence(config, payload=request_payload)
     except PreviewClientNetworkError:
         print(
             "qCoder Explorer Beta evidence: FAIL (network). The service may be unreachable; check your base URL.",
@@ -523,13 +611,27 @@ def _run_student_evidence_check(*, base_url_override: str | None, json_output: b
 
     if json_output:
         _print_raw_payload_json(response.payload)
+        if out_json:
+            _write_json_payload(out_json, response.payload)
+        if out_md:
+            _write_markdown_payload(out_md, response.payload)
         return 0 if response.status_code == 200 else 1 if response.status_code in {401, 403} else 2
 
     if response.status_code == 200:
         print("qCoder Explorer Beta evidence: PASS (HTTP 200).")
         print("  compatibility_command: qcoder student evidence")
+        if request_payload is not None:
+            print("  evidence_mode: derived_context")
+            print("  raw_qasm_uploaded: false")
+            print("  persisted: false")
         for line in _summarize_student_evidence_payload(response.payload):
             print(f"  {line}")
+        if out_json:
+            _write_json_payload(out_json, response.payload)
+            print(f"  wrote_json: {out_json}")
+        if out_md:
+            _write_markdown_payload(out_md, response.payload)
+            print(f"  wrote_md: {out_md}")
         return 0
     if response.status_code == 401:
         print(
@@ -587,7 +689,7 @@ def _cmd_student(argv: list[str]) -> int:
 
     p_evidence = sub.add_parser(
         "evidence",
-        help="Call Explorer Beta built-in guided-evidence endpoint and print safe summary.",
+        help="Call Explorer Beta guided evidence. No input uses built-in samples; --qasm/--context-json uses derived local context.",
     )
     p_evidence.add_argument(
         "--base-url",
@@ -595,6 +697,18 @@ def _cmd_student(argv: list[str]) -> int:
         help="Override qCoder Explorer Beta base URL (default env: QCODER_STUDENT_BASE_URL, QCODER_PREVIEW_BASE_URL, or QCODER_PRO_API_URL).",
     )
     p_evidence.add_argument("--json", action="store_true", help="Emit raw service payload as JSON.")
+    p_evidence.add_argument(
+        "--qasm",
+        default=None,
+        help="Build sanitized derived context from a local OpenQASM 2 file and request Explorer Beta guidance.",
+    )
+    p_evidence.add_argument(
+        "--context-json",
+        default=None,
+        help="Use an existing qCoder preflight context JSON artifact; raw paths and source are not sent.",
+    )
+    p_evidence.add_argument("--out-json", default=None, help="Write Explorer evidence response JSON.")
+    p_evidence.add_argument("--out-md", default=None, help="Write Explorer evidence response Markdown.")
     p_evidence.set_defaults(student_command="evidence")
 
     args = p.parse_args(argv)
@@ -609,7 +723,14 @@ def _cmd_student(argv: list[str]) -> int:
             json_output=args.json,
         )
     if args.student_command == "evidence":
-        return _run_student_evidence_check(base_url_override=args.base_url, json_output=args.json)
+        return _run_student_evidence_check(
+            base_url_override=args.base_url,
+            json_output=args.json,
+            qasm_path=args.qasm,
+            context_json_path=args.context_json,
+            out_json=args.out_json,
+            out_md=args.out_md,
+        )
 
     p.print_help()
     return 0

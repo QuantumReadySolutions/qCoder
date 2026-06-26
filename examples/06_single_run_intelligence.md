@@ -1,8 +1,8 @@
-# 06: Free single-run intelligence (copy-paste)
+# 06: OSS single-run intelligence (copy-paste)
 
-This walkthrough mirrors the **Free Single-Run Intelligence** story on [qcoder.ai](https://qcoder.ai/manual/workflows/single-run-intelligence/): one circuit, one execution **you** run outside qCoder, deterministic qCoder artifacts, then optional **BYO** (bring-your-own) LLM interpretation in **your** tool—no qCoder-hosted LLM and no telemetry upload from qCoder.
+This walkthrough mirrors the **OSS Single-Run Intelligence** story on [qcoder.ai](https://qcoder.ai/manual/workflows/single-run-intelligence/): one circuit, one execution **you** run outside qCoder, deterministic qCoder artifacts, then optional **BYO** (bring-your-own) LLM interpretation in **your** tool—no qCoder-hosted LLM and no telemetry upload from qCoder.
 
-## What you get (Free, local)
+## What you get (OSS, local)
 
 - **Deterministic circuit analysis** and optional **feature profiles** from `qcoder context`.
 - **Resource guidance** (optional `--guidance`) as transparent starting points—not optimality proof. When present, JSON may include **`guidance_metadata`**: a **shadow-mode** read of the packaged local guidance candidate (id, version, hash, optional suggestions). **`shadow_guidance.applied` is false**; deterministic `simulation_guidance.mps_bond_dimension.pressure` / `starting_points` remain the values to plan from until a future evaluated release applies pack output.
@@ -12,11 +12,13 @@ This walkthrough mirrors the **Free Single-Run Intelligence** story on [qcoder.a
 
 **qCoder does not execute the circuit.** It does not run a simulator or hardware, call an LLM, upload data, or perform retrieval.
 
-## Free vs Pro (positioning)
+## OSS and future product boundaries
 
-**Free (this repo and CLI):** strong **single-circuit** and **single-run** intelligence—local artifacts from structure plus review from counts you pass in.
+**OSS (this repo and CLI):** strong **single-circuit** and **single-run** intelligence—local artifacts from structure plus review from counts you pass in.
 
-**Pro (product direction, not shipped in this open-source package):** adds durable **workflow memory**, adaptation across runs, recommendation and outcome style provenance over time, richer evidence and quality signals over time, project-style workflow memory, integrated BYO or managed LLM workflows with provenance where productized, and optional community-enhanced context when offered under explicit policy.
+**Explorer Beta:** account-backed guided evidence can consume bounded derived context from local qCoder artifacts. It does not upload raw QASM in the v0 custom evidence path.
+
+**Pro:** not launched as a current public product in this package.
 
 ## 1) Preflight: context + guidance + profiles
 
