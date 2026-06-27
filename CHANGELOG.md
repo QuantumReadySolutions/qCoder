@@ -1,6 +1,18 @@
 # Changelog
 
 
+## 0.5.0a6
+
+- Add share-safe / redacted artifact mode for artifacts intended for ChatGPT, Cursor, email, GitHub issues, or support threads.
+- Add `--share-safe` / `--redact` to OSS artifact commands and Explorer evidence file output.
+- Emit share-safety metadata in JSON artifacts: `share_safe`, `redactions_applied`, `raw_qasm_included`, `local_paths_included`, and `tokens_included`.
+- Add a visible share-safe note to Markdown artifacts.
+- Fix Windows free-text path redaction, including `C:\Users\...` paths, Windows forward-slash paths, UNC paths, home-relative paths, Linux home paths, and WSL-mounted Windows paths.
+- Preserve normal rich local artifacts by default; share-safe mode is opt-in.
+- Share-safe mode is designed for safer sharing and users should still review artifacts before sharing. It is not a privacy guarantee.
+- Remaining P1 hardening: forward-slash UNC variants, broader Linux root patterns, independent post-scan hardening, and expanded docs wording.
+
+
 ## 0.5.0a5
 
 - Add `qcoder explorer evidence` as the primary Explorer Beta guided-evidence surface.
