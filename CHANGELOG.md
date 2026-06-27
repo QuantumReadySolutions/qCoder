@@ -1,6 +1,14 @@
 # Changelog
 
 
+## 0.5.0a5
+
+- Add `qcoder explorer evidence` as the primary Explorer Beta guided-evidence surface.
+- Add derived-context Explorer evidence for user-owned OpenQASM 2 artifacts without raw hosted QASM upload.
+- Preserve `qcoder student evidence` as a beta compatibility alias.
+- Align public package wording with qCoder OSS and Explorer Beta; Pro is not launched or a current public product.
+- Preserve the OSS local artifact path (`analyze`, `batch`, `context`, `review`) for no-account, no-token local workflows.
+
 ## 0.5.0a4
 
 - Add public Student aliases: `qcoder student status` and `qcoder student demo`.
