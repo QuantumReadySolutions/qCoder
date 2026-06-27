@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from qcoder.cli import main
+from qcoder.core.share_safe import contains_local_path, make_share_safe_payload
 
 
 class _FakeResponse:
@@ -75,6 +76,46 @@ def _assert_share_safe_payload(payload: dict[str, Any], *, forbidden_path: str, 
     assert "Authorization: Bearer" not in serialized
     assert "secret-token" not in serialized
     assert "OPENQASM 2.0" not in serialized
+
+
+@pytest.mark.parametrize(
+    ("label", "path_text"),
+    [
+        ("windows_backslash", r"C:\Users\Robert\secret\file.qasm"),
+        ("windows_forward_slash", "C:/Users/Robert/secret/file.qasm"),
+        ("unc", r"\\server\share\secret\file.qasm"),
+        ("home_relative", "~/project/secret/file.qasm"),
+        ("linux_home", "/home/rob/project/secret/file.qasm"),
+        ("wsl_mount", "/mnt/c/Users/Robert/secret/file.qasm"),
+    ],
+)
+def test_share_safe_redacts_cross_platform_free_text_paths(label: str, path_text: str) -> None:
+    payload = make_share_safe_payload(
+        {
+            "label": label,
+            "detail": f"The artifact came from {path_text} during a local run.",
+            "nested": {"markdown": f"Open the file at `{path_text}` before sharing."},
+            "items": [f"error detail references {path_text}"],
+        }
+    )
+    serialized = json.dumps(payload, sort_keys=True)
+
+    assert path_text not in serialized
+    assert "<redacted-local-path>" in serialized
+    assert payload["local_paths_included"] is False
+    assert "absolute_path" in payload["redactions_applied"]
+    assert contains_local_path(path_text) is True
+
+
+def test_share_safe_metadata_reports_unremoved_path_conservatively() -> None:
+    # A path-like value in metadata keys is also scanned after sanitization; if a
+    # new unsupported path pattern ever survives, local_paths_included must not
+    # be hard-coded false.
+    payload = make_share_safe_payload({"detail": "clean text only"})
+
+    assert payload["local_paths_included"] is False
+    assert payload["raw_qasm_included"] is False
+    assert payload["tokens_included"] is False
 
 
 def test_analyze_share_safe_json_redacts_path_and_adds_metadata(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

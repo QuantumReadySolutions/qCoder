@@ -14,7 +14,15 @@ SHARE_SAFE_NOTE = (
 _REDACTED_LOCAL_PATH = "<redacted-local-path>"
 _REDACTED_SENSITIVE_VALUE = "<redacted-sensitive-value>"
 
-_ABSOLUTE_PATH_RE = re.compile(r"(?P<path>(?:[A-Za-z]:\\\\|/)[^\s`'\"<>]+)")
+_PATH_TERMINATOR_CHARS = r"\s`'\"<>|"
+_LOCAL_PATH_RE = re.compile(
+    r"(?P<path>"
+    r"(?:[A-Za-z]:[\\/][^" + _PATH_TERMINATOR_CHARS + r"]+)"
+    r"|(?:\\\\[^\\/" + _PATH_TERMINATOR_CHARS + r"]+[\\/][^" + _PATH_TERMINATOR_CHARS + r"]+)"
+    r"|(?:~[\\/][^" + _PATH_TERMINATOR_CHARS + r"]+)"
+    r"|(?:/(?:home|Users|mnt|private|var|tmp|workspace|workspaces)/[^" + _PATH_TERMINATOR_CHARS + r"]+)"
+    r")"
+)
 _TOKEN_LIKE_RE = re.compile(
     r"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]{8,}|"
     r"(authorization\s*[:=]\s*)(?:bearer\s+)?[^\n,;]+|"
@@ -62,9 +70,10 @@ def make_share_safe_payload(payload: dict[str, Any]) -> dict[str, Any]:
         sanitized = {"value": sanitized}
     sanitized["share_safe"] = True
     sanitized["redactions_applied"] = sorted(redactions)
-    sanitized["raw_qasm_included"] = False
-    sanitized["local_paths_included"] = False
-    sanitized["tokens_included"] = False
+    serialized = _stable_string(sanitized)
+    sanitized["raw_qasm_included"] = contains_raw_qasm_marker(serialized)
+    sanitized["local_paths_included"] = contains_local_path(serialized)
+    sanitized["tokens_included"] = contains_token_or_header(serialized)
     sanitized["share_safe_note"] = SHARE_SAFE_NOTE
     return sanitized
 
@@ -113,19 +122,39 @@ def _sanitize_text(text: str, *, redactions: set[str]) -> str:
         redactions.add("absolute_path")
         return _REDACTED_LOCAL_PATH
 
-    out = _ABSOLUTE_PATH_RE.sub(_path_repl, out)
+    out = _LOCAL_PATH_RE.sub(_path_repl, out)
 
     def _token_repl(match: re.Match[str]) -> str:
         redactions.add("token_or_header_like_text")
-        prefix = next((g for g in match.groups() if g), "")
-        return f"{prefix}{_REDACTED_SENSITIVE_VALUE}"
+        return _REDACTED_SENSITIVE_VALUE
 
     out = _TOKEN_LIKE_RE.sub(_token_repl, out)
     return out
 
 
+def _stable_string(value: Any) -> str:
+    try:
+        import json
+
+        return json.dumps(value, sort_keys=True, ensure_ascii=False)
+    except Exception:
+        return str(value)
+
+
+def contains_local_path(text: str) -> bool:
+    return bool(_LOCAL_PATH_RE.search(text))
+
+
+def contains_token_or_header(text: str) -> bool:
+    return bool(_TOKEN_LIKE_RE.search(text))
+
+
+def contains_raw_qasm_marker(text: str) -> bool:
+    return any(marker in text for marker in ("OPENQASM 2.0", "OPENQASM 3.0", "qreg ", "creg "))
+
+
 def is_probable_absolute_path(value: str) -> bool:
     try:
-        return PurePath(value).is_absolute() or bool(re.match(r"^[A-Za-z]:\\\\", value))
+        return PurePath(value).is_absolute() or contains_local_path(value)
     except Exception:
         return False
