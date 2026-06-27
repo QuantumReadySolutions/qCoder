@@ -47,6 +47,16 @@ qcoder context path/to/circuit.qasm --out-json preflight.context.json --out-md p
 qcoder review --counts-json counts.json --format qiskit_counts --preflight-json preflight.context.json --out-json execution.review.json --out-md execution.review.md
 ```
 
+For artifacts you intend to paste into ChatGPT, Cursor, email, GitHub issues, or support threads, add `--share-safe`:
+
+```bash
+qcoder analyze path/to/circuit.qasm --json --share-safe
+qcoder context path/to/circuit.qasm --out-json preflight.context.json --out-md preflight.context.md --share-safe
+qcoder review --counts-json counts.json --format qiskit_counts --preflight-json preflight.context.json --out-json execution.review.json --out-md execution.review.md --share-safe
+```
+
+Share-safe mode is designed for safer sharing: it redacts local paths and token/header-like strings, adds `share_safe=true`, and marks raw QASM/local paths/tokens as not included. Review artifacts before sharing; this is not a guarantee that all sensitive project content has been removed.
+
 Explorer Beta compatibility checks and archived Pro bootstrap:
 
 ```bash
@@ -55,6 +65,7 @@ qcoder explorer demo
 qcoder explorer evidence
 qcoder explorer evidence --qasm path/to/circuit.qasm
 qcoder explorer evidence --context-json preflight.context.json
+qcoder explorer evidence --qasm path/to/circuit.qasm --out-json explorer.json --out-md explorer.md --share-safe
 qcoder pro --help
 ```
 

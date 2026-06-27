@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from qcoder.core.share_safe import render_share_safe_note
+
 
 def render_review_markdown(bundle: dict[str, Any]) -> str:
     lines: list[str] = []
@@ -14,6 +16,9 @@ def render_review_markdown(bundle: dict[str, Any]) -> str:
 
     lines.append("# qCoder Execution Review")
     lines.append("")
+    if bundle.get("share_safe") is True:
+        lines.append(render_share_safe_note().strip())
+        lines.append("")
     lines.append("## Purpose")
     lines.append("Deterministic post-execution review artifact from provided counts.")
     lines.append("Counts are user-provided; qCoder did not execute the circuit.")
@@ -107,4 +112,3 @@ def render_review_markdown(bundle: dict[str, Any]) -> str:
     lines.append(bundle.get("llm_use", {}).get("intended_use", ""))
     lines.append("")
     return "\n".join(lines)
-

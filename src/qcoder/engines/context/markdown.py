@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from qcoder.core.share_safe import render_share_safe_note
+
 
 def _fmt_num(value: Any) -> str:
     if isinstance(value, float) and value.is_integer():
@@ -24,6 +26,9 @@ def render_context_markdown(bundle: dict[str, Any]) -> str:
 
     lines.append("# qCoder Preflight Context")
     lines.append("")
+    if bundle.get("share_safe") is True:
+        lines.append(render_share_safe_note().strip())
+        lines.append("")
     lines.append("## Purpose")
     lines.append("Deterministic pre-execution context artifact for planning and review.")
     lines.append("")
@@ -121,4 +126,3 @@ def render_context_markdown(bundle: dict[str, Any]) -> str:
     lines.append(bundle.get("llm_use", {}).get("intended_use", ""))
     lines.append("")
     return "\n".join(lines)
-

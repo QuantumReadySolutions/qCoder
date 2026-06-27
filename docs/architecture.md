@@ -25,6 +25,8 @@ qCoder OSS commands are local/offline after package installation: no LLM calls, 
 
 Portable JSON and Markdown artifacts are intended for humans, chat LLMs, and agentic IDEs to consume in user-managed workflows. Productized Cursor, Claude Code, Codex, or MCP integration is not part of this public package surface unless separately implemented and documented.
 
+Use `--share-safe` when producing artifacts intended for ChatGPT, Cursor, email, GitHub issues, or support threads. Share-safe mode redacts local paths and token/header-like strings, adds explicit `share_safe` metadata, and marks raw QASM/local paths/tokens as not included. It is designed for safer sharing, but users should still review artifacts before sharing because qCoder cannot guarantee that every sensitive project-specific detail has been removed.
+
 ## Explorer Beta boundary
 
 Explorer Beta is the account-backed beta path. The primary public CLI namespace is `qcoder explorer`. During beta, `qcoder student` remains a compatibility alias, and the primary environment variables remain `QCODER_STUDENT_BASE_URL` and `QCODER_STUDENT_TOKEN`.

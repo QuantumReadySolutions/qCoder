@@ -69,6 +69,7 @@ class TestCliHelp(unittest.TestCase):
         self.assertIn("--json", out)
         self.assertIn("--guidance", out)
         self.assertIn("--profiles", out)
+        self.assertIn("--share-safe", out)
         self.assertIn("requires --json", out.lower())
 
     def test_batch_help_includes_circuits_dir_and_out(self) -> None:
@@ -101,11 +102,13 @@ class TestCliHelp(unittest.TestCase):
         self.assertIn("--out-md", out)
         self.assertIn("--full-features", out)
         self.assertIn("--profiles", out)
+        self.assertIn("--share-safe", out)
 
     def test_python_m_qcoder_review_help(self) -> None:
         out = self._run_module_help("review")
         self.assertIn("--counts-json", out)
         self.assertIn("--format", out)
+        self.assertIn("--share-safe", out)
 
     def test_python_m_qcoder_pro_help(self) -> None:
         out = self._run_module_help("pro")

@@ -8,6 +8,7 @@ from pathlib import Path
 from qcoder.pipelines.analyze import analyze_qasm
 from qcoder.pipelines.context import write_preflight_context
 from qcoder.pipelines.review import write_execution_review
+from qcoder.core.share_safe import make_share_safe_payload, render_share_safe_note
 from qcoder.explorer.derived_evidence import (
     ExplorerDerivedEvidenceRequestError,
     build_derived_evidence_request_from_context_json,
@@ -100,6 +101,13 @@ def _cmd_analyze(argv: list[str]) -> int:
         help="Include derived feature_profiles in JSON output (requires --json for analyze)",
     )
     p.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+    p.add_argument(
+        "--share-safe",
+        "--redact",
+        dest="share_safe",
+        action="store_true",
+        help="Redact local paths and sensitive runtime details in JSON output intended for sharing.",
+    )
     args = p.parse_args(argv)
 
     if args.profiles and not args.json:
@@ -120,9 +128,12 @@ def _cmd_analyze(argv: list[str]) -> int:
     )
 
     if args.json:
+        payload = report.to_json_dict(include_guidance=args.guidance, include_profiles=args.profiles)
+        if args.share_safe:
+            payload = make_share_safe_payload(payload)
         print(
             json.dumps(
-                report.to_json_dict(include_guidance=args.guidance, include_profiles=args.profiles),
+                payload,
                 indent=2,
                 sort_keys=True,
             )
@@ -131,7 +142,9 @@ def _cmd_analyze(argv: list[str]) -> int:
 
     ex = report.example
     rc = report.run_config
-    print(f"file: {ex.qasm_path}")
+    print(f"file: {'<redacted-local-path>' if args.share_safe else ex.qasm_path}")
+    if args.share_safe:
+        print("share_safe: true")
     print(f"format: {ex.ir.source_format}")
     if ex.name:
         print(f"name: {ex.name}")
@@ -218,6 +231,13 @@ def _cmd_context(argv: list[str]) -> int:
         action="store_true",
         help="Include full feature glossary/appendix in context artifacts (default: selected structural features only)",
     )
+    p.add_argument(
+        "--share-safe",
+        "--redact",
+        dest="share_safe",
+        action="store_true",
+        help="Write artifacts designed for safer sharing by redacting local paths and sensitive runtime details.",
+    )
     args = p.parse_args(argv)
 
     write_preflight_context(
@@ -229,9 +249,12 @@ def _cmd_context(argv: list[str]) -> int:
         include_full_features=args.full_features,
         circuit_id=args.circuit_id,
         circuit_name=args.circuit_name,
+        share_safe=args.share_safe,
     )
-    print(f"Wrote preflight context JSON to {args.out_json}", file=sys.stderr)
-    print(f"Wrote preflight context Markdown to {args.out_md}", file=sys.stderr)
+    json_label = "<redacted-local-path>" if args.share_safe else args.out_json
+    md_label = "<redacted-local-path>" if args.share_safe else args.out_md
+    print(f"Wrote preflight context JSON to {json_label}", file=sys.stderr)
+    print(f"Wrote preflight context Markdown to {md_label}", file=sys.stderr)
     return 0
 
 
@@ -248,6 +271,13 @@ def _cmd_review(argv: list[str]) -> int:
     p.add_argument("--preflight-json", default=None, help="Optional preflight context JSON path for linkage/checks")
     p.add_argument("--out-json", required=True, help="Output execution review JSON path")
     p.add_argument("--out-md", required=True, help="Output execution review Markdown path")
+    p.add_argument(
+        "--share-safe",
+        "--redact",
+        dest="share_safe",
+        action="store_true",
+        help="Write artifacts designed for safer sharing by redacting local paths and sensitive runtime details.",
+    )
     args = p.parse_args(argv)
 
     write_execution_review(
@@ -256,9 +286,12 @@ def _cmd_review(argv: list[str]) -> int:
         preflight_json=args.preflight_json,
         out_json=args.out_json,
         out_md=args.out_md,
+        share_safe=args.share_safe,
     )
-    print(f"Wrote execution review JSON to {args.out_json}", file=sys.stderr)
-    print(f"Wrote execution review Markdown to {args.out_md}", file=sys.stderr)
+    json_label = "<redacted-local-path>" if args.share_safe else args.out_json
+    md_label = "<redacted-local-path>" if args.share_safe else args.out_md
+    print(f"Wrote execution review JSON to {json_label}", file=sys.stderr)
+    print(f"Wrote execution review Markdown to {md_label}", file=sys.stderr)
     return 0
 
 
@@ -318,14 +351,20 @@ def _format_summary_value(value: str | int | float | bool) -> str:
     return str(value)
 
 
-def _print_raw_payload_json(payload: dict[str, object] | None) -> None:
-    print(json.dumps(payload or {}, indent=2, sort_keys=True))
+def _print_raw_payload_json(payload: dict[str, object] | None, *, share_safe: bool = False) -> None:
+    out = payload or {}
+    if share_safe:
+        out = make_share_safe_payload(out)
+    print(json.dumps(out, indent=2, sort_keys=True))
 
 
-def _write_json_payload(path: str, payload: dict[str, object] | None) -> None:
+def _write_json_payload(path: str, payload: dict[str, object] | None, *, share_safe: bool = False) -> None:
+    out = payload or {}
+    if share_safe:
+        out = make_share_safe_payload(out)
     out_path = Path(path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(payload or {}, indent=2, sort_keys=True), encoding="utf-8")
+    out_path.write_text(json.dumps(out, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _is_scalar(value: object) -> bool:
@@ -468,6 +507,9 @@ def _render_student_evidence_markdown(payload: dict[str, object] | None) -> str:
         "# qCoder Explorer Beta Guided Evidence",
         "",
     ]
+    if payload and payload.get("share_safe") is True:
+        lines.append(render_share_safe_note().strip())
+        lines.append("")
     for line in _summarize_student_evidence_payload(payload):
         lines.append(f"- {line}")
     if payload:
@@ -490,10 +532,13 @@ def _render_student_evidence_markdown(payload: dict[str, object] | None) -> str:
     return "\n".join(lines)
 
 
-def _write_markdown_payload(path: str, payload: dict[str, object] | None) -> None:
+def _write_markdown_payload(path: str, payload: dict[str, object] | None, *, share_safe: bool = False) -> None:
+    out = payload or {}
+    if share_safe:
+        out = make_share_safe_payload(out)
     out_path = Path(path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(_render_student_evidence_markdown(payload), encoding="utf-8")
+    out_path.write_text(_render_student_evidence_markdown(out), encoding="utf-8")
 
 
 def _run_student_builtin_review_check(
@@ -577,6 +622,7 @@ def _run_student_evidence_check(
     context_json_path: str | None = None,
     out_json: str | None = None,
     out_md: str | None = None,
+    share_safe: bool = False,
 ) -> int:
     request_payload: dict[str, object] | None = None
     if qasm_path and context_json_path:
@@ -618,11 +664,11 @@ def _run_student_evidence_check(
         return 2
 
     if json_output:
-        _print_raw_payload_json(response.payload)
+        _print_raw_payload_json(response.payload, share_safe=share_safe)
         if out_json:
-            _write_json_payload(out_json, response.payload)
+            _write_json_payload(out_json, response.payload, share_safe=share_safe)
         if out_md:
-            _write_markdown_payload(out_md, response.payload)
+            _write_markdown_payload(out_md, response.payload, share_safe=share_safe)
         return 0 if response.status_code == 200 else 1 if response.status_code in {401, 403} else 2
 
     if response.status_code == 200:
@@ -637,11 +683,11 @@ def _run_student_evidence_check(
         for line in _summarize_student_evidence_payload(response.payload):
             print(f"  {line}")
         if out_json:
-            _write_json_payload(out_json, response.payload)
-            print(f"  wrote_json: {out_json}")
+            _write_json_payload(out_json, response.payload, share_safe=share_safe)
+            print(f"  wrote_json: {'<redacted-local-path>' if share_safe else out_json}")
         if out_md:
-            _write_markdown_payload(out_md, response.payload)
-            print(f"  wrote_md: {out_md}")
+            _write_markdown_payload(out_md, response.payload, share_safe=share_safe)
+            print(f"  wrote_md: {'<redacted-local-path>' if share_safe else out_md}")
         return 0
     if response.status_code == 401:
         print(
@@ -724,6 +770,13 @@ def _cmd_explorer(argv: list[str], *, compatibility_alias: bool = False) -> int:
     )
     p_evidence.add_argument("--out-json", default=None, help="Write Explorer evidence response JSON.")
     p_evidence.add_argument("--out-md", default=None, help="Write Explorer evidence response Markdown.")
+    p_evidence.add_argument(
+        "--share-safe",
+        "--redact",
+        dest="share_safe",
+        action="store_true",
+        help="Write output artifacts with explicit share-safe metadata and local-sensitive details redacted.",
+    )
     p_evidence.set_defaults(explorer_command="evidence")
 
     args = p.parse_args(argv)
@@ -749,6 +802,7 @@ def _cmd_explorer(argv: list[str], *, compatibility_alias: bool = False) -> int:
             context_json_path=args.context_json,
             out_json=args.out_json,
             out_md=args.out_md,
+            share_safe=args.share_safe,
         )
 
     p.print_help()

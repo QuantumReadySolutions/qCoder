@@ -8,6 +8,7 @@ from typing import Any
 from qcoder.engines.context.bundle import build_context_bundle
 from qcoder.engines.context.markdown import render_context_markdown
 from qcoder.pipelines.analyze import analyze_qasm
+from qcoder.core.share_safe import make_share_safe_payload
 
 
 def _qcoder_version() -> str:
@@ -49,6 +50,7 @@ def write_preflight_context(
     include_full_features: bool = False,
     circuit_id: str | None = None,
     circuit_name: str | None = None,
+    share_safe: bool = False,
 ) -> dict[str, Any]:
     bundle = build_preflight_context(
         qasm_path,
@@ -58,6 +60,8 @@ def write_preflight_context(
         circuit_id=circuit_id,
         circuit_name=circuit_name,
     )
+    if share_safe:
+        bundle = make_share_safe_payload(bundle)
     out_json_path = Path(out_json)
     out_md_path = Path(out_md)
     out_json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -65,4 +69,3 @@ def write_preflight_context(
     out_json_path.write_text(json.dumps(bundle, indent=2, sort_keys=True), encoding="utf-8")
     out_md_path.write_text(render_context_markdown(bundle), encoding="utf-8")
     return bundle
-
