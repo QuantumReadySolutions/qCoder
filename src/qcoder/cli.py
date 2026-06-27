@@ -501,6 +501,8 @@ def _run_student_builtin_review_check(
     base_url_override: str | None,
     mode: str,
     json_output: bool,
+    compatibility_alias: bool = False,
+    command_prefix: str = "qcoder explorer",
 ) -> int:
     try:
         config = resolve_preview_client_config(
@@ -508,7 +510,7 @@ def _run_student_builtin_review_check(
             include_student_aliases=True,
         )
     except ValueError as exc:
-        print(f"qcoder student: {exc}", file=sys.stderr)
+        print(f"{command_prefix}: {exc}", file=sys.stderr)
         return 2
 
     try:
@@ -528,16 +530,20 @@ def _run_student_builtin_review_check(
     if response.status_code == 200:
         if mode == "status":
             print("qCoder Explorer Beta access: OK")
-            print("  compatibility_command: qcoder student")
+            print("  command: qcoder explorer status")
+            if compatibility_alias:
+                print("  compatibility_alias: qcoder student status")
             print(f"  http_status: {response.status_code}")
             print("  service: available")
             count = _sample_count(response.payload)
             if count is not None:
                 print(f"  teaching_demo_samples: {count}")
-            print("Next: try qcoder student demo, then qcoder student evidence.")
+            print("Next: try qcoder explorer demo, then qcoder explorer evidence.")
         else:
             print("qCoder Explorer Beta built-in teaching demo: PASS (HTTP 200).")
-            print("  compatibility_command: qcoder student demo")
+            print("  command: qcoder explorer demo")
+            if compatibility_alias:
+                print("  compatibility_alias: qcoder student demo")
             for line in _summarize_student_demo_payload(response.payload):
                 print(f"  {line}")
         return 0
@@ -565,6 +571,8 @@ def _run_student_evidence_check(
     *,
     base_url_override: str | None,
     json_output: bool,
+    command_label: str = "qcoder explorer evidence",
+    compatibility_alias: bool = False,
     qasm_path: str | None = None,
     context_json_path: str | None = None,
     out_json: str | None = None,
@@ -572,19 +580,19 @@ def _run_student_evidence_check(
 ) -> int:
     request_payload: dict[str, object] | None = None
     if qasm_path and context_json_path:
-        print("qcoder student evidence: choose only one of --qasm or --context-json", file=sys.stderr)
+        print(f"{command_label}: choose only one of --qasm or --context-json", file=sys.stderr)
         return 2
     if qasm_path:
         try:
             request_payload = build_derived_evidence_request_from_qasm(qasm_path)
         except ExplorerDerivedEvidenceRequestError as exc:
-            print(f"qcoder student evidence: {exc}", file=sys.stderr)
+            print(f"{command_label}: {exc}", file=sys.stderr)
             return 2
     elif context_json_path:
         try:
             request_payload = build_derived_evidence_request_from_context_json(context_json_path)
         except ExplorerDerivedEvidenceRequestError as exc:
-            print(f"qcoder student evidence: {exc}", file=sys.stderr)
+            print(f"{command_label}: {exc}", file=sys.stderr)
             return 2
 
     try:
@@ -593,7 +601,7 @@ def _run_student_evidence_check(
             include_student_aliases=True,
         )
     except ValueError as exc:
-        print(f"qcoder student: {exc}", file=sys.stderr)
+        print(f"{command_label.rsplit(' ', 1)[0]}: {exc}", file=sys.stderr)
         return 2
 
     try:
@@ -619,7 +627,9 @@ def _run_student_evidence_check(
 
     if response.status_code == 200:
         print("qCoder Explorer Beta evidence: PASS (HTTP 200).")
-        print("  compatibility_command: qcoder student evidence")
+        print("  command: qcoder explorer evidence")
+        if compatibility_alias:
+            print("  compatibility_alias: qcoder student evidence")
         if request_payload is not None:
             print("  evidence_mode: derived_context")
             print("  raw_qasm_uploaded: false")
@@ -652,16 +662,21 @@ def _run_student_evidence_check(
     return 2
 
 
-def _cmd_student(argv: list[str]) -> int:
+def _cmd_explorer(argv: list[str], *, compatibility_alias: bool = False) -> int:
+    prog = "qcoder student" if compatibility_alias else "qcoder explorer"
     p = argparse.ArgumentParser(
-        prog="qcoder student",
+        prog=prog,
         add_help=True,
         description=(
             "qCoder Explorer Beta account-backed status/demo/evidence checks. "
-            "The command namespace remains `qcoder student` during beta for compatibility."
+            + (
+                "`qcoder student` is a compatibility alias; use `qcoder explorer` for the primary public surface."
+                if compatibility_alias
+                else "`qcoder student` remains available as a compatibility alias during beta."
+            )
         ),
     )
-    sub = p.add_subparsers(dest="student_command")
+    sub = p.add_subparsers(dest="explorer_command")
 
     p_status = sub.add_parser(
         "status",
@@ -673,7 +688,7 @@ def _cmd_student(argv: list[str]) -> int:
         help="Override qCoder Explorer Beta base URL (default env: QCODER_STUDENT_BASE_URL, QCODER_PREVIEW_BASE_URL, or QCODER_PRO_API_URL).",
     )
     p_status.add_argument("--json", action="store_true", help="Emit raw service payload as JSON.")
-    p_status.set_defaults(student_command="status")
+    p_status.set_defaults(explorer_command="status")
 
     p_demo = sub.add_parser(
         "demo",
@@ -685,7 +700,7 @@ def _cmd_student(argv: list[str]) -> int:
         help="Override qCoder Explorer Beta base URL (default env: QCODER_STUDENT_BASE_URL, QCODER_PREVIEW_BASE_URL, or QCODER_PRO_API_URL).",
     )
     p_demo.add_argument("--json", action="store_true", help="Emit raw service payload as JSON.")
-    p_demo.set_defaults(student_command="demo")
+    p_demo.set_defaults(explorer_command="demo")
 
     p_evidence = sub.add_parser(
         "evidence",
@@ -709,23 +724,27 @@ def _cmd_student(argv: list[str]) -> int:
     )
     p_evidence.add_argument("--out-json", default=None, help="Write Explorer evidence response JSON.")
     p_evidence.add_argument("--out-md", default=None, help="Write Explorer evidence response Markdown.")
-    p_evidence.set_defaults(student_command="evidence")
+    p_evidence.set_defaults(explorer_command="evidence")
 
     args = p.parse_args(argv)
-    if args.student_command is None:
+    if args.explorer_command is None:
         p.print_help()
         return 0
 
-    if args.student_command in {"status", "demo"}:
+    if args.explorer_command in {"status", "demo"}:
         return _run_student_builtin_review_check(
             base_url_override=args.base_url,
-            mode=args.student_command,
+            mode=args.explorer_command,
             json_output=args.json,
+            compatibility_alias=compatibility_alias,
+            command_prefix=prog,
         )
-    if args.student_command == "evidence":
+    if args.explorer_command == "evidence":
         return _run_student_evidence_check(
             base_url_override=args.base_url,
             json_output=args.json,
+            command_label=f"{prog} evidence",
+            compatibility_alias=compatibility_alias,
             qasm_path=args.qasm,
             context_json_path=args.context_json,
             out_json=args.out_json,
@@ -734,6 +753,10 @@ def _cmd_student(argv: list[str]) -> int:
 
     p.print_help()
     return 0
+
+
+def _cmd_student(argv: list[str]) -> int:
+    return _cmd_explorer(argv, compatibility_alias=True)
 
 
 def _cmd_pro(argv: list[str]) -> int:
@@ -1117,16 +1140,17 @@ def _cmd_pro(argv: list[str]) -> int:
 
 def _print_root_help() -> None:
     print(
-        "usage: qcoder [--version | -V] [-h] {analyze,batch,context,review,pro,student} ...\n\n"
+        "usage: qcoder [--version | -V] [-h] {analyze,batch,context,review,explorer,pro,student} ...\n\n"
         "Quantum circuit analysis CLI.\n\n"
         "positional arguments:\n"
-        "  {analyze,batch,context,review,pro,student}  subcommand\n\n"
+        "  {analyze,batch,context,review,explorer,pro,student}  subcommand\n\n"
         "  analyze          Analyze a QASM file (feature extraction + metadata + run config).\n"
         "  batch            Batch extract a directory to JSONL (requires --out).\n"
         "  context          Build deterministic preflight context artifacts.\n"
         "  review           Build deterministic execution review artifacts from counts.\n"
+        "  explorer         Explorer Beta status/demo/evidence checks.\n"
         "  pro              Archived Pro client-contract shell (not current public product).\n"
-        "  student          Explorer Beta status/demo/evidence checks (compatibility namespace).\n\n"
+        "  student          Compatibility alias for Explorer Beta checks.\n\n"
         "Run `qcoder <subcommand> --help` for subcommand options.",
         end="",
     )
@@ -1155,13 +1179,15 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_context(rest)
     if cmd == "review":
         return _cmd_review(rest)
+    if cmd == "explorer":
+        return _cmd_explorer(rest)
     if cmd == "pro":
         return _cmd_pro(rest)
     if cmd == "student":
         return _cmd_student(rest)
 
     print(
-        f"qcoder: unknown subcommand {cmd!r} (expected analyze, batch, context, review, pro, or student)",
+        f"qcoder: unknown subcommand {cmd!r} (expected analyze, batch, context, review, explorer, pro, or student)",
         file=sys.stderr,
     )
     print("Run `qcoder --help` for usage.", file=sys.stderr)

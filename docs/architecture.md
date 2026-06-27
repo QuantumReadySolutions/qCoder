@@ -16,7 +16,7 @@ The public `qcoder` package on `main` ships:
 - Optional `--profiles` on `analyze --json` and `context` — derived structural taxonomy from `feature_map`.
 - `qcoder context` — preflight context artifacts (JSON + Markdown).
 - `qcoder review` — post-run review artifacts from user-supplied counts (`qcoder` or `qiskit_counts` formats).
-- `qcoder student status`, `qcoder student demo`, and `qcoder student evidence` — temporary Explorer Beta compatibility commands for account-backed status, built-in evidence, and derived-context custom evidence checks.
+- `qcoder explorer status`, `qcoder explorer demo`, and `qcoder explorer evidence` — primary Explorer Beta commands for account-backed status, built-in evidence, and derived-context custom evidence checks. `qcoder student ...` remains a compatibility alias during beta.
 - `qcoder pro` — archived pilot/client-contract plumbing only. Pro is not launched and is not a current public product path.
 
 ## OSS boundary
@@ -27,9 +27,9 @@ Portable JSON and Markdown artifacts are intended for humans, chat LLMs, and age
 
 ## Explorer Beta boundary
 
-Explorer Beta is the account-backed beta path. During beta, the public CLI compatibility namespace remains `qcoder student`, and the primary environment variables remain `QCODER_STUDENT_BASE_URL` and `QCODER_STUDENT_TOKEN`.
+Explorer Beta is the account-backed beta path. The primary public CLI namespace is `qcoder explorer`. During beta, `qcoder student` remains a compatibility alias, and the primary environment variables remain `QCODER_STUDENT_BASE_URL` and `QCODER_STUDENT_TOKEN`.
 
-With no input, `qcoder student evidence` uses built-in guided evidence samples. With `--qasm` or `--context-json`, it uses locally derived qCoder context/features for custom guided evidence over a user-owned artifact.
+With no input, `qcoder explorer evidence` uses built-in guided evidence samples. With `--qasm` or `--context-json`, it uses locally derived qCoder context/features for custom guided evidence over a user-owned artifact.
 
 The CLI may read OpenQASM 2 locally, but the Explorer Beta custom evidence request must not include raw QASM, raw source text, local paths, reconstructable operation lists, raw counts, notebooks, prompts, tokens, auth headers, or cookies. The v0 service response is stateless: `persisted=false` and `history_ready=false`.
 

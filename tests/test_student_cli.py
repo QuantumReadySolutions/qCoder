@@ -9,6 +9,7 @@ from urllib.error import HTTPError, URLError
 import pytest
 
 from qcoder.cli import main
+from qcoder.pipelines.context import write_preflight_context
 
 
 class _FakeResponse:
@@ -56,10 +57,14 @@ def test_student_status_dispatches_to_preview_check_and_forwards_base_url(monkey
         base_url_override: str | None,
         mode: str,
         json_output: bool,
+        compatibility_alias: bool = False,
+        command_prefix: str = "qcoder explorer",
     ) -> int:
         captured["base_url_override"] = base_url_override
         captured["mode"] = mode
         captured["json_output"] = json_output
+        captured["compatibility_alias"] = compatibility_alias
+        captured["command_prefix"] = command_prefix
         return 0
 
     monkeypatch.setattr("qcoder.cli._run_student_builtin_review_check", _fake_run)
@@ -68,6 +73,8 @@ def test_student_status_dispatches_to_preview_check_and_forwards_base_url(monkey
         "base_url_override": "http://127.0.0.1:18081",
         "mode": "status",
         "json_output": False,
+        "compatibility_alias": True,
+        "command_prefix": "qcoder student",
     }
 
 
@@ -79,10 +86,14 @@ def test_student_demo_dispatches_to_preview_check_and_forwards_base_url(monkeypa
         base_url_override: str | None,
         mode: str,
         json_output: bool,
+        compatibility_alias: bool = False,
+        command_prefix: str = "qcoder explorer",
     ) -> int:
         captured["base_url_override"] = base_url_override
         captured["mode"] = mode
         captured["json_output"] = json_output
+        captured["compatibility_alias"] = compatibility_alias
+        captured["command_prefix"] = command_prefix
         return 0
 
     monkeypatch.setattr("qcoder.cli._run_student_builtin_review_check", _fake_run)
@@ -91,6 +102,8 @@ def test_student_demo_dispatches_to_preview_check_and_forwards_base_url(monkeypa
         "base_url_override": "http://127.0.0.1:18082",
         "mode": "demo",
         "json_output": False,
+        "compatibility_alias": True,
+        "command_prefix": "qcoder student",
     }
 
 
@@ -123,7 +136,7 @@ def test_student_evidence_calls_guided_evidence_endpoint(monkeypatch: pytest.Mon
     assert captured["url"] == "http://127.0.0.1:18081/v0/student/guided-evidence"
 
 
-def test_student_evidence_qasm_posts_sanitized_derived_context(
+def test_explorer_evidence_qasm_posts_sanitized_derived_context(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -167,18 +180,19 @@ def test_student_evidence_qasm_posts_sanitized_derived_context(
         )
 
     monkeypatch.setattr("qcoder.pro_preview.client.urlopen", _fake_urlopen)
-    assert main(["student", "evidence", "--qasm", str(qasm), "--out-json", str(out_json), "--out-md", str(out_md)]) == 0
+    assert main(["explorer", "evidence", "--qasm", str(qasm), "--out-json", str(out_json), "--out-md", str(out_md)]) == 0
     out = capsys.readouterr()
     request_payload = json.loads(captured["body"])
     combined = out.out + out.err + captured["body"] + out_json.read_text(encoding="utf-8") + out_md.read_text(encoding="utf-8")
 
-    assert captured["url"] == "http://127.0.0.1:18081/v0/student/custom-guided-evidence"
+    assert captured["url"] == "http://127.0.0.1:18081/v0/explorer/custom-guided-evidence"
     assert captured["authorization"] == f"Bearer {token}"
     assert request_payload["schema_id"] == "qcoder.explorer.custom_guided_evidence.request.v0"
     assert request_payload["privacy_boundary"]["raw_qasm_included"] is False
     assert request_payload["privacy_boundary"]["local_paths_included"] is False
     assert request_payload["input_summary"]["raw_artifact_uploaded"] is False
     assert "evidence_mode: derived_context" in out.out
+    assert "command: qcoder explorer evidence" in out.out
     assert "raw_qasm_uploaded: false" in out.out
     assert "persisted: false" in out.out
     assert out_json.exists()
@@ -189,6 +203,83 @@ def test_student_evidence_qasm_posts_sanitized_derived_context(
     assert token not in combined
     assert f"Bearer {token}" not in combined
     assert "Authorization" not in combined
+
+
+def test_student_evidence_qasm_still_works_as_compatibility_alias(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    qasm = tmp_path / "compat-circuit.qasm"
+    qasm.write_text(
+        "OPENQASM 2.0;\nqreg q[1];\ncreg c[1];\nmeasure q[0] -> c[0];\n",
+        encoding="utf-8",
+    )
+    _set_student_env(monkeypatch, base_url="http://127.0.0.1:18081", token="dummy-preview-token-for-test")
+    captured: dict[str, str] = {}
+
+    def _fake_urlopen(req: Any, timeout: float = 0) -> _FakeResponse:
+        captured["url"] = req.full_url
+        captured["body"] = req.data.decode("utf-8")
+        return _FakeResponse(
+            status=200,
+            body=(
+                '{"schema_id":"qcoder.explorer.custom_guided_evidence.response.v0",'
+                '"mode":"explorer-custom-guided-evidence","status":"ok",'
+                '"student_summary":"Compatibility alias response.",'
+                '"history_ready":false,"persisted":false}'
+            ),
+        )
+
+    monkeypatch.setattr("qcoder.pro_preview.client.urlopen", _fake_urlopen)
+    assert main(["student", "evidence", "--qasm", str(qasm)]) == 0
+    out = capsys.readouterr()
+    request_payload = json.loads(captured["body"])
+
+    assert captured["url"] == "http://127.0.0.1:18081/v0/explorer/custom-guided-evidence"
+    assert request_payload["client"]["command_namespace"] == "qcoder explorer"
+    assert "command: qcoder explorer evidence" in out.out
+    assert "compatibility_alias: qcoder student evidence" in out.out
+
+
+def test_explorer_evidence_context_json_posts_sanitized_request(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    qasm = tmp_path / "context-source.qasm"
+    context_json = tmp_path / "preflight.context.json"
+    context_md = tmp_path / "preflight.context.md"
+    qasm.write_text(
+        "OPENQASM 2.0;\nqreg q[1];\ncreg c[1];\nmeasure q[0] -> c[0];\n",
+        encoding="utf-8",
+    )
+    write_preflight_context(
+        str(qasm),
+        out_json=str(context_json),
+        out_md=str(context_md),
+        include_guidance=True,
+        include_profiles=True,
+    )
+    _set_student_env(monkeypatch, base_url="http://127.0.0.1:18081", token="dummy-preview-token-for-test")
+    captured: dict[str, str] = {}
+
+    def _fake_urlopen(req: Any, timeout: float = 0) -> _FakeResponse:
+        captured["url"] = req.full_url
+        captured["body"] = req.data.decode("utf-8")
+        return _FakeResponse(
+            status=200,
+            body='{"schema_id":"qcoder.explorer.custom_guided_evidence.response.v0","status":"ok"}',
+        )
+
+    monkeypatch.setattr("qcoder.pro_preview.client.urlopen", _fake_urlopen)
+    assert main(["explorer", "evidence", "--context-json", str(context_json)]) == 0
+    request_payload = json.loads(captured["body"])
+    serialized = captured["body"]
+
+    assert captured["url"] == "http://127.0.0.1:18081/v0/explorer/custom-guided-evidence"
+    assert request_payload["input_summary"]["input_kind"] == "preflight_context_json"
+    assert str(qasm) not in serialized
+    assert "context-source.qasm" not in serialized
 
 
 def test_student_evidence_qasm3_rejected_before_network(
@@ -301,9 +392,9 @@ def test_student_status_renders_access_framing_and_next_step(
     assert main(["student", "status"]) == 0
     out = capsys.readouterr()
     assert "qCoder Explorer Beta access: OK" in out.out
-    assert "compatibility_command: qcoder student" in out.out
+    assert "command: qcoder explorer status" in out.out
     assert "qCoder Explorer Beta demo: PASS" not in out.out
-    assert "Next: try qcoder student demo, then qcoder student evidence." in out.out
+    assert "Next: try qcoder explorer demo, then qcoder explorer evidence." in out.out
     assert "teaching_demo_samples: 2" in out.out
     assert "demo_level" not in out.out
     assert "demo_scope" not in out.out
@@ -331,7 +422,7 @@ def test_student_demo_renders_teaching_demo_and_hides_meta(
     assert main(["student", "demo"]) == 0
     out = capsys.readouterr()
     assert "qCoder Explorer Beta built-in teaching demo: PASS (HTTP 200)" in out.out
-    assert "compatibility_command: qcoder student demo" in out.out
+    assert "command: qcoder explorer demo" in out.out
     assert "summary: This demo shows how qCoder explains a built-in circuit." in out.out
     assert "samples: 2" in out.out
     assert "sample 1: A tiny Bell-style example." in out.out
@@ -376,7 +467,7 @@ def test_student_evidence_http_200_prints_safe_summary(
     assert main(["student", "evidence"]) == 0
     out = capsys.readouterr()
     assert "qCoder Explorer Beta evidence: PASS (HTTP 200)" in out.out
-    assert "compatibility_command: qcoder student evidence" in out.out
+    assert "command: qcoder explorer evidence" in out.out
     assert "summary: This is a learner-friendly guided evidence summary." in out.out
     assert "anatomy_label: bell_pair_teaching_example" in out.out
     assert "sample 1: This sample creates and checks a two-qubit relationship." in out.out

@@ -10,7 +10,8 @@ The current public local path is **qCoder OSS**. OSS commands run locally and do
 - `qcoder batch`
 - `qcoder context`
 - `qcoder review`
-- `qcoder student` (temporary Explorer Beta compatibility namespace for account-backed status/demo/evidence checks)
+- `qcoder explorer` (Explorer Beta account-backed status/demo/evidence checks)
+- `qcoder student` (temporary compatibility alias for Explorer Beta)
 - `qcoder pro` (archived pilot/bootstrap client contract; non-confidential local plumbing only, not a current public product path)
 
 ## Current product boundaries
@@ -18,7 +19,7 @@ The current public local path is **qCoder OSS**. OSS commands run locally and do
 Public `qcoder` ships **OSS local commands** plus Explorer Beta compatibility commands. Pro is not launched and is not a current public product path.
 
 - **OSS commands** (`analyze`, `batch`, `context`, `review`) are Apache-2.0, local-first/offline, and useful without an account or token. They do not upload data, call a qCoder hosted service, or run QPU/simulator jobs.
-- **Explorer Beta compatibility commands** (`qcoder student status`, `qcoder student demo`, `qcoder student evidence`) use the temporary `qcoder student` namespace during beta. They are account-backed checks for Explorer Beta status, built-in guided evidence samples, and derived-context guided evidence for user-owned OpenQASM 2 artifacts.
+- **Explorer Beta commands** (`qcoder explorer status`, `qcoder explorer demo`, `qcoder explorer evidence`) are account-backed checks for Explorer Beta status, built-in guided evidence samples, and derived-context guided evidence for user-owned OpenQASM 2 artifacts. The older `qcoder student ...` commands remain available as beta compatibility aliases.
 - Explorer Beta custom evidence uses locally derived qCoder context/features. The CLI may read QASM locally, but the hosted request must not include raw QASM, raw source text, local paths, operation lists, raw counts, notebooks, prompts, tokens, auth headers, or cookies.
 - Explorer Beta custom evidence is stateless in this v0 slice; it does not create persistent Explorer history.
 - **`qcoder pro` bootstrap/workflow commands** are archived pilot/client-contract surfaces. They are not a Pro purchase path, not a current public signup path, and not generally available hosted Pro.
@@ -49,11 +50,11 @@ qcoder review --counts-json counts.json --format qiskit_counts --preflight-json 
 Explorer Beta compatibility checks and archived Pro bootstrap:
 
 ```bash
-qcoder student status
-qcoder student demo
-qcoder student evidence
-qcoder student evidence --qasm path/to/circuit.qasm
-qcoder student evidence --context-json preflight.context.json
+qcoder explorer status
+qcoder explorer demo
+qcoder explorer evidence
+qcoder explorer evidence --qasm path/to/circuit.qasm
+qcoder explorer evidence --context-json preflight.context.json
 qcoder pro --help
 ```
 

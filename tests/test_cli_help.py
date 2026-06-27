@@ -45,6 +45,7 @@ class TestCliHelp(unittest.TestCase):
         self.assertIn("batch", out)
         self.assertIn("context", out)
         self.assertIn("review", out)
+        self.assertIn("explorer", out)
         self.assertIn("pro", out)
         self.assertIn("student", out)
 
@@ -124,9 +125,22 @@ class TestCliHelp(unittest.TestCase):
         self.assertIn("evidence", out)
         self.assertIn("qCoder Explorer Beta", out)
         self.assertIn("compatibility", out)
+        self.assertIn("qcoder explorer", out)
+
+    def test_python_m_qcoder_explorer_help(self) -> None:
+        out = self._run_module_help("explorer")
+        self.assertIn("status", out)
+        self.assertIn("demo", out)
+        self.assertIn("evidence", out)
+        self.assertIn("qCoder Explorer Beta", out)
+        self.assertIn("compatibility alias", out)
+        self.assertNotIn("Student Beta", out)
 
     def test_student_subcommand_help_includes_json(self) -> None:
         for argv in (
+            ["explorer", "status", "--help"],
+            ["explorer", "demo", "--help"],
+            ["explorer", "evidence", "--help"],
             ["student", "status", "--help"],
             ["student", "demo", "--help"],
             ["student", "evidence", "--help"],

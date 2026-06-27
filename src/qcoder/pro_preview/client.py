@@ -130,6 +130,7 @@ PRO_API_URL_ENV = "QCODER_PRO_API_URL"
 PRO_TOKEN_ENV = "QCODER_PRO_TOKEN"
 BUILTIN_REVIEW_PATH = "/v0/demo/builtin-review"
 STUDENT_GUIDED_EVIDENCE_PATH = "/v0/student/guided-evidence"
+EXPLORER_CUSTOM_GUIDED_EVIDENCE_PATH = "/v0/explorer/custom-guided-evidence"
 STUDENT_CUSTOM_GUIDED_EVIDENCE_PATH = "/v0/student/custom-guided-evidence"
 
 
@@ -240,7 +241,7 @@ def call_student_custom_guided_evidence(
 ) -> PreviewClientResponse:
     """Call the Explorer Beta derived-context guided-evidence endpoint."""
     request = Request(
-        _join_service_url(config.base_url, STUDENT_CUSTOM_GUIDED_EVIDENCE_PATH),
+        _join_service_url(config.base_url, EXPLORER_CUSTOM_GUIDED_EVIDENCE_PATH),
         data=json.dumps(payload, sort_keys=True).encode("utf-8"),
         headers={
             "Accept": "application/json",

@@ -252,7 +252,7 @@ def _build_request_from_context(context: Mapping[str, Any], *, input_kind: str) 
         "client": {
             "name": "qcoder",
             "version": _qcoder_version(),
-            "command_namespace": "qcoder student",
+            "command_namespace": "qcoder explorer",
             "compatibility_namespace": True,
         },
         "input_summary": {
@@ -317,4 +317,3 @@ def build_derived_evidence_request_from_context_json(context_json_path: str) -> 
 def request_fingerprint(request: Mapping[str, Any]) -> str:
     raw = json.dumps(request, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
-
