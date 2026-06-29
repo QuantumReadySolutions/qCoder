@@ -60,9 +60,15 @@ class RunConfig:
         )
 
     def to_dict(self) -> dict:
+        analysis_backend = "local_gpu" if self.backend == "GPU" else "local_cpu"
         return {
             "processor": self.processor,
             "backend": self.backend,
+            "analysis_backend": analysis_backend,
+            "local_analysis_backend": analysis_backend,
+            "backend_meaning": (
+                "local analysis backend; not a simulator, QPU, or hardware execution backend"
+            ),
             "precision": self.precision,
             "threshold": self.threshold,
         }

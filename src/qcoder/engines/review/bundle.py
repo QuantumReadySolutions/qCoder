@@ -50,6 +50,7 @@ def build_review_bundle(
     counts_v0: dict[str, Any],
     preflight_context: dict[str, Any] | None = None,
     preflight_context_path: str | None = None,
+    qcoder_version: str | None = None,
     generated_utc: str | None = None,
 ) -> dict[str, Any]:
     counts = counts_v0.get("counts", {})
@@ -193,6 +194,9 @@ def build_review_bundle(
     return {
         "review_bundle_schema_version": "0.1",
         "artifact_type": "qcoder.execution_review",
+        "qcoder_product_path": "oss",
+        "artifact_role": "local_execution_review",
+        "qcoder_version": qcoder_version,
         "basis": "deterministic_counts_review",
         "generated_utc": generated_utc or utc_now_iso(),
         "inputs": {
@@ -228,4 +232,3 @@ def build_review_bundle(
             ],
         },
     }
-

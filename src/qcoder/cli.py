@@ -8,7 +8,11 @@ from pathlib import Path
 from qcoder.pipelines.analyze import analyze_qasm
 from qcoder.pipelines.context import write_preflight_context
 from qcoder.pipelines.review import write_execution_review
-from qcoder.core.share_safe import make_share_safe_payload, render_share_safe_note
+from qcoder.core.share_safe import (
+    make_share_safe_payload,
+    render_share_safe_note,
+    render_share_safe_provenance,
+)
 from qcoder.explorer.derived_evidence import (
     ExplorerDerivedEvidenceRequestError,
     build_derived_evidence_request_from_context_json,
@@ -509,6 +513,8 @@ def _render_student_evidence_markdown(payload: dict[str, object] | None) -> str:
     ]
     if payload and payload.get("share_safe") is True:
         lines.append(render_share_safe_note().strip())
+        lines.append("")
+        lines.append(render_share_safe_provenance(payload).strip())
         lines.append("")
     for line in _summarize_student_evidence_payload(payload):
         lines.append(f"- {line}")

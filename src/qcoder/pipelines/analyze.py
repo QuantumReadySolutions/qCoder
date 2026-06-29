@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from qcoder.core.run_config import RunConfig
 from qcoder.engines.feature_extraction.extractor import CircuitExample, extract_example
+
+
+def _qcoder_version() -> str:
+    try:
+        return version("qcoder")
+    except PackageNotFoundError:
+        return "0+unknown"
 
 
 @dataclass(frozen=True)
@@ -19,6 +27,9 @@ class AnalyzeReport:
         fv = ex.global_features
         feature_map = dict(zip(fv.feature_names, fv.features))
         out = {
+            "qcoder_product_path": "oss",
+            "artifact_role": "local_analysis_report",
+            "qcoder_version": _qcoder_version(),
             "circuit_id": ex.id,
             "circuit_name": ex.name,
             "function_hint": ex.function_hint,

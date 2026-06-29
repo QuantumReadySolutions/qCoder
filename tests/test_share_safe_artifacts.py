@@ -66,9 +66,16 @@ def _assert_share_safe_payload(payload: dict[str, Any], *, forbidden_path: str, 
     assert payload["share_safe"] is True
     assert payload["raw_qasm_included"] is False
     assert payload["local_paths_included"] is False
+    assert payload["token_like_secrets_included"] is False
     assert payload["tokens_included"] is False
+    assert payload["tokens_included_meaning"] == (
+        "authentication tokens or token-like secrets, not LLM token counts"
+    )
     assert isinstance(payload["redactions_applied"], list)
-    assert "Share-safe artifact" in payload["share_safe_note"]
+    assert "designed for safer sharing, not a privacy guarantee" in payload["share_safe_note"]
+    assert "qCoder package versions and artifact/schema versions are versioned separately" in payload["schema_version_note"]
+    assert "runtime prediction" in payload["unsupported_claims"]
+    assert "deterministic structural features" in payload["supported_claims"]
     assert forbidden_path not in serialized
     assert forbidden_name not in serialized
     assert "/home/" not in serialized
@@ -115,6 +122,7 @@ def test_share_safe_metadata_reports_unremoved_path_conservatively() -> None:
 
     assert payload["local_paths_included"] is False
     assert payload["raw_qasm_included"] is False
+    assert payload["token_like_secrets_included"] is False
     assert payload["tokens_included"] is False
 
 
@@ -127,7 +135,13 @@ def test_analyze_share_safe_json_redacts_path_and_adds_metadata(tmp_path: Path, 
     payload = json.loads(out)
 
     _assert_share_safe_payload(payload, forbidden_path=str(tmp_path), forbidden_name=qasm.name)
+    assert payload["qcoder_product_path"] == "oss"
+    assert payload["artifact_role"] == "local_analysis_report"
     assert payload["qasm_path"] == "<redacted-local-path>"
+    assert payload["run_config"]["analysis_backend"] == "local_cpu"
+    assert payload["run_config"]["backend_meaning"] == (
+        "local analysis backend; not a simulator, QPU, or hardware execution backend"
+    )
 
 
 def test_analyze_normal_json_preserves_local_path(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -139,6 +153,11 @@ def test_analyze_normal_json_preserves_local_path(tmp_path: Path, capsys: pytest
 
     assert payload["qasm_path"] == str(qasm)
     assert "share_safe" not in payload
+    assert payload["qcoder_product_path"] == "oss"
+    assert payload["artifact_role"] == "local_analysis_report"
+    assert payload["run_config"]["backend_meaning"] == (
+        "local analysis backend; not a simulator, QPU, or hardware execution backend"
+    )
 
 
 def test_context_share_safe_writes_json_and_markdown_without_local_path(tmp_path: Path) -> None:
@@ -167,8 +186,17 @@ def test_context_share_safe_writes_json_and_markdown_without_local_path(tmp_path
     md = out_md.read_text(encoding="utf-8")
 
     _assert_share_safe_payload(payload, forbidden_path=str(tmp_path), forbidden_name=qasm.name)
+    assert payload["qcoder_product_path"] == "oss"
+    assert payload["artifact_role"] == "local_preflight_context"
     assert payload["circuit"]["qasm_path"] == "<redacted-local-path>"
-    assert "Share-safe artifact" in md
+    assert "Share-safe provenance" in md
+    assert "qcoder_product_path: `oss`" in md
+    assert "artifact_role: `local_preflight_context`" in md
+    assert "token_like_secrets_included: `False`" in md
+    assert "Supported by this artifact" in md
+    assert "Not supported by this artifact" in md
+    assert "runtime prediction" in md
+    assert "qCoder package versions and artifact/schema versions are versioned separately" in md
     assert str(tmp_path) not in md
     assert qasm.name not in md
 
@@ -211,9 +239,16 @@ def test_review_share_safe_redacts_preflight_path_and_keeps_counts(tmp_path: Pat
     md = review_md.read_text(encoding="utf-8")
 
     _assert_share_safe_payload(payload, forbidden_path=str(tmp_path), forbidden_name=context_json.name)
+    assert payload["qcoder_product_path"] == "oss"
+    assert payload["artifact_role"] == "local_execution_review"
     assert payload["inputs"]["preflight_context_path"] == "<redacted-local-path>"
     assert payload["derived"]["total_shots"] == 8
-    assert "Share-safe artifact" in md
+    assert "Share-safe provenance" in md
+    assert "qcoder_product_path: `oss`" in md
+    assert "artifact_role: `local_execution_review`" in md
+    assert "token_like_secrets_included: `False`" in md
+    assert "Supported by this artifact" in md
+    assert "Not supported by this artifact" in md
     assert str(tmp_path) not in md
 
 
@@ -268,8 +303,13 @@ def test_explorer_evidence_share_safe_redacts_response_files(
     md = out_md.read_text(encoding="utf-8")
 
     _assert_share_safe_payload(payload, forbidden_path=str(tmp_path), forbidden_name=qasm.name)
+    assert payload["qcoder_product_path"] == "explorer_beta"
+    assert payload["artifact_role"] == "derived_context_guided_evidence"
     assert payload["debug_path"] == "<redacted-local-path>"
-    assert "Share-safe artifact" in md
+    assert "Share-safe provenance" in md
+    assert "qcoder_product_path: `explorer_beta`" in md
+    assert "artifact_role: `derived_context_guided_evidence`" in md
+    assert "raw hosted QASM" in md
     assert str(tmp_path) not in md
     assert "secret-token-for-test" not in md
 
@@ -301,4 +341,6 @@ def test_student_evidence_share_safe_alias_is_preserved(
     payload = json.loads(out_json.read_text(encoding="utf-8"))
 
     _assert_share_safe_payload(payload, forbidden_path=str(tmp_path), forbidden_name=qasm.name)
+    assert payload["qcoder_product_path"] == "explorer_beta"
+    assert payload["artifact_role"] == "derived_context_guided_evidence"
     assert payload["local_path"] == "<redacted-local-path>"

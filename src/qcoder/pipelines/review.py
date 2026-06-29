@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,13 @@ from qcoder.engines.review.counts_v0 import normalize_counts_v0
 from qcoder.engines.review.markdown import render_review_markdown
 from qcoder.engines.review.qiskit_counts import normalize_qiskit_counts_payload
 from qcoder.core.share_safe import make_share_safe_payload
+
+
+def _qcoder_version() -> str:
+    try:
+        return version("qcoder")
+    except PackageNotFoundError:
+        return "0+unknown"
 
 
 def _load_json(path: str) -> dict[str, Any]:
@@ -38,6 +46,7 @@ def build_execution_review(
         counts_v0=counts_v0,
         preflight_context=preflight,
         preflight_context_path=preflight_json,
+        qcoder_version=_qcoder_version(),
     )
 
 

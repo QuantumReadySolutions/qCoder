@@ -88,6 +88,8 @@ def build_context_bundle(
     return {
         "context_bundle_schema_version": "0.1",
         "artifact_type": "qcoder.preflight_context",
+        "qcoder_product_path": "oss",
+        "artifact_role": "local_preflight_context",
         "basis": context_bundle_basis(analysis),
         "generated_utc": generated_utc or utc_now_iso(),
         "qcoder_version": qcoder_version,
@@ -106,4 +108,3 @@ def build_context_bundle(
             "limits": llm_limits,
         },
     }
-

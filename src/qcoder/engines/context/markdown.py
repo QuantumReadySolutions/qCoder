@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from qcoder.core.share_safe import render_share_safe_note
+from qcoder.core.share_safe import render_share_safe_note, render_share_safe_provenance
 
 
 def _fmt_num(value: Any) -> str:
@@ -28,6 +28,8 @@ def render_context_markdown(bundle: dict[str, Any]) -> str:
     lines.append("")
     if bundle.get("share_safe") is True:
         lines.append(render_share_safe_note().strip())
+        lines.append("")
+        lines.append(render_share_safe_provenance(bundle).strip())
         lines.append("")
     lines.append("## Purpose")
     lines.append("Deterministic pre-execution context artifact for planning and review.")
