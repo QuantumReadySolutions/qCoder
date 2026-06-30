@@ -99,6 +99,39 @@ def test_mcp_rejects_directory_instead_of_arbitrary_file_expansion(tmp_path: Pat
         call_tool("qcoder_analyze_circuit", {"qasm_path": str(tmp_path)})
 
 
+def test_mcp_rejects_qasm3_gracefully(tmp_path: Path) -> None:
+    qasm = tmp_path / "qasm3.qasm"
+    qasm.write_text(
+        "OPENQASM 3.0;\n"
+        "qubit[1] q;\n"
+        "bit[1] c;\n"
+        "h q[0];\n"
+        "c[0] = measure q[0];\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="OpenQASM 2"):
+        call_tool("qcoder_analyze_circuit", {"qasm_path": str(qasm)})
+
+
+def test_mcp_rejects_oversized_explicit_input(tmp_path: Path) -> None:
+    qasm = tmp_path / "large.qasm"
+    qasm.write_text("// padding\n" + ("x" * (1024 * 1024 + 1)), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="input size cap"):
+        call_tool("qcoder_analyze_circuit", {"qasm_path": str(qasm)})
+
+
+def test_mcp_package_does_not_import_token_or_network_clients() -> None:
+    source = Path(__file__).resolve().parents[1] / "src" / "qcoder" / "mcp" / "tools.py"
+    text = source.read_text(encoding="utf-8")
+
+    assert "resolve_token" not in text
+    assert "urlopen" not in text
+    assert "ProServiceClient" not in text
+    assert "call_student" not in text
+
+
 def test_mcp_claim_boundaries_keep_pro_and_deferred_items_out() -> None:
     payload = _structured(call_tool("qcoder_claim_boundaries", {}))
     text = json.dumps(payload, sort_keys=True).lower()
@@ -108,6 +141,25 @@ def test_mcp_claim_boundaries_keep_pro_and_deferred_items_out() -> None:
     assert "backend or qpu ranking" in text
     assert payload["manual_artifact_loop_launch_required"] is True
     assert payload["local_cursor_mcp_complements_artifacts"] is True
+
+
+def test_mcp_claim_boundaries_summarizes_supplied_artifact() -> None:
+    payload = _structured(
+        call_tool(
+            "qcoder_claim_boundaries",
+            {
+                "artifact": {
+                    "artifact_type": "qcoder.preflight_context",
+                    "analysis": {"feature_map": {"n_qubits": 2, "n_ops": 4}},
+                }
+            },
+        )
+    )
+
+    assert payload["artifact_present"] is True
+    assert payload["artifact_summary"]["feature_map_present"] is True
+    assert payload["artifact_summary"]["artifact_type"] == "qcoder.preflight_context"
+    assert payload["artifact_summary"]["feature_keys_present"] == ["n_ops", "n_qubits"]
 
 
 def test_mcp_next_checks_do_not_claim_autonomous_repair() -> None:

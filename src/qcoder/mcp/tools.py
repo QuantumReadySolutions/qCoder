@@ -12,6 +12,8 @@ from qcoder.pipelines.context import build_preflight_context
 from qcoder.pipelines.review import build_execution_review
 
 
+MAX_MCP_INPUT_BYTES = 1024 * 1024
+
 SAFE_MARKETING_FRAME = (
     "Explorer helps you make your AI assistant better at quantum circuit work by "
     "giving it clean qCoder evidence to reason from."
@@ -129,6 +131,8 @@ def _explicit_file_arg(args: dict[str, Any], key: str) -> str:
     path = Path(value).expanduser()
     if not path.is_file():
         raise ValueError(f"{key} must be an explicit readable file")
+    if path.stat().st_size > MAX_MCP_INPUT_BYTES:
+        raise ValueError(f"{key} exceeds the local MCP input size cap of {MAX_MCP_INPUT_BYTES} bytes")
     return str(path)
 
 
@@ -149,11 +153,16 @@ def _result(payload: dict[str, Any], *, markdown: str | None = None) -> dict[str
 
 def _analyze_circuit(args: dict[str, Any]) -> dict[str, Any]:
     qasm_path = _explicit_file_arg(args, "qasm_path")
-    payload = analyze_qasm_json(
-        qasm_path,
-        include_guidance=bool(args.get("include_guidance", True)),
-        include_profiles=bool(args.get("include_profiles", True)),
-    )
+    try:
+        payload = analyze_qasm_json(
+            qasm_path,
+            include_guidance=bool(args.get("include_guidance", True)),
+            include_profiles=bool(args.get("include_profiles", True)),
+        )
+    except NotImplementedError as exc:
+        if "OpenQASM 3" in str(exc):
+            raise ValueError("local qCoder MCP currently supports OpenQASM 2; QASM3 is deferred") from exc
+        raise
     payload = make_share_safe_payload(payload)
     payload["mcp_boundary"] = _mcp_boundary()
     return _result(payload)
@@ -161,11 +170,16 @@ def _analyze_circuit(args: dict[str, Any]) -> dict[str, Any]:
 
 def _generate_context_pack(args: dict[str, Any]) -> dict[str, Any]:
     qasm_path = _explicit_file_arg(args, "qasm_path")
-    payload = build_preflight_context(
-        qasm_path,
-        include_guidance=bool(args.get("include_guidance", True)),
-        include_profiles=bool(args.get("include_profiles", True)),
-    )
+    try:
+        payload = build_preflight_context(
+            qasm_path,
+            include_guidance=bool(args.get("include_guidance", True)),
+            include_profiles=bool(args.get("include_profiles", True)),
+        )
+    except NotImplementedError as exc:
+        if "OpenQASM 3" in str(exc):
+            raise ValueError("local qCoder MCP currently supports OpenQASM 2; QASM3 is deferred") from exc
+        raise
     payload = make_share_safe_payload(payload)
     payload["evidence_grounded_coding_loop"] = _evidence_loop()
     payload["mcp_boundary"] = _mcp_boundary()
@@ -210,12 +224,19 @@ def _explain_findings(args: dict[str, Any]) -> dict[str, Any]:
 
 def _claim_boundaries(args: dict[str, Any]) -> dict[str, Any]:
     artifact = args.get("artifact") if isinstance(args.get("artifact"), dict) else {}
+    feature_map = _feature_map_from_artifact(artifact) if artifact else {}
     payload = {
         "schema_id": "qcoder.mcp.claim_boundaries.v0",
         "status": "ok",
         "mcp_supported_claims": SUPPORTED_CLAIMS,
         "mcp_unsupported_claims": UNSUPPORTED_CLAIMS,
         "artifact_present": bool(artifact),
+        "artifact_summary": {
+            "feature_map_present": bool(feature_map),
+            "feature_keys_present": sorted(str(key) for key in feature_map)[:12],
+            "artifact_type": artifact.get("artifact_type") if isinstance(artifact.get("artifact_type"), str) else None,
+            "schema_id": artifact.get("schema_id") if isinstance(artifact.get("schema_id"), str) else None,
+        },
         "manual_artifact_loop_launch_required": True,
         "local_cursor_mcp_complements_artifacts": True,
         "oss_boundary": "OSS remains local, no-account, no-token.",

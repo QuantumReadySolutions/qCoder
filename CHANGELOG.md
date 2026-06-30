@@ -1,6 +1,18 @@
 # Changelog
 
 
+## 0.5.0a7
+
+- Add local read-only qCoder MCP for Cursor-oriented Explorer Launch workflows.
+- Add MCP tools for local circuit analysis, context-pack generation, counts review, bounded findings, claim boundaries, next checks, and share-safe artifact sanitization.
+- Document the Evidence-Grounded Coding Loop and preserve the manual artifact handoff as launch-required even when local MCP is available.
+- Harden Windows-created inputs by accepting UTF-8 BOM in QASM and JSON paths used by local analysis/review.
+- Improve `qcoder review` error guidance for malformed JSON and Qiskit counts input.
+- Add MCP, share-safe, claim-boundary, and Windows/QASM/Qiskit tests plus release-check MCP stdio rehearsal.
+- Preserve launch boundaries: no public hosted MCP claim, no live service calls from MCP, no token requirement, no autonomous code modification, no QPU/simulator submission, and no runtime/fidelity/backend/QPU/correctness/advantage claims.
+- This is release-candidate preparation only until separately published.
+
+
 ## 0.5.0a6
 
 - Add share-safe / redacted artifact mode for artifacts intended for ChatGPT, Cursor, email, GitHub issues, or support threads.

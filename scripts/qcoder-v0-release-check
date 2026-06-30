@@ -2,6 +2,13 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ -n "${QCODER_RELEASE_PYTHON:-}" ]]; then
+  PYTHON_BIN="$QCODER_RELEASE_PYTHON"
+elif command -v python3.12 >/dev/null 2>&1; then
+  PYTHON_BIN="python3.12"
+else
+  PYTHON_BIN="python3"
+fi
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/qcoder-public-release-check.XXXXXX")"
 BUILD_VENV="$TMP_ROOT/build-venv"
 RUN_VENV="$TMP_ROOT/run-venv"
@@ -14,6 +21,8 @@ CTX_MD="$TMP_ROOT/preflight.context.md"
 REV_JSON="$TMP_ROOT/execution.review.json"
 REV_MD="$TMP_ROOT/execution.review.md"
 WORKFLOW_MANIFEST_JSON="$TMP_ROOT/pro.workflow.manifest.json"
+MCP_REQ="$TMP_ROOT/mcp-requests.jsonl"
+MCP_OUT="$TMP_ROOT/mcp-output.jsonl"
 
 cleanup() {
   rm -rf "$TMP_ROOT"
@@ -28,21 +37,23 @@ run_cmd() {
 echo "==> qCoder public release rehearsal (Free + Pro shell)"
 echo "==> workspace: $ROOT_DIR"
 echo "==> temp dir: $TMP_ROOT"
+echo "==> python: $PYTHON_BIN"
 
-if ! python3 - <<'PY'
+if ! "$PYTHON_BIN" - <<'PY'
 import sys
 raise SystemExit(0 if sys.version_info >= (3, 11) else 1)
 PY
 then
-  echo "release-check: python3 must be >= 3.11 (current: $(python3 --version 2>&1))" >&2
+  echo "release-check: python must be >= 3.11 (current: $($PYTHON_BIN --version 2>&1))" >&2
   exit 1
 fi
 
-python3 -m venv "$BUILD_VENV"
-python3 -m venv "$RUN_VENV"
+"$PYTHON_BIN" -m venv "$BUILD_VENV"
+"$PYTHON_BIN" -m venv "$RUN_VENV"
 mkdir -p "$PRO_HOME"
 
 run_cmd "$BUILD_VENV/bin/python" -m pip install --upgrade pip setuptools wheel build
+run_cmd "$BUILD_VENV/bin/python" -m pip install -e "$ROOT_DIR" pytest
 run_cmd "$BUILD_VENV/bin/python" -m build --sdist --wheel --outdir "$DIST_DIR" "$ROOT_DIR"
 
 WHEEL_PATH="$(ls "$DIST_DIR"/qcoder-*.whl | head -n 1)"
@@ -79,6 +90,8 @@ cat > "$COUNTS_PATH" <<'JSON'
 JSON
 
 run_cmd "$RUN_VENV/bin/qcoder" --help
+run_cmd "$RUN_VENV/bin/qcoder" mcp --help
+run_cmd "$RUN_VENV/bin/qcoder" mcp serve --help
 run_cmd "$RUN_VENV/bin/qcoder" analyze "$QASM_PATH" --json
 run_cmd "$RUN_VENV/bin/qcoder" context "$QASM_PATH" --out-json "$CTX_JSON" --out-md "$CTX_MD"
 run_cmd "$RUN_VENV/bin/qcoder" review --counts-json "$COUNTS_PATH" --format qiskit_counts --preflight-json "$CTX_JSON" --out-json "$REV_JSON" --out-md "$REV_MD"
@@ -94,14 +107,59 @@ run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro status
 run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro validate
 run_cmd env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro workflow --qasm "$QASM_PATH" --project-dir "$TMP_ROOT/project" --dry-run-manifest "$WORKFLOW_MANIFEST_JSON"
 
+cat > "$MCP_REQ" <<JSON
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"qcoder_claim_boundaries","arguments":{}}}
+JSON
+echo "+ $RUN_VENV/bin/qcoder mcp serve < $MCP_REQ > $MCP_OUT"
+"$RUN_VENV/bin/qcoder" mcp serve < "$MCP_REQ" > "$MCP_OUT"
+
+"$RUN_VENV/bin/python" - <<PY
+import json
+from pathlib import Path
+
+lines = [json.loads(line) for line in Path("$MCP_OUT").read_text(encoding="utf-8").splitlines() if line.strip()]
+if len(lines) != 3:
+    raise SystemExit(f"release-check: expected 3 MCP responses, got {len(lines)}")
+if lines[0].get("result", {}).get("serverInfo", {}).get("name") != "qcoder-local-read-only":
+    raise SystemExit("release-check: MCP initialize serverInfo mismatch")
+tools = {tool.get("name") for tool in lines[1].get("result", {}).get("tools", [])}
+expected = {
+    "qcoder_analyze_circuit",
+    "qcoder_generate_context_pack",
+    "qcoder_review_counts",
+    "qcoder_explain_findings",
+    "qcoder_claim_boundaries",
+    "qcoder_next_checks",
+    "qcoder_generate_share_safe_artifact",
+}
+missing = expected - tools
+if missing:
+    raise SystemExit(f"release-check: MCP tools/list missing {sorted(missing)}")
+if "qcoder_explorer_evidence" in tools:
+    raise SystemExit("release-check: MCP must not expose token-sensitive Explorer evidence tool")
+payload = lines[2].get("result", {}).get("structuredContent", {})
+if payload.get("mcp_boundary", {}).get("requires_token") is not False:
+    raise SystemExit("release-check: MCP claim-boundary tool must not require a token")
+if payload.get("mcp_boundary", {}).get("uses_live_service") is not False:
+    raise SystemExit("release-check: MCP claim-boundary tool must not use a live service")
+PY
+
 # Pro Preview unit tests (no live service)
-run_cmd python3 -m pytest \
+run_cmd "$BUILD_VENV/bin/python" -m pytest \
   "$ROOT_DIR/tests/test_pro_preview_config.py" \
   "$ROOT_DIR/tests/test_pro_preview_manifest.py" \
   "$ROOT_DIR/tests/test_pro_preview_client.py" \
   "$ROOT_DIR/tests/test_pro_preview_cli.py" \
   "$ROOT_DIR/tests/test_student_cli.py" \
   "$ROOT_DIR/tests/test_pro_preview_hosted_client.py" \
+  "$ROOT_DIR/tests/test_mcp_server.py" \
+  "$ROOT_DIR/tests/test_mcp_tools.py" \
+  "$ROOT_DIR/tests/test_share_safe_artifacts.py" \
+  "$ROOT_DIR/tests/test_cli_context_review.py" \
+  "$ROOT_DIR/tests/test_review_qiskit_counts.py" \
+  "$ROOT_DIR/tests/test_windows_qasm_qiskit_hardening.py" \
   -q
 
 if env HOME="$PRO_HOME" "$RUN_VENV/bin/qcoder" pro workflow --qasm "$QASM_PATH" --project-dir "$TMP_ROOT/project"; then
@@ -119,7 +177,7 @@ if ! grep -q "No production hosted Pro service" "$TMP_ROOT/submit-blocked.err"; 
   exit 1
 fi
 
-python3 - <<PY
+"$PYTHON_BIN" - <<PY
 import json
 from pathlib import Path
 
@@ -145,7 +203,7 @@ for key in ("upload_performed", "network_performed", "source_contents_included",
         raise SystemExit(f"release-check: pro workflow manifest boundary {key} must be false")
 PY
 
-python3 - <<PY
+"$PYTHON_BIN" - <<PY
 import tarfile
 import zipfile
 from pathlib import Path

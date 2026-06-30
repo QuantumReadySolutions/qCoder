@@ -88,7 +88,7 @@ def analyze_qasm(
     if mirror_artifacts_dir:
         from qcoder.core.qasm2.adjoint_eligibility import check_adjoint_eligibility
 
-        qasm_text = Path(qasm_path).read_text(encoding="utf-8", errors="replace")
+        qasm_text = Path(qasm_path).read_text(encoding="utf-8-sig", errors="replace")
         content_hash = hashlib.sha256(qasm_text.encode("utf-8")).hexdigest()
         eligibility = check_adjoint_eligibility(qasm_text, include_mirror_qasm=True)
         mirror_qasm_ref = None

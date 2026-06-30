@@ -66,6 +66,8 @@ It does not:
 - expose tokens, headers, cookies, local secrets, raw provider payloads, or private artifacts
 - call live Explorer/account services
 
+MCP file-input tools require an explicit file path selected by the user. They do not accept directories or recursively search a workspace. Local MCP file inputs are capped at 1 MiB so a tool call cannot accidentally ingest a large private artifact.
+
 Example Cursor MCP command:
 
 ```json
