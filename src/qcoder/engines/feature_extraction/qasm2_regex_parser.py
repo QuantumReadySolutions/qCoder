@@ -193,5 +193,5 @@ def parse_qasm2_text(qasm_text: str, *, source_label: str | None = None) -> Circ
 
 def parse_qasm2_file(path: str) -> CircuitIR:
     p = Path(path)
-    text = p.read_text(encoding="utf-8", errors="replace")
+    text = p.read_text(encoding="utf-8-sig", errors="replace")
     return parse_qasm2_text(text)

@@ -71,7 +71,7 @@ def _qcoder_version() -> str:
 
 def _load_context_json(path: str) -> dict[str, Any]:
     try:
-        loaded = json.loads(Path(path).read_text(encoding="utf-8"))
+        loaded = json.loads(Path(path).read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as exc:
         raise ExplorerDerivedEvidenceRequestError("context JSON is not valid JSON") from exc
     if not isinstance(loaded, dict):

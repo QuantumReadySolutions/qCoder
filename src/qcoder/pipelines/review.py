@@ -20,7 +20,7 @@ def _qcoder_version() -> str:
 
 
 def _load_json(path: str) -> dict[str, Any]:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    data = json.loads(Path(path).read_text(encoding="utf-8-sig"))
     if not isinstance(data, dict):
         raise ValueError(f"JSON root must be an object: {path}")
     return data

@@ -10,6 +10,7 @@ The current public local path is **qCoder OSS**. OSS commands run locally and do
 - `qcoder batch`
 - `qcoder context`
 - `qcoder review`
+- `qcoder mcp` (local read-only Cursor MCP tools)
 - `qcoder explorer` (Explorer Beta account-backed status/demo/evidence checks)
 - `qcoder student` (temporary compatibility alias for Explorer Beta)
 - `qcoder pro` (archived pilot/bootstrap client contract; non-confidential local plumbing only, not a current public product path)
@@ -56,6 +57,14 @@ qcoder review --counts-json counts.json --format qiskit_counts --preflight-json 
 ```
 
 Share-safe mode is designed for safer sharing: it redacts local paths and token/header-like strings, adds `share_safe=true`, and marks raw QASM/local paths/tokens as not included. Review artifacts before sharing; this is not a guarantee that all sensitive project content has been removed.
+
+Local Cursor MCP:
+
+```bash
+qcoder mcp serve
+```
+
+The MCP server uses explicit user-selected local inputs only. It reads, inspects, explains, bounds, and recommends; it does not execute circuits, modify user code, read arbitrary files, call live services, or require tokens. See [Explorer Evidence-Grounded Coding Loop](examples/08_explorer_evidence_grounded_coding_loop.md) for the manual artifact loop, Cursor MCP setup, and claim boundaries.
 
 Explorer Beta compatibility checks and archived Pro bootstrap:
 

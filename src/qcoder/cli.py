@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from json import JSONDecodeError
 from pathlib import Path
 
 from qcoder.pipelines.analyze import analyze_qasm
@@ -284,18 +285,57 @@ def _cmd_review(argv: list[str]) -> int:
     )
     args = p.parse_args(argv)
 
-    write_execution_review(
-        counts_json=args.counts_json,
-        counts_format=args.counts_format,
-        preflight_json=args.preflight_json,
-        out_json=args.out_json,
-        out_md=args.out_md,
-        share_safe=args.share_safe,
-    )
+    try:
+        write_execution_review(
+            counts_json=args.counts_json,
+            counts_format=args.counts_format,
+            preflight_json=args.preflight_json,
+            out_json=args.out_json,
+            out_md=args.out_md,
+            share_safe=args.share_safe,
+        )
+    except JSONDecodeError as exc:
+        print(
+            f"qcoder review: input JSON could not be parsed at line {exc.lineno}, column {exc.colno}. "
+            "Check that the counts/preflight file is UTF-8 JSON.",
+            file=sys.stderr,
+        )
+        return 2
+    except ValueError as exc:
+        print(
+            f"qcoder review: {exc}. For Qiskit counts, use --format qiskit_counts with a JSON object "
+            'like {"00": 10, "11": 6} or {"counts": {"00": 10, "11": 6}}.',
+            file=sys.stderr,
+        )
+        return 2
     json_label = "<redacted-local-path>" if args.share_safe else args.out_json
     md_label = "<redacted-local-path>" if args.share_safe else args.out_md
     print(f"Wrote execution review JSON to {json_label}", file=sys.stderr)
     print(f"Wrote execution review Markdown to {md_label}", file=sys.stderr)
+    return 0
+
+
+def _cmd_mcp(argv: list[str]) -> int:
+    p = argparse.ArgumentParser(
+        prog="qcoder mcp",
+        add_help=True,
+        description=(
+            "Local read-only qCoder MCP for Cursor. Uses explicit user-selected inputs only; "
+            "does not execute circuits, modify code, use tokens, or call live services."
+        ),
+    )
+    sub = p.add_subparsers(dest="mcp_command")
+    p_serve = sub.add_parser("serve", help="Serve qCoder tools over MCP stdio.")
+    p_serve.set_defaults(mcp_command="serve")
+    args = p.parse_args(argv)
+    if args.mcp_command is None:
+        p.print_help()
+        return 0
+    if args.mcp_command == "serve":
+        from qcoder.mcp.server import serve_stdio
+
+        return serve_stdio()
+    p.print_help()
     return 0
 
 
@@ -1200,14 +1240,15 @@ def _cmd_pro(argv: list[str]) -> int:
 
 def _print_root_help() -> None:
     print(
-        "usage: qcoder [--version | -V] [-h] {analyze,batch,context,review,explorer,pro,student} ...\n\n"
+        "usage: qcoder [--version | -V] [-h] {analyze,batch,context,review,mcp,explorer,pro,student} ...\n\n"
         "Quantum circuit analysis CLI.\n\n"
         "positional arguments:\n"
-        "  {analyze,batch,context,review,explorer,pro,student}  subcommand\n\n"
+        "  {analyze,batch,context,review,mcp,explorer,pro,student}  subcommand\n\n"
         "  analyze          Analyze a QASM file (feature extraction + metadata + run config).\n"
         "  batch            Batch extract a directory to JSONL (requires --out).\n"
         "  context          Build deterministic preflight context artifacts.\n"
         "  review           Build deterministic execution review artifacts from counts.\n"
+        "  mcp              Serve local read-only qCoder tools for Cursor over MCP stdio.\n"
         "  explorer         Explorer Beta status/demo/evidence checks.\n"
         "  pro              Archived Pro client-contract shell (not current public product).\n"
         "  student          Compatibility alias for Explorer Beta checks.\n\n"
@@ -1239,6 +1280,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_context(rest)
     if cmd == "review":
         return _cmd_review(rest)
+    if cmd == "mcp":
+        return _cmd_mcp(rest)
     if cmd == "explorer":
         return _cmd_explorer(rest)
     if cmd == "pro":
@@ -1247,7 +1290,7 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_student(rest)
 
     print(
-        f"qcoder: unknown subcommand {cmd!r} (expected analyze, batch, context, review, explorer, pro, or student)",
+        f"qcoder: unknown subcommand {cmd!r} (expected analyze, batch, context, review, mcp, explorer, pro, or student)",
         file=sys.stderr,
     )
     print("Run `qcoder --help` for usage.", file=sys.stderr)
