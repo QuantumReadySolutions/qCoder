@@ -1,6 +1,16 @@
 # Changelog
 
 
+## 0.5.0a8
+
+- Add `qcoder context-bridge mcp serve`, a stdio Context Bridge MCP adapter for eligible Explorer users.
+- Add `qcoder context-bridge mcp smoke --token-file <path> --json` for sanitized install verification.
+- Expose only the approved Context Bridge tools: guided evidence context, prompt context, Evidence Context Pack, Context Session Card, and Run Readiness Card.
+- Read Context Bridge tokens from a local token file only; token values are not printed and are not required in IDE config.
+- Reject raw QASM, raw counts, paths, unsupported artifact lookup, unknown tools, and non-current-context inputs before forwarding.
+- Preserve qCoder OSS local commands, Explorer evidence commands, and archived Pro shell boundaries.
+
+
 ## 0.5.0a6
 
 - Add share-safe / redacted artifact mode for artifacts intended for ChatGPT, Cursor, email, GitHub issues, or support threads.

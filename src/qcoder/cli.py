@@ -819,6 +819,12 @@ def _cmd_student(argv: list[str]) -> int:
     return _cmd_explorer(argv, compatibility_alias=True)
 
 
+def _cmd_context_bridge(argv: list[str]) -> int:
+    from qcoder.context_bridge_mcp import main as context_bridge_main
+
+    return context_bridge_main(argv)
+
+
 def _cmd_pro(argv: list[str]) -> int:
     p = argparse.ArgumentParser(
         prog="qcoder pro",
@@ -1200,15 +1206,16 @@ def _cmd_pro(argv: list[str]) -> int:
 
 def _print_root_help() -> None:
     print(
-        "usage: qcoder [--version | -V] [-h] {analyze,batch,context,review,explorer,pro,student} ...\n\n"
+        "usage: qcoder [--version | -V] [-h] {analyze,batch,context,review,explorer,context-bridge,pro,student} ...\n\n"
         "Quantum circuit analysis CLI.\n\n"
         "positional arguments:\n"
-        "  {analyze,batch,context,review,explorer,pro,student}  subcommand\n\n"
+        "  {analyze,batch,context,review,explorer,context-bridge,pro,student}  subcommand\n\n"
         "  analyze          Analyze a QASM file (feature extraction + metadata + run config).\n"
         "  batch            Batch extract a directory to JSONL (requires --out).\n"
         "  context          Build deterministic preflight context artifacts.\n"
         "  review           Build deterministic execution review artifacts from counts.\n"
         "  explorer         Explorer Beta status/demo/evidence checks.\n"
+        "  context-bridge   Run the Context Bridge MCP adapter for eligible Explorer users.\n"
         "  pro              Archived Pro client-contract shell (not current public product).\n"
         "  student          Compatibility alias for Explorer Beta checks.\n\n"
         "Run `qcoder <subcommand> --help` for subcommand options.",
@@ -1241,13 +1248,15 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_review(rest)
     if cmd == "explorer":
         return _cmd_explorer(rest)
+    if cmd == "context-bridge":
+        return _cmd_context_bridge(rest)
     if cmd == "pro":
         return _cmd_pro(rest)
     if cmd == "student":
         return _cmd_student(rest)
 
     print(
-        f"qcoder: unknown subcommand {cmd!r} (expected analyze, batch, context, review, explorer, pro, or student)",
+        f"qcoder: unknown subcommand {cmd!r} (expected analyze, batch, context, review, explorer, context-bridge, pro, or student)",
         file=sys.stderr,
     )
     print("Run `qcoder --help` for usage.", file=sys.stderr)

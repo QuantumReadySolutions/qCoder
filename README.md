@@ -11,15 +11,17 @@ The current public local path is **qCoder OSS**. OSS commands run locally and do
 - `qcoder context`
 - `qcoder review`
 - `qcoder explorer` (Explorer Beta account-backed status/demo/evidence checks)
+- `qcoder context-bridge` (token-backed Context Bridge MCP adapter for eligible Explorer users)
 - `qcoder student` (temporary compatibility alias for Explorer Beta)
 - `qcoder pro` (archived pilot/bootstrap client contract; non-confidential local plumbing only, not a current public product path)
 
 ## Current product boundaries
 
-Public `qcoder` ships **OSS local commands** plus Explorer Beta compatibility commands. Pro is not launched and is not a current public product path.
+Public `qcoder` ships **OSS local commands**, Explorer Beta compatibility commands, and the Context Bridge adapter command for eligible Explorer users. Pro is not launched and is not a current public product path.
 
 - **OSS commands** (`analyze`, `batch`, `context`, `review`) are Apache-2.0, local-first/offline, and useful without an account or token. They do not upload data, call a qCoder hosted service, or run QPU/simulator jobs.
 - **Explorer Beta commands** (`qcoder explorer status`, `qcoder explorer demo`, `qcoder explorer evidence`) are account-backed checks for Explorer Beta status, built-in guided evidence samples, and derived-context guided evidence for user-owned OpenQASM 2 artifacts. The older `qcoder student ...` commands remain available as beta compatibility aliases.
+- **Context Bridge adapter commands** (`qcoder context-bridge mcp serve`, `qcoder context-bridge mcp smoke`) are for eligible Explorer users with support-managed Context Bridge token access. They expose bounded current-evidence context tools to configured MCP clients and read tokens from a local token file.
 - Explorer Beta custom evidence uses locally derived qCoder context/features. The CLI may read QASM locally, but the hosted request must not include raw QASM, raw source text, local paths, operation lists, raw counts, notebooks, prompts, tokens, auth headers, or cookies.
 - Explorer Beta custom evidence is stateless in this v0 slice; it does not create persistent Explorer history.
 - **`qcoder pro` bootstrap/workflow commands** are archived pilot/client-contract surfaces. They are not a Pro purchase path, not a current public signup path, and not generally available hosted Pro.
@@ -66,6 +68,8 @@ qcoder explorer evidence
 qcoder explorer evidence --qasm path/to/circuit.qasm
 qcoder explorer evidence --context-json preflight.context.json
 qcoder explorer evidence --qasm path/to/circuit.qasm --out-json explorer.json --out-md explorer.md --share-safe
+qcoder context-bridge mcp serve --help
+qcoder context-bridge mcp smoke --token-file ~/.qcoder/context-bridge/token.txt --json
 qcoder pro --help
 ```
 
