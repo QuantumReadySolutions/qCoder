@@ -19,6 +19,17 @@ EXPECTED_TOOLS = (
     "create_context_session_card",
     "create_run_readiness_card",
     "create_result_review_context_card",
+    "create_next_check_plan",
+    "create_single_loop_evidence_diff",
+)
+PROMPT_CONTEXT_MODES = frozenset(
+    {
+        "explain",
+        "review",
+        "revise",
+        "troubleshoot",
+        "plan_next_checks",
+    }
 )
 DEFAULT_ARTIFACT_KIND = "share_safe_evidence_summary"
 MAX_ARTIFACT_TEXT_CHARS = 20_000
@@ -39,6 +50,11 @@ FORBIDDEN_TEXT_MARKERS = (
     "raw_counts",
     "provider_result",
     "result_payload",
+    "raw_provider_result",
+    "artifact_id",
+    "stored_card_id",
+    "prior_session_id",
+    "session_id",
     "raw_source",
     "notebook",
     ".ipynb",
@@ -47,6 +63,11 @@ FORBIDDEN_TEXT_MARKERS = (
     "multi-run comparison",
     "remember it",
     "compare with prior run",
+    "backend selection",
+    "rank backends",
+    "optimize shots",
+    "execute this",
+    "edit code",
 )
 
 
@@ -99,6 +120,29 @@ def validate_artifact_text(artifact_text: object) -> str:
     return "ok"
 
 
+def validate_optional_payload(value: object) -> str:
+    if value is None:
+        return "ok"
+    try:
+        serialized = json.dumps(value, sort_keys=True)
+    except TypeError:
+        return "payload_not_json_serializable"
+    if len(serialized) > MAX_ARTIFACT_TEXT_CHARS:
+        return "artifact_text_too_large"
+    lowered = serialized.lower()
+    if any(marker in lowered for marker in FORBIDDEN_TEXT_MARKERS):
+        return "forbidden_input_value"
+    return "ok"
+
+
+def _has_explicit_side(value: object) -> bool:
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, dict):
+        return any(str(nested).strip() for nested in value.values())
+    return False
+
+
 def decode_json(raw: bytes) -> dict[str, Any]:
     try:
         decoded = json.loads(raw.decode("utf-8"))
@@ -115,15 +159,45 @@ def post_context_bridge(
     artifact_text: object,
     artifact_kind: str = DEFAULT_ARTIFACT_KIND,
     client_context: dict[str, Any] | None = None,
+    mode: str | None = None,
+    current_goal: object | None = None,
+    evidence_basis: object | None = None,
+    share_safe_evidence_summary: object | None = None,
+    open_questions: object | None = None,
+    explicit_assumptions: object | None = None,
+    current_card_context: object | None = None,
+    before: object | None = None,
+    after: object | None = None,
     opener: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
     if tool_name not in EXPECTED_TOOLS:
         return safe_error("unknown_tool")
+    if mode is not None:
+        if tool_name != "create_prompt_context":
+            return safe_error("mode_not_supported_for_tool")
+        if str(mode).strip() not in PROMPT_CONTEXT_MODES:
+            return safe_error("invalid_prompt_context_mode")
+    if tool_name == "create_single_loop_evidence_diff" and (not _has_explicit_side(before) or not _has_explicit_side(after)):
+        return safe_error("missing_explicit_diff_side")
     if artifact_kind != DEFAULT_ARTIFACT_KIND:
         return safe_error("unsupported_artifact_kind")
     text_validation = validate_artifact_text(artifact_text)
     if text_validation != "ok":
         return safe_error(text_validation)
+    optional_payloads = (
+        current_goal,
+        evidence_basis,
+        share_safe_evidence_summary,
+        open_questions,
+        explicit_assumptions,
+        current_card_context,
+        before,
+        after,
+    )
+    for payload in optional_payloads:
+        payload_validation = validate_optional_payload(payload)
+        if payload_validation != "ok":
+            return safe_error(payload_validation)
     token_ok, token_category, token = validate_token_file(token_file)
     if not token_ok:
         return safe_error(token_category, status_category="auth_preflight_failed")
@@ -137,6 +211,18 @@ def post_context_bridge(
             **(client_context or {}),
         },
     }
+    optional_fields = {
+        "mode": mode,
+        "current_goal": current_goal,
+        "evidence_basis": evidence_basis,
+        "share_safe_evidence_summary": share_safe_evidence_summary,
+        "open_questions": open_questions,
+        "explicit_assumptions": explicit_assumptions,
+        "current_card_context": current_card_context,
+        "before": before,
+        "after": after,
+    }
+    body.update({key: value for key, value in optional_fields.items() if value is not None})
     data = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
     request = urllib.request.Request(
         base_url.rstrip("/") + ROUTE_PATH,
@@ -183,6 +269,46 @@ def tool_descriptors() -> list[dict[str, Any]]:
                 "additionalProperties": True,
                 "description": "Optional client metadata without secrets, paths, or raw artifacts.",
             },
+            "mode": {
+                "type": "string",
+                "enum": sorted(PROMPT_CONTEXT_MODES),
+                "description": "Optional create_prompt_context handoff mode.",
+            },
+            "current_goal": {
+                "type": "string",
+                "description": "Optional bounded current workflow goal.",
+            },
+            "evidence_basis": {
+                "type": "string",
+                "description": "Optional share-safe evidence basis for current-request planning.",
+            },
+            "share_safe_evidence_summary": {
+                "type": "string",
+                "description": "Optional compact share-safe current evidence summary.",
+            },
+            "open_questions": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional current-request questions without raw artifacts.",
+            },
+            "explicit_assumptions": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional assumptions supplied by the user for this request.",
+            },
+            "current_card_context": {
+                "type": "object",
+                "additionalProperties": True,
+                "description": "Optional current card/context payload without secrets, paths, or raw artifacts.",
+            },
+            "before": {
+                "type": ["object", "string"],
+                "description": "Explicit before context for Single-Loop Evidence Diff.",
+            },
+            "after": {
+                "type": ["object", "string"],
+                "description": "Explicit after context for Single-Loop Evidence Diff.",
+            },
         },
         "required": ["artifact_text"],
         "additionalProperties": False,
@@ -194,6 +320,8 @@ def tool_descriptors() -> list[dict[str, Any]]:
         "create_context_session_card": "Create a current-session context card without memory or history.",
         "create_run_readiness_card": "Create a bounded readiness card for the next development check.",
         "create_result_review_context_card": "Create a bounded review card from share-safe user-provided result evidence.",
+        "create_next_check_plan": "Create a bounded next-check plan from current-request evidence.",
+        "create_single_loop_evidence_diff": "Compare two explicitly supplied current-loop contexts without history or lookup.",
     }
     return [
         {"name": name, "description": descriptions[name], "inputSchema": schema}
@@ -248,6 +376,15 @@ def handle_jsonrpc_message(
             client_context=arguments.get("client_context")
             if isinstance(arguments.get("client_context"), dict)
             else None,
+            mode=str(arguments.get("mode")) if arguments.get("mode") is not None else None,
+            current_goal=arguments.get("current_goal"),
+            evidence_basis=arguments.get("evidence_basis"),
+            share_safe_evidence_summary=arguments.get("share_safe_evidence_summary"),
+            open_questions=arguments.get("open_questions"),
+            explicit_assumptions=arguments.get("explicit_assumptions"),
+            current_card_context=arguments.get("current_card_context"),
+            before=arguments.get("before"),
+            after=arguments.get("after"),
             opener=opener,
         )
         return _jsonrpc_result(
@@ -377,6 +514,79 @@ def run_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
             ),
             expected_success=True,
         ),
+        "next_check_plan_allowed": _case_summary(
+            payload=post_context_bridge(
+                base_url=base_url,
+                token_file=token_file,
+                tool_name="create_next_check_plan",
+                artifact_text=safe_text,
+                current_goal="Choose the next bounded development check.",
+                open_questions=["Which assumption should be clarified next?"],
+                explicit_assumptions=["The evidence summary is share-safe and current-session only."],
+            ),
+            expected_success=True,
+        ),
+        "single_loop_evidence_diff_allowed": _case_summary(
+            payload=post_context_bridge(
+                base_url=base_url,
+                token_file=token_file,
+                tool_name="create_single_loop_evidence_diff",
+                artifact_text=safe_text,
+                before={"summary": "Before context: readiness card requested one bounded check."},
+                after={"summary": "After context: user-provided result evidence was reviewed."},
+            ),
+            expected_success=True,
+        ),
+        "prompt_mode_explain_allowed": _case_summary(
+            payload=post_context_bridge(
+                base_url=base_url,
+                token_file=token_file,
+                tool_name="create_prompt_context",
+                artifact_text=safe_text,
+                mode="explain",
+            ),
+            expected_success=True,
+        ),
+        "prompt_mode_review_allowed": _case_summary(
+            payload=post_context_bridge(
+                base_url=base_url,
+                token_file=token_file,
+                tool_name="create_prompt_context",
+                artifact_text=safe_text,
+                mode="review",
+            ),
+            expected_success=True,
+        ),
+        "prompt_mode_revise_allowed": _case_summary(
+            payload=post_context_bridge(
+                base_url=base_url,
+                token_file=token_file,
+                tool_name="create_prompt_context",
+                artifact_text=safe_text,
+                mode="revise",
+            ),
+            expected_success=True,
+        ),
+        "prompt_mode_troubleshoot_allowed": _case_summary(
+            payload=post_context_bridge(
+                base_url=base_url,
+                token_file=token_file,
+                tool_name="create_prompt_context",
+                artifact_text=safe_text,
+                mode="troubleshoot",
+            ),
+            expected_success=True,
+        ),
+        "prompt_mode_plan_next_checks_allowed": _case_summary(
+            payload=post_context_bridge(
+                base_url=base_url,
+                token_file=token_file,
+                tool_name="create_prompt_context",
+                artifact_text=safe_text,
+                mode="plan_next_checks",
+            ),
+            expected_success=True,
+        ),
         "raw_qasm_rejected": _case_summary(
             payload=post_context_bridge(
                 base_url=base_url,
@@ -414,6 +624,26 @@ def run_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
             ),
             expected_success=False,
         ),
+        "invalid_prompt_mode_rejected": _case_summary(
+            payload=post_context_bridge(
+                base_url=base_url,
+                token_file=token_file,
+                tool_name="create_prompt_context",
+                artifact_text=safe_text,
+                mode="diagnose",
+            ),
+            expected_success=False,
+        ),
+        "diff_missing_side_rejected": _case_summary(
+            payload=post_context_bridge(
+                base_url=base_url,
+                token_file=token_file,
+                tool_name="create_single_loop_evidence_diff",
+                artifact_text=safe_text,
+                before={"summary": "before only"},
+            ),
+            expected_success=False,
+        ),
     }
     approved = [
         "guided_context_allowed",
@@ -422,8 +652,22 @@ def run_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
         "context_session_card_allowed",
         "run_readiness_card_allowed",
         "result_review_context_card_allowed",
+        "next_check_plan_allowed",
+        "single_loop_evidence_diff_allowed",
+        "prompt_mode_explain_allowed",
+        "prompt_mode_review_allowed",
+        "prompt_mode_revise_allowed",
+        "prompt_mode_troubleshoot_allowed",
+        "prompt_mode_plan_next_checks_allowed",
     ]
-    unsafe = ["raw_qasm_rejected", "repo_path_rejected", "artifact_lookup_rejected", "unknown_tool_rejected"]
+    unsafe = [
+        "raw_qasm_rejected",
+        "repo_path_rejected",
+        "artifact_lookup_rejected",
+        "unknown_tool_rejected",
+        "invalid_prompt_mode_rejected",
+        "diff_missing_side_rejected",
+    ]
     result = {
         "ok": True,
         "metadata_only": True,
