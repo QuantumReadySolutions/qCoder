@@ -18,6 +18,7 @@ EXPECTED_TOOLS = (
     "create_evidence_context_pack",
     "create_context_session_card",
     "create_run_readiness_card",
+    "create_result_review_context_card",
 )
 DEFAULT_ARTIFACT_KIND = "share_safe_evidence_summary"
 MAX_ARTIFACT_TEXT_CHARS = 20_000
@@ -36,9 +37,16 @@ FORBIDDEN_TEXT_MARKERS = (
     "file_path",
     "raw_qasm",
     "raw_counts",
+    "provider_result",
+    "result_payload",
     "raw_source",
     "notebook",
     ".ipynb",
+    "project memory",
+    "prior run history",
+    "multi-run comparison",
+    "remember it",
+    "compare with prior run",
 )
 
 
@@ -185,6 +193,7 @@ def tool_descriptors() -> list[dict[str, Any]]:
         "create_evidence_context_pack": "Create a current-evidence context packet with evidence limits and next-step framing.",
         "create_context_session_card": "Create a current-session context card without memory or history.",
         "create_run_readiness_card": "Create a bounded readiness card for the next development check.",
+        "create_result_review_context_card": "Create a bounded review card from share-safe user-provided result evidence.",
     }
     return [
         {"name": name, "description": descriptions[name], "inputSchema": schema}
@@ -359,6 +368,15 @@ def run_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
             ),
             expected_success=True,
         ),
+        "result_review_context_card_allowed": _case_summary(
+            payload=post_context_bridge(
+                base_url=base_url,
+                token_file=token_file,
+                tool_name="create_result_review_context_card",
+                artifact_text=safe_text,
+            ),
+            expected_success=True,
+        ),
         "raw_qasm_rejected": _case_summary(
             payload=post_context_bridge(
                 base_url=base_url,
@@ -403,6 +421,7 @@ def run_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
         "evidence_context_pack_allowed",
         "context_session_card_allowed",
         "run_readiness_card_allowed",
+        "result_review_context_card_allowed",
     ]
     unsafe = ["raw_qasm_rejected", "repo_path_rejected", "artifact_lookup_rejected", "unknown_tool_rejected"]
     result = {
@@ -495,4 +514,3 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result.get("ok") else 1
     parser.print_help()
     return 0
-

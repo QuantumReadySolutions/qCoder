@@ -65,9 +65,19 @@ def test_context_bridge_help_includes_mcp_serve_and_smoke() -> None:
 
 def test_tool_descriptors_are_exact_public_context_bridge_tools() -> None:
     names = [tool["name"] for tool in tool_descriptors()]
+    assert names == [
+        "get_guided_evidence_context",
+        "create_prompt_context",
+        "create_evidence_context_pack",
+        "create_context_session_card",
+        "create_run_readiness_card",
+        "create_result_review_context_card",
+    ]
     assert names == list(EXPECTED_TOOLS)
     assert "suggest_next_checks" not in names
     assert "apply_repo_edit" not in names
+    result_review = next(tool for tool in tool_descriptors() if tool["name"] == "create_result_review_context_card")
+    assert "user-provided result evidence" in result_review["description"]
 
 
 def test_token_file_validation_requires_private_local_file(tmp_path: Path) -> None:
@@ -99,8 +109,10 @@ def test_unsafe_inputs_rejected_before_network(tmp_path: Path) -> None:
     for text in (
         "OPENQASM 2.0; qreg q[1];",
         "counts={'00': 4}",
+        "provider_result={raw backend payload}",
         "/home/example/project/file.py",
         "repo_path=src/example.py",
+        "Please compare with prior run history and remember it.",
     ):
         payload = post_context_bridge(
             base_url="https://example.invalid",
