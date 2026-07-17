@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import subprocess
+import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -323,6 +326,81 @@ def test_jsonrpc_lists_exact_tools_and_calls_tool(tmp_path: Path) -> None:
     )
     assert diff_called is not None
     assert diff_called["result"]["structuredContent"]["ok"] is True
+
+
+def _content_length_message(message: dict[str, object]) -> bytes:
+    body = json.dumps(message, separators=(",", ":")).encode("utf-8")
+    return f"Content-Length: {len(body)}\r\n\r\n".encode("ascii") + body
+
+
+def _read_content_length_response(stdout: object) -> dict[str, object]:
+    headers: dict[str, str] = {}
+    while True:
+        line = stdout.readline()  # type: ignore[attr-defined]
+        assert line
+        stripped = line.strip()
+        if not stripped:
+            break
+        key, value = stripped.decode("ascii").split(":", 1)
+        headers[key.lower()] = value.strip()
+    body = stdout.read(int(headers["content-length"]))  # type: ignore[attr-defined]
+    return json.loads(body.decode("utf-8"))
+
+
+def test_mcp_stdio_content_length_lists_exact_tools(tmp_path: Path) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    env = {**os.environ, "PYTHONPATH": str(Path.cwd() / "src")}
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "qcoder",
+            "context-bridge",
+            "mcp",
+            "serve",
+            "--token-file",
+            str(token_file),
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+    )
+    try:
+        assert proc.stdin is not None
+        assert proc.stdout is not None
+        proc.stdin.write(
+            _content_length_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "test", "version": "0"},
+                    },
+                }
+            )
+        )
+        proc.stdin.flush()
+        initialized = _read_content_length_response(proc.stdout)
+        assert initialized["result"]["serverInfo"]["name"] == "qcoder-context-bridge"
+
+        proc.stdin.write(
+            _content_length_message({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        )
+        proc.stdin.flush()
+        listed = _read_content_length_response(proc.stdout)
+        assert [tool["name"] for tool in listed["result"]["tools"]] == list(EXPECTED_TOOLS)
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=2)
 
 
 def test_smoke_without_token_reports_sanitized_category(tmp_path: Path) -> None:

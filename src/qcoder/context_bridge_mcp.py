@@ -418,6 +418,72 @@ def serve_stdio(*, base_url: str, token_file: str | Path) -> int:
     return 0
 
 
+def _write_content_length_response(response: dict[str, Any]) -> None:
+    data = json.dumps(response, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    sys.stdout.buffer.write(f"Content-Length: {len(data)}\r\n\r\n".encode("ascii"))
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+
+def _read_mcp_headers(first_line: bytes) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    line = first_line
+    while line:
+        stripped = line.strip()
+        if not stripped:
+            break
+        if b":" in stripped:
+            key, value = stripped.split(b":", 1)
+            headers[key.decode("ascii", errors="ignore").lower()] = value.decode(
+                "ascii", errors="ignore"
+            ).strip()
+        line = sys.stdin.buffer.readline()
+    return headers
+
+
+def serve_mcp_stdio(*, base_url: str, token_file: str | Path) -> int:
+    stdin = sys.stdin.buffer
+    while True:
+        first_line = stdin.readline()
+        if not first_line:
+            break
+        if not first_line.strip():
+            continue
+        if first_line.lstrip().startswith(b"{"):
+            try:
+                message = json.loads(first_line.decode("utf-8"))
+            except json.JSONDecodeError:
+                response = _jsonrpc_error(None, -32700, "parse_error")
+            else:
+                response = handle_jsonrpc_message(message, base_url=base_url, token_file=token_file)
+            if response is not None:
+                print(json.dumps(response, sort_keys=True), flush=True)
+            continue
+
+        headers = _read_mcp_headers(first_line)
+        try:
+            content_length = int(headers.get("content-length", "0"))
+        except ValueError:
+            _write_content_length_response(_jsonrpc_error(None, -32600, "invalid_content_length"))
+            continue
+        if content_length <= 0:
+            _write_content_length_response(_jsonrpc_error(None, -32600, "missing_content_length"))
+            continue
+        raw = stdin.read(content_length)
+        try:
+            message = json.loads(raw.decode("utf-8"))
+        except json.JSONDecodeError:
+            response = _jsonrpc_error(None, -32700, "parse_error")
+        else:
+            if not isinstance(message, dict):
+                response = _jsonrpc_error(None, -32600, "invalid_request")
+            else:
+                response = handle_jsonrpc_message(message, base_url=base_url, token_file=token_file)
+        if response is not None:
+            _write_content_length_response(response)
+    return 0
+
+
 def _case_summary(*, payload: dict[str, Any], expected_success: bool) -> dict[str, Any]:
     serialized = json.dumps(payload, sort_keys=True)
     ok_value = payload.get("ok")
@@ -743,7 +809,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 0
     if args.mcp_command == "serve":
-        return serve_stdio(base_url=args.base_url, token_file=args.token_file)
+        return serve_mcp_stdio(base_url=args.base_url, token_file=args.token_file)
     if args.mcp_command == "smoke":
         result = run_smoke(base_url=args.base_url, token_file=args.token_file)
         if args.json:
