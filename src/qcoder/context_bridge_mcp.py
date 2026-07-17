@@ -303,11 +303,38 @@ def tool_descriptors() -> list[dict[str, Any]]:
             },
             "before": {
                 "type": ["object", "string"],
-                "description": "Explicit before context for Single-Loop Evidence Diff.",
+                "description": (
+                    "Explicit before context for Single-Loop Evidence Diff. Prefer an object with compact "
+                    "share-safe keys such as goal, evidence, unresolved, assumptions, expectations, or limitations. "
+                    "Preserve salient user-provided observations instead of replacing them with generic summaries."
+                ),
+                "properties": {
+                    "goal": {"type": "string"},
+                    "evidence": {"type": "string"},
+                    "unresolved": {"type": "string"},
+                    "assumptions": {"type": "string"},
+                    "expectations": {"type": "string"},
+                    "limitations": {"type": "string"},
+                },
+                "additionalProperties": True,
             },
             "after": {
                 "type": ["object", "string"],
-                "description": "Explicit after context for Single-Loop Evidence Diff.",
+                "description": (
+                    "Explicit after context for Single-Loop Evidence Diff. Prefer an object with compact "
+                    "share-safe keys such as result_evidence, unresolved, assumptions, expectations, or limitations. "
+                    "Keep salient user-reported result observations, for example a compact reported outcome pattern, "
+                    "rather than reducing them to generic 'result evidence is present' wording."
+                ),
+                "properties": {
+                    "result_evidence": {"type": "string"},
+                    "evidence": {"type": "string"},
+                    "unresolved": {"type": "string"},
+                    "assumptions": {"type": "string"},
+                    "expectations": {"type": "string"},
+                    "limitations": {"type": "string"},
+                },
+                "additionalProperties": True,
             },
         },
         "required": ["artifact_text"],
@@ -321,7 +348,10 @@ def tool_descriptors() -> list[dict[str, Any]]:
         "create_run_readiness_card": "Create a bounded readiness card for the next development check.",
         "create_result_review_context_card": "Create a bounded review card from share-safe user-provided result evidence.",
         "create_next_check_plan": "Create a bounded next-check plan from current-request evidence.",
-        "create_single_loop_evidence_diff": "Compare two explicitly supplied current-loop contexts without history or lookup.",
+        "create_single_loop_evidence_diff": (
+            "Compare two explicitly supplied current-loop contexts without history or lookup. "
+            "Use structured before/after fields and preserve salient user-provided result observations."
+        ),
     }
     return [
         {"name": name, "description": descriptions[name], "inputSchema": schema}

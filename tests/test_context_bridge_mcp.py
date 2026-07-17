@@ -5,7 +5,9 @@ import json
 import os
 import subprocess
 import sys
+import threading
 from contextlib import redirect_stdout
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from qcoder.cli import main
@@ -87,6 +89,10 @@ def test_tool_descriptors_are_exact_public_context_bridge_tools() -> None:
     assert "current-request evidence" in next_check["description"]
     diff = next(tool for tool in tool_descriptors() if tool["name"] == "create_single_loop_evidence_diff")
     assert "without history or lookup" in diff["description"]
+    assert "preserve salient user-provided result observations" in diff["description"]
+    assert "result_evidence" in diff["inputSchema"]["properties"]["after"]["properties"]
+    assert "Preserve salient user-provided observations" in diff["inputSchema"]["properties"]["before"]["description"]
+    assert "generic 'result evidence is present'" in diff["inputSchema"]["properties"]["after"]["description"]
 
 
 def test_token_file_validation_requires_private_local_file(tmp_path: Path) -> None:
@@ -401,6 +407,127 @@ def test_mcp_stdio_content_length_lists_exact_tools(tmp_path: Path) -> None:
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait(timeout=2)
+
+
+def test_mcp_stdio_content_length_preserves_structured_diff_arguments(tmp_path: Path) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    captured: dict[str, object] = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802
+            length = int(self.headers.get("content-length", "0"))
+            body = self.rfile.read(length)
+            payload = json.loads(body.decode("utf-8"))
+            captured["payload"] = payload
+            serialized = json.dumps(payload, sort_keys=True)
+            response = {
+                "ok": True,
+                "tool_name": "create_single_loop_evidence_diff",
+                "context_status": "single_loop_evidence_diff_ready",
+                "retention": "process_and_discard",
+                "retained_artifacts": [],
+                "content_specific_delta": "dominant correlated outcomes" in serialized,
+            }
+            data = json.dumps(response).encode("utf-8")
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, format: str, *args: object) -> None:
+            return None
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    env = {**os.environ, "PYTHONPATH": str(Path.cwd() / "src")}
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "qcoder",
+            "context-bridge",
+            "mcp",
+            "serve",
+            "--token-file",
+            str(token_file),
+            "--base-url",
+            f"http://127.0.0.1:{server.server_port}",
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+    )
+    try:
+        assert proc.stdin is not None
+        assert proc.stdout is not None
+        proc.stdin.write(
+            _content_length_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "test", "version": "0"},
+                    },
+                }
+            )
+        )
+        proc.stdin.flush()
+        initialized = _read_content_length_response(proc.stdout)
+        assert initialized["result"]["serverInfo"]["name"] == "qcoder-context-bridge"
+        arguments = {
+            "artifact_text": "Share-safe current evidence summary.",
+            "before": {
+                "goal": "verify whether the external result is consistent with the intended correlation pattern",
+                "evidence": "circuit intent and readiness checks were documented",
+                "unresolved": "no result evidence had yet been supplied",
+                "assumptions": "external simulator configuration was appropriate",
+            },
+            "after": {
+                "result_evidence": "user reports dominant correlated outcomes in a compact share-safe summary",
+                "unresolved": "raw counts and independent execution verification were not supplied",
+                "assumptions": "the compact result summary accurately reflects the external run",
+            },
+        }
+        proc.stdin.write(
+            _content_length_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "create_single_loop_evidence_diff",
+                        "arguments": arguments,
+                    },
+                }
+            )
+        )
+        proc.stdin.flush()
+        called = _read_content_length_response(proc.stdout)
+        structured = called["result"]["structuredContent"]
+        assert structured["ok"] is True
+        assert structured["content_specific_delta"] is True
+        forwarded = captured["payload"]
+        assert isinstance(forwarded, dict)
+        assert isinstance(forwarded["before"], dict)
+        assert isinstance(forwarded["after"], dict)
+        assert forwarded["after"]["result_evidence"] == arguments["after"]["result_evidence"]
+        assert forwarded["before"]["unresolved"] == arguments["before"]["unresolved"]
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=2)
+        server.shutdown()
+        server.server_close()
 
 
 def test_smoke_without_token_reports_sanitized_category(tmp_path: Path) -> None:
