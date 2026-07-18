@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import threading
+import urllib.error
 from contextlib import redirect_stdout
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -19,6 +20,7 @@ from qcoder.context_bridge_mcp import (
     tool_descriptors,
     validate_token_file,
 )
+import qcoder.context_bridge_mcp as context_bridge_mcp
 
 
 class _FakeResponse:
@@ -535,3 +537,232 @@ def test_smoke_without_token_reports_sanitized_category(tmp_path: Path) -> None:
     assert result["ok"] is False
     assert result["token_file_category"] == "token_file_missing"
     assert result["token_printed"] is False
+
+
+def _successful_smoke_payload(tool_name: str) -> dict[str, object]:
+    statuses = {
+        "get_guided_evidence_context": "assistant_context_ready",
+        "create_prompt_context": "prompt_context_ready",
+        "create_evidence_context_pack": "evidence_context_pack_ready",
+        "create_context_session_card": "context_session_card_ready",
+        "create_run_readiness_card": "run_readiness_card_ready",
+        "create_result_review_context_card": "result_review_context_card_ready",
+        "create_next_check_plan": "next_check_plan_ready",
+        "create_single_loop_evidence_diff": "single_loop_evidence_diff_ready",
+    }
+    return {
+        "ok": True,
+        "adapter_status_category": "success_2xx",
+        "tool_name": tool_name,
+        "context_status": statuses[tool_name],
+        "retention": "process_and_discard",
+        "retained_artifacts": [],
+    }
+
+
+def test_default_smoke_is_concise_and_uses_one_bounded_network_call(
+    monkeypatch, tmp_path: Path
+) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    network_calls: list[str] = []
+
+    def fake_post(**kwargs: object) -> dict[str, object]:
+        tool_name = str(kwargs["tool_name"])
+        if "OPENQASM" in str(kwargs["artifact_text"]):
+            return context_bridge_mcp.safe_error("forbidden_input_value")
+        network_calls.append(tool_name)
+        return _successful_smoke_payload(tool_name)
+
+    monkeypatch.setattr(context_bridge_mcp, "post_context_bridge", fake_post)
+    result = run_smoke(base_url="https://example.invalid", token_file=token_file)
+
+    assert result["ok"] is True
+    assert result["connection_status_category"] == "ready"
+    assert result["token_accepted"] == "yes"
+    assert result["tools_discovered"] == 8
+    assert result["tools_visible"] == list(EXPECTED_TOOLS)
+    assert result["bounded_call_passed"] is True
+    assert result["unsafe_input_rejected"] is True
+    assert network_calls == ["create_context_session_card"]
+
+
+def test_default_smoke_human_output_and_json_compatibility(monkeypatch, tmp_path: Path) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    result = {
+        "ok": True,
+        "connection_status_category": "ready",
+        "token_accepted": "yes",
+        "tools_discovered": 8,
+        "metadata_only": True,
+    }
+    monkeypatch.setattr(context_bridge_mcp, "run_smoke", lambda **_kwargs: result)
+
+    human = io.StringIO()
+    with redirect_stdout(human):
+        rc = context_bridge_mcp.main(["mcp", "smoke", "--token-file", str(token_file)])
+    assert rc == 0
+    assert human.getvalue().splitlines() == [
+        "Context Bridge connection: ready",
+        "Token accepted: yes",
+        "Tools discovered: 8",
+    ]
+
+    structured = io.StringIO()
+    with redirect_stdout(structured):
+        rc = context_bridge_mcp.main(["mcp", "smoke", "--token-file", str(token_file), "--json"])
+    assert rc == 0
+    assert json.loads(structured.getvalue()) == result
+
+
+def test_full_smoke_stops_prompt_matrix_on_rate_limit_without_retrying_or_rejecting_token(
+    monkeypatch, tmp_path: Path
+) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    prompt_modes_called: list[object] = []
+
+    def fake_post(**kwargs: object) -> dict[str, object]:
+        tool_name = str(kwargs["tool_name"])
+        artifact_text = str(kwargs["artifact_text"])
+        if tool_name not in EXPECTED_TOOLS:
+            return context_bridge_mcp.safe_error("unknown_tool")
+        if kwargs.get("artifact_kind") == "server_artifact_id":
+            return context_bridge_mcp.safe_error("unsupported_artifact_kind")
+        if kwargs.get("mode") == "diagnose":
+            return context_bridge_mcp.safe_error("invalid_prompt_context_mode")
+        if tool_name == "create_single_loop_evidence_diff" and kwargs.get("after") is None:
+            return context_bridge_mcp.safe_error("missing_explicit_diff_side")
+        if "OPENQASM" in artifact_text or artifact_text.startswith("/home/"):
+            return context_bridge_mcp.safe_error("forbidden_input_value")
+        if tool_name == "create_prompt_context":
+            prompt_modes_called.append(kwargs.get("mode"))
+            if len(prompt_modes_called) == 4:
+                return {
+                    "ok": False,
+                    "adapter_status_category": "http_429",
+                    "error_category": "rate_limited",
+                    "retry_after_category": "seconds",
+                    "retention": "process_and_discard",
+                    "retained_artifacts": [],
+                }
+        return _successful_smoke_payload(tool_name)
+
+    monkeypatch.setattr(context_bridge_mcp, "post_context_bridge", fake_post)
+    result = run_smoke(base_url="https://example.invalid", token_file=token_file, full=True)
+
+    assert result["ok"] is False
+    assert result["diagnostic_status_category"] == "rate_limit_pause_required"
+    assert result["retry_after_category"] == "seconds"
+    assert result["token_onboarding_failure"] is False
+    assert prompt_modes_called == [None, "explain", "review", "revise"]
+    assert result["cases"]["prompt_mode_troubleshoot_allowed"]["status_category"] == (
+        "not_run_rate_limit_pause"
+    )
+    assert result["cases"]["prompt_mode_plan_next_checks_allowed"]["status_category"] == (
+        "not_run_rate_limit_pause"
+    )
+
+
+def test_retry_after_is_categorized_without_automatic_retry(tmp_path: Path) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    calls = 0
+
+    def rate_limited(_request: object, timeout: int = 20) -> object:
+        nonlocal calls
+        calls += 1
+        body = io.BytesIO(json.dumps({"ok": False, "error_category": "rate_limited"}).encode("utf-8"))
+        raise urllib.error.HTTPError(
+            "https://example.invalid",
+            429,
+            "Too Many Requests",
+            {"Retry-After": "30"},
+            body,
+        )
+
+    payload = post_context_bridge(
+        base_url="https://example.invalid",
+        token_file=token_file,
+        tool_name="create_prompt_context",
+        artifact_text="Share-safe current evidence summary.",
+        opener=rate_limited,
+    )
+
+    assert calls == 1
+    assert payload["adapter_status_category"] == "http_429"
+    assert payload["retry_after_category"] == "seconds"
+
+
+def test_full_smoke_does_not_call_prompt_modes_when_default_prompt_is_rate_limited(
+    monkeypatch, tmp_path: Path
+) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    prompt_calls: list[object] = []
+    context_session_calls = 0
+
+    def fake_post(**kwargs: object) -> dict[str, object]:
+        nonlocal context_session_calls
+        tool_name = str(kwargs["tool_name"])
+        artifact_text = str(kwargs["artifact_text"])
+        if tool_name not in EXPECTED_TOOLS:
+            return context_bridge_mcp.safe_error("unknown_tool")
+        if kwargs.get("artifact_kind") == "server_artifact_id":
+            return context_bridge_mcp.safe_error("unsupported_artifact_kind")
+        if kwargs.get("mode") == "diagnose":
+            return context_bridge_mcp.safe_error("invalid_prompt_context_mode")
+        if tool_name == "create_single_loop_evidence_diff" and kwargs.get("after") is None:
+            return context_bridge_mcp.safe_error("missing_explicit_diff_side")
+        if "OPENQASM" in artifact_text or artifact_text.startswith("/home/"):
+            return context_bridge_mcp.safe_error("forbidden_input_value")
+        if tool_name == "create_context_session_card":
+            context_session_calls += 1
+        if tool_name == "create_prompt_context":
+            prompt_calls.append(kwargs.get("mode"))
+            return {
+                "ok": False,
+                "adapter_status_category": "http_429",
+                "error_category": "rate_limited",
+                "retry_after_category": "http_date",
+                "retention": "process_and_discard",
+                "retained_artifacts": [],
+            }
+        return _successful_smoke_payload(tool_name)
+
+    monkeypatch.setattr(context_bridge_mcp, "post_context_bridge", fake_post)
+    result = run_smoke(base_url="https://example.invalid", token_file=token_file, full=True)
+
+    assert context_session_calls == 2
+    assert prompt_calls == [None]
+    assert result["diagnostic_status_category"] == "rate_limit_pause_required"
+    assert result["retry_after_category"] == "http_date"
+    assert result["token_onboarding_failure"] is False
+
+
+def test_full_smoke_stops_on_hard_token_rejection(monkeypatch, tmp_path: Path) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    calls = 0
+
+    def rejected(**kwargs: object) -> dict[str, object]:
+        nonlocal calls
+        if "OPENQASM" in str(kwargs["artifact_text"]):
+            return context_bridge_mcp.safe_error("forbidden_input_value")
+        calls += 1
+        return {
+            "ok": False,
+            "adapter_status_category": "http_401",
+            "error_category": "token_rejected",
+            "retention": "process_and_discard",
+            "retained_artifacts": [],
+        }
+
+    monkeypatch.setattr(context_bridge_mcp, "post_context_bridge", rejected)
+    result = run_smoke(base_url="https://example.invalid", token_file=token_file, full=True)
+
+    assert calls == 1
+    assert result["diagnostic_status_category"] == "token_rejected"
+    assert result["token_onboarding_failure"] is True
+    assert result["token_accepted"] == "no"

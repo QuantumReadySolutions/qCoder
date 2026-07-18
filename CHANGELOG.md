@@ -7,6 +7,7 @@
 - Expose exactly eight Context Bridge tools while preserving the existing guided-evidence, prompt-context, and Evidence Context Pack tools.
 - Add `explain`, `review`, `revise`, `troubleshoot`, and `plan_next_checks` prompt-context modes while preserving the default prompt behavior.
 - Preserve structured before/after evidence in Single-Loop Evidence Diff calls over Content-Length stdio MCP framing.
+- Make the default Context Bridge smoke a concise one-call customer connection check, with optional JSON output and a separate rate-limit-aware `--full` support/release diagnostic.
 - Keep Context Bridge current-request-only and process-and-discard, with categorical evidence-provenance labels and no retained artifacts, repository scanning, file editing, history, memory, scoring, or autonomous execution.
 
 

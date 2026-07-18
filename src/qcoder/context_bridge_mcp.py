@@ -151,6 +151,17 @@ def decode_json(raw: bytes) -> dict[str, Any]:
     return decoded if isinstance(decoded, dict) else {"ok": False, "error_category": "non_object_response"}
 
 
+def _retry_after_category(value: object) -> str:
+    retry_after = str(value or "").strip()
+    if not retry_after:
+        return "absent"
+    if retry_after.isdigit():
+        return "seconds"
+    if "," in retry_after and ":" in retry_after:
+        return "http_date"
+    return "present_unparsed"
+
+
 def post_context_bridge(
     *,
     base_url: str,
@@ -238,9 +249,11 @@ def post_context_bridge(
         with urlopen(request, timeout=20) as response:
             status = int(response.status)
             payload = decode_json(response.read())
+            retry_after = response.headers.get("Retry-After") if getattr(response, "headers", None) else None
     except urllib.error.HTTPError as exc:
         status = int(exc.code)
         payload = decode_json(exc.read())
+        retry_after = exc.headers.get("Retry-After") if exc.headers else None
     except Exception:
         return safe_error("context_bridge_unreachable", status_category="network_error")
 
@@ -248,6 +261,8 @@ def post_context_bridge(
     payload.setdefault("token_printed", False)
     payload.setdefault("raw_payload_printed", False)
     payload.setdefault("raw_response_printed", False)
+    if status == 429:
+        payload.setdefault("retry_after_category", _retry_after_category(retry_after))
     return payload
 
 
@@ -537,7 +552,7 @@ def _case_summary(*, payload: dict[str, Any], expected_success: bool) -> dict[st
     }
 
 
-def run_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
+def _run_full_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
     token_ok, token_category, _ = validate_token_file(token_file)
     if not token_ok:
         return {
@@ -555,6 +570,12 @@ def run_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
         "No raw QASM, no raw counts, no file paths, no backend identifiers, and no source code are included. "
         "QCODER_CONTEXT_BRIDGE_SMOKE_MARKER"
     )
+    prompt_context_payload = post_context_bridge(
+        base_url=base_url,
+        token_file=token_file,
+        tool_name="create_prompt_context",
+        artifact_text=safe_text,
+    )
     cases = {
         "guided_context_allowed": _case_summary(
             payload=post_context_bridge(
@@ -566,12 +587,7 @@ def run_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
             expected_success=True,
         ),
         "prompt_context_allowed": _case_summary(
-            payload=post_context_bridge(
-                base_url=base_url,
-                token_file=token_file,
-                tool_name="create_prompt_context",
-                artifact_text=safe_text,
-            ),
+            payload=prompt_context_payload,
             expected_success=True,
         ),
         "evidence_context_pack_allowed": _case_summary(
@@ -633,56 +649,6 @@ def run_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
             ),
             expected_success=True,
         ),
-        "prompt_mode_explain_allowed": _case_summary(
-            payload=post_context_bridge(
-                base_url=base_url,
-                token_file=token_file,
-                tool_name="create_prompt_context",
-                artifact_text=safe_text,
-                mode="explain",
-            ),
-            expected_success=True,
-        ),
-        "prompt_mode_review_allowed": _case_summary(
-            payload=post_context_bridge(
-                base_url=base_url,
-                token_file=token_file,
-                tool_name="create_prompt_context",
-                artifact_text=safe_text,
-                mode="review",
-            ),
-            expected_success=True,
-        ),
-        "prompt_mode_revise_allowed": _case_summary(
-            payload=post_context_bridge(
-                base_url=base_url,
-                token_file=token_file,
-                tool_name="create_prompt_context",
-                artifact_text=safe_text,
-                mode="revise",
-            ),
-            expected_success=True,
-        ),
-        "prompt_mode_troubleshoot_allowed": _case_summary(
-            payload=post_context_bridge(
-                base_url=base_url,
-                token_file=token_file,
-                tool_name="create_prompt_context",
-                artifact_text=safe_text,
-                mode="troubleshoot",
-            ),
-            expected_success=True,
-        ),
-        "prompt_mode_plan_next_checks_allowed": _case_summary(
-            payload=post_context_bridge(
-                base_url=base_url,
-                token_file=token_file,
-                tool_name="create_prompt_context",
-                artifact_text=safe_text,
-                mode="plan_next_checks",
-            ),
-            expected_success=True,
-        ),
         "raw_qasm_rejected": _case_summary(
             payload=post_context_bridge(
                 base_url=base_url,
@@ -741,6 +707,64 @@ def run_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
             expected_success=False,
         ),
     }
+    prompt_mode_cases = (
+        ("prompt_mode_explain_allowed", "explain"),
+        ("prompt_mode_review_allowed", "review"),
+        ("prompt_mode_revise_allowed", "revise"),
+        ("prompt_mode_troubleshoot_allowed", "troubleshoot"),
+        ("prompt_mode_plan_next_checks_allowed", "plan_next_checks"),
+    )
+    rate_limit_pause = (
+        str(prompt_context_payload.get("adapter_status_category") or prompt_context_payload.get("status_category"))
+        == "http_429"
+    )
+    retry_after_category = (
+        str(prompt_context_payload.get("retry_after_category") or "absent") if rate_limit_pause else "absent"
+    )
+    if rate_limit_pause:
+        for pending_name, _pending_mode in prompt_mode_cases:
+            cases[pending_name] = {
+                "expected_outcome_met": False,
+                "ok_category": "missing",
+                "status_category": "not_run_rate_limit_pause",
+                "error_category": "",
+                "tool_name_category": "create_prompt_context",
+                "context_status_category": "missing",
+                "retention_category": "process_and_discard",
+                "retained_artifacts_empty_or_absent": True,
+                "raw_payload_echo_absent": True,
+                "token_printed": False,
+                "raw_response_printed": False,
+            }
+    else:
+        for index, (case_name, mode) in enumerate(prompt_mode_cases):
+            payload = post_context_bridge(
+                base_url=base_url,
+                token_file=token_file,
+                tool_name="create_prompt_context",
+                artifact_text=safe_text,
+                mode=mode,
+            )
+            cases[case_name] = _case_summary(payload=payload, expected_success=True)
+            if str(payload.get("adapter_status_category") or payload.get("status_category")) == "http_429":
+                rate_limit_pause = True
+                retry_after_category = str(payload.get("retry_after_category") or "absent")
+                for pending_name, _pending_mode in prompt_mode_cases[index + 1 :]:
+                    cases[pending_name] = {
+                        "expected_outcome_met": False,
+                        "ok_category": "missing",
+                        "status_category": "not_run_rate_limit_pause",
+                        "error_category": "",
+                        "tool_name_category": "create_prompt_context",
+                        "context_status_category": "missing",
+                        "retention_category": "process_and_discard",
+                        "retained_artifacts_empty_or_absent": True,
+                        "raw_payload_echo_absent": True,
+                        "token_printed": False,
+                        "raw_response_printed": False,
+                    }
+                break
+
     approved = [
         "guided_context_allowed",
         "prompt_context_allowed",
@@ -782,6 +806,11 @@ def run_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
         "payment_auth_billing_mutation": "no",
         "public_claim_created": "no",
         "source_modified": "no",
+        "diagnostic_mode": "full",
+        "diagnostic_status_category": "rate_limit_pause_required" if rate_limit_pause else "complete",
+        "retry_after_category": retry_after_category,
+        "token_accepted": "yes",
+        "token_onboarding_failure": False,
         "cases": cases,
     }
     result["all_expected_outcomes_met"] = (
@@ -792,6 +821,99 @@ def run_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
     )
     result["ok"] = bool(result["all_expected_outcomes_met"])
     return result
+
+
+def run_smoke(*, base_url: str, token_file: str | Path, full: bool = False) -> dict[str, Any]:
+    if full:
+        preflight = run_smoke(base_url=base_url, token_file=token_file)
+        if not preflight.get("ok"):
+            category = str(preflight.get("connection_status_category") or "connection_check_failed")
+            return {
+                **preflight,
+                "diagnostic_mode": "full",
+                "diagnostic_status_category": category,
+                "token_onboarding_failure": category in {"token_file_not_ready", "token_rejected"},
+            }
+        return _run_full_smoke(base_url=base_url, token_file=token_file)
+
+    token_ok, token_category, _ = validate_token_file(token_file)
+    if not token_ok:
+        return {
+            "ok": False,
+            "metadata_only": True,
+            "connection_status_category": "token_file_not_ready",
+            "token_file_category": token_category,
+            "token_accepted": "no",
+            "tools_visible": list(EXPECTED_TOOLS),
+            "tools_exact": True,
+            "tools_discovered": len(EXPECTED_TOOLS),
+            "token_printed": False,
+            "raw_token_printed": False,
+            "instruction_category": "create_local_chmod_600_token_file",
+        }
+
+    safe_text = (
+        "Share-safe current qCoder evidence summary for a harmless connection check. "
+        "The user wants one bounded current-session context card. "
+        "QCODER_CONTEXT_BRIDGE_SMOKE_MARKER"
+    )
+    bounded_payload = post_context_bridge(
+        base_url=base_url,
+        token_file=token_file,
+        tool_name="create_context_session_card",
+        artifact_text=safe_text,
+    )
+    bounded_case = _case_summary(payload=bounded_payload, expected_success=True)
+    status_category = str(
+        bounded_payload.get("adapter_status_category") or bounded_payload.get("status_category") or "missing"
+    )
+    rate_limited = status_category == "http_429"
+    token_rejected = status_category in {"http_401", "http_403"}
+    endpoint_reachable = status_category not in {"network_error", "missing"}
+    unsafe_payload = post_context_bridge(
+        base_url=base_url,
+        token_file=token_file,
+        tool_name="get_guided_evidence_context",
+        artifact_text="OPENQASM 2.0; qreg q[1];",
+    )
+    unsafe_case = _case_summary(payload=unsafe_payload, expected_success=False)
+    ready = bounded_case["expected_outcome_met"] and unsafe_case["expected_outcome_met"]
+    return {
+        "ok": bool(ready),
+        "metadata_only": True,
+        "connection_status_category": (
+            "ready"
+            if ready
+            else "rate_limit_pause_required"
+            if rate_limited
+            else "token_rejected"
+            if token_rejected
+            else "connection_check_failed"
+        ),
+        "token_file_category": "present_safe",
+        "token_accepted": "yes" if ready else "not_rejected" if rate_limited else "no" if token_rejected else "unknown",
+        "endpoint_reachable": endpoint_reachable,
+        "tools_visible": list(EXPECTED_TOOLS),
+        "tools_exact": True,
+        "tools_discovered": len(EXPECTED_TOOLS),
+        "bounded_call_passed": bounded_case["expected_outcome_met"],
+        "unsafe_input_rejected": unsafe_case["expected_outcome_met"],
+        "retry_after_category": str(bounded_payload.get("retry_after_category") or "absent"),
+        "token_printed": False,
+        "raw_payload_echo": "no"
+        if bounded_case["raw_payload_echo_absent"] and unsafe_case["raw_payload_echo_absent"]
+        else "yes",
+        "retention_category": "process_and_discard_or_rejected",
+        "retained_artifacts_empty": "yes"
+        if bounded_case["retained_artifacts_empty_or_absent"]
+        and unsafe_case["retained_artifacts_empty_or_absent"]
+        else "no",
+        "payment_auth_billing_mutation": "no",
+        "cases": {
+            "context_session_card_allowed": bounded_case,
+            "unsafe_input_rejected": unsafe_case,
+        },
+    }
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -816,7 +938,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     serve.set_defaults(context_bridge_command="mcp", mcp_command="serve")
 
-    smoke = mcp_sub.add_parser("smoke", help="Run a sanitized adapter install smoke.")
+    smoke = mcp_sub.add_parser("smoke", help="Check the Context Bridge connection safely.")
     smoke.add_argument(
         "--token-file",
         default=os.getenv("QCODER_CONTEXT_BRIDGE_TOKEN_FILE", str(default_token_file())),
@@ -828,6 +950,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Context Bridge service base URL.",
     )
     smoke.add_argument("--json", action="store_true", help="Emit sanitized JSON result.")
+    smoke.add_argument(
+        "--full",
+        action="store_true",
+        help="Run the exhaustive support/release diagnostic without automatic rate-limit retries.",
+    )
     smoke.set_defaults(context_bridge_command="mcp", mcp_command="smoke")
     return parser
 
@@ -841,16 +968,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.mcp_command == "serve":
         return serve_mcp_stdio(base_url=args.base_url, token_file=args.token_file)
     if args.mcp_command == "smoke":
-        result = run_smoke(base_url=args.base_url, token_file=args.token_file)
+        result = run_smoke(base_url=args.base_url, token_file=args.token_file, full=args.full)
         if args.json:
             print(json.dumps(result, indent=2, sort_keys=True))
+        elif args.full:
+            print(f"Context Bridge full diagnostic: {result.get('diagnostic_status_category', 'check_required')}")
+            print(f"Token onboarding failure: {'yes' if result.get('token_onboarding_failure') else 'no'}")
+            print(f"Tools discovered: {len(result.get('tools_visible', []))}")
+            if result.get("diagnostic_status_category") == "rate_limit_pause_required":
+                print("Rate limit: pause before continuing the remaining diagnostic checks")
         else:
-            print(f"qCoder Context Bridge adapter smoke: {'PASS' if result.get('ok') else 'CHECK'}")
-            print(f"  token_file: {result.get('token_file_category', 'present_safe')}")
-            print(f"  tools_exact: {result.get('tools_exact', False)}")
-            print(f"  approved_tool_calls: {result.get('approved_tool_calls_passed', False)}")
-            print(f"  unsafe_calls_rejected: {result.get('unsafe_calls_rejected', False)}")
-            print(f"  token_printed: {result.get('token_printed', False)}")
+            status = "ready" if result.get("ok") else result.get("connection_status_category", "check required")
+            print(f"Context Bridge connection: {status}")
+            print(f"Token accepted: {result.get('token_accepted', 'unknown')}")
+            print(f"Tools discovered: {result.get('tools_discovered', 0)}")
+        if result.get("diagnostic_status_category") == "rate_limit_pause_required":
+            return 2
         return 0 if result.get("ok") else 1
     parser.print_help()
     return 0

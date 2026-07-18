@@ -83,10 +83,12 @@ qcoder explorer evidence
 qcoder explorer evidence --qasm path/to/circuit.qasm
 qcoder explorer evidence --context-json preflight.context.json
 qcoder explorer evidence --qasm path/to/circuit.qasm --out-json explorer.json --out-md explorer.md --share-safe
-qcoder context-bridge mcp serve --help
-qcoder context-bridge mcp smoke --token-file ~/.qcoder/context-bridge/token.txt --json
+python -m qcoder context-bridge mcp serve --help
+python -m qcoder context-bridge mcp smoke --token-file ~/.qcoder/context-bridge/token.txt
 qcoder pro --help
 ```
+
+Run the Context Bridge commands in the Python environment where qCoder is installed. The default smoke prints a concise connection result. Add `--json` for structured troubleshooting, or `--full` for the exhaustive support/release diagnostic; full mode stops without automatic retry when the current rate window requires a pause.
 
 **Support-safe checklist**
 
