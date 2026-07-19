@@ -97,6 +97,80 @@ def test_tool_descriptors_are_exact_public_context_bridge_tools() -> None:
     assert "generic 'result evidence is present'" in diff["inputSchema"]["properties"]["after"]["description"]
 
 
+def test_tool_descriptors_advertise_only_tool_specific_fields() -> None:
+    schemas = {tool["name"]: tool["inputSchema"] for tool in tool_descriptors()}
+    expected_properties = {
+        "get_guided_evidence_context": {"artifact_text", "artifact_kind", "client_context"},
+        "create_prompt_context": {"artifact_text", "artifact_kind", "client_context", "mode"},
+        "create_evidence_context_pack": {
+            "artifact_text", "artifact_kind", "client_context", "current_goal", "evidence_basis",
+        },
+        "create_context_session_card": {
+            "artifact_text", "artifact_kind", "client_context", "current_goal", "evidence_basis",
+            "open_questions", "explicit_assumptions",
+        },
+        "create_run_readiness_card": {
+            "artifact_text", "artifact_kind", "client_context", "current_goal", "evidence_basis",
+            "open_questions", "explicit_assumptions", "current_card_context",
+        },
+        "create_result_review_context_card": {
+            "artifact_text", "artifact_kind", "client_context", "current_goal", "evidence_basis",
+            "share_safe_evidence_summary", "open_questions", "explicit_assumptions", "current_card_context",
+        },
+        "create_next_check_plan": {
+            "artifact_text", "artifact_kind", "client_context", "current_goal", "evidence_basis",
+            "open_questions", "explicit_assumptions", "current_card_context",
+        },
+        "create_single_loop_evidence_diff": {
+            "artifact_text", "artifact_kind", "client_context", "current_goal", "before", "after",
+        },
+    }
+    assert set(schemas) == set(expected_properties)
+    for tool_name, expected in expected_properties.items():
+        schema = schemas[tool_name]
+        assert set(schema["properties"]) == expected
+        assert schema["required"] == ["artifact_text"]
+        assert schema["additionalProperties"] is False
+
+    assert schemas["create_prompt_context"]["properties"]["mode"]["enum"] == sorted(
+        ["explain", "review", "revise", "troubleshoot", "plan_next_checks"]
+    )
+    assert all("mode" not in schema["properties"] for name, schema in schemas.items() if name != "create_prompt_context")
+    assert all(
+        "before" not in schema["properties"] and "after" not in schema["properties"]
+        for name, schema in schemas.items()
+        if name != "create_single_loop_evidence_diff"
+    )
+    diff_properties = schemas["create_single_loop_evidence_diff"]["properties"]
+    assert diff_properties["before"]["type"] == "object"
+    assert diff_properties["after"]["type"] == "object"
+
+
+def test_tools_call_rejects_fields_not_advertised_for_selected_tool(tmp_path: Path) -> None:
+    token_file = tmp_path / "token.txt"
+    response = handle_jsonrpc_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {
+                "name": "create_run_readiness_card",
+                "arguments": {
+                    "artifact_text": "Share-safe current evidence summary.",
+                    "mode": "review",
+                },
+            },
+        },
+        base_url="https://example.invalid",
+        token_file=token_file,
+    )
+
+    assert response is not None
+    result = response["result"]
+    assert result["isError"] is True
+    assert result["structuredContent"]["error_category"] == "unsupported_tool_argument"
+
+
 def test_token_file_validation_requires_private_local_file(tmp_path: Path) -> None:
     missing = tmp_path / "missing.txt"
     ok, category, token = validate_token_file(missing)

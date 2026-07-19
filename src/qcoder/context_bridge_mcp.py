@@ -31,6 +31,71 @@ PROMPT_CONTEXT_MODES = frozenset(
         "plan_next_checks",
     }
 )
+TOOL_INPUT_FIELDS = {
+    "get_guided_evidence_context": frozenset({"artifact_text", "artifact_kind", "client_context"}),
+    "create_prompt_context": frozenset({"artifact_text", "artifact_kind", "client_context", "mode"}),
+    "create_evidence_context_pack": frozenset(
+        {"artifact_text", "artifact_kind", "client_context", "current_goal", "evidence_basis"}
+    ),
+    "create_context_session_card": frozenset(
+        {
+            "artifact_text",
+            "artifact_kind",
+            "client_context",
+            "current_goal",
+            "evidence_basis",
+            "open_questions",
+            "explicit_assumptions",
+        }
+    ),
+    "create_run_readiness_card": frozenset(
+        {
+            "artifact_text",
+            "artifact_kind",
+            "client_context",
+            "current_goal",
+            "evidence_basis",
+            "open_questions",
+            "explicit_assumptions",
+            "current_card_context",
+        }
+    ),
+    "create_result_review_context_card": frozenset(
+        {
+            "artifact_text",
+            "artifact_kind",
+            "client_context",
+            "current_goal",
+            "evidence_basis",
+            "share_safe_evidence_summary",
+            "open_questions",
+            "explicit_assumptions",
+            "current_card_context",
+        }
+    ),
+    "create_next_check_plan": frozenset(
+        {
+            "artifact_text",
+            "artifact_kind",
+            "client_context",
+            "current_goal",
+            "evidence_basis",
+            "open_questions",
+            "explicit_assumptions",
+            "current_card_context",
+        }
+    ),
+    "create_single_loop_evidence_diff": frozenset(
+        {
+            "artifact_text",
+            "artifact_kind",
+            "client_context",
+            "current_goal",
+            "before",
+            "after",
+        }
+    ),
+}
 DEFAULT_ARTIFACT_KIND = "share_safe_evidence_summary"
 MAX_ARTIFACT_TEXT_CHARS = 20_000
 FORBIDDEN_TEXT_MARKERS = (
@@ -183,6 +248,23 @@ def post_context_bridge(
 ) -> dict[str, Any]:
     if tool_name not in EXPECTED_TOOLS:
         return safe_error("unknown_tool")
+    supplied_optional_fields = {
+        key
+        for key, value in {
+            "mode": mode,
+            "current_goal": current_goal,
+            "evidence_basis": evidence_basis,
+            "share_safe_evidence_summary": share_safe_evidence_summary,
+            "open_questions": open_questions,
+            "explicit_assumptions": explicit_assumptions,
+            "current_card_context": current_card_context,
+            "before": before,
+            "after": after,
+        }.items()
+        if value is not None
+    }
+    if supplied_optional_fields - TOOL_INPUT_FIELDS[tool_name]:
+        return safe_error("unsupported_tool_argument")
     if mode is not None:
         if tool_name != "create_prompt_context":
             return safe_error("mode_not_supported_for_tool")
@@ -266,95 +348,96 @@ def post_context_bridge(
     return payload
 
 
-def tool_descriptors() -> list[dict[str, Any]]:
-    schema = {
-        "type": "object",
-        "properties": {
-            "artifact_text": {
-                "type": "string",
-                "description": "Share-safe current qCoder evidence summary. Raw circuits, counts, paths, notebooks, and source files are rejected.",
-            },
-            "artifact_kind": {
-                "type": "string",
-                "enum": [DEFAULT_ARTIFACT_KIND],
-                "default": DEFAULT_ARTIFACT_KIND,
-            },
-            "client_context": {
-                "type": "object",
-                "additionalProperties": True,
-                "description": "Optional client metadata without secrets, paths, or raw artifacts.",
-            },
-            "mode": {
-                "type": "string",
-                "enum": sorted(PROMPT_CONTEXT_MODES),
-                "description": "Optional create_prompt_context handoff mode.",
-            },
-            "current_goal": {
-                "type": "string",
-                "description": "Optional bounded current workflow goal.",
-            },
-            "evidence_basis": {
-                "type": "string",
-                "description": "Optional share-safe evidence basis for current-request planning.",
-            },
-            "share_safe_evidence_summary": {
-                "type": "string",
-                "description": "Optional compact share-safe current evidence summary.",
-            },
-            "open_questions": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Optional current-request questions without raw artifacts.",
-            },
-            "explicit_assumptions": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Optional assumptions supplied by the user for this request.",
-            },
-            "current_card_context": {
-                "type": "object",
-                "additionalProperties": True,
-                "description": "Optional current card/context payload without secrets, paths, or raw artifacts.",
-            },
-            "before": {
-                "type": ["object", "string"],
-                "description": (
-                    "Explicit before context for Single-Loop Evidence Diff. Prefer an object with compact "
-                    "share-safe keys such as goal, evidence, unresolved, assumptions, expectations, or limitations. "
-                    "Preserve salient user-provided observations instead of replacing them with generic summaries."
-                ),
-                "properties": {
-                    "goal": {"type": "string"},
-                    "evidence": {"type": "string"},
-                    "unresolved": {"type": "string"},
-                    "assumptions": {"type": "string"},
-                    "expectations": {"type": "string"},
-                    "limitations": {"type": "string"},
-                },
-                "additionalProperties": True,
-            },
-            "after": {
-                "type": ["object", "string"],
-                "description": (
-                    "Explicit after context for Single-Loop Evidence Diff. Prefer an object with compact "
-                    "share-safe keys such as result_evidence, unresolved, assumptions, expectations, or limitations. "
-                    "Keep salient user-reported result observations, for example a compact reported outcome pattern, "
-                    "rather than reducing them to generic 'result evidence is present' wording."
-                ),
-                "properties": {
-                    "result_evidence": {"type": "string"},
-                    "evidence": {"type": "string"},
-                    "unresolved": {"type": "string"},
-                    "assumptions": {"type": "string"},
-                    "expectations": {"type": "string"},
-                    "limitations": {"type": "string"},
-                },
-                "additionalProperties": True,
-            },
+def _tool_property_schemas() -> dict[str, dict[str, Any]]:
+    diff_side_properties = {
+        "goal": {"type": "string"},
+        "evidence_state": {"type": "string"},
+        "result_evidence": {"type": "string"},
+        "evidence": {"type": "string"},
+        "unresolved": {"type": "array", "items": {"type": "string"}},
+        "assumptions": {"type": "array", "items": {"type": "string"}},
+        "expectations": {"type": "array", "items": {"type": "string"}},
+        "limitations": {"type": "array", "items": {"type": "string"}},
+    }
+    return {
+        "artifact_text": {
+            "type": "string",
+            "description": "Share-safe current qCoder evidence summary. Raw circuits, counts, paths, notebooks, and source files are rejected.",
         },
+        "artifact_kind": {
+            "type": "string",
+            "enum": [DEFAULT_ARTIFACT_KIND],
+            "default": DEFAULT_ARTIFACT_KIND,
+        },
+        "client_context": {
+            "type": "object",
+            "additionalProperties": True,
+            "description": "Optional client metadata without secrets, paths, or raw artifacts.",
+        },
+        "mode": {
+            "type": "string",
+            "enum": sorted(PROMPT_CONTEXT_MODES),
+            "description": "Optional create_prompt_context handoff mode.",
+        },
+        "current_goal": {
+            "type": "string",
+            "description": "Bounded goal for the current workflow request.",
+        },
+        "evidence_basis": {
+            "type": "string",
+            "description": "Compact share-safe evidence basis supplied for this current request.",
+        },
+        "share_safe_evidence_summary": {
+            "type": "string",
+            "description": "Compact user-provided result evidence for current-request review.",
+        },
+        "open_questions": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Current user-controlled questions or candidate checks to preserve when safely relevant.",
+        },
+        "explicit_assumptions": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Assumptions explicitly supplied by the user for this request.",
+        },
+        "current_card_context": {
+            "type": "object",
+            "additionalProperties": True,
+            "description": "Optional current-request card context without secrets, paths, or raw artifacts.",
+        },
+        "before": {
+            "type": "object",
+            "description": (
+                "Explicit structured before context for Single-Loop Evidence Diff. Preserve salient user-provided "
+                "observations instead of replacing them with generic summaries."
+            ),
+            "properties": diff_side_properties,
+            "additionalProperties": False,
+        },
+        "after": {
+            "type": "object",
+            "description": (
+                "Explicit structured after context for Single-Loop Evidence Diff. Keep salient user-reported result "
+                "observations rather than reducing them to generic 'result evidence is present' wording."
+            ),
+            "properties": diff_side_properties,
+            "additionalProperties": False,
+        },
+    }
+
+
+def _tool_schema(tool_name: str) -> dict[str, Any]:
+    property_schemas = _tool_property_schemas()
+    return {
+        "type": "object",
+        "properties": {name: property_schemas[name] for name in TOOL_INPUT_FIELDS[tool_name]},
         "required": ["artifact_text"],
         "additionalProperties": False,
     }
+
+
+def tool_descriptors() -> list[dict[str, Any]]:
     descriptions = {
         "get_guided_evidence_context": "Create bounded assistant context from share-safe current qCoder evidence.",
         "create_prompt_context": "Create a share-safe prompt context from current qCoder evidence.",
@@ -369,7 +452,7 @@ def tool_descriptors() -> list[dict[str, Any]]:
         ),
     }
     return [
-        {"name": name, "description": descriptions[name], "inputSchema": schema}
+        {"name": name, "description": descriptions[name], "inputSchema": _tool_schema(name)}
         for name in EXPECTED_TOOLS
     ]
 
@@ -411,11 +494,22 @@ def handle_jsonrpc_message(
     if method == "tools/call":
         params = message.get("params") if isinstance(message.get("params"), dict) else {}
         tool_name = params.get("name")
+        normalized_tool_name = str(tool_name or "")
         arguments = params.get("arguments") if isinstance(params.get("arguments"), dict) else {}
+        if normalized_tool_name in TOOL_INPUT_FIELDS and set(arguments) - TOOL_INPUT_FIELDS[normalized_tool_name]:
+            payload = safe_error("unsupported_tool_argument")
+            return _jsonrpc_result(
+                message_id,
+                {
+                    "content": [{"type": "text", "text": json.dumps(payload, sort_keys=True)}],
+                    "structuredContent": payload,
+                    "isError": True,
+                },
+            )
         payload = post_context_bridge(
             base_url=base_url,
             token_file=token_file,
-            tool_name=str(tool_name or ""),
+            tool_name=normalized_tool_name,
             artifact_text=arguments.get("artifact_text"),
             artifact_kind=str(arguments.get("artifact_kind") or DEFAULT_ARTIFACT_KIND),
             client_context=arguments.get("client_context")
