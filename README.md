@@ -28,6 +28,21 @@ Public `qcoder` ships **OSS local commands**, Explorer Beta compatibility comman
 - There is **no generally available production hosted Pro service**, Pro account/token issuance, artifact/source upload, telemetry/training ingest, confidential local analyzer/cards, QPU/provider execution, or launched Pro V0.0 behavior in this public-main surface.
 - **No confidential Pro analysis or cards** are bundled in this package. Token-gating is **access control only**, not a secrecy boundary.
 
+## Context Bridge inventory
+
+Eligible Explorer users can discover exactly these eight Context Bridge tools:
+
+- `get_guided_evidence_context`
+- `create_prompt_context`
+- `create_evidence_context_pack`
+- `create_context_session_card`
+- `create_run_readiness_card`
+- `create_result_review_context_card`
+- `create_next_check_plan`
+- `create_single_loop_evidence_diff`
+
+`create_prompt_context` supports `explain`, `review`, `revise`, `troubleshoot`, and `plan_next_checks` modes; omitting the mode preserves the default behavior. Context Bridge uses only evidence explicitly supplied for the current request, processes it without retaining artifacts, and does not scan repositories, edit files, execute circuits or next checks, keep history or memory, score correctness, or perform autonomous work.
+
 ## Quick start
 
 Install:
@@ -68,10 +83,12 @@ qcoder explorer evidence
 qcoder explorer evidence --qasm path/to/circuit.qasm
 qcoder explorer evidence --context-json preflight.context.json
 qcoder explorer evidence --qasm path/to/circuit.qasm --out-json explorer.json --out-md explorer.md --share-safe
-qcoder context-bridge mcp serve --help
-qcoder context-bridge mcp smoke --token-file ~/.qcoder/context-bridge/token.txt --json
+python -m qcoder context-bridge mcp serve --help
+python -m qcoder context-bridge mcp smoke --token-file ~/.qcoder/context-bridge/token.txt
 qcoder pro --help
 ```
+
+Run the Context Bridge commands in the Python environment where qCoder is installed. The default smoke prints a concise connection result. Add `--json` for structured troubleshooting, or `--full` for the exhaustive support/release diagnostic; full mode stops without automatic retry when the current rate window requires a pause.
 
 **Support-safe checklist**
 
