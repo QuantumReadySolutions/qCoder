@@ -65,6 +65,13 @@ The format is based on common practice for pre-1.0 semantic versioning: **`MAJOR
 
 ## Unreleased
 
+### Evidence Review
+
+- Align the existing eight Context Bridge tools as the bounded Explorer Evidence Review capability for current-session readiness, result interpretation, two-point comparison, user-controlled next checks, and purpose-specific handoff.
+- Use the categorical Evidence Confidence Labels Observed, User-provided, Inferred, Assumed, Not proven, and Suggested next check across core review outputs without numerical confidence or correctness scoring.
+- Preserve exact tool and Prompt Context mode inventories, existing request compatibility, process-and-discard handling, and current-artifact/current-session boundaries.
+- Keep execution external to qCoder, suggested checks user-controlled, and ChatGPT a manual share-safe Prompt Context handoff rather than a connected Context Bridge integration.
+
 ## 0.5.0a2 (alpha — public Free + Pro Preview client contract)
 
 Second public alpha for the **Option 3 product line**: unchanged Free local/offline CLI plus an expanded **Pro Preview bootstrap/client contract** (not a generally available hosted Pro product).
