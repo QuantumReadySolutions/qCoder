@@ -22,6 +22,10 @@ EXPECTED_TOOLS = (
     "create_next_check_plan",
     "create_single_loop_evidence_diff",
 )
+TOOL_ALIASES = {
+    "get_context_from_share_safe_artifact": "get_guided_evidence_context",
+    "build_assistant_prompt_context": "create_prompt_context",
+}
 PROMPT_CONTEXT_MODES = frozenset(
     {
         "explain",
@@ -33,7 +37,9 @@ PROMPT_CONTEXT_MODES = frozenset(
 )
 TOOL_INPUT_FIELDS = {
     "get_guided_evidence_context": frozenset({"artifact_text", "artifact_kind", "client_context"}),
-    "create_prompt_context": frozenset({"artifact_text", "artifact_kind", "client_context", "mode"}),
+    "create_prompt_context": frozenset(
+        {"artifact_text", "artifact_kind", "client_context", "mode"}
+    ),
     "create_evidence_context_pack": frozenset(
         {"artifact_text", "artifact_kind", "client_context", "current_goal", "evidence_basis"}
     ),
@@ -96,6 +102,70 @@ TOOL_INPUT_FIELDS = {
         }
     ),
 }
+TOOL_REQUIRED_FIELDS = {tool_name: ("artifact_text",) for tool_name in EXPECTED_TOOLS}
+EVIDENCE_CONFIDENCE_LABELS = (
+    (
+        "observed",
+        "Observed",
+        "Information directly present in the explicitly supplied circuit, result, or workflow evidence.",
+    ),
+    (
+        "user_provided",
+        "User-provided",
+        "Information asserted or entered by the user but not independently verified by qCoder.",
+    ),
+    (
+        "inferred",
+        "Inferred",
+        "A bounded interpretation derived from explicitly supplied evidence.",
+    ),
+    (
+        "assumed",
+        "Assumed",
+        "A premise used to organize or interpret the supplied evidence but not established by it.",
+    ),
+    (
+        "not_proven",
+        "Not proven",
+        "A statement, explanation, property, outcome, or conclusion that the supplied evidence does not establish.",
+    ),
+    (
+        "suggested_next_check",
+        "Suggested next check",
+        "An ordered, user-controlled recommendation for obtaining more evidence or resolving uncertainty.",
+    ),
+)
+EVIDENCE_REVIEW_ARTIFACT_DISCRIMINATORS = {
+    "get_guided_evidence_context": {"field": "context_status", "value": "assistant_context_ready"},
+    "create_prompt_context": {"field": "context_status", "value": "prompt_context_ready"},
+    "create_evidence_context_pack": {"field": "pack_type", "value": "share_safe_current_evidence"},
+    "create_context_session_card": {"field": "card_type", "value": "share_safe_current_session"},
+    "create_run_readiness_card": {
+        "field": "card_type",
+        "value": "share_safe_current_run_readiness",
+    },
+    "create_result_review_context_card": {
+        "field": "card_type",
+        "value": "share_safe_current_result_review",
+    },
+    "create_next_check_plan": {
+        "field": "plan_type",
+        "value": "bounded_current_request_next_checks",
+    },
+    "create_single_loop_evidence_diff": {
+        "field": "diff_type",
+        "value": "explicit_before_after_current_loop",
+    },
+}
+EVIDENCE_REVIEW_BOUNDARIES = (
+    "current artifact and current session only",
+    "explicitly supplied evidence only; no hidden lookup",
+    "process-and-discard with no retained artifacts",
+    "no project memory, evidence history, or multi-run comparison",
+    "no repository access or file editing",
+    "no autonomous execution",
+    "no correctness verification, runtime or fidelity prediction, backend ranking, or quantum-advantage claim",
+)
 DEFAULT_ARTIFACT_KIND = "share_safe_evidence_summary"
 MAX_ARTIFACT_TEXT_CHARS = 20_000
 FORBIDDEN_TEXT_MARKERS = (
@@ -213,7 +283,11 @@ def decode_json(raw: bytes) -> dict[str, Any]:
         decoded = json.loads(raw.decode("utf-8"))
     except Exception:
         return {"ok": False, "error_category": "non_json_response"}
-    return decoded if isinstance(decoded, dict) else {"ok": False, "error_category": "non_object_response"}
+    return (
+        decoded
+        if isinstance(decoded, dict)
+        else {"ok": False, "error_category": "non_object_response"}
+    )
 
 
 def _retry_after_category(value: object) -> str:
@@ -225,6 +299,33 @@ def _retry_after_category(value: object) -> str:
     if "," in retry_after and ":" in retry_after:
         return "http_date"
     return "present_unparsed"
+
+
+def _canonical_tool_name(tool_name: str) -> str:
+    return TOOL_ALIASES.get(tool_name, tool_name)
+
+
+def evidence_review_contract_snapshot() -> dict[str, Any]:
+    """Return the sanitized adapter contract mirrored by the protected implementation."""
+
+    return {
+        "capability": "Evidence Review",
+        "tool_names": list(EXPECTED_TOOLS),
+        "prompt_context_modes": sorted(PROMPT_CONTEXT_MODES),
+        "confidence_labels": [
+            {"value": value, "display": display}
+            for value, display, _meaning in EVIDENCE_CONFIDENCE_LABELS
+        ],
+        "tool_input_fields": {name: sorted(TOOL_INPUT_FIELDS[name]) for name in EXPECTED_TOOLS},
+        "required_request_properties": {
+            name: list(TOOL_REQUIRED_FIELDS[name]) for name in EXPECTED_TOOLS
+        },
+        "compatibility_aliases": dict(sorted(TOOL_ALIASES.items())),
+        "artifact_discriminators": EVIDENCE_REVIEW_ARTIFACT_DISCRIMINATORS,
+        "context_scope": "current_artifact_current_session",
+        "retention": "process_and_discard",
+        "boundaries": list(EVIDENCE_REVIEW_BOUNDARIES),
+    }
 
 
 def post_context_bridge(
@@ -246,7 +347,8 @@ def post_context_bridge(
     after: object | None = None,
     opener: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
-    if tool_name not in EXPECTED_TOOLS:
+    canonical_tool_name = _canonical_tool_name(tool_name)
+    if canonical_tool_name not in EXPECTED_TOOLS:
         return safe_error("unknown_tool")
     supplied_optional_fields = {
         key
@@ -263,14 +365,16 @@ def post_context_bridge(
         }.items()
         if value is not None
     }
-    if supplied_optional_fields - TOOL_INPUT_FIELDS[tool_name]:
+    if supplied_optional_fields - TOOL_INPUT_FIELDS[canonical_tool_name]:
         return safe_error("unsupported_tool_argument")
     if mode is not None:
-        if tool_name != "create_prompt_context":
+        if canonical_tool_name != "create_prompt_context":
             return safe_error("mode_not_supported_for_tool")
         if str(mode).strip() not in PROMPT_CONTEXT_MODES:
             return safe_error("invalid_prompt_context_mode")
-    if tool_name == "create_single_loop_evidence_diff" and (not _has_explicit_side(before) or not _has_explicit_side(after)):
+    if canonical_tool_name == "create_single_loop_evidence_diff" and (
+        not _has_explicit_side(before) or not _has_explicit_side(after)
+    ):
         return safe_error("missing_explicit_diff_side")
     if artifact_kind != DEFAULT_ARTIFACT_KIND:
         return safe_error("unsupported_artifact_kind")
@@ -296,7 +400,7 @@ def post_context_bridge(
         return safe_error(token_category, status_category="auth_preflight_failed")
 
     body = {
-        "tool_name": tool_name,
+        "tool_name": canonical_tool_name,
         "artifact_kind": artifact_kind,
         "artifact_text": artifact_text,
         "client_context": {
@@ -331,7 +435,9 @@ def post_context_bridge(
         with urlopen(request, timeout=20) as response:
             status = int(response.status)
             payload = decode_json(response.read())
-            retry_after = response.headers.get("Retry-After") if getattr(response, "headers", None) else None
+            retry_after = (
+                response.headers.get("Retry-After") if getattr(response, "headers", None) else None
+            )
     except urllib.error.HTTPError as exc:
         status = int(exc.code)
         payload = decode_json(exc.read())
@@ -339,7 +445,9 @@ def post_context_bridge(
     except Exception:
         return safe_error("context_bridge_unreachable", status_category="network_error")
 
-    payload.setdefault("adapter_status_category", "success_2xx" if 200 <= status < 300 else f"http_{status}")
+    payload.setdefault(
+        "adapter_status_category", "success_2xx" if 200 <= status < 300 else f"http_{status}"
+    )
     payload.setdefault("token_printed", False)
     payload.setdefault("raw_payload_printed", False)
     payload.setdefault("raw_response_printed", False)
@@ -440,14 +548,27 @@ def _tool_schema(tool_name: str) -> dict[str, Any]:
 def tool_descriptors() -> list[dict[str, Any]]:
     descriptions = {
         "get_guided_evidence_context": "Create bounded assistant context from share-safe current qCoder evidence.",
-        "create_prompt_context": "Create a share-safe prompt context from current qCoder evidence.",
+        "create_prompt_context": (
+            "Create a purpose-specific handoff context from current qCoder evidence, preserving Evidence Review "
+            "labels, supported interpretations, unproven statements, and user-controlled next checks."
+        ),
         "create_evidence_context_pack": "Create a current-evidence context packet with evidence limits and next-step framing.",
         "create_context_session_card": "Create a current-session context card without memory or history.",
-        "create_run_readiness_card": "Create a bounded readiness card for the next development check.",
-        "create_result_review_context_card": "Create a bounded review card from share-safe user-provided result evidence.",
-        "create_next_check_plan": "Create a bounded next-check plan from current-request evidence.",
+        "create_run_readiness_card": (
+            "Review current supplied evidence for readiness, assumptions, supported statements, unproven "
+            "statements, and bounded next checks without claiming verification."
+        ),
+        "create_result_review_context_card": (
+            "Review share-safe user-provided result evidence with Observed, User-provided, Inferred, Assumed, "
+            "Not proven, and Suggested next check semantics."
+        ),
+        "create_next_check_plan": (
+            "Create an ordered, bounded, user-controlled next-check plan tied to current-request evidence and "
+            "uncertainties; qCoder does not execute the checks."
+        ),
         "create_single_loop_evidence_diff": (
-            "Compare two explicitly supplied current-loop contexts without history or lookup. "
+            "Describe what changed between two explicitly supplied current-loop contexts without history or lookup; "
+            "this is not causal diagnosis or multi-run analysis. "
             "Use structured before/after fields and preserve salient user-provided result observations."
         ),
     }
@@ -495,8 +616,12 @@ def handle_jsonrpc_message(
         params = message.get("params") if isinstance(message.get("params"), dict) else {}
         tool_name = params.get("name")
         normalized_tool_name = str(tool_name or "")
+        canonical_tool_name = _canonical_tool_name(normalized_tool_name)
         arguments = params.get("arguments") if isinstance(params.get("arguments"), dict) else {}
-        if normalized_tool_name in TOOL_INPUT_FIELDS and set(arguments) - TOOL_INPUT_FIELDS[normalized_tool_name]:
+        if (
+            canonical_tool_name in TOOL_INPUT_FIELDS
+            and set(arguments) - TOOL_INPUT_FIELDS[canonical_tool_name]
+        ):
             payload = safe_error("unsupported_tool_argument")
             return _jsonrpc_result(
                 message_id,
@@ -627,7 +752,9 @@ def _case_summary(*, payload: dict[str, Any], expected_success: bool) -> dict[st
     serialized = json.dumps(payload, sort_keys=True)
     ok_value = payload.get("ok")
     retained = payload.get("retained_artifacts", [])
-    status_category = str(payload.get("adapter_status_category") or payload.get("status_category") or "missing")
+    status_category = str(
+        payload.get("adapter_status_category") or payload.get("status_category") or "missing"
+    )
     success = ok_value is True or status_category == "success_2xx"
     return {
         "expected_outcome_met": success if expected_success else not success,
@@ -728,7 +855,9 @@ def _run_full_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
                 artifact_text=safe_text,
                 current_goal="Choose the next bounded development check.",
                 open_questions=["Which assumption should be clarified next?"],
-                explicit_assumptions=["The evidence summary is share-safe and current-session only."],
+                explicit_assumptions=[
+                    "The evidence summary is share-safe and current-session only."
+                ],
             ),
             expected_success=True,
         ),
@@ -809,11 +938,16 @@ def _run_full_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
         ("prompt_mode_plan_next_checks_allowed", "plan_next_checks"),
     )
     rate_limit_pause = (
-        str(prompt_context_payload.get("adapter_status_category") or prompt_context_payload.get("status_category"))
+        str(
+            prompt_context_payload.get("adapter_status_category")
+            or prompt_context_payload.get("status_category")
+        )
         == "http_429"
     )
     retry_after_category = (
-        str(prompt_context_payload.get("retry_after_category") or "absent") if rate_limit_pause else "absent"
+        str(prompt_context_payload.get("retry_after_category") or "absent")
+        if rate_limit_pause
+        else "absent"
     )
     if rate_limit_pause:
         for pending_name, _pending_mode in prompt_mode_cases:
@@ -840,7 +974,10 @@ def _run_full_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
                 mode=mode,
             )
             cases[case_name] = _case_summary(payload=payload, expected_success=True)
-            if str(payload.get("adapter_status_category") or payload.get("status_category")) == "http_429":
+            if (
+                str(payload.get("adapter_status_category") or payload.get("status_category"))
+                == "http_429"
+            ):
                 rate_limit_pause = True
                 retry_after_category = str(payload.get("retry_after_category") or "absent")
                 for pending_name, _pending_mode in prompt_mode_cases[index + 1 :]:
@@ -892,7 +1029,9 @@ def _run_full_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
         "approved_tool_calls_passed": all(cases[name]["expected_outcome_met"] for name in approved),
         "unsafe_calls_rejected": all(cases[name]["expected_outcome_met"] for name in unsafe),
         "token_printed": False,
-        "raw_payload_echo": "no" if all(case["raw_payload_echo_absent"] for case in cases.values()) else "yes",
+        "raw_payload_echo": "no"
+        if all(case["raw_payload_echo_absent"] for case in cases.values())
+        else "yes",
         "retention_category": "process_and_discard_or_rejected",
         "retained_artifacts_empty": "yes"
         if all(case["retained_artifacts_empty_or_absent"] for case in cases.values())
@@ -901,7 +1040,9 @@ def _run_full_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
         "public_claim_created": "no",
         "source_modified": "no",
         "diagnostic_mode": "full",
-        "diagnostic_status_category": "rate_limit_pause_required" if rate_limit_pause else "complete",
+        "diagnostic_status_category": "rate_limit_pause_required"
+        if rate_limit_pause
+        else "complete",
         "retry_after_category": retry_after_category,
         "token_accepted": "yes",
         "token_onboarding_failure": False,
@@ -959,7 +1100,9 @@ def run_smoke(*, base_url: str, token_file: str | Path, full: bool = False) -> d
     )
     bounded_case = _case_summary(payload=bounded_payload, expected_success=True)
     status_category = str(
-        bounded_payload.get("adapter_status_category") or bounded_payload.get("status_category") or "missing"
+        bounded_payload.get("adapter_status_category")
+        or bounded_payload.get("status_category")
+        or "missing"
     )
     rate_limited = status_category == "http_429"
     token_rejected = status_category in {"http_401", "http_403"}
@@ -985,7 +1128,13 @@ def run_smoke(*, base_url: str, token_file: str | Path, full: bool = False) -> d
             else "connection_check_failed"
         ),
         "token_file_category": "present_safe",
-        "token_accepted": "yes" if ready else "not_rejected" if rate_limited else "no" if token_rejected else "unknown",
+        "token_accepted": "yes"
+        if ready
+        else "not_rejected"
+        if rate_limited
+        else "no"
+        if token_rejected
+        else "unknown",
         "endpoint_reachable": endpoint_reachable,
         "tools_visible": list(EXPECTED_TOOLS),
         "tools_exact": True,
@@ -1066,13 +1215,21 @@ def main(argv: list[str] | None = None) -> int:
         if args.json:
             print(json.dumps(result, indent=2, sort_keys=True))
         elif args.full:
-            print(f"Context Bridge full diagnostic: {result.get('diagnostic_status_category', 'check_required')}")
-            print(f"Token onboarding failure: {'yes' if result.get('token_onboarding_failure') else 'no'}")
+            print(
+                f"Context Bridge full diagnostic: {result.get('diagnostic_status_category', 'check_required')}"
+            )
+            print(
+                f"Token onboarding failure: {'yes' if result.get('token_onboarding_failure') else 'no'}"
+            )
             print(f"Tools discovered: {len(result.get('tools_visible', []))}")
             if result.get("diagnostic_status_category") == "rate_limit_pause_required":
                 print("Rate limit: pause before continuing the remaining diagnostic checks")
         else:
-            status = "ready" if result.get("ok") else result.get("connection_status_category", "check required")
+            status = (
+                "ready"
+                if result.get("ok")
+                else result.get("connection_status_category", "check required")
+            )
             print(f"Context Bridge connection: {status}")
             print(f"Token accepted: {result.get('token_accepted', 'unknown')}")
             print(f"Tools discovered: {result.get('tools_discovered', 0)}")

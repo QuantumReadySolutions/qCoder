@@ -21,7 +21,7 @@ Public `qcoder` ships **OSS local commands**, Explorer Beta compatibility comman
 
 - **OSS commands** (`analyze`, `batch`, `context`, `review`) are Apache-2.0, local-first/offline, and useful without an account or token. They do not upload data, call a qCoder hosted service, or run QPU/simulator jobs.
 - **Explorer Beta commands** (`qcoder explorer status`, `qcoder explorer demo`, `qcoder explorer evidence`) are account-backed checks for Explorer Beta status, built-in guided evidence samples, and derived-context guided evidence for user-owned OpenQASM 2 artifacts. The older `qcoder student ...` commands remain available as beta compatibility aliases.
-- **Context Bridge adapter commands** (`qcoder context-bridge mcp serve`, `qcoder context-bridge mcp smoke`) are for eligible Explorer users with support-managed Context Bridge token access. They expose bounded current-evidence context tools to configured MCP clients and read tokens from a local token file.
+- **Context Bridge adapter commands** (`qcoder context-bridge mcp serve`, `qcoder context-bridge mcp smoke`) are for eligible Explorer users who create a display-once token through Account Center. Support handles revocation and lost-token replacement. The adapter exposes bounded current-evidence context tools to configured Cursor, Claude Code, and Codex clients and reads the token from a local token file.
 - Explorer Beta custom evidence uses locally derived qCoder context/features. The CLI may read QASM locally, but the hosted request must not include raw QASM, raw source text, local paths, operation lists, raw counts, notebooks, prompts, tokens, auth headers, or cookies.
 - Explorer Beta custom evidence is stateless in this v0 slice; it does not create persistent Explorer history.
 - **`qcoder pro` bootstrap/workflow commands** are archived pilot/client-contract surfaces. They are not a Pro purchase path, not a current public signup path, and not generally available hosted Pro.
@@ -42,6 +42,22 @@ Eligible Explorer users can discover exactly these eight Context Bridge tools:
 - `create_single_loop_evidence_diff`
 
 `create_prompt_context` supports `explain`, `review`, `revise`, `troubleshoot`, and `plan_next_checks` modes; omitting the mode preserves the default behavior. Context Bridge uses only evidence explicitly supplied for the current request, processes it without retaining artifacts, and does not scan repositories, edit files, execute circuits or next checks, keep history or memory, score correctness, or perform autonomous work.
+
+## Review current evidence
+
+Evidence Review is an Explorer capability for understanding what explicitly supplied current evidence supports, what remains unproven, what changed within one bounded workflow, and what the user may choose to check next. It uses the existing Context Bridge operations:
+
+- before an external run, use `create_run_readiness_card`;
+- for a compact user-provided result summary, use `create_result_review_context_card`;
+- for two explicitly supplied points in one workflow, use `create_single_loop_evidence_diff`;
+- for ordered user-controlled follow-up, use `create_next_check_plan`;
+- for assistant handoff, use `create_prompt_context` with `review`, `troubleshoot`, or `plan_next_checks`.
+
+Core Evidence Review output uses these provenance and evidence-status labels: **Observed**, **User-provided**, **Inferred**, **Assumed**, **Not proven**, and **Suggested next check**. They are not confidence percentages, assurance ratings, or correctness scores. “What the evidence supports” is a bounded interpretation, not independent verification. “What changed” is a descriptive comparison of explicit inputs, not history, causality, or multi-run analysis. Suggested checks remain user-controlled and are not executed by qCoder.
+
+Local qCoder OSS commands provide deterministic local analysis and review artifacts. Circuit Workbench is the machine-local selected-evidence surface in supported Cursor setup. Explorer Evidence Review is the complete guided current-session interpretation capability delivered through Context Bridge; Context Bridge carries the tools into supported coding clients but does not own separate review reasoning. The Explorer Evidence Loop sequences preparation, an external run, review, bounded comparison, next checks, and handoff. ChatGPT uses a manual share-safe Prompt Context handoff and is not a connected Context Bridge client.
+
+See the sanitized [`Evidence Review walkthrough`](examples/08_evidence_review.md).
 
 ## Quick start
 

@@ -23,7 +23,9 @@ The public `qcoder` package on `main` ships:
 
 qCoder OSS commands are local/offline after package installation: no LLM calls, no telemetry upload, no QPU/simulator execution, and no card generation in the public package. OSS is the current path for user-owned artifacts.
 
-Portable JSON and Markdown artifacts are intended for humans, chat LLMs, and agentic IDEs to consume in user-managed workflows. Productized Cursor, Claude Code, Codex, or MCP integration is not part of this public package surface unless separately implemented and documented.
+Portable JSON and Markdown artifacts are intended for humans, chat LLMs, and coding tools to consume in user-managed workflows. Local OSS artifacts remain independent of hosted integrations. For eligible Explorer users, the separately documented Context Bridge adapter carries bounded current-session Evidence Review tools into Cursor, Claude Code, and Codex. ChatGPT remains a manual share-safe Prompt Context handoff rather than a connected Context Bridge client.
+
+Evidence Review is the Explorer interpretation capability that organizes explicitly supplied evidence into observations, user-provided facts, bounded inferences, assumptions, supported statements, unproven statements, descriptive current-loop changes, and user-controlled next checks. It is not persistence, history, multi-run analysis, repository access, correctness verification, or autonomous execution. Circuit Workbench is a machine-local selected-evidence surface; Context Bridge is the delivery path; the Explorer Evidence Loop is the spanning workflow.
 
 Use `--share-safe` when producing artifacts intended for ChatGPT, Cursor, email, GitHub issues, or support threads. Share-safe mode redacts local paths and token/header-like strings, adds explicit `share_safe` metadata, and marks raw QASM/local paths/tokens as not included. It is designed for safer sharing, but users should still review artifacts before sharing because qCoder cannot guarantee that every sensitive project-specific detail has been removed.
 
