@@ -10,6 +10,7 @@ The current public local path is **qCoder OSS**. OSS commands run locally and do
 - `qcoder batch`
 - `qcoder context`
 - `qcoder review`
+- `qcoder blueprint` (unreleased branch-local machine-local selected-source evidence)
 - `qcoder explorer` (Explorer Beta account-backed status/demo/evidence checks)
 - `qcoder context-bridge` (token-backed Context Bridge MCP adapter for eligible Explorer users)
 - `qcoder student` (temporary compatibility alias for Explorer Beta)
@@ -30,7 +31,8 @@ Public `qcoder` ships **OSS local commands**, Explorer Beta compatibility comman
 
 ## Context Bridge inventory
 
-Eligible Explorer users can discover exactly these eight Context Bridge tools:
+This unreleased development branch preserves the existing eight Evidence Review operations and
+adds four Algorithm Blueprint operations, for exactly twelve Context Bridge capability tools:
 
 - `get_guided_evidence_context`
 - `create_prompt_context`
@@ -40,6 +42,10 @@ Eligible Explorer users can discover exactly these eight Context Bridge tools:
 - `create_result_review_context_card`
 - `create_next_check_plan`
 - `create_single_loop_evidence_diff`
+- `create_algorithm_intent_card`
+- `create_implementation_blueprint`
+- `create_generation_context_pack`
+- `create_source_blueprint_alignment_review`
 
 `create_prompt_context` supports `explain`, `review`, `revise`, `troubleshoot`, and `plan_next_checks` modes; omitting the mode preserves the default behavior. Context Bridge uses only evidence explicitly supplied for the current request, processes it without retaining artifacts, and does not scan repositories, edit files, execute circuits or next checks, keep history or memory, score correctness, or perform autonomous work.
 
@@ -58,6 +64,33 @@ Core Evidence Review output uses these provenance and evidence-status labels: **
 Local qCoder OSS commands provide deterministic local analysis and review artifacts. Circuit Workbench is the machine-local selected-evidence surface in supported Cursor setup. Explorer Evidence Review is the complete guided current-session interpretation capability delivered through Context Bridge; Context Bridge carries the tools into supported coding clients but does not own separate review reasoning. The Explorer Evidence Loop sequences preparation, an external run, review, bounded comparison, next checks, and handoff. ChatGPT uses a manual share-safe Prompt Context handoff and is not a connected Context Bridge client.
 
 See the sanitized [`Evidence Review walkthrough`](examples/08_evidence_review.md).
+
+## Prepare an Algorithm Blueprint
+
+Algorithm Blueprint is an Explorer capability for turning explicitly supplied human intent into a
+reviewable, user-confirmed Qiskit-first build contract before code generation, then reviewing
+compact static Python evidence against that contract. The branch-local workflow uses:
+
+- `create_algorithm_intent_card` to preserve original intent, provenance, clarification questions,
+  and explicit user-reviewed confirmation;
+- `create_implementation_blueprint` to return an Implementation Blueprint and a distinct Output
+  Evidence Contract without adding another tool;
+- `create_generation_context_pack` to prepare requirements for code generation in Cursor, Claude
+  Code, Codex, or a manual ChatGPT handoff;
+- external, user-controlled Python generation outside qCoder;
+- `qcoder blueprint source-evidence` for deterministic machine-local AST extraction from one
+  selected `.py` file or bounded stdin; and
+- `create_source_blueprint_alignment_review` to review only compact supplied static evidence.
+
+The available profiles are Generic Qiskit Blueprint, Grover Search, and QAOA. Profiles ask
+deterministic questions and surface alternatives; they do not silently choose an oracle, QAOA
+depth, mixer, optimizer, backend, shots, or parameter strategy. Static motif observations do not
+prove algorithm identity, correctness, completeness, executability, or runtime behavior. qCoder
+does not scan a repository, import or execute selected source, generate code, edit files, invoke a
+simulator/backend/QPU, retain artifacts, or retrieve prior artifacts.
+
+See the synthetic [`Algorithm Blueprint walkthrough`](examples/09_algorithm_blueprint.md). This
+feature-branch documentation is preparation only and does not claim publication or public rollout.
 
 ## Quick start
 
@@ -78,6 +111,7 @@ Create local context and review artifacts:
 ```bash
 qcoder context path/to/circuit.qasm --out-json preflight.context.json --out-md preflight.context.md
 qcoder review --counts-json counts.json --format qiskit_counts --preflight-json preflight.context.json --out-json execution.review.json --out-md execution.review.md
+qcoder blueprint source-evidence --source-file selected_generated.py
 ```
 
 For artifacts you intend to paste into ChatGPT, Cursor, email, GitHub issues, or support threads, add `--share-safe`:

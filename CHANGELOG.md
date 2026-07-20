@@ -65,6 +65,12 @@ The format is based on common practice for pre-1.0 semantic versioning: **`MAJOR
 
 ## Unreleased
 
+- Add the unreleased Algorithm Blueprint v1 contract: four additive Context Bridge operations,
+  explicit intent confirmation, Generic Qiskit/Grover/QAOA profiles, a distinct Output Evidence
+  Contract, machine-local Selected Python Source Evidence, and bounded static-source alignment.
+- Preserve exactly five Prompt Context modes, all existing Evidence Review requests and aliases,
+  process-and-discard behavior, and the no-execution/no-correctness boundaries.
+
 ### Evidence Review
 
 - Align the existing eight Context Bridge tools as the bounded Explorer Evidence Review capability for current-session readiness, result interpretation, two-point comparison, user-controlled next checks, and purpose-specific handoff.

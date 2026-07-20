@@ -42,6 +42,10 @@ from qcoder.pro_preview.manifest import (
     write_workflow_manifest,
 )
 from qcoder.tools.batch import analyze_qasm_dir_to_jsonl
+from qcoder.algorithm_blueprint import (
+    extract_selected_python_file_evidence,
+    extract_selected_python_source_evidence,
+)
 
 EXPLORER_BETA_DOCS_URL = "https://qcoder.ai/manual/student-beta/"
 OSS_DOCS_URL = "https://qcoder.ai/manual/oss/"
@@ -825,6 +829,68 @@ def _cmd_context_bridge(argv: list[str]) -> int:
     return context_bridge_main(argv)
 
 
+def _cmd_blueprint(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="qcoder blueprint",
+        description="Create deterministic machine-local Algorithm Blueprint evidence.",
+    )
+    subparsers = parser.add_subparsers(dest="blueprint_command")
+    source_parser = subparsers.add_parser(
+        "source-evidence",
+        help="Extract compact static evidence from one selected Python file or bounded stdin.",
+    )
+    source_group = source_parser.add_mutually_exclusive_group(required=True)
+    source_group.add_argument(
+        "--source-file",
+        help="One explicitly selected .py file; no directory or import traversal is performed.",
+    )
+    source_group.add_argument(
+        "--excerpt-stdin",
+        action="store_true",
+        help="Read one bounded Python excerpt from stdin and discard it after extraction.",
+    )
+    source_parser.add_argument(
+        "--logical-label",
+        default=None,
+        help="Share-safe logical source label; defaults to the selected basename or 'stdin excerpt'.",
+    )
+    source_parser.add_argument("--symbol", default=None, help="Optional selected function or class name.")
+    source_parser.add_argument("--start-line", type=int, default=None)
+    source_parser.add_argument("--end-line", type=int, default=None)
+    args = parser.parse_args(argv)
+    if args.blueprint_command is None:
+        parser.print_help()
+        return 0
+    if (args.start_line is None) != (args.end_line is None):
+        print("qcoder blueprint: --start-line and --end-line must be supplied together.", file=sys.stderr)
+        return 2
+    line_span = (
+        (args.start_line, args.end_line)
+        if args.start_line is not None and args.end_line is not None
+        else None
+    )
+    try:
+        if args.source_file:
+            artifact = extract_selected_python_file_evidence(
+                args.source_file,
+                logical_source_label=args.logical_label,
+                selected_symbol=args.symbol,
+                line_span=line_span,
+            )
+        else:
+            artifact = extract_selected_python_source_evidence(
+                sys.stdin.read(),
+                logical_source_label=args.logical_label or "stdin excerpt",
+                selected_symbol=args.symbol,
+                line_span=line_span,
+            )
+    except ValueError as exc:
+        print(f"qcoder blueprint: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(artifact, indent=2, sort_keys=True))
+    return 0
+
+
 def _cmd_pro(argv: list[str]) -> int:
     p = argparse.ArgumentParser(
         prog="qcoder pro",
@@ -1206,14 +1272,15 @@ def _cmd_pro(argv: list[str]) -> int:
 
 def _print_root_help() -> None:
     print(
-        "usage: qcoder [--version | -V] [-h] {analyze,batch,context,review,explorer,context-bridge,pro,student} ...\n\n"
+        "usage: qcoder [--version | -V] [-h] {analyze,batch,context,review,blueprint,explorer,context-bridge,pro,student} ...\n\n"
         "Quantum circuit analysis CLI.\n\n"
         "positional arguments:\n"
-        "  {analyze,batch,context,review,explorer,context-bridge,pro,student}  subcommand\n\n"
+        "  {analyze,batch,context,review,blueprint,explorer,context-bridge,pro,student}  subcommand\n\n"
         "  analyze          Analyze a QASM file (feature extraction + metadata + run config).\n"
         "  batch            Batch extract a directory to JSONL (requires --out).\n"
         "  context          Build deterministic preflight context artifacts.\n"
         "  review           Build deterministic execution review artifacts from counts.\n"
+        "  blueprint        Build machine-local static evidence for Algorithm Blueprint.\n"
         "  explorer         Explorer Beta status/demo/evidence checks.\n"
         "  context-bridge   Run the Context Bridge MCP adapter for eligible Explorer users.\n"
         "  pro              Archived Pro client-contract shell (not current public product).\n"
@@ -1246,6 +1313,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_context(rest)
     if cmd == "review":
         return _cmd_review(rest)
+    if cmd == "blueprint":
+        return _cmd_blueprint(rest)
     if cmd == "explorer":
         return _cmd_explorer(rest)
     if cmd == "context-bridge":
@@ -1256,7 +1325,7 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_student(rest)
 
     print(
-        f"qcoder: unknown subcommand {cmd!r} (expected analyze, batch, context, review, explorer, context-bridge, pro, or student)",
+        f"qcoder: unknown subcommand {cmd!r} (expected analyze, batch, context, review, blueprint, explorer, context-bridge, pro, or student)",
         file=sys.stderr,
     )
     print("Run `qcoder --help` for usage.", file=sys.stderr)

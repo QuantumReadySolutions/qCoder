@@ -12,6 +12,7 @@ Copy-paste walkthroughs for the qCoder OSS local workflow.
 - [`06_single_run_intelligence.md`](./06_single_run_intelligence.md) - OSS single-run intelligence workflow.
 - [`07_byo_llm_artifact_pack.md`](./07_byo_llm_artifact_pack.md) - BYO LLM artifact pack.
 - [`08_evidence_review.md`](./08_evidence_review.md) - synthetic Explorer Evidence Review walkthrough using existing Context Bridge operations.
+- [`09_algorithm_blueprint.md`](./09_algorithm_blueprint.md) - synthetic intent-to-static-source Algorithm Blueprint walkthrough for the unreleased feature branch.
 - [`prompts/single_run_artifact_to_action.md`](./prompts/single_run_artifact_to_action.md) - copy-paste BYO prompt.
 
 ## Walkthroughs
@@ -24,6 +25,7 @@ Copy-paste walkthroughs for the qCoder OSS local workflow.
 6. [`06_single_run_intelligence.md`](./06_single_run_intelligence.md) - OSS single-run intelligence: preflight → your run → review → optional BYO LLM → next local action.
 7. [`07_byo_llm_artifact_pack.md`](./07_byo_llm_artifact_pack.md) - which artifacts to attach to a user-managed LLM; JSON vs Markdown roles.
 8. [`08_evidence_review.md`](./08_evidence_review.md) - bounded current-session Evidence Review, next checks, and handoff with synthetic evidence.
+9. [`09_algorithm_blueprint.md`](./09_algorithm_blueprint.md) - explicit confirmation, Qiskit-first blueprint, external generation, local static extraction, and bounded alignment.
 9. [`prompts/single_run_artifact_to_action.md`](./prompts/single_run_artifact_to_action.md) - copy-paste BYO prompt for artifact-to-action follow-up.
 
 ## Boundary reminder

@@ -56,7 +56,17 @@ def _token_file(tmp_path: Path) -> Path:
 def test_contract_snapshot_has_exact_inventories_labels_and_boundaries() -> None:
     snapshot = evidence_review_contract_snapshot()
     assert snapshot["tool_names"] == list(EXPECTED_TOOLS)
-    assert len(snapshot["tool_names"]) == 8
+    assert len(snapshot["tool_names"]) == 12
+    assert snapshot["tool_names"][:8] == [
+        "get_guided_evidence_context",
+        "create_prompt_context",
+        "create_evidence_context_pack",
+        "create_context_session_card",
+        "create_run_readiness_card",
+        "create_result_review_context_card",
+        "create_next_check_plan",
+        "create_single_loop_evidence_diff",
+    ]
     assert snapshot["prompt_context_modes"] == sorted(PROMPT_CONTEXT_MODES)
     assert len(snapshot["prompt_context_modes"]) == 5
     assert [
@@ -77,7 +87,7 @@ def test_contract_snapshot_has_exact_inventories_labels_and_boundaries() -> None
 def test_discovery_exposes_no_new_tool_or_hidden_orchestration() -> None:
     names = [descriptor["name"] for descriptor in tool_descriptors()]
     assert names == list(EXPECTED_TOOLS)
-    assert len(names) == 8
+    assert len(names) == 12
     assert all("evidence_review_summary" not in name for name in names)
     assert all("orchestrat" not in name for name in names)
     assert not set(TOOL_ALIASES) & set(names)

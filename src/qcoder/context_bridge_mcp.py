@@ -10,6 +10,18 @@ from typing import Any, Callable
 import urllib.error
 import urllib.request
 
+from qcoder.algorithm_blueprint import (
+    ALGORITHM_BLUEPRINT_ARTIFACT_DISCRIMINATORS,
+    ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS,
+    ALGORITHM_BLUEPRINT_TOOL_NAMES,
+    ALGORITHM_BLUEPRINT_TOOL_REQUIRED_FIELDS,
+    CONFIRMATION_STATES,
+    EVIDENCE_COVERAGE_VALUES,
+    ORIGIN_VALUES,
+    PROFILE_IDS,
+    algorithm_blueprint_contract_snapshot,
+)
+
 DEFAULT_BASE_URL = "https://preview-api.qcoder.ai"
 ROUTE_PATH = "/v0/internal/hosted-mcp/context"
 EXPECTED_TOOLS = (
@@ -21,6 +33,7 @@ EXPECTED_TOOLS = (
     "create_result_review_context_card",
     "create_next_check_plan",
     "create_single_loop_evidence_diff",
+    *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 TOOL_ALIASES = {
     "get_context_from_share_safe_artifact": "get_guided_evidence_context",
@@ -101,8 +114,14 @@ TOOL_INPUT_FIELDS = {
             "after",
         }
     ),
+    **ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS,
 }
-TOOL_REQUIRED_FIELDS = {tool_name: ("artifact_text",) for tool_name in EXPECTED_TOOLS}
+TOOL_REQUIRED_FIELDS = {
+    tool_name: ("artifact_text",)
+    for tool_name in EXPECTED_TOOLS
+    if tool_name not in ALGORITHM_BLUEPRINT_TOOL_NAMES
+}
+TOOL_REQUIRED_FIELDS.update(ALGORITHM_BLUEPRINT_TOOL_REQUIRED_FIELDS)
 EVIDENCE_CONFIDENCE_LABELS = (
     (
         "observed",
@@ -156,6 +175,7 @@ EVIDENCE_REVIEW_ARTIFACT_DISCRIMINATORS = {
         "field": "diff_type",
         "value": "explicit_before_after_current_loop",
     },
+    **ALGORITHM_BLUEPRINT_ARTIFACT_DISCRIMINATORS,
 }
 EVIDENCE_REVIEW_BOUNDARIES = (
     "current artifact and current session only",
@@ -181,6 +201,11 @@ FORBIDDEN_TEXT_MARKERS = (
     "../",
     "repo_path",
     "file_path",
+    "repository_root",
+    "directory_root",
+    "workspace_root",
+    "source_code",
+    '"command"',
     "raw_qasm",
     "raw_counts",
     "provider_result",
@@ -203,6 +228,38 @@ FORBIDDEN_TEXT_MARKERS = (
     "optimize shots",
     "execute this",
     "edit code",
+)
+FORBIDDEN_PAYLOAD_FIELDS = frozenset(
+    {
+        "file_path",
+        "path",
+        "workspace_path",
+        "workspace_root",
+        "repository_root",
+        "directory_root",
+        "source_path",
+        "notebook_path",
+        "raw_source",
+        "source_code",
+        "source_excerpt",
+        "raw_circuit",
+        "raw_qasm",
+        "qasm_text",
+        "raw_counts",
+        "counts",
+        "provider_result",
+        "provider_result_payload",
+        "raw_provider_result",
+        "result_payload",
+        "mcp_payload",
+        "stored_card_id",
+        "prior_session_id",
+        "session_id",
+        "artifact_id",
+        "command",
+        "token",
+        "authorization",
+    }
 )
 
 
@@ -264,10 +321,39 @@ def validate_optional_payload(value: object) -> str:
         return "payload_not_json_serializable"
     if len(serialized) > MAX_ARTIFACT_TEXT_CHARS:
         return "artifact_text_too_large"
-    lowered = serialized.lower()
-    if any(marker in lowered for marker in FORBIDDEN_TEXT_MARKERS):
+    if _contains_forbidden_payload_field(value):
         return "forbidden_input_value"
+    for text_value in _payload_text_values(value):
+        lowered = text_value.lower()
+        if any(marker in lowered for marker in FORBIDDEN_TEXT_MARKERS):
+            return "forbidden_input_value"
     return "ok"
+
+
+def _contains_forbidden_payload_field(value: object) -> bool:
+    if isinstance(value, dict):
+        return any(
+            str(key).strip().lower() in FORBIDDEN_PAYLOAD_FIELDS
+            or _contains_forbidden_payload_field(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, list):
+        return any(_contains_forbidden_payload_field(item) for item in value)
+    return False
+
+
+def _payload_text_values(value: object) -> list[str]:
+    if isinstance(value, dict):
+        result: list[str] = []
+        for item in value.values():
+            result.extend(_payload_text_values(item))
+        return result
+    if isinstance(value, list):
+        result = []
+        for item in value:
+            result.extend(_payload_text_values(item))
+        return result
+    return [value] if isinstance(value, str) else []
 
 
 def _has_explicit_side(value: object) -> bool:
@@ -341,6 +427,7 @@ def evidence_review_contract_snapshot() -> dict[str, Any]:
         "context_scope": "current_artifact_current_session",
         "retention": "process_and_discard",
         "boundaries": list(EVIDENCE_REVIEW_BOUNDARIES),
+        "algorithm_blueprint": algorithm_blueprint_contract_snapshot(),
     }
 
 
@@ -361,14 +448,13 @@ def post_context_bridge(
     current_card_context: object | None = None,
     before: object | None = None,
     after: object | None = None,
+    tool_arguments: dict[str, Any] | None = None,
     opener: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
     canonical_tool_name = _canonical_tool_name(tool_name)
     if canonical_tool_name not in EXPECTED_TOOLS:
         return safe_error("unknown_tool")
-    supplied_optional_fields = {
-        key
-        for key, value in {
+    direct_arguments = {
             "mode": mode,
             "current_goal": current_goal,
             "evidence_basis": evidence_basis,
@@ -378,10 +464,18 @@ def post_context_bridge(
             "current_card_context": current_card_context,
             "before": before,
             "after": after,
-        }.items()
-        if value is not None
     }
-    if supplied_optional_fields - TOOL_INPUT_FIELDS[canonical_tool_name]:
+    arguments = dict(tool_arguments or {})
+    for key, value in direct_arguments.items():
+        if value is not None:
+            if key in arguments and arguments[key] != value:
+                return safe_error("conflicting_tool_argument")
+            arguments[key] = value
+    supplied_fields = set(arguments)
+    if artifact_text is not None:
+        supplied_fields.add("artifact_text")
+    supplied_fields.update({"artifact_kind", "client_context"})
+    if supplied_fields - TOOL_INPUT_FIELDS[canonical_tool_name]:
         return safe_error("unsupported_tool_argument")
     if mode is not None:
         if canonical_tool_name != "create_prompt_context":
@@ -389,25 +483,21 @@ def post_context_bridge(
         if str(mode).strip() not in PROMPT_CONTEXT_MODES:
             return safe_error("invalid_prompt_context_mode")
     if canonical_tool_name == "create_single_loop_evidence_diff" and (
-        not _has_explicit_side(before) or not _has_explicit_side(after)
+        not _has_explicit_side(arguments.get("before"))
+        or not _has_explicit_side(arguments.get("after"))
     ):
         return safe_error("missing_explicit_diff_side")
     if artifact_kind != DEFAULT_ARTIFACT_KIND:
         return safe_error("unsupported_artifact_kind")
-    text_validation = validate_artifact_text(artifact_text)
-    if text_validation != "ok":
-        return safe_error(text_validation)
-    optional_payloads = (
-        current_goal,
-        evidence_basis,
-        share_safe_evidence_summary,
-        open_questions,
-        explicit_assumptions,
-        current_card_context,
-        before,
-        after,
-    )
-    for payload in optional_payloads:
+    if "artifact_text" in TOOL_REQUIRED_FIELDS[canonical_tool_name] or artifact_text is not None:
+        text_validation = validate_artifact_text(artifact_text)
+        if text_validation != "ok":
+            return safe_error(text_validation)
+    for required_field in TOOL_REQUIRED_FIELDS[canonical_tool_name]:
+        required_value = artifact_text if required_field == "artifact_text" else arguments.get(required_field)
+        if required_value is None or required_value == "" or required_value == [] or required_value == {}:
+            return safe_error(f"missing_{required_field}")
+    for payload in arguments.values():
         payload_validation = validate_optional_payload(payload)
         if payload_validation != "ok":
             return safe_error(payload_validation)
@@ -415,27 +505,17 @@ def post_context_bridge(
     if not token_ok:
         return safe_error(token_category, status_category="auth_preflight_failed")
 
-    body = {
+    body: dict[str, Any] = {
         "tool_name": canonical_tool_name,
         "artifact_kind": artifact_kind,
-        "artifact_text": artifact_text,
         "client_context": {
             "client_version": "qcoder-context-bridge-mcp-adapter",
             **(client_context or {}),
         },
     }
-    optional_fields = {
-        "mode": mode,
-        "current_goal": current_goal,
-        "evidence_basis": evidence_basis,
-        "share_safe_evidence_summary": share_safe_evidence_summary,
-        "open_questions": open_questions,
-        "explicit_assumptions": explicit_assumptions,
-        "current_card_context": current_card_context,
-        "before": before,
-        "after": after,
-    }
-    body.update({key: value for key, value in optional_fields.items() if value is not None})
+    if artifact_text is not None:
+        body["artifact_text"] = artifact_text
+    body.update(arguments)
     data = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
     request = urllib.request.Request(
         base_url.rstrip("/") + ROUTE_PATH,
@@ -548,6 +628,148 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
             "properties": diff_side_properties,
             "additionalProperties": False,
         },
+        "original_user_intent": {
+            "type": "string",
+            "description": "Original user request preserved in the Algorithm Intent Card.",
+        },
+        "profile_id": {
+            "type": "string",
+            "enum": list(PROFILE_IDS),
+            "description": "Explicitly selected Algorithm Blueprint profile.",
+        },
+        "proposed_interpretation": {
+            "type": "object",
+            "additionalProperties": True,
+            "description": "Assistant- or user-supplied proposed structured interpretation; qCoder validates but does not authoritatively infer it.",
+        },
+        "requirements": {"type": "array", "items": {"type": "string"}},
+        "constraints": {"type": "array", "items": {"type": "string"}},
+        "non_goals": {"type": "array", "items": {"type": "string"}},
+        "field_provenance": {
+            "type": "object",
+            "additionalProperties": {"type": "string", "enum": list(ORIGIN_VALUES)},
+        },
+        "revision_notes": {"type": "array", "items": {"type": "string"}},
+        "requested_confirmation_state": {
+            "type": "string",
+            "enum": list(CONFIRMATION_STATES),
+            "default": "proposed",
+        },
+        "confirmation_assertion": {
+            "type": "object",
+            "properties": {"user_reviewed": {"type": "boolean"}},
+            "required": ["user_reviewed"],
+            "additionalProperties": False,
+            "description": "Explicit assertion that the user reviewed the supplied interpretation; not identity or scientific verification.",
+        },
+        "accepted_unresolved_choices": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Named unresolved fields the user explicitly accepts retaining in a confirmed card.",
+        },
+        "algorithm_intent_card": {
+            "type": "object",
+            "required": [
+                "artifact_type",
+                "schema_version",
+                "artifact_digest",
+                "original_user_intent",
+                "field_provenance",
+                "confirmation_state",
+            ],
+            "additionalProperties": True,
+            "description": "Explicitly supplied current-session Algorithm Intent Card.",
+        },
+        "intent_relationship": {
+            "type": "object",
+            "properties": {
+                "relationship_type": {"type": "string", "enum": ["represented_by"]},
+                "parent_artifact_digest": {"type": "string"},
+            },
+            "required": ["relationship_type", "parent_artifact_digest"],
+            "additionalProperties": False,
+        },
+        "implementation_blueprint": {
+            "type": "object",
+            "required": [
+                "artifact_type",
+                "schema_version",
+                "artifact_digest",
+                "confirmation_state",
+            ],
+            "additionalProperties": True,
+            "description": "Explicitly supplied confirmed current-session Implementation Blueprint.",
+        },
+        "output_evidence_contract": {
+            "type": "object",
+            "required": [
+                "artifact_type",
+                "schema_version",
+                "artifact_digest",
+                "parent_artifact_digest",
+                "expected_evidence",
+            ],
+            "additionalProperties": True,
+            "description": "Explicitly supplied Output Evidence Contract returned with the blueprint.",
+        },
+        "selected_python_source_evidence": {
+            "type": "object",
+            "properties": {
+                "artifact_type": {"type": "string", "enum": ["selected_python_source_evidence"]},
+                "schema_version": {"type": "integer", "enum": [1]},
+                "artifact_digest": {"type": "string"},
+                "logical_source_label": {"type": "string"},
+                "safe_basename": {"type": ["string", "null"]},
+                "selected_symbol": {"type": ["string", "null"]},
+                "bounded_line_span": {
+                    "type": ["array", "null"],
+                    "items": {"type": "integer"},
+                },
+                "origin": {"type": "string", "enum": list(ORIGIN_VALUES)},
+                "evidence_scope": {"type": "string"},
+                "evidence_coverage": {
+                    "type": "string",
+                    "enum": list(EVIDENCE_COVERAGE_VALUES),
+                },
+                "parse_status": {"type": "string"},
+                "framework_observation": {"type": "string"},
+                "imports_and_aliases": {"type": "array", "items": {"type": "object"}},
+                "circuit_construction_symbols": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                },
+                "parameter_declarations": {"type": "array", "items": {"type": "object"}},
+                "measurement_calls": {"type": "array", "items": {"type": "object"}},
+                "functions": {"type": "array", "items": {"type": "object"}},
+                "classes": {"type": "array", "items": {"type": "object"}},
+                "profile_motif_observations": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                },
+                "source_references": {"type": "array", "items": {"type": "integer"}},
+                "ambiguities": {"type": "array", "items": {"type": "string"}},
+                "extraction_limitations": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "raw_source_included": {"type": "boolean", "enum": [False]},
+                "repository_scanned": {"type": "boolean", "enum": [False]},
+                "source_executed": {"type": "boolean", "enum": [False]},
+                "source_edited": {"type": "boolean", "enum": [False]},
+                "retention": {"type": "string", "enum": ["process_and_discard"]},
+            },
+            "required": [
+                "artifact_type",
+                "schema_version",
+                "artifact_digest",
+                "evidence_scope",
+                "evidence_coverage",
+                "parse_status",
+                "raw_source_included",
+            ],
+            "additionalProperties": False,
+            "description": "Compact machine-local static evidence only; paths and raw source are not accepted.",
+        },
     }
 
 
@@ -556,7 +778,7 @@ def _tool_schema(tool_name: str) -> dict[str, Any]:
     return {
         "type": "object",
         "properties": {name: property_schemas[name] for name in TOOL_INPUT_FIELDS[tool_name]},
-        "required": ["artifact_text"],
+        "required": list(TOOL_REQUIRED_FIELDS[tool_name]),
         "additionalProperties": False,
     }
 
@@ -586,6 +808,22 @@ def tool_descriptors() -> list[dict[str, Any]]:
             "Describe what changed between two explicitly supplied current-loop contexts without history or lookup; "
             "this is not causal diagnosis or multi-run analysis. "
             "Use structured before/after fields and preserve salient user-provided result observations."
+        ),
+        "create_algorithm_intent_card": (
+            "Preserve an explicitly supplied quantum algorithm request, validate a proposed interpretation, "
+            "surface profile questions and provenance, and require explicit user-reviewed confirmation."
+        ),
+        "create_implementation_blueprint": (
+            "Create a Qiskit-first Implementation Blueprint and distinct Output Evidence Contract from an "
+            "explicitly supplied confirmed Algorithm Intent Card; no code or circuit is generated."
+        ),
+        "create_generation_context_pack": (
+            "Create a current-session Generation Context Pack for external code generation from an explicitly "
+            "supplied confirmed blueprint and matching evidence contract; qCoder does not invoke an assistant."
+        ),
+        "create_source_blueprint_alignment_review": (
+            "Review compact machine-local Selected Python Source Evidence against a confirmed blueprint, scoped "
+            "to supplied static evidence; no paths, raw source, execution, or correctness claim."
         ),
     }
     return [
@@ -647,6 +885,17 @@ def handle_jsonrpc_message(
                     "isError": True,
                 },
             )
+        direct_field_names = {
+            "mode",
+            "current_goal",
+            "evidence_basis",
+            "share_safe_evidence_summary",
+            "open_questions",
+            "explicit_assumptions",
+            "current_card_context",
+            "before",
+            "after",
+        }
         payload = post_context_bridge(
             base_url=base_url,
             token_file=token_file,
@@ -665,6 +914,13 @@ def handle_jsonrpc_message(
             current_card_context=arguments.get("current_card_context"),
             before=arguments.get("before"),
             after=arguments.get("after"),
+            tool_arguments={
+                key: value
+                for key, value in arguments.items()
+                if key
+                not in direct_field_names
+                | {"artifact_text", "artifact_kind", "client_context"}
+            },
             opener=opener,
         )
         payload = _client_visible_tool_payload(canonical_tool_name, payload)

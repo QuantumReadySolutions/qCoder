@@ -81,6 +81,10 @@ def test_tool_descriptors_are_exact_public_context_bridge_tools() -> None:
         "create_result_review_context_card",
         "create_next_check_plan",
         "create_single_loop_evidence_diff",
+        "create_algorithm_intent_card",
+        "create_implementation_blueprint",
+        "create_generation_context_pack",
+        "create_source_blueprint_alignment_review",
     ]
     assert names == list(EXPECTED_TOOLS)
     assert "suggest_next_checks" not in names
@@ -124,12 +128,39 @@ def test_tool_descriptors_advertise_only_tool_specific_fields() -> None:
         "create_single_loop_evidence_diff": {
             "artifact_text", "artifact_kind", "client_context", "current_goal", "before", "after",
         },
+        "create_algorithm_intent_card": {
+            "artifact_kind", "client_context", "original_user_intent", "profile_id",
+            "proposed_interpretation", "requirements", "constraints", "non_goals",
+            "field_provenance", "revision_notes", "requested_confirmation_state",
+            "confirmation_assertion", "accepted_unresolved_choices",
+        },
+        "create_implementation_blueprint": {
+            "artifact_kind", "client_context", "algorithm_intent_card", "intent_relationship",
+        },
+        "create_generation_context_pack": {
+            "artifact_kind", "client_context", "implementation_blueprint", "output_evidence_contract",
+        },
+        "create_source_blueprint_alignment_review": {
+            "artifact_kind", "client_context", "implementation_blueprint", "output_evidence_contract",
+            "selected_python_source_evidence",
+        },
     }
     assert set(schemas) == set(expected_properties)
     for tool_name, expected in expected_properties.items():
         schema = schemas[tool_name]
         assert set(schema["properties"]) == expected
-        assert schema["required"] == ["artifact_text"]
+        expected_required = {
+            "create_algorithm_intent_card": ["original_user_intent", "profile_id"],
+            "create_implementation_blueprint": ["algorithm_intent_card", "intent_relationship"],
+            "create_generation_context_pack": [
+                "implementation_blueprint", "output_evidence_contract",
+            ],
+            "create_source_blueprint_alignment_review": [
+                "implementation_blueprint", "output_evidence_contract",
+                "selected_python_source_evidence",
+            ],
+        }.get(tool_name, ["artifact_text"])
+        assert schema["required"] == expected_required
         assert schema["additionalProperties"] is False
 
     assert schemas["create_prompt_context"]["properties"]["mode"]["enum"] == sorted(
@@ -775,7 +806,7 @@ def test_default_smoke_is_concise_and_uses_one_bounded_network_call(
     assert result["ok"] is True
     assert result["connection_status_category"] == "ready"
     assert result["token_accepted"] == "yes"
-    assert result["tools_discovered"] == 8
+    assert result["tools_discovered"] == 12
     assert result["tools_visible"] == list(EXPECTED_TOOLS)
     assert result["bounded_call_passed"] is True
     assert result["unsafe_input_rejected"] is True
