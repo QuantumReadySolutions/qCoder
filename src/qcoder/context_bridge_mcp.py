@@ -305,6 +305,22 @@ def _canonical_tool_name(tool_name: str) -> str:
     return TOOL_ALIASES.get(tool_name, tool_name)
 
 
+def _client_visible_tool_payload(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Expose nested core-contract metadata without changing the service response."""
+
+    if tool_name != "create_run_readiness_card" or payload.get("ok") is not True:
+        return payload
+    readiness_card = payload.get("readiness_card")
+    if not isinstance(readiness_card, dict):
+        return payload
+    labels = readiness_card.get("evidence_confidence_labels")
+    if not isinstance(labels, list) or not labels:
+        return payload
+    projected = dict(payload)
+    projected.setdefault("evidence_confidence_labels", labels)
+    return projected
+
+
 def evidence_review_contract_snapshot() -> dict[str, Any]:
     """Return the sanitized adapter contract mirrored by the protected implementation."""
 
@@ -555,8 +571,8 @@ def tool_descriptors() -> list[dict[str, Any]]:
         "create_evidence_context_pack": "Create a current-evidence context packet with evidence limits and next-step framing.",
         "create_context_session_card": "Create a current-session context card without memory or history.",
         "create_run_readiness_card": (
-            "Review current supplied evidence for readiness, assumptions, supported statements, unproven "
-            "statements, and bounded next checks without claiming verification."
+            "Review current supplied evidence for readiness with applicable Observed, User-provided, Inferred, "
+            "Assumed, Not proven, and Suggested next check labels, without claiming verification."
         ),
         "create_result_review_context_card": (
             "Review share-safe user-provided result evidence with Observed, User-provided, Inferred, Assumed, "
@@ -651,6 +667,7 @@ def handle_jsonrpc_message(
             after=arguments.get("after"),
             opener=opener,
         )
+        payload = _client_visible_tool_payload(canonical_tool_name, payload)
         return _jsonrpc_result(
             message_id,
             {

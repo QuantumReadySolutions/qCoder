@@ -171,6 +171,127 @@ def test_tools_call_rejects_fields_not_advertised_for_selected_tool(tmp_path: Pa
     assert result["structuredContent"]["error_category"] == "unsupported_tool_argument"
 
 
+def test_run_readiness_call_promotes_existing_label_contract_for_named_clients(
+    tmp_path: Path,
+) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    approved_labels = [
+        "Observed",
+        "User-provided",
+        "Inferred",
+        "Assumed",
+        "Not proven",
+        "Suggested next check",
+    ]
+    readiness_card = {
+        "card_type": "share_safe_current_run_readiness",
+        "readiness_summary": "Current supplied evidence supports a bounded readiness discussion.",
+        "evidence_supplied": [{"label": "User-provided", "text": "Current evidence."}],
+        "observations": [{"label": "Observed", "text": "A bounded plan is present."}],
+        "user_provided_facts": [{"label": "User-provided", "text": "An external run is planned."}],
+        "inferences": [{"label": "Inferred", "text": "A bounded next step can be planned."}],
+        "assumptions": [{"label": "Assumed", "text": "Result bit ordering is unresolved."}],
+        "what_the_evidence_supports": [
+            {"label": "Inferred", "text": "Readiness can be discussed, not certified."}
+        ],
+        "what_remains_unproven": [
+            {"label": "Not proven", "text": "Execution and circuit correctness."}
+        ],
+        "suggested_next_check_items": [
+            {"label": "Suggested next check", "text": "Confirm result bit ordering."}
+        ],
+        "evidence_confidence_labels": [
+            {"label": label, "meaning": "Approved provenance or evidentiary status."}
+            for label in approved_labels
+        ],
+    }
+
+    class _ReadinessResponse:
+        status = 200
+        headers: dict[str, str] = {}
+
+        def __enter__(self) -> "_ReadinessResponse":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "ok": True,
+                    "tool_name": "create_run_readiness_card",
+                    "context_status": "run_readiness_card_ready",
+                    "retention": "process_and_discard",
+                    "retained_artifacts": [],
+                    "readiness_card": readiness_card,
+                }
+            ).encode("utf-8")
+
+    response = handle_jsonrpc_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "tools/call",
+            "params": {
+                "name": "create_run_readiness_card",
+                "arguments": {"artifact_text": "Share-safe current readiness evidence."},
+            },
+        },
+        base_url="https://example.invalid",
+        token_file=token_file,
+        opener=lambda *_args, **_kwargs: _ReadinessResponse(),
+    )
+
+    assert response is not None
+    result = response["result"]
+    structured = result["structuredContent"]
+    assert structured["readiness_card"] == readiness_card
+    assert [item["label"] for item in structured["evidence_confidence_labels"]] == approved_labels
+    text_payload = json.loads(result["content"][0]["text"])
+    assert [item["label"] for item in text_payload["evidence_confidence_labels"]] == approved_labels
+    assert text_payload["readiness_card"] == readiness_card
+    serialized = json.dumps(result, sort_keys=True).lower()
+    for forbidden in (
+        "confidence_score",
+        "confidence percentage",
+        "assurance rating",
+        "high confidence",
+        "medium confidence",
+        "low confidence",
+        "runtime prediction",
+        "fidelity prediction",
+        "backend ranking",
+        "entanglement verified",
+    ):
+        assert forbidden not in serialized
+
+
+def test_non_readiness_calls_are_not_given_a_synthetic_label_projection(
+    tmp_path: Path,
+) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    response = handle_jsonrpc_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "tools/call",
+            "params": {
+                "name": "get_guided_evidence_context",
+                "arguments": {"artifact_text": "Share-safe current evidence."},
+            },
+        },
+        base_url="https://example.invalid",
+        token_file=token_file,
+        opener=lambda *_args, **_kwargs: _FakeResponse(),
+    )
+
+    assert response is not None
+    assert "evidence_confidence_labels" not in response["result"]["structuredContent"]
+
+
 def test_token_file_validation_requires_private_local_file(tmp_path: Path) -> None:
     missing = tmp_path / "missing.txt"
     ok, category, token = validate_token_file(missing)

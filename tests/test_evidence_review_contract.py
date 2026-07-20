@@ -106,6 +106,15 @@ def test_legacy_aliases_are_accepted_without_becoming_discoverable(tmp_path: Pat
 
 def test_tool_descriptions_state_bounded_evidence_review_semantics() -> None:
     descriptions = {item["name"]: item["description"] for item in tool_descriptors()}
+    for label in (
+        "Observed",
+        "User-provided",
+        "Inferred",
+        "Assumed",
+        "Not proven",
+        "Suggested next check",
+    ):
+        assert label in descriptions["create_run_readiness_card"]
     assert (
         "Observed, User-provided, Inferred, Assumed"
         in descriptions["create_result_review_context_card"]
