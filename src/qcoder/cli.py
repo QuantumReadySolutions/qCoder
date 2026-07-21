@@ -46,6 +46,7 @@ from qcoder.algorithm_blueprint import (
     extract_selected_python_file_evidence,
     extract_selected_python_source_evidence,
 )
+from qcoder.development_evidence import PROFILE_IDS, SOURCE_EVIDENCE_DEPTH_GATE
 
 EXPLORER_BETA_DOCS_URL = "https://qcoder.ai/manual/student-beta/"
 OSS_DOCS_URL = "https://qcoder.ai/manual/oss/"
@@ -857,6 +858,22 @@ def _cmd_blueprint(argv: list[str]) -> int:
     source_parser.add_argument("--symbol", default=None, help="Optional selected function or class name.")
     source_parser.add_argument("--start-line", type=int, default=None)
     source_parser.add_argument("--end-line", type=int, default=None)
+    source_parser.add_argument(
+        "--source-evidence-depth",
+        choices=("disabled", SOURCE_EVIDENCE_DEPTH_GATE),
+        default=None,
+        help="Explicitly opt into bounded blueprint-relative source depth v1.",
+    )
+    source_parser.add_argument("--profile", choices=PROFILE_IDS, default=None)
+    source_parser.add_argument("--source-reference", default=None)
+    source_parser.add_argument("--blueprint-reference", default=None)
+    source_parser.add_argument(
+        "--expected-motif",
+        action="append",
+        default=[],
+        help="Confirmed or profile-expected canonical motif identifier; repeat as needed.",
+    )
+    source_parser.add_argument("--sdk-version", default=None)
     args = parser.parse_args(argv)
     if args.blueprint_command is None:
         parser.print_help()
@@ -869,6 +886,27 @@ def _cmd_blueprint(argv: list[str]) -> int:
         if args.start_line is not None and args.end_line is not None
         else None
     )
+    development_context = None
+    if args.source_evidence_depth == SOURCE_EVIDENCE_DEPTH_GATE:
+        if not all(
+            (args.profile, args.source_reference, args.blueprint_reference, args.expected_motif)
+        ):
+            print(
+                "qcoder blueprint: depth_v1 requires --profile, --source-reference, "
+                "--blueprint-reference, and at least one --expected-motif.",
+                file=sys.stderr,
+            )
+            return 2
+        development_context = {
+            "source_reference_id": args.source_reference,
+            "blueprint_reference_id": args.blueprint_reference,
+            "profile_id": args.profile,
+            "expected_requirements": [
+                {"motif_id": motif, "choice_origin": "blueprint_confirmed"}
+                for motif in args.expected_motif
+            ],
+            "explicit_sdk_version": args.sdk_version,
+        }
     try:
         if args.source_file:
             artifact = extract_selected_python_file_evidence(
@@ -876,6 +914,8 @@ def _cmd_blueprint(argv: list[str]) -> int:
                 logical_source_label=args.logical_label,
                 selected_symbol=args.symbol,
                 line_span=line_span,
+                development_evidence_context=development_context,
+                source_evidence_depth=args.source_evidence_depth,
             )
         else:
             artifact = extract_selected_python_source_evidence(
@@ -883,6 +923,8 @@ def _cmd_blueprint(argv: list[str]) -> int:
                 logical_source_label=args.logical_label or "stdin excerpt",
                 selected_symbol=args.symbol,
                 line_span=line_span,
+                development_evidence_context=development_context,
+                source_evidence_depth=args.source_evidence_depth,
             )
     except ValueError as exc:
         print(f"qcoder blueprint: {exc}", file=sys.stderr)

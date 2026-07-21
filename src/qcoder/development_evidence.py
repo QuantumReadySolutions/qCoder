@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 from copy import deepcopy
+import math
 import re
 from typing import Any, Mapping, Sequence
 
@@ -68,6 +69,65 @@ ALIGNMENT_STATUSES = (
     "not_applicable",
 )
 PROFILE_IDS = ("generic_qiskit", "grover_search", "qaoa")
+SOURCE_EVIDENCE_DEPTH_GATE = "depth_v1"
+SOURCE_EVIDENCE_DEPTH_DISABLED = "disabled"
+SOURCE_EVIDENCE_DEPTH_STATUSES = (
+    "available",
+    "parse_limited",
+    "unavailable",
+    "unsupported_profile",
+)
+IMPLEMENTATION_DECISION_SUMMARY_CONTRACT = "implementation_decision_summary"
+IMPLEMENTATION_DECISION_SUMMARY_VERSION = 1
+SOURCE_EVIDENCE_DEPTH_DETECTORS = (
+    "qiskit.imports.v1",
+    "qiskit.api.references.v1",
+    "qiskit.circuit.construction.v1",
+    "qiskit.register.width.v1",
+    "qiskit.helper.expansion.v1",
+    "python.safe.constant.v1",
+    "python.loop.repetition.v1",
+    "python.branch.structure.v1",
+    "qiskit.parameter.declaration.v1",
+    "qiskit.parameter.binding.v1",
+    "qiskit.measurement.v1",
+    "qiskit.bit_order.v1",
+    "qiskit.execution.configuration.v1",
+    "qiskit.result.processing.v1",
+    "profile.grover.structure.v1",
+    "profile.qaoa.structure.v1",
+)
+IMPLEMENTATION_DECISION_GROUPS = (
+    "blueprint_confirmed_choices",
+    "choices_introduced_after_blueprint",
+    "explicit_source_configuration",
+    "profile_expected_structures",
+    "ambiguous_or_dynamic_behavior",
+    "sdk_default_candidates",
+    "requires_logical_circuit_evidence",
+    "suggested_next_actions",
+)
+USER_CONTROLLED_ACTIONS = (
+    "Accept and add to blueprint",
+    "Clarify the requirement",
+    "Constrain the next generation",
+    "Compare profile-supported alternatives",
+    "Ask the assistant to regenerate",
+    "Request logical-circuit evidence",
+    "Leave unresolved",
+)
+SOURCE_EVIDENCE_DEPTH_LIMITS = {
+    "selected_artifacts": 1,
+    "maximum_source_characters": 100_000,
+    "same_file_helper_expansion_depth": 2,
+    "helper_body_visits_per_analysis_path": 1,
+    "maximum_ast_nodes": 20_000,
+    "maximum_findings": 200,
+    "maximum_line_references_per_finding": 20,
+    "maximum_safe_scalar_absolute_value": 1_000_000,
+    "maximum_safe_collection_length": 10_000,
+    "maximum_constant_expression_depth": 4,
+}
 RETENTION_STATE = {
     "state": "process_and_discard",
     "retained_artifacts": [],
@@ -85,6 +145,15 @@ _STATIC_NON_PROOF = (
     "Static source evidence does not prove implementation correctness, completeness, algorithm "
     "identity, constructed-circuit behavior, target compatibility, or runtime behavior."
 )
+SOURCE_EVIDENCE_DEPTH_NEGATIVE_SCOPE = (
+    "Not observed in the one explicitly selected source artifact using the stated bounded "
+    "detector and inspection method."
+)
+INTRODUCED_AFTER_BLUEPRINT_NON_CAUSAL = (
+    "The selected source contains this bounded choice; the confirmed blueprint did not "
+    "represent it. No authorship, intent, or causal attribution is made."
+)
+STATIC_SOURCE_NON_PROOF = _STATIC_NON_PROOF
 _FORBIDDEN_SHARE_SAFE_KEYS = frozenset(
     {
         "raw_source",
@@ -287,6 +356,24 @@ def development_evidence_contract_snapshot() -> dict[str, Any]:
         ],
         "motif_registry": deepcopy(MOTIF_REGISTRY),
         "qiskit_version_rules": deepcopy(QISKIT_VERSION_RULES),
+        "source_evidence_depth": {
+            "gate": SOURCE_EVIDENCE_DEPTH_GATE,
+            "disabled_value": SOURCE_EVIDENCE_DEPTH_DISABLED,
+            "statuses": list(SOURCE_EVIDENCE_DEPTH_STATUSES),
+            "detectors": list(SOURCE_EVIDENCE_DEPTH_DETECTORS),
+            "limits": deepcopy(SOURCE_EVIDENCE_DEPTH_LIMITS),
+            "decision_summary_contract": IMPLEMENTATION_DECISION_SUMMARY_CONTRACT,
+            "decision_summary_version": IMPLEMENTATION_DECISION_SUMMARY_VERSION,
+            "decision_groups": list(IMPLEMENTATION_DECISION_GROUPS),
+            "user_controlled_actions": list(USER_CONTROLLED_ACTIONS),
+            "one_selected_artifact_only": True,
+            "introduced_after_blueprint_is_non_causal": True,
+            "introduced_after_blueprint_language": INTRODUCED_AFTER_BLUEPRINT_NON_CAUSAL,
+            "negative_findings_are_artifact_and_detector_scoped": True,
+            "negative_finding_language": SOURCE_EVIDENCE_DEPTH_NEGATIVE_SCOPE,
+            "static_source_non_proof": STATIC_SOURCE_NON_PROOF,
+            "arbitrary_literal_disclosure": False,
+        },
         "later_stage_analyzers": [],
         "transitive_inference": False,
         "graph_traversal": False,
@@ -931,6 +1018,7 @@ def extract_qiskit_source_development_evidence(
     expected_requirements: Sequence[Mapping[str, Any]],
     explicit_sdk_version: str | None = None,
     explicit_local_environment_version: str | None = None,
+    source_evidence_depth: str | None = None,
 ) -> dict[str, Any]:
     """Return a share-safe, current-session Qiskit source-evidence spine.
 
@@ -1000,6 +1088,53 @@ def extract_qiskit_source_development_evidence(
         source_reference_id=source_reference_id,
     )
     decision_summary = _decision_summary(findings, version_facts)
+    depth_result: dict[str, Any] | None = None
+    if source_evidence_depth not in {
+        None,
+        SOURCE_EVIDENCE_DEPTH_DISABLED,
+        SOURCE_EVIDENCE_DEPTH_GATE,
+    }:
+        depth_result = {
+            "gate": str(source_evidence_depth)[:64],
+            "status": "unsupported_profile",
+            "diagnostics": ["The requested source-evidence depth is not supported."],
+            "child_contract": IMPLEMENTATION_DECISION_SUMMARY_CONTRACT,
+            "child_version": IMPLEMENTATION_DECISION_SUMMARY_VERSION,
+        }
+    elif source_evidence_depth == SOURCE_EVIDENCE_DEPTH_GATE:
+        from qcoder.source_evidence_depth import analyze_qiskit_source_depth
+
+        depth_result = analyze_qiskit_source_depth(
+            source_text,
+            logical_source_label=logical_source_label.strip(),
+            source_reference=source_ref,
+            profile_id=profile_id,
+            expected_requirements=expected_items,
+            motif_registry=MOTIF_REGISTRY,
+            baseline_findings=findings,
+            baseline_observations=all_observations,
+            version_facts=version_facts,
+            detector_inventory=SOURCE_EVIDENCE_DEPTH_DETECTORS,
+            resource_limits=SOURCE_EVIDENCE_DEPTH_LIMITS,
+            decision_groups=IMPLEMENTATION_DECISION_GROUPS,
+            user_controlled_actions=USER_CONTROLLED_ACTIONS,
+        )
+        if depth_result["status"] == "available":
+            findings = depth_result["alignment_findings"]
+            all_observations = depth_result["motif_observations"]
+            decision_summary = depth_result["implementation_decision_summary"]
+            depth_result = {
+                key: deepcopy(value)
+                for key, value in depth_result.items()
+                if key
+                not in {
+                    "motif_observations",
+                    "alignment_findings",
+                    "implementation_decision_summary",
+                }
+            }
+        else:
+            decision_summary = None
     relationship = relationship_declaration(
         relationship_type="implements",
         source_stage="human_intent",
@@ -1086,8 +1221,148 @@ def extract_qiskit_source_development_evidence(
         "working_transition": ["human_intent", "python_source"],
         "later_stage_analysis_performed": False,
     }
+    if depth_result is not None:
+        result["source_evidence_depth"] = depth_result
     validate_development_evidence(result, raise_on_error=True)
     return result
+
+
+def _implementation_decision_summary_v1_error(value: object) -> str | None:
+    if not isinstance(value, dict):
+        return "implementation_decision_summary_invalid"
+    if value.get("section_type") != IMPLEMENTATION_DECISION_SUMMARY_CONTRACT:
+        return "implementation_decision_summary_invalid"
+    if value.get("schema_version") != IMPLEMENTATION_DECISION_SUMMARY_VERSION:
+        return "implementation_decision_summary_version_invalid"
+    if value.get("child_contract") != IMPLEMENTATION_DECISION_SUMMARY_CONTRACT:
+        return "implementation_decision_summary_invalid"
+    if any(
+        value.get(field) is not expected
+        for field, expected in {
+            "independent_artifact": False,
+            "discoverable_capability": False,
+            "current_session_only": True,
+            "persistent": False,
+            "actions_executed": False,
+        }.items()
+    ):
+        return "implementation_decision_summary_boundary_invalid"
+    groups = value.get("groups")
+    if not isinstance(groups, list) or [item.get("group_id") for item in groups] != list(
+        IMPLEMENTATION_DECISION_GROUPS
+    ):
+        return "implementation_decision_summary_groups_invalid"
+    for order, group in enumerate(groups, 1):
+        if group.get("order") != order or not isinstance(group.get("items"), list):
+            return "implementation_decision_summary_order_invalid"
+        for item in group["items"]:
+            if not isinstance(item, dict):
+                return "implementation_decision_summary_item_invalid"
+            if item.get("choice_origin") not in CHOICE_ORIGINS:
+                return "implementation_decision_summary_axis_invalid"
+            if item.get("evidence_confidence") not in EVIDENCE_CONFIDENCE_LABELS:
+                return "implementation_decision_summary_axis_invalid"
+            if item.get("alignment_status") not in ALIGNMENT_STATUSES:
+                return "implementation_decision_summary_axis_invalid"
+            for action in item.get("suggested_user_controlled_actions") or []:
+                if isinstance(action, str):
+                    if action not in USER_CONTROLLED_ACTIONS:
+                        return "implementation_decision_summary_action_invalid"
+                    continue
+                if (
+                    not isinstance(action, dict)
+                    or action.get("action") not in USER_CONTROLLED_ACTIONS
+                ):
+                    return "implementation_decision_summary_action_invalid"
+                if action.get("executed") is not False:
+                    return "implementation_decision_summary_action_invalid"
+    return None
+
+
+def _source_evidence_depth_error(value: object) -> str | None:
+    if not isinstance(value, dict):
+        return "source_evidence_depth_invalid"
+    if value.get("status") not in SOURCE_EVIDENCE_DEPTH_STATUSES:
+        return "source_evidence_depth_status_invalid"
+    if value.get("child_contract") != IMPLEMENTATION_DECISION_SUMMARY_CONTRACT:
+        return "source_evidence_depth_child_invalid"
+    if value.get("child_version") != IMPLEMENTATION_DECISION_SUMMARY_VERSION:
+        return "source_evidence_depth_child_invalid"
+    if value.get("status") != "available":
+        diagnostics = value.get("diagnostics")
+        if not isinstance(diagnostics, list) or not diagnostics:
+            return "source_evidence_depth_diagnostic_missing"
+        if "implementation_decision_summary" in value:
+            return "source_evidence_depth_unavailable_child_present"
+        return None
+    if value.get("gate") != SOURCE_EVIDENCE_DEPTH_GATE:
+        return "source_evidence_depth_gate_invalid"
+    if value.get("analysis_unit") != "one_explicitly_selected_python_source_artifact":
+        return "source_evidence_depth_analysis_unit_invalid"
+    if value.get("detector_inventory") != list(SOURCE_EVIDENCE_DEPTH_DETECTORS):
+        return "source_evidence_depth_detector_inventory_invalid"
+    if value.get("resource_limits") != SOURCE_EVIDENCE_DEPTH_LIMITS:
+        return "source_evidence_depth_limits_invalid"
+    for boundary in (
+        "raw_source_included",
+        "raw_path_included",
+        "imports_followed",
+        "source_imported",
+        "source_executed",
+        "network_accessed",
+        "later_stage_analysis_performed",
+    ):
+        if value.get(boundary) is not False:
+            return "source_evidence_depth_boundary_invalid"
+    for fact in value.get("source_facts") or []:
+        if fact.get("detector_id") not in SOURCE_EVIDENCE_DEPTH_DETECTORS:
+            return "source_evidence_depth_detector_invalid"
+        if fact.get("choice_origin") not in CHOICE_ORIGINS:
+            return "source_evidence_depth_axis_invalid"
+        if fact.get("evidence_confidence") not in EVIDENCE_CONFIDENCE_LABELS:
+            return "source_evidence_depth_axis_invalid"
+        if fact.get("alignment_status") not in ALIGNMENT_STATUSES:
+            return "source_evidence_depth_axis_invalid"
+        safe_value = (fact.get("safe_scalar_fact") or {}).get("value")
+        if safe_value is not None and (
+            not isinstance(safe_value, (bool, int, float))
+            or isinstance(safe_value, float)
+            and not math.isfinite(safe_value)
+            or isinstance(safe_value, (int, float))
+            and abs(safe_value) > SOURCE_EVIDENCE_DEPTH_LIMITS["maximum_safe_scalar_absolute_value"]
+        ):
+            return "source_evidence_depth_literal_invalid"
+        structure = fact.get("structural_fact")
+        if structure is not None and (
+            structure.get("value_disclosure") != "withheld"
+            or structure.get("collection_contents_included") is not False
+        ):
+            return "source_evidence_depth_literal_invalid"
+    for item in (
+        value.get("source_negative_findings") or value.get("negative_source_inventory") or []
+    ):
+        if item.get("detector_id") not in SOURCE_EVIDENCE_DEPTH_DETECTORS:
+            return "source_evidence_depth_detector_invalid"
+        if item.get("choice_origin") not in CHOICE_ORIGINS:
+            return "source_evidence_depth_axis_invalid"
+        if item.get("evidence_confidence") not in EVIDENCE_CONFIDENCE_LABELS:
+            return "source_evidence_depth_axis_invalid"
+        if item.get("alignment_status") not in {"not_observed", "ambiguous"}:
+            return "source_evidence_depth_axis_invalid"
+        if item.get("inspection_scope_reference") != ("source_evidence_depth.inspection_scope"):
+            return "source_evidence_depth_negative_scope_invalid"
+        if (
+            item.get("alignment_status") == "not_observed"
+            and item.get("bounded_observation") != SOURCE_EVIDENCE_DEPTH_NEGATIVE_SCOPE
+        ):
+            return "source_evidence_depth_negative_scope_invalid"
+    if value.get("non_causal_introduced_after_blueprint") != (
+        INTRODUCED_AFTER_BLUEPRINT_NON_CAUSAL
+    ):
+        return "source_evidence_depth_origin_semantics_invalid"
+    if value.get("negative_finding_scope") != SOURCE_EVIDENCE_DEPTH_NEGATIVE_SCOPE:
+        return "source_evidence_depth_negative_scope_invalid"
+    return None
 
 
 def validate_development_evidence(value: object, *, raise_on_error: bool = False) -> str:
@@ -1131,6 +1406,13 @@ def validate_development_evidence(value: object, *, raise_on_error: bool = False
             if finding.get("choice_origin") not in CHOICE_ORIGINS:
                 error = "development_evidence_choice_origin_invalid"
                 break
+    if error == "ok" and value.get("source_evidence_depth") is not None:
+        error = _source_evidence_depth_error(value["source_evidence_depth"]) or "ok"
+    if error == "ok" and (value.get("source_evidence_depth") or {}).get("status") == "available":
+        error = (
+            _implementation_decision_summary_v1_error(value.get("implementation_decision_summary"))
+            or "ok"
+        )
     if error == "ok":
         pending = [value]
         while pending:

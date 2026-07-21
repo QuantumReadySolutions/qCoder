@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from qcoder.development_evidence import (
+    IMPLEMENTATION_DECISION_SUMMARY_CONTRACT,
+    IMPLEMENTATION_DECISION_SUMMARY_VERSION,
+    SOURCE_EVIDENCE_DEPTH_DISABLED,
+    SOURCE_EVIDENCE_DEPTH_GATE,
     development_evidence_contract_snapshot,
     extract_qiskit_source_development_evidence,
 )
@@ -474,6 +478,7 @@ def extract_selected_python_source_evidence(
     line_span: tuple[int, int] | None = None,
     origin: str = "explicitly_supplied_source_excerpt",
     development_evidence_context: dict[str, Any] | None = None,
+    source_evidence_depth: str | None = None,
 ) -> dict[str, Any]:
     """Extract compact static evidence without importing or executing supplied Python."""
 
@@ -572,15 +577,454 @@ def extract_selected_python_source_evidence(
         "source_edited": False,
         "retention": "process_and_discard",
     }
+    if source_evidence_depth not in {
+        None,
+        SOURCE_EVIDENCE_DEPTH_DISABLED,
+        SOURCE_EVIDENCE_DEPTH_GATE,
+    }:
+        artifact["source_evidence_depth"] = {
+            "gate": str(source_evidence_depth)[:64],
+            "status": "unsupported_profile",
+            "child_contract": IMPLEMENTATION_DECISION_SUMMARY_CONTRACT,
+            "child_version": IMPLEMENTATION_DECISION_SUMMARY_VERSION,
+            "diagnostics": ["The requested source-evidence depth is not supported."],
+        }
+    elif (
+        source_evidence_depth == SOURCE_EVIDENCE_DEPTH_GATE and development_evidence_context is None
+    ):
+        artifact["source_evidence_depth"] = {
+            "gate": SOURCE_EVIDENCE_DEPTH_GATE,
+            "status": "unavailable",
+            "child_contract": IMPLEMENTATION_DECISION_SUMMARY_CONTRACT,
+            "child_version": IMPLEMENTATION_DECISION_SUMMARY_VERSION,
+            "diagnostics": [
+                "A confirmed blueprint context is required for blueprint-relative depth findings."
+            ],
+        }
     if development_evidence_context is not None:
         if not isinstance(development_evidence_context, dict):
             raise ValueError("development_evidence_context_must_be_object")
-        artifact["development_evidence"] = extract_qiskit_source_development_evidence(
+        development_evidence = extract_qiskit_source_development_evidence(
             selected_text,
             logical_source_label=logical_source_label.strip(),
+            source_evidence_depth=source_evidence_depth,
             **development_evidence_context,
         )
+        artifact["development_evidence"] = development_evidence
+        depth = development_evidence.get("source_evidence_depth")
+        if isinstance(depth, dict):
+            artifact["source_evidence_depth"] = {
+                key: deepcopy(depth[key])
+                for key in (
+                    "gate",
+                    "status",
+                    "child_contract",
+                    "child_version",
+                    "diagnostics",
+                )
+                if key in depth
+            }
     return with_artifact_digest(artifact)
+
+
+def compact_selected_python_source_evidence_for_hosted(
+    artifact: dict[str, Any],
+) -> dict[str, Any]:
+    """Project opted-in local depth evidence to the bounded hosted contract."""
+
+    supplied = deepcopy(artifact)
+    depth_status = supplied.get("source_evidence_depth")
+    development = supplied.get("development_evidence")
+    if not (
+        isinstance(depth_status, dict)
+        and depth_status.get("status") == "available"
+        and isinstance(development, dict)
+    ):
+        return supplied
+    depth = development.get("source_evidence_depth")
+    summary = development.get("implementation_decision_summary")
+    if not isinstance(depth, dict) or not isinstance(summary, dict):
+        return supplied
+
+    compact_motifs = [
+        {
+            "motif_id": item.get("motif_id"),
+            "observation_status": item.get("observation_status"),
+            "bounded_line_references": [
+                reference.get("line")
+                for reference in item.get("bounded_evidence_references") or []
+                if isinstance(reference, dict) and isinstance(reference.get("line"), int)
+            ][:20],
+            "evidence_confidence": item.get("evidence_confidence"),
+            "choice_origin": item.get("choice_origin"),
+            "inspection_scope_reference": "source_evidence_depth.inspection_scope",
+        }
+        for item in development.get("motif_observations") or []
+        if isinstance(item, dict)
+    ]
+    profile_prefix = {
+        "grover_search": "grover.",
+        "qaoa": "qaoa.",
+        "generic_qiskit": "qiskit.",
+    }.get(str(depth.get("profile_id")), "")
+    if profile_prefix:
+        compact_motifs = [
+            item
+            for item in compact_motifs
+            if str(item.get("motif_id", "")).startswith(profile_prefix)
+        ]
+    compact_negative_findings = [
+        {
+            key: deepcopy(item[key])
+            for key in (
+                "expected_item",
+                "alignment_status",
+                "evidence_confidence",
+                "choice_origin",
+                "bounded_observation",
+                "inspection_scope_reference",
+                "detector_identifier",
+                "supported_detector_inventory_reference",
+                "what_was_not_found",
+                "what_remains_unproven",
+                "required_next_evidence",
+            )
+            if key in item
+        }
+        for item in development.get("alignment_findings") or []
+        if isinstance(item, dict)
+        and item.get("alignment_status")
+        in {"not_observed", "ambiguous", "requires_next_stage_evidence", "conflicting"}
+    ]
+    compact_source_negatives = [
+        {
+            key: deepcopy(item[key])
+            for key in (
+                "negative_id",
+                "decision_family",
+                "detector_id",
+                "alignment_status",
+                "evidence_confidence",
+                "choice_origin",
+                "bounded_observation",
+                "inspection_scope_reference",
+                "what_was_not_found",
+                "what_remains_unproven",
+                "required_later_evidence",
+                "suggested_user_controlled_action",
+            )
+            if key in item
+        }
+        for item in depth.get("source_negative_findings") or []
+        if isinstance(item, dict)
+    ]
+    compact_configuration = [
+        {
+            "decision_family": item.get("decision_family"),
+            "detector_id": item.get("detector_id"),
+            "bounded_line_references": deepcopy(
+                (item.get("source_evidence_basis") or {}).get("bounded_line_references") or []
+            ),
+            **(
+                {"safe_scalar_fact": deepcopy(item["safe_scalar_fact"])}
+                if item.get("safe_scalar_fact") is not None
+                else {}
+            ),
+            **(
+                {"structural_fact": deepcopy(item["structural_fact"])}
+                if item.get("structural_fact") is not None
+                else {}
+            ),
+            "classification": {
+                "alignment_status": item.get("alignment_status"),
+                "choice_origin": item.get("choice_origin"),
+                "evidence_confidence": item.get("evidence_confidence"),
+            },
+        }
+        for item in depth.get("source_facts") or []
+        if isinstance(item, dict)
+        and (
+            item.get("safe_scalar_fact") is not None
+            or item.get("structural_fact") is not None
+            or item.get("decision_family")
+            in {
+                "source_visible_execution_call_shape",
+                "source_visible_parameter_binding",
+                "source_visible_measurement",
+                "source_declared_quantum_width",
+                "source_declared_classical_width",
+                "statically_established_repetition",
+            }
+        )
+    ][:2]
+    hosted_depth = {
+        key: deepcopy(depth[key])
+        for key in (
+            "gate",
+            "status",
+            "child_contract",
+            "child_version",
+            "analysis_unit",
+            "detector_inventory",
+            "resource_limits",
+            "inspection_scope",
+            "raw_source_included",
+            "raw_path_included",
+            "imports_followed",
+            "source_imported",
+            "source_executed",
+            "network_accessed",
+            "later_stage_analysis_performed",
+            "profile_id",
+            "parser_status",
+            "non_causal_introduced_after_blueprint",
+            "negative_finding_scope",
+            "non_proofs",
+        )
+        if key in depth
+    }
+    hosted_depth["source_configuration_facts"] = compact_configuration
+    hosted_depth["ambiguity_inventory"] = []
+    hosted_depth["motif_observation_inventory"] = compact_motifs
+    hosted_depth["negative_alignment_inventory"] = compact_negative_findings
+    hosted_depth["negative_source_inventory"] = compact_source_negatives
+    hosted_depth["local_detail_omitted_from_hosted_projection"] = True
+
+    compact_summary = {
+        key: deepcopy(summary[key])
+        for key in (
+            "section_type",
+            "schema_version",
+            "child_contract",
+            "independent_artifact",
+            "discoverable_capability",
+            "current_session_only",
+            "persistent",
+            "actions_executed",
+            "ordering_basis",
+        )
+        if key in summary
+    }
+    compact_summary["decision_non_proof_reference"] = "source_evidence_depth.non_proofs[0]"
+    compact_summary["default_required_later_evidence"] = "logical_circuit"
+    compact_summary["groups"] = []
+    for group in summary.get("groups") or []:
+        compact_items = []
+        for item in group.get("items") or []:
+            compact_item = {
+                key: deepcopy(item[key])
+                for key in (
+                    "decision_id",
+                    "apparent_implementation_choice",
+                    "decision_family",
+                    "blueprint_requirement_reference",
+                    "relationship_to_confirmed_blueprint",
+                    "choice_origin",
+                    "evidence_confidence",
+                    "alignment_status",
+                    "bounded_source_evidence_basis",
+                    "related_motif_evidence",
+                    "why_the_choice_matters",
+                    "profile_supported_alternatives",
+                    "included_decision_families",
+                    "included_ambiguity_families",
+                    "ordering_key",
+                    "action",
+                )
+                if key in item
+            }
+            alternatives = compact_item.get("profile_supported_alternatives") or []
+            if alternatives:
+                compact_item["profile_supported_alternatives"] = [
+                    {
+                        key: deepcopy(alternative[key])
+                        for key in (
+                            "name",
+                            "decision_family",
+                            "provenance",
+                            "requirement_addressed",
+                            "blueprint_clarification_required",
+                            "non_preference",
+                        )
+                        if key in alternative
+                    }
+                    for alternative in alternatives
+                ]
+            basis = compact_item.get("bounded_source_evidence_basis") or {}
+            if not basis.get("bounded_line_references"):
+                compact_item.pop("bounded_source_evidence_basis", None)
+                compact_item["bounded_source_evidence_basis_reference"] = (
+                    "source_evidence_depth.inspection_scope"
+                )
+            compact_items.append(compact_item)
+        group_id = group.get("group_id")
+        if group_id == "suggested_next_actions":
+            action_items = list(group.get("items") or [])
+            first_action = action_items[0] if action_items else {}
+            compact_items = [
+                {
+                    "decision_id": "group.suggested_next_actions",
+                    "actions": [
+                        {
+                            "action": (item.get("action") or {}).get("action"),
+                            "decision_references": deepcopy(
+                                (item.get("action") or {}).get("decision_or_ambiguity") or []
+                            ),
+                        }
+                        for item in action_items
+                    ],
+                    "choice_origin": first_action.get("choice_origin", "unknown"),
+                    "evidence_confidence": first_action.get(
+                        "evidence_confidence", "Suggested next check"
+                    ),
+                    "alignment_status": first_action.get("alignment_status", "not_applicable"),
+                }
+            ]
+            compact_summary["suggested_action_semantics"] = {
+                "intended_update": "next_human_intent_or_confirmed_blueprint",
+                "could_establish": "explicit_requirement_choice_or_evidence_request",
+                "still_not_proven_reference": "source_evidence_depth.non_proofs[0]",
+                "executed": False,
+            }
+        elif (
+            group_id
+            in {
+                "blueprint_confirmed_choices",
+                "choices_introduced_after_blueprint",
+                "ambiguous_or_dynamic_behavior",
+            }
+            and len(compact_items) > 1
+        ):
+            first = compact_items[0]
+            compact_items = [
+                {
+                    "decision_id": f"group.{group_id}",
+                    "ordered_decisions": [
+                        {
+                            "decision_id": item.get("decision_id"),
+                            "choice": item.get("apparent_implementation_choice"),
+                            "family": item.get("decision_family"),
+                            "motif_id": item.get("related_motif_evidence"),
+                        }
+                        for item in compact_items
+                    ],
+                    "relationship_to_confirmed_blueprint": first.get(
+                        "relationship_to_confirmed_blueprint"
+                    ),
+                    "choice_origin": first.get("choice_origin"),
+                    "evidence_confidence": first.get("evidence_confidence"),
+                    "alignment_status": first.get("alignment_status"),
+                    "bounded_source_evidence_basis_reference": (
+                        "source_evidence_depth.inspection_scope"
+                    ),
+                    "related_motif_evidence": [
+                        item.get("related_motif_evidence")
+                        for item in compact_items
+                        if item.get("related_motif_evidence")
+                    ],
+                    "why_the_choices_matter": "maintained_motif_or_analysis_metadata",
+                    "profile_supported_alternatives": [
+                        alternative
+                        for item in compact_items
+                        for alternative in item.get("profile_supported_alternatives") or []
+                    ],
+                    "ordered_by": "source_summary_ordering_basis",
+                    "included_ambiguity_families": sorted(
+                        {
+                            family
+                            for item in compact_items
+                            for family in item.get("included_ambiguity_families") or []
+                        }
+                    ),
+                }
+            ]
+        compact_summary["groups"].append(
+            {
+                "group_id": group_id,
+                "order": group.get("order"),
+                "items": compact_items,
+            }
+        )
+
+    hosted_development = {
+        key: deepcopy(development[key])
+        for key in (
+            "schema_id",
+            "schema_version",
+            "artifact_kind",
+            "development_stage",
+            "framework",
+            "framework_version_facts",
+            "current_session_scope",
+            "artifact_reference",
+            "related_artifact_references",
+            "relationships",
+            "retention_state",
+            "non_proofs",
+            "working_transition",
+            "later_stage_analysis_performed",
+        )
+        if key in development
+    }
+    hosted_development["framework_version_facts"] = [
+        {
+            **{key: deepcopy(value) for key, value in fact.items() if key != "non_proof"},
+            **(
+                {"non_proof_reference": "development_evidence.non_proofs[0]"}
+                if "non_proof" in fact
+                else {}
+            ),
+        }
+        for fact in development.get("framework_version_facts") or []
+        if isinstance(fact, dict)
+    ]
+    hosted_development["motif_expectations"] = [
+        {
+            **{key: deepcopy(value) for key, value in item.items() if key != "non_proof"},
+            "non_proof_reference": "development_evidence.non_proofs[0]",
+        }
+        for item in development.get("motif_expectations") or []
+        if isinstance(item, dict)
+    ]
+    hosted_development["motif_observations"] = []
+    hosted_development["alignment_findings"] = []
+    hosted_development["implementation_decision_summary"] = compact_summary
+    hosted_development["source_evidence_depth"] = hosted_depth
+
+    projected = {
+        key: deepcopy(supplied[key])
+        for key in (
+            "artifact_type",
+            "schema_version",
+            "logical_source_label",
+            "origin",
+            "evidence_scope",
+            "evidence_coverage",
+            "parse_status",
+            "profile_motif_observations",
+            "ambiguities",
+            "extraction_limitations",
+            "raw_source_included",
+            "repository_scanned",
+            "source_executed",
+            "source_edited",
+            "retention",
+            "source_evidence_depth",
+        )
+        if key in supplied
+    }
+    projected["profile_motif_observations"] = [
+        {key: deepcopy(item[key]) for key in ("motif", "status", "evidence_label") if key in item}
+        for item in supplied.get("profile_motif_observations") or []
+        if isinstance(item, dict)
+    ]
+    projected["extraction_limitations"] = [
+        "Static selected-source evidence; imports and dynamic behavior remain unresolved."
+    ]
+    if not projected.get("ambiguities"):
+        projected.pop("ambiguities", None)
+    projected["development_evidence"] = hosted_development
+    return with_artifact_digest(projected)
 
 
 def extract_selected_python_file_evidence(
@@ -590,6 +1034,7 @@ def extract_selected_python_file_evidence(
     selected_symbol: str | None = None,
     line_span: tuple[int, int] | None = None,
     development_evidence_context: dict[str, Any] | None = None,
+    source_evidence_depth: str | None = None,
 ) -> dict[str, Any]:
     """Read exactly one explicitly selected file and return compact local evidence."""
 
@@ -610,4 +1055,5 @@ def extract_selected_python_file_evidence(
         line_span=line_span,
         origin="local_source_evidence",
         development_evidence_context=development_evidence_context,
+        source_evidence_depth=source_evidence_depth,
     )

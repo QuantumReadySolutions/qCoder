@@ -1,0 +1,41 @@
+{
+  "fixtures": {
+    "generic_qiskit": {
+      "source_fixture": "generic_qiskit.py",
+      "logical_source_label": "synthetic generic selected source",
+      "source_reference_id": "session-artifact-000000000000d101",
+      "blueprint_reference_id": "session-artifact-000000000000d102",
+      "explicit_sdk_version": "1.4.2",
+      "expected_requirements": [
+        {"motif_id": "qiskit.circuit.construction", "choice_origin": "blueprint_confirmed"},
+        {"motif_id": "qiskit.parameter.use", "choice_origin": "blueprint_confirmed"},
+        {"motif_id": "qiskit.measurement.mapping", "choice_origin": "blueprint_confirmed"}
+      ]
+    },
+    "grover_search": {
+      "source_fixture": "grover_search.py",
+      "logical_source_label": "synthetic Grover selected source",
+      "source_reference_id": "session-artifact-000000000000d201",
+      "blueprint_reference_id": "session-artifact-000000000000d202",
+      "explicit_sdk_version": "1.4.2",
+      "expected_requirements": [
+        {"motif_id": "grover.oracle.structure", "choice_origin": "blueprint_confirmed"},
+        {"motif_id": "grover.diffusion.amplification", "choice_origin": "profile_expected"},
+        {"motif_id": "grover.iteration.structure", "choice_origin": "blueprint_confirmed"}
+      ]
+    },
+    "qaoa": {
+      "source_fixture": "qaoa.py",
+      "logical_source_label": "synthetic QAOA selected source",
+      "source_reference_id": "session-artifact-000000000000d301",
+      "blueprint_reference_id": "session-artifact-000000000000d302",
+      "explicit_sdk_version": "1.4.2",
+      "expected_requirements": [
+        {"motif_id": "qaoa.cost.layer", "choice_origin": "blueprint_confirmed"},
+        {"motif_id": "qaoa.mixer.layer", "choice_origin": "profile_expected"},
+        {"motif_id": "qaoa.repetition.layer", "choice_origin": "blueprint_confirmed"},
+        {"motif_id": "qaoa.parameterized.layer", "choice_origin": "blueprint_confirmed"}
+      ]
+    }
+  }
+}

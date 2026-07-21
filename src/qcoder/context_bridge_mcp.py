@@ -20,6 +20,7 @@ from qcoder.algorithm_blueprint import (
     ORIGIN_VALUES,
     PROFILE_IDS,
     algorithm_blueprint_contract_snapshot,
+    compact_selected_python_source_evidence_for_hosted,
 )
 
 DEFAULT_BASE_URL = "https://preview-api.qcoder.ai"
@@ -471,6 +472,14 @@ def post_context_bridge(
             if key in arguments and arguments[key] != value:
                 return safe_error("conflicting_tool_argument")
             arguments[key] = value
+    if canonical_tool_name == "create_source_blueprint_alignment_review" and isinstance(
+        arguments.get("selected_python_source_evidence"), dict
+    ):
+        arguments["selected_python_source_evidence"] = (
+            compact_selected_python_source_evidence_for_hosted(
+                arguments["selected_python_source_evidence"]
+            )
+        )
     supplied_fields = set(arguments)
     if artifact_text is not None:
         supplied_fields.add("artifact_text")
@@ -757,6 +766,33 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
                 "source_executed": {"type": "boolean", "enum": [False]},
                 "source_edited": {"type": "boolean", "enum": [False]},
                 "retention": {"type": "string", "enum": ["process_and_discard"]},
+                "source_evidence_depth": {
+                    "type": "object",
+                    "properties": {
+                        "gate": {"type": "string"},
+                        "status": {
+                            "type": "string",
+                            "enum": [
+                                "available",
+                                "parse_limited",
+                                "unavailable",
+                                "unsupported_profile",
+                            ],
+                        },
+                        "child_contract": {
+                            "type": "string",
+                            "enum": ["implementation_decision_summary"],
+                        },
+                        "child_version": {"type": "integer", "enum": [1]},
+                        "diagnostics": {"type": "array", "items": {"type": "string"}},
+                    },
+                    "required": ["gate", "status", "child_contract", "child_version"],
+                    "additionalProperties": False,
+                    "description": (
+                        "The single explicit source-depth opt-in status. Omission preserves the "
+                        "legacy response; unavailable or parse-limited requests return diagnostics only."
+                    ),
+                },
                 "development_evidence": {
                     "type": "object",
                     "properties": {
