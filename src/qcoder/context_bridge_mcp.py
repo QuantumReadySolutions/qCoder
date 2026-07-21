@@ -757,6 +757,60 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
                 "source_executed": {"type": "boolean", "enum": [False]},
                 "source_edited": {"type": "boolean", "enum": [False]},
                 "retention": {"type": "string", "enum": ["process_and_discard"]},
+                "development_evidence": {
+                    "type": "object",
+                    "properties": {
+                        "schema_id": {
+                            "type": "string",
+                            "enum": ["qcoder.development_evidence.v0"],
+                        },
+                        "schema_version": {"type": "integer", "enum": [0]},
+                        "artifact_kind": {
+                            "type": "string",
+                            "enum": ["selected_python_source_development_evidence"],
+                        },
+                        "development_stage": {"type": "string", "enum": ["python_source"]},
+                        "framework": {"type": "string", "enum": ["qiskit"]},
+                        "working_transition": {
+                            "type": "array",
+                            "prefixItems": [
+                                {"type": "string", "enum": ["human_intent"]},
+                                {"type": "string", "enum": ["python_source"]},
+                            ],
+                            "minItems": 2,
+                            "maxItems": 2,
+                        },
+                        "artifact_reference": {"type": "object"},
+                        "relationships": {"type": "array", "items": {"type": "object"}},
+                        "motif_expectations": {"type": "array", "items": {"type": "object"}},
+                        "motif_observations": {"type": "array", "items": {"type": "object"}},
+                        "alignment_findings": {"type": "array", "items": {"type": "object"}},
+                        "implementation_decision_summary": {"type": ["object", "null"]},
+                        "later_stage_analysis_performed": {
+                            "type": "boolean",
+                            "enum": [False],
+                        },
+                    },
+                    "required": [
+                        "schema_id",
+                        "schema_version",
+                        "artifact_kind",
+                        "development_stage",
+                        "framework",
+                        "working_transition",
+                        "artifact_reference",
+                        "relationships",
+                        "motif_expectations",
+                        "motif_observations",
+                        "alignment_findings",
+                        "later_stage_analysis_performed",
+                    ],
+                    "additionalProperties": True,
+                    "description": (
+                        "Optional share-safe current-session Development Evidence v0 data. "
+                        "It contains no raw source, raw path, stable source identifier, or later-stage analysis."
+                    ),
+                },
             },
             "required": [
                 "artifact_type",

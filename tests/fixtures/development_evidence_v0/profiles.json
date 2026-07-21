@@ -1,0 +1,89 @@
+{
+  "schema_id": "qcoder.development_evidence.reference_fixtures.v0",
+  "fixtures": {
+    "generic_qiskit": {
+      "logical_source_label": "synthetic generic circuit builder",
+      "source_fixture": "generic_qiskit.py",
+      "source_reference_id": "session-artifact-0000000000000001",
+      "blueprint_reference_id": "session-artifact-0000000000000002",
+      "explicit_sdk_version": "1.4.2",
+      "algorithm_intent_card": {
+        "confirmation_state": "confirmed",
+        "goal": "Build a small parameter-free Qiskit circuit and preserve measurement evidence."
+      },
+      "implementation_blueprint": {
+        "confirmation_state": "confirmed",
+        "expected_requirements": [
+          {
+            "motif_id": "qiskit.circuit.construction",
+            "choice_origin": "blueprint_confirmed"
+          },
+          {
+            "motif_id": "qiskit.measurement.mapping",
+            "choice_origin": "blueprint_confirmed"
+          }
+        ]
+      }
+    },
+    "grover_search": {
+      "logical_source_label": "synthetic Grover source evidence",
+      "source_fixture": "grover_search.py",
+      "source_reference_id": "session-artifact-0000000000000003",
+      "blueprint_reference_id": "session-artifact-0000000000000004",
+      "explicit_sdk_version": "1.4.1",
+      "algorithm_intent_card": {
+        "confirmation_state": "confirmed",
+        "goal": "Represent an explicitly supplied two-qubit marked-state amplification example."
+      },
+      "implementation_blueprint": {
+        "confirmation_state": "confirmed",
+        "expected_requirements": [
+          {
+            "motif_id": "grover.oracle.structure",
+            "choice_origin": "blueprint_confirmed"
+          },
+          {
+            "motif_id": "grover.diffusion.amplification",
+            "choice_origin": "profile_expected"
+          },
+          {
+            "motif_id": "grover.iteration.structure",
+            "choice_origin": "blueprint_confirmed"
+          }
+        ]
+      }
+    },
+    "qaoa": {
+      "logical_source_label": "synthetic QAOA layer builder",
+      "source_fixture": "qaoa.py",
+      "source_reference_id": "session-artifact-0000000000000005",
+      "blueprint_reference_id": "session-artifact-0000000000000006",
+      "explicit_sdk_version": "1.4.0",
+      "algorithm_intent_card": {
+        "confirmation_state": "confirmed",
+        "goal": "Build explicitly parameterized cost and mixer layers without choosing runtime settings."
+      },
+      "implementation_blueprint": {
+        "confirmation_state": "confirmed",
+        "expected_requirements": [
+          {
+            "motif_id": "qaoa.cost.layer",
+            "choice_origin": "blueprint_confirmed"
+          },
+          {
+            "motif_id": "qaoa.mixer.layer",
+            "choice_origin": "blueprint_confirmed"
+          },
+          {
+            "motif_id": "qaoa.repetition.layer",
+            "choice_origin": "blueprint_confirmed"
+          },
+          {
+            "motif_id": "qaoa.parameterized.layer",
+            "choice_origin": "profile_expected"
+          }
+        ]
+      }
+    }
+  }
+}

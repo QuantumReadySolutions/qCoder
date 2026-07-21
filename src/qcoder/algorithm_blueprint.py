@@ -9,6 +9,11 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
+from qcoder.development_evidence import (
+    development_evidence_contract_snapshot,
+    extract_qiskit_source_development_evidence,
+)
+
 
 SCHEMA_VERSION = 1
 ALGORITHM_BLUEPRINT_TOOL_NAMES = (
@@ -330,6 +335,7 @@ def algorithm_blueprint_contract_snapshot() -> dict[str, Any]:
         "artifact_discriminators": ALGORITHM_BLUEPRINT_ARTIFACT_DISCRIMINATORS,
         "hosted_path_fields": [],
         "raw_source_fields": [],
+        "development_evidence": development_evidence_contract_snapshot(),
     }
 
 
@@ -467,6 +473,7 @@ def extract_selected_python_source_evidence(
     selected_symbol: str | None = None,
     line_span: tuple[int, int] | None = None,
     origin: str = "explicitly_supplied_source_excerpt",
+    development_evidence_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Extract compact static evidence without importing or executing supplied Python."""
 
@@ -565,6 +572,14 @@ def extract_selected_python_source_evidence(
         "source_edited": False,
         "retention": "process_and_discard",
     }
+    if development_evidence_context is not None:
+        if not isinstance(development_evidence_context, dict):
+            raise ValueError("development_evidence_context_must_be_object")
+        artifact["development_evidence"] = extract_qiskit_source_development_evidence(
+            selected_text,
+            logical_source_label=logical_source_label.strip(),
+            **development_evidence_context,
+        )
     return with_artifact_digest(artifact)
 
 
@@ -574,6 +589,7 @@ def extract_selected_python_file_evidence(
     logical_source_label: str | None = None,
     selected_symbol: str | None = None,
     line_span: tuple[int, int] | None = None,
+    development_evidence_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Read exactly one explicitly selected file and return compact local evidence."""
 
@@ -593,4 +609,5 @@ def extract_selected_python_file_evidence(
         selected_symbol=selected_symbol,
         line_span=line_span,
         origin="local_source_evidence",
+        development_evidence_context=development_evidence_context,
     )
