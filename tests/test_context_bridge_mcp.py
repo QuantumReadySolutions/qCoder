@@ -12,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from qcoder.cli import main
+from qcoder.algorithm_blueprint import ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS
 from qcoder.context_bridge_mcp import (
     EXPECTED_TOOLS,
     handle_jsonrpc_message,
@@ -89,16 +90,28 @@ def test_tool_descriptors_are_exact_public_context_bridge_tools() -> None:
     assert names == list(EXPECTED_TOOLS)
     assert "suggest_next_checks" not in names
     assert "apply_repo_edit" not in names
-    result_review = next(tool for tool in tool_descriptors() if tool["name"] == "create_result_review_context_card")
+    result_review = next(
+        tool for tool in tool_descriptors() if tool["name"] == "create_result_review_context_card"
+    )
     assert "user-provided result evidence" in result_review["description"]
-    next_check = next(tool for tool in tool_descriptors() if tool["name"] == "create_next_check_plan")
+    next_check = next(
+        tool for tool in tool_descriptors() if tool["name"] == "create_next_check_plan"
+    )
     assert "current-request evidence" in next_check["description"]
-    diff = next(tool for tool in tool_descriptors() if tool["name"] == "create_single_loop_evidence_diff")
+    diff = next(
+        tool for tool in tool_descriptors() if tool["name"] == "create_single_loop_evidence_diff"
+    )
     assert "without history or lookup" in diff["description"]
     assert "preserve salient user-provided result observations" in diff["description"]
     assert "result_evidence" in diff["inputSchema"]["properties"]["after"]["properties"]
-    assert "Preserve salient user-provided observations" in diff["inputSchema"]["properties"]["before"]["description"]
-    assert "generic 'result evidence is present'" in diff["inputSchema"]["properties"]["after"]["description"]
+    assert (
+        "Preserve salient user-provided observations"
+        in diff["inputSchema"]["properties"]["before"]["description"]
+    )
+    assert (
+        "generic 'result evidence is present'"
+        in diff["inputSchema"]["properties"]["after"]["description"]
+    )
 
 
 def test_tool_descriptors_advertise_only_tool_specific_fields() -> None:
@@ -107,56 +120,111 @@ def test_tool_descriptors_advertise_only_tool_specific_fields() -> None:
         "get_guided_evidence_context": {"artifact_text", "artifact_kind", "client_context"},
         "create_prompt_context": {"artifact_text", "artifact_kind", "client_context", "mode"},
         "create_evidence_context_pack": {
-            "artifact_text", "artifact_kind", "client_context", "current_goal", "evidence_basis",
+            "artifact_text",
+            "artifact_kind",
+            "client_context",
+            "current_goal",
+            "evidence_basis",
         },
         "create_context_session_card": {
-            "artifact_text", "artifact_kind", "client_context", "current_goal", "evidence_basis",
-            "open_questions", "explicit_assumptions",
+            "artifact_text",
+            "artifact_kind",
+            "client_context",
+            "current_goal",
+            "evidence_basis",
+            "open_questions",
+            "explicit_assumptions",
         },
         "create_run_readiness_card": {
-            "artifact_text", "artifact_kind", "client_context", "current_goal", "evidence_basis",
-            "open_questions", "explicit_assumptions", "current_card_context",
+            "artifact_text",
+            "artifact_kind",
+            "client_context",
+            "current_goal",
+            "evidence_basis",
+            "open_questions",
+            "explicit_assumptions",
+            "current_card_context",
         },
         "create_result_review_context_card": {
-            "artifact_text", "artifact_kind", "client_context", "current_goal", "evidence_basis",
-            "share_safe_evidence_summary", "open_questions", "explicit_assumptions", "current_card_context",
+            "artifact_text",
+            "artifact_kind",
+            "client_context",
+            "current_goal",
+            "evidence_basis",
+            "share_safe_evidence_summary",
+            "open_questions",
+            "explicit_assumptions",
+            "current_card_context",
         },
         "create_next_check_plan": {
-            "artifact_text", "artifact_kind", "client_context", "current_goal", "evidence_basis",
-            "open_questions", "explicit_assumptions", "current_card_context",
+            "artifact_text",
+            "artifact_kind",
+            "client_context",
+            "current_goal",
+            "evidence_basis",
+            "open_questions",
+            "explicit_assumptions",
+            "current_card_context",
         },
         "create_single_loop_evidence_diff": {
-            "artifact_text", "artifact_kind", "client_context", "current_goal", "before", "after",
+            "artifact_text",
+            "artifact_kind",
+            "client_context",
+            "current_goal",
+            "before",
+            "after",
         },
         "create_algorithm_intent_card": {
-            "artifact_kind", "client_context", "original_user_intent", "profile_id",
-            "proposed_interpretation", "requirements", "constraints", "non_goals",
-            "field_provenance", "revision_notes", "requested_confirmation_state",
-            "confirmation_assertion", "accepted_unresolved_choices",
+            "artifact_kind",
+            "client_context",
+            "original_user_intent",
+            "profile_id",
+            "proposed_interpretation",
+            "requirements",
+            "constraints",
+            "non_goals",
+            "field_provenance",
+            "revision_notes",
+            "requested_confirmation_state",
+            "confirmation_assertion",
+            "accepted_unresolved_choices",
         },
         "create_implementation_blueprint": {
-            "artifact_kind", "client_context", "algorithm_intent_card", "intent_relationship",
+            "artifact_kind",
+            "client_context",
+            "algorithm_intent_card",
+            "intent_relationship",
         },
         "create_generation_context_pack": {
-            "artifact_kind", "client_context", "implementation_blueprint", "output_evidence_contract",
+            "artifact_kind",
+            "client_context",
+            "implementation_blueprint",
+            "output_evidence_contract",
         },
         "create_source_blueprint_alignment_review": {
-            "artifact_kind", "client_context", "implementation_blueprint", "output_evidence_contract",
+            "artifact_kind",
+            "client_context",
+            "implementation_blueprint",
+            "output_evidence_contract",
             "selected_python_source_evidence",
         },
     }
     assert set(schemas) == set(expected_properties)
     for tool_name, expected in expected_properties.items():
         schema = schemas[tool_name]
+        if tool_name in ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS:
+            expected = set(ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS[tool_name])
         assert set(schema["properties"]) == expected
         expected_required = {
             "create_algorithm_intent_card": ["original_user_intent", "profile_id"],
             "create_implementation_blueprint": ["algorithm_intent_card", "intent_relationship"],
             "create_generation_context_pack": [
-                "implementation_blueprint", "output_evidence_contract",
+                "implementation_blueprint",
+                "output_evidence_contract",
             ],
             "create_source_blueprint_alignment_review": [
-                "implementation_blueprint", "output_evidence_contract",
+                "implementation_blueprint",
+                "output_evidence_contract",
                 "selected_python_source_evidence",
             ],
         }.get(tool_name, ["artifact_text"])
@@ -166,7 +234,11 @@ def test_tool_descriptors_advertise_only_tool_specific_fields() -> None:
     assert schemas["create_prompt_context"]["properties"]["mode"]["enum"] == sorted(
         ["explain", "review", "revise", "troubleshoot", "plan_next_checks"]
     )
-    assert all("mode" not in schema["properties"] for name, schema in schemas.items() if name != "create_prompt_context")
+    assert all(
+        "mode" not in schema["properties"]
+        for name, schema in schemas.items()
+        if name != "create_prompt_context"
+    )
     assert all(
         "before" not in schema["properties"] and "after" not in schema["properties"]
         for name, schema in schemas.items()
@@ -759,7 +831,9 @@ def test_mcp_stdio_content_length_preserves_structured_diff_arguments(tmp_path: 
 
 
 def test_smoke_without_token_reports_sanitized_category(tmp_path: Path) -> None:
-    result = run_smoke(base_url="https://example.invalid", token_file=tmp_path / "missing-token.txt")
+    result = run_smoke(
+        base_url="https://example.invalid", token_file=tmp_path / "missing-token.txt"
+    )
     assert result["ok"] is False
     assert result["token_file_category"] == "token_file_missing"
     assert result["token_printed"] is False
@@ -899,7 +973,9 @@ def test_retry_after_is_categorized_without_automatic_retry(tmp_path: Path) -> N
     def rate_limited(_request: object, timeout: int = 20) -> object:
         nonlocal calls
         calls += 1
-        body = io.BytesIO(json.dumps({"ok": False, "error_category": "rate_limited"}).encode("utf-8"))
+        body = io.BytesIO(
+            json.dumps({"ok": False, "error_category": "rate_limited"}).encode("utf-8")
+        )
         raise urllib.error.HTTPError(
             "https://example.invalid",
             429,

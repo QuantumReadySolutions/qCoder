@@ -17,9 +17,30 @@ from qcoder.development_evidence import (
     development_evidence_contract_snapshot,
     extract_qiskit_source_development_evidence,
 )
+from qcoder.blueprint_decisions import profile_decision_catalog_snapshot
 
 
 SCHEMA_VERSION = 1
+_DECISION_LOOP_COMMON_INPUT_FIELDS = {
+    "decision_loop",
+    "profile_decision_catalog_version",
+    "current_lineage_reference",
+    "decision_dispositions",
+    "decision_references",
+    "blueprint_decision_records",
+    "resolution_phase",
+    "resolution_context",
+    "selected_action",
+    "selected_decision_references",
+    "source_finding_references",
+    "proposed_updates",
+    "proposal_ref",
+    "prospective_derived_artifact_references",
+    "decision_resolution_pack",
+    "resolution_confirmation",
+    "confirmation_payload",
+    "resolution_parent_artifact",
+}
 ALGORITHM_BLUEPRINT_TOOL_NAMES = (
     "create_algorithm_intent_card",
     "create_implementation_blueprint",
@@ -42,6 +63,7 @@ ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS = {
             "requested_confirmation_state",
             "confirmation_assertion",
             "accepted_unresolved_choices",
+            *_DECISION_LOOP_COMMON_INPUT_FIELDS,
         }
     ),
     "create_implementation_blueprint": frozenset(
@@ -50,6 +72,7 @@ ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS = {
             "client_context",
             "algorithm_intent_card",
             "intent_relationship",
+            *_DECISION_LOOP_COMMON_INPUT_FIELDS,
         }
     ),
     "create_generation_context_pack": frozenset(
@@ -58,6 +81,7 @@ ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS = {
             "client_context",
             "implementation_blueprint",
             "output_evidence_contract",
+            *_DECISION_LOOP_COMMON_INPUT_FIELDS,
         }
     ),
     "create_source_blueprint_alignment_review": frozenset(
@@ -67,6 +91,7 @@ ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS = {
             "implementation_blueprint",
             "output_evidence_contract",
             "selected_python_source_evidence",
+            *_DECISION_LOOP_COMMON_INPUT_FIELDS,
         }
     ),
 }
@@ -340,6 +365,7 @@ def algorithm_blueprint_contract_snapshot() -> dict[str, Any]:
         "hosted_path_fields": [],
         "raw_source_fields": [],
         "development_evidence": development_evidence_contract_snapshot(),
+        "profile_decision_catalog": profile_decision_catalog_snapshot(),
     }
 
 

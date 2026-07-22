@@ -321,13 +321,14 @@ def test_digest_labels_and_confirmation_values_match_public_contract() -> None:
         "Not proven",
         "Suggested next check",
     ]
-    assert set(TOOL_INPUT_FIELDS["create_source_blueprint_alignment_review"]) == {
+    assert {
         "artifact_kind",
         "client_context",
         "implementation_blueprint",
         "output_evidence_contract",
         "selected_python_source_evidence",
-    }
+    } <= set(TOOL_INPUT_FIELDS["create_source_blueprint_alignment_review"])
+    assert "decision_loop" in TOOL_INPUT_FIELDS["create_source_blueprint_alignment_review"]
 
 
 def test_package_help_and_examples_keep_capabilities_and_boundaries_distinct(

@@ -22,6 +22,14 @@ from qcoder.algorithm_blueprint import (
     algorithm_blueprint_contract_snapshot,
     compact_selected_python_source_evidence_for_hosted,
 )
+from qcoder.blueprint_decisions import (
+    ACTION_IDS,
+    DECISION_LOOP_DISABLED,
+    DECISION_LOOP_GATE,
+    PROFILE_DECISION_CATALOG_VERSION,
+    RESOLUTION_CONTEXTS,
+    RESOLUTION_PHASES,
+)
 
 DEFAULT_BASE_URL = "https://preview-api.qcoder.ai"
 ROUTE_PATH = "/v0/internal/hosted-mcp/context"
@@ -189,6 +197,7 @@ EVIDENCE_REVIEW_BOUNDARIES = (
 )
 DEFAULT_ARTIFACT_KIND = "share_safe_evidence_summary"
 MAX_ARTIFACT_TEXT_CHARS = 20_000
+MAX_DECISION_LOOP_PAYLOAD_CHARS = 96_000
 FORBIDDEN_TEXT_MARKERS = (
     "openqasm",
     "qreg ",
@@ -313,14 +322,14 @@ def validate_artifact_text(artifact_text: object) -> str:
     return "ok"
 
 
-def validate_optional_payload(value: object) -> str:
+def validate_optional_payload(value: object, *, max_chars: int = MAX_ARTIFACT_TEXT_CHARS) -> str:
     if value is None:
         return "ok"
     try:
         serialized = json.dumps(value, sort_keys=True, separators=(",", ":"))
     except TypeError:
         return "payload_not_json_serializable"
-    if len(serialized) > MAX_ARTIFACT_TEXT_CHARS:
+    if len(serialized) > max_chars:
         return "artifact_text_too_large"
     if _contains_forbidden_payload_field(value):
         return "forbidden_input_value"
@@ -456,15 +465,15 @@ def post_context_bridge(
     if canonical_tool_name not in EXPECTED_TOOLS:
         return safe_error("unknown_tool")
     direct_arguments = {
-            "mode": mode,
-            "current_goal": current_goal,
-            "evidence_basis": evidence_basis,
-            "share_safe_evidence_summary": share_safe_evidence_summary,
-            "open_questions": open_questions,
-            "explicit_assumptions": explicit_assumptions,
-            "current_card_context": current_card_context,
-            "before": before,
-            "after": after,
+        "mode": mode,
+        "current_goal": current_goal,
+        "evidence_basis": evidence_basis,
+        "share_safe_evidence_summary": share_safe_evidence_summary,
+        "open_questions": open_questions,
+        "explicit_assumptions": explicit_assumptions,
+        "current_card_context": current_card_context,
+        "before": before,
+        "after": after,
     }
     arguments = dict(tool_arguments or {})
     for key, value in direct_arguments.items():
@@ -503,11 +512,26 @@ def post_context_bridge(
         if text_validation != "ok":
             return safe_error(text_validation)
     for required_field in TOOL_REQUIRED_FIELDS[canonical_tool_name]:
-        required_value = artifact_text if required_field == "artifact_text" else arguments.get(required_field)
-        if required_value is None or required_value == "" or required_value == [] or required_value == {}:
+        required_value = (
+            artifact_text if required_field == "artifact_text" else arguments.get(required_field)
+        )
+        if (
+            required_value is None
+            or required_value == ""
+            or required_value == []
+            or required_value == {}
+        ):
             return safe_error(f"missing_{required_field}")
+    decision_loop_enabled = arguments.get("decision_loop") == DECISION_LOOP_GATE
     for payload in arguments.values():
-        payload_validation = validate_optional_payload(payload)
+        payload_validation = validate_optional_payload(
+            payload,
+            max_chars=(
+                MAX_DECISION_LOOP_PAYLOAD_CHARS
+                if decision_loop_enabled
+                else MAX_ARTIFACT_TEXT_CHARS
+            ),
+        )
         if payload_validation != "ok":
             return safe_error(payload_validation)
     token_ok, token_category, token = validate_token_file(token_file)
@@ -676,6 +700,64 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
             "items": {"type": "string"},
             "description": "Named unresolved fields the user explicitly accepts retaining in a confirmed card.",
         },
+        "decision_loop": {
+            "type": "string",
+            "enum": [DECISION_LOOP_GATE, DECISION_LOOP_DISABLED],
+            "description": "Single explicit Decision Readiness and Resolution v1 opt-in. Omission preserves legacy behavior.",
+        },
+        "profile_decision_catalog_version": {
+            "type": "integer",
+            "enum": [PROFILE_DECISION_CATALOG_VERSION],
+        },
+        "current_lineage_reference": {"type": "string"},
+        "decision_dispositions": {
+            "oneOf": [
+                {"type": "array", "items": {"type": "object"}},
+                {"type": "object", "additionalProperties": {"type": "object"}},
+            ]
+        },
+        "decision_references": {
+            "type": "object",
+            "additionalProperties": {"type": "string"},
+        },
+        "blueprint_decision_records": {
+            "oneOf": [
+                {"type": "array", "items": {"type": "object"}},
+                {"type": "object"},
+            ],
+        },
+        "resolution_phase": {
+            "type": "string",
+            "enum": list(RESOLUTION_PHASES),
+        },
+        "resolution_context": {
+            "type": "string",
+            "enum": list(RESOLUTION_CONTEXTS),
+        },
+        "selected_action": {"type": "string", "enum": list(ACTION_IDS)},
+        "selected_decision_references": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "source_finding_references": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "proposed_updates": {"type": "array", "items": {"type": "object"}},
+        "proposal_ref": {"type": "string"},
+        "prospective_derived_artifact_references": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "decision_resolution_pack": {"type": "object"},
+        "resolution_confirmation": {
+            "type": "object",
+            "properties": {"confirmed": {"type": "boolean"}},
+            "required": ["confirmed"],
+            "additionalProperties": False,
+        },
+        "confirmation_payload": {"type": "object"},
+        "resolution_parent_artifact": {"type": "object"},
         "algorithm_intent_card": {
             "type": "object",
             "required": [
@@ -1008,8 +1090,7 @@ def handle_jsonrpc_message(
                 key: value
                 for key, value in arguments.items()
                 if key
-                not in direct_field_names
-                | {"artifact_text", "artifact_kind", "client_context"}
+                not in direct_field_names | {"artifact_text", "artifact_kind", "client_context"}
             },
             opener=opener,
         )
