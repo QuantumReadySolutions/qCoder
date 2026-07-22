@@ -645,23 +645,42 @@ def compact_selected_python_source_evidence_for_hosted(
     summary = development.get("implementation_decision_summary")
     if not isinstance(depth, dict) or not isinstance(summary, dict):
         return supplied
+    already_compact = depth.get("local_detail_omitted_from_hosted_projection") is True
 
-    compact_motifs = [
-        {
-            "motif_id": item.get("motif_id"),
-            "observation_status": item.get("observation_status"),
-            "bounded_line_references": [
-                reference.get("line")
-                for reference in item.get("bounded_evidence_references") or []
-                if isinstance(reference, dict) and isinstance(reference.get("line"), int)
-            ][:20],
-            "evidence_confidence": item.get("evidence_confidence"),
-            "choice_origin": item.get("choice_origin"),
-            "inspection_scope_reference": "source_evidence_depth.inspection_scope",
-        }
-        for item in development.get("motif_observations") or []
-        if isinstance(item, dict)
-    ]
+    if already_compact:
+        compact_motifs = [
+            {
+                key: deepcopy(item[key])
+                for key in (
+                    "motif_id",
+                    "observation_status",
+                    "bounded_line_references",
+                    "evidence_confidence",
+                    "choice_origin",
+                    "inspection_scope_reference",
+                )
+                if key in item
+            }
+            for item in depth.get("motif_observation_inventory") or []
+            if isinstance(item, dict)
+        ]
+    else:
+        compact_motifs = [
+            {
+                "motif_id": item.get("motif_id"),
+                "observation_status": item.get("observation_status"),
+                "bounded_line_references": [
+                    reference.get("line")
+                    for reference in item.get("bounded_evidence_references") or []
+                    if isinstance(reference, dict) and isinstance(reference.get("line"), int)
+                ][:20],
+                "evidence_confidence": item.get("evidence_confidence"),
+                "choice_origin": item.get("choice_origin"),
+                "inspection_scope_reference": "source_evidence_depth.inspection_scope",
+            }
+            for item in development.get("motif_observations") or []
+            if isinstance(item, dict)
+        ]
     profile_prefix = {
         "grover_search": "grover.",
         "qaoa": "qaoa.",
@@ -673,6 +692,11 @@ def compact_selected_python_source_evidence_for_hosted(
             for item in compact_motifs
             if str(item.get("motif_id", "")).startswith(profile_prefix)
         ]
+    negative_source = (
+        depth.get("negative_alignment_inventory")
+        if already_compact
+        else development.get("alignment_findings")
+    )
     compact_negative_findings = [
         {
             key: deepcopy(item[key])
@@ -691,11 +715,16 @@ def compact_selected_python_source_evidence_for_hosted(
             )
             if key in item
         }
-        for item in development.get("alignment_findings") or []
+        for item in negative_source or []
         if isinstance(item, dict)
         and item.get("alignment_status")
         in {"not_observed", "ambiguous", "requires_next_stage_evidence", "conflicting"}
     ]
+    source_negative_source = (
+        depth.get("negative_source_inventory")
+        if already_compact
+        else depth.get("source_negative_findings")
+    )
     compact_source_negatives = [
         {
             key: deepcopy(item[key])
@@ -715,15 +744,20 @@ def compact_selected_python_source_evidence_for_hosted(
             )
             if key in item
         }
-        for item in depth.get("source_negative_findings") or []
+        for item in source_negative_source or []
         if isinstance(item, dict)
     ]
+    configuration_source = (
+        depth.get("source_configuration_facts") if already_compact else depth.get("source_facts")
+    )
     compact_configuration = [
         {
             "decision_family": item.get("decision_family"),
             "detector_id": item.get("detector_id"),
             "bounded_line_references": deepcopy(
-                (item.get("source_evidence_basis") or {}).get("bounded_line_references") or []
+                item.get("bounded_line_references")
+                if already_compact
+                else (item.get("source_evidence_basis") or {}).get("bounded_line_references") or []
             ),
             **(
                 {"safe_scalar_fact": deepcopy(item["safe_scalar_fact"])}
@@ -735,16 +769,19 @@ def compact_selected_python_source_evidence_for_hosted(
                 if item.get("structural_fact") is not None
                 else {}
             ),
-            "classification": {
+            "classification": deepcopy(item.get("classification"))
+            if already_compact
+            else {
                 "alignment_status": item.get("alignment_status"),
                 "choice_origin": item.get("choice_origin"),
                 "evidence_confidence": item.get("evidence_confidence"),
             },
         }
-        for item in depth.get("source_facts") or []
+        for item in configuration_source or []
         if isinstance(item, dict)
         and (
-            item.get("safe_scalar_fact") is not None
+            already_compact
+            or item.get("safe_scalar_fact") is not None
             or item.get("structural_fact") is not None
             or item.get("decision_family")
             in {
@@ -830,6 +867,11 @@ def compact_selected_python_source_evidence_for_hosted(
                     "included_ambiguity_families",
                     "ordering_key",
                     "action",
+                    "actions",
+                    "bounded_source_evidence_basis_reference",
+                    "ordered_decisions",
+                    "ordered_by",
+                    "why_the_choices_matter",
                 )
                 if key in item
             }
@@ -861,25 +903,50 @@ def compact_selected_python_source_evidence_for_hosted(
         if group_id == "suggested_next_actions":
             action_items = list(group.get("items") or [])
             first_action = action_items[0] if action_items else {}
-            compact_items = [
-                {
-                    "decision_id": "group.suggested_next_actions",
-                    "actions": [
-                        {
-                            "action": (item.get("action") or {}).get("action"),
-                            "decision_references": deepcopy(
-                                (item.get("action") or {}).get("decision_or_ambiguity") or []
-                            ),
-                        }
-                        for item in action_items
-                    ],
-                    "choice_origin": first_action.get("choice_origin", "unknown"),
-                    "evidence_confidence": first_action.get(
-                        "evidence_confidence", "Suggested next check"
-                    ),
-                    "alignment_status": first_action.get("alignment_status", "not_applicable"),
-                }
-            ]
+            if already_compact:
+                compact_items = [
+                    {
+                        **{
+                            key: deepcopy(first_action[key])
+                            for key in (
+                                "decision_id",
+                                "choice_origin",
+                                "evidence_confidence",
+                                "alignment_status",
+                            )
+                            if key in first_action
+                        },
+                        "actions": [
+                            {
+                                key: deepcopy(action[key])
+                                for key in ("action", "decision_references")
+                                if key in action
+                            }
+                            for action in first_action.get("actions") or []
+                            if isinstance(action, dict)
+                        ],
+                    }
+                ]
+            else:
+                compact_items = [
+                    {
+                        "decision_id": "group.suggested_next_actions",
+                        "actions": [
+                            {
+                                "action": (item.get("action") or {}).get("action"),
+                                "decision_references": deepcopy(
+                                    (item.get("action") or {}).get("decision_or_ambiguity") or []
+                                ),
+                            }
+                            for item in action_items
+                        ],
+                        "choice_origin": first_action.get("choice_origin", "unknown"),
+                        "evidence_confidence": first_action.get(
+                            "evidence_confidence", "Suggested next check"
+                        ),
+                        "alignment_status": first_action.get("alignment_status", "not_applicable"),
+                    }
+                ]
             compact_summary["suggested_action_semantics"] = {
                 "intended_update": "next_human_intent_or_confirmed_blueprint",
                 "could_establish": "explicit_requirement_choice_or_evidence_request",

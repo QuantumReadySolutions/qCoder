@@ -655,6 +655,12 @@ def test_hosted_projection_is_compact_valid_and_retains_gated_semantics(profile_
     assert depth["inspection_scope"]["selected_artifact_reference"]["scope"] == "current_session"
 
 
+@pytest.mark.parametrize("profile_id", PROFILE_IDS)
+def test_hosted_projection_is_idempotent_for_precompacted_evidence(profile_id: str) -> None:
+    projected = compact_selected_python_source_evidence_for_hosted(_extract(profile_id))
+    assert compact_selected_python_source_evidence_for_hosted(projected) == projected
+
+
 def test_context_bridge_automatically_sends_only_compact_depth_projection(tmp_path: Path) -> None:
     captured: list[dict[str, object]] = []
 
@@ -698,6 +704,62 @@ def test_context_bridge_automatically_sends_only_compact_depth_projection(tmp_pa
     assert "source_facts" not in depth
     assert depth["local_detail_omitted_from_hosted_projection"] is True
     assert len(json.dumps(captured[0], separators=(",", ":")).encode("utf-8")) < 32_768
+
+
+def test_context_bridge_preserves_precompacted_grover_negative_scope(tmp_path: Path) -> None:
+    captured: list[dict[str, object]] = []
+
+    class Response:
+        status = 200
+        headers: dict[str, str] = {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self) -> bytes:
+            return b'{"ok":true}'
+
+    def opener(request, timeout=20):
+        assert timeout == 20
+        captured.append(json.loads(request.data))
+        return Response()
+
+    token_file = tmp_path / "token.txt"
+    token_file.write_text("synthetic-context-bridge-token", encoding="utf-8")
+    token_file.chmod(0o600)
+    projected = compact_selected_python_source_evidence_for_hosted(_extract("grover_search"))
+    depth = projected["development_evidence"]["source_evidence_depth"]
+    assert depth["negative_alignment_inventory"]
+    depth["private_literal"] = "must-not-forward"
+    depth["negative_alignment_inventory"][0]["private_literal"] = "must-not-forward"
+
+    result = post_context_bridge(
+        base_url="https://preview.invalid",
+        token_file=token_file,
+        tool_name="create_source_blueprint_alignment_review",
+        artifact_text=None,
+        tool_arguments={
+            "implementation_blueprint": {"synthetic": True},
+            "output_evidence_contract": {"synthetic": True},
+            "selected_python_source_evidence": projected,
+        },
+        opener=opener,
+    )
+
+    assert result["ok"] is True, result
+    hosted = captured[0]["selected_python_source_evidence"]
+    hosted_depth = hosted["development_evidence"]["source_evidence_depth"]
+    assert hosted_depth["negative_alignment_inventory"] == [
+        {
+            key: value
+            for key, value in depth["negative_alignment_inventory"][0].items()
+            if key != "private_literal"
+        }
+    ]
+    assert "must-not-forward" not in json.dumps(captured[0], sort_keys=True)
 
 
 def test_cli_explicit_gate_and_missing_context_behavior(tmp_path: Path, capsys) -> None:

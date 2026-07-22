@@ -317,7 +317,7 @@ def validate_optional_payload(value: object) -> str:
     if value is None:
         return "ok"
     try:
-        serialized = json.dumps(value, sort_keys=True)
+        serialized = json.dumps(value, sort_keys=True, separators=(",", ":"))
     except TypeError:
         return "payload_not_json_serializable"
     if len(serialized) > MAX_ARTIFACT_TEXT_CHARS:
