@@ -13,8 +13,10 @@ from typing import Any, Iterable
 from qcoder.development_evidence import (
     ALIGNMENT_STATUSES,
     CHOICE_ORIGINS,
+    DEVELOPMENT_STAGES,
     EVIDENCE_CONFIDENCE_LABELS,
     MOTIF_REGISTRY,
+    MOTIF_HIERARCHY_LEVELS,
     PROFILE_IDS,
 )
 
@@ -69,6 +71,20 @@ ACTION_DISPLAY_LABELS = {
     "request_logical_circuit_evidence": "Request logical-circuit evidence",
     "leave_unresolved": "Leave unresolved",
 }
+SEMANTIC_CLASSIFICATIONS = (
+    "evidence_observation",
+    "decision_candidate",
+    "blueprint_decision",
+    "stage_manifestation",
+)
+CONTROL_TREATMENTS = (
+    "keep_fixed",
+    "allow_variation_within_bounds",
+    "avoid",
+    "defer",
+    "current_implementation_detail",
+)
+PRESENTATION_LENSES = ("guided", "deliberate")
 
 _DECISION_REFERENCE_PATTERN = re.compile(r"^decision-[A-Za-z0-9_-]{22,64}$")
 _LINEAGE_REFERENCE_PATTERN = re.compile(r"^session-artifact-[0-9a-f]{16,64}$")
@@ -108,6 +124,19 @@ def _entry(
     canonical_motifs = list(motifs)
     if any(motif not in MOTIF_REGISTRY for motif in canonical_motifs):
         raise RuntimeError("profile_decision_motif_unknown")
+    semantic_role = (
+        f"Define {label.lower()} for generated source under the supplied blueprint."
+        if generation_relevant
+        else None
+    )
+    applicable_scope = (
+        f"The {profile_id} intent-to-Python generation handoff." if generation_relevant else None
+    )
+    relationship_to_requirement = (
+        f"Interprets supplied blueprint field(s): {', '.join(blueprint_fields)}."
+        if tuple(blueprint_fields)
+        else None
+    )
     return {
         "profile_decision_id": f"{profile_id}.{name}",
         "catalog_id": PROFILE_DECISION_CATALOG_ID,
@@ -116,6 +145,20 @@ def _entry(
         "motif_mapping_version": MOTIF_MAPPING_VERSION,
         "display_label": label,
         "question": f"What explicit treatment should apply to {label.lower()}?",
+        "semantic_classification": (
+            "decision_candidate" if generation_relevant else "evidence_observation"
+        ),
+        "semantic_role": semantic_role,
+        "applicable_scope": applicable_scope,
+        "relationship_to_requirement": relationship_to_requirement,
+        "why_the_decision_matters": (
+            f"The supplied treatment determines how {label.lower()} is constrained or reviewed."
+            if generation_relevant
+            else (
+                f"An observed {label.lower()} may inform review but is not future design intent "
+                "without a supplied role and disposition."
+            )
+        ),
         "profile_id": profile_id,
         "intent_fields": list(blueprint_fields),
         "blueprint_fields": list(blueprint_fields),
@@ -137,6 +180,10 @@ def _entry(
         "required_source_visible_evidence": [
             f"source-visible structure or configuration for {label.lower()}"
         ],
+        "future_review_rule": (
+            f"Compare future explicitly supplied evidence for {label.lower()} with the "
+            "confirmed disposition and any finite bounds."
+        ),
         "canonical_motif_ids": canonical_motifs,
         "compatibility_motif_aliases": [motif.rsplit(".", 1)[-1] for motif in canonical_motifs],
         "evidence_confidence_limitations": [
@@ -218,6 +265,12 @@ def _generic_catalog() -> list[dict[str, Any]]:
             generation_relevant=False,
             default_effect="non_blocking",
             non_blocking_evidence_deferred=True,
+            future_stage="logical_circuit",
+            actions=(
+                "clarify_requirement",
+                "request_logical_circuit_evidence",
+                "leave_unresolved",
+            ),
         ),
         _entry(
             p,
@@ -637,6 +690,26 @@ def profile_decision_catalog_snapshot() -> dict[str, Any]:
         "resolution_phases": list(RESOLUTION_PHASES),
         "action_ids": list(ACTION_IDS),
         "action_display_labels": deepcopy(ACTION_DISPLAY_LABELS),
+        "semantic_classifications": list(SEMANTIC_CLASSIFICATIONS),
+        "control_treatments": list(CONTROL_TREATMENTS),
+        "presentation_lenses": list(PRESENTATION_LENSES),
+        "motif_hierarchy_levels": list(MOTIF_HIERARCHY_LEVELS),
+        "motif_hierarchy": {
+            motif_id: {
+                key: deepcopy(value[key])
+                for key in (
+                    "hierarchy_level",
+                    "hierarchy_label",
+                    "taxonomic_parent_motif_ids",
+                    "composition_parent_motif_ids",
+                    "related_child_motif_ids",
+                    "advisory_profile_lenses",
+                    "profile_lenses_are_identity_proof",
+                    "automatic_decision_promotion",
+                )
+            }
+            for motif_id, value in MOTIF_REGISTRY.items()
+        },
         "bound_types": list(_BOUND_TYPES),
         "decision_loop_gate": DECISION_LOOP_GATE,
         "decision_loop_disabled": DECISION_LOOP_DISABLED,
@@ -732,6 +805,17 @@ def build_decision_records(
             "non_proof_reference": "profile_decision_catalog.v1.non_proof",
         }
         optional_values = {
+            "semantic_classification": disposition.get("semantic_classification"),
+            "control_treatment": disposition.get("control_treatment"),
+            "semantic_role": disposition.get("semantic_role"),
+            "applicable_scope": disposition.get("applicable_scope"),
+            "relationship_to_requirement": disposition.get("relationship_to_requirement"),
+            "evidence_expectation": disposition.get("evidence_expectation"),
+            "future_review_rule": disposition.get("future_review_rule"),
+            "manifestation_stage": disposition.get("manifestation_stage"),
+            "motif_hierarchy": disposition.get("motif_hierarchy"),
+            "remaining_non_proofs": disposition.get("remaining_non_proofs"),
+            "available_control_treatments": disposition.get("available_control_treatments"),
             "related_intent_references": disposition.get("related_intent_references"),
             "related_requirement_references": disposition.get("related_requirement_references"),
             "allowed_profile_alternatives": definition["supported_alternatives"],
@@ -890,6 +974,155 @@ def bound_error(bound: object, definition: dict[str, Any]) -> str | None:
     return None
 
 
+def _nonempty_text(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _nonempty_text_list(value: object) -> bool:
+    return isinstance(value, list) and bool(value) and all(_nonempty_text(item) for item in value)
+
+
+def _motif_hierarchy_error(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        return "motif_hierarchy_invalid"
+    for item in value:
+        if not isinstance(item, dict):
+            return "motif_hierarchy_invalid"
+        motif_id = item.get("motif_id")
+        if motif_id not in MOTIF_REGISTRY:
+            return "motif_hierarchy_motif_invalid"
+        level = item.get("hierarchy_level")
+        if not isinstance(level, int) or level not in range(len(MOTIF_HIERARCHY_LEVELS)):
+            return "motif_hierarchy_level_invalid"
+        if item.get("hierarchy_label") != MOTIF_HIERARCHY_LEVELS[level]:
+            return "motif_hierarchy_label_invalid"
+    return None
+
+
+def _control_treatment_error(value: dict[str, Any]) -> str | None:
+    treatment = value.get("control_treatment")
+    if treatment is None:
+        return None
+    if treatment not in CONTROL_TREATMENTS:
+        return "control_treatment_invalid"
+    disposition = value.get("user_disposition")
+    state = value.get("resolution_state")
+    if treatment == "keep_fixed":
+        if disposition != "selected_choice" or state != "resolved":
+            return "keep_fixed_axes_invalid"
+        if not _nonempty_text_list(value.get("evidence_expectation")):
+            return "keep_fixed_evidence_expectation_missing"
+    elif treatment == "allow_variation_within_bounds":
+        if disposition not in {"bounded_alternatives", "bounded_value_range"}:
+            return "bounded_variation_disposition_invalid"
+    elif treatment == "avoid":
+        if disposition != "bounded_alternatives":
+            return "avoid_disposition_invalid"
+        if not value.get("explicitly_disallowed_choices"):
+            return "avoid_disallowed_choices_missing"
+    elif treatment == "defer":
+        if disposition not in {
+            "deferred_to_source_evidence",
+            "deferred_to_later_evidence",
+            "left_unresolved",
+        }:
+            return "defer_disposition_invalid"
+    elif treatment == "current_implementation_detail":
+        if value.get("semantic_classification") != "evidence_observation":
+            return "current_implementation_detail_classification_invalid"
+        if disposition not in {
+            "deferred_to_source_evidence",
+            "deferred_to_later_evidence",
+            "left_unresolved",
+        }:
+            return "current_implementation_detail_disposition_invalid"
+        if state not in {"unresolved", "evidence_deferred"}:
+            return "current_implementation_detail_resolution_invalid"
+        if value.get("generation_effect") != "non_blocking":
+            return "current_implementation_detail_generation_effect_invalid"
+        if value.get("blueprint_representation_state") in {
+            "represented",
+            "represented_in_derived_blueprint",
+        }:
+            return "current_implementation_detail_blueprint_adoption_invalid"
+    return None
+
+
+def semantic_classification_error(value: object) -> str | None:
+    if not isinstance(value, dict):
+        return "blueprint_decision_record_invalid"
+    classification = value.get("semantic_classification")
+    if classification is None:
+        return _control_treatment_error(value)
+    if classification not in SEMANTIC_CLASSIFICATIONS:
+        return "semantic_classification_invalid"
+    hierarchy_error = _motif_hierarchy_error(value.get("motif_hierarchy"))
+    if hierarchy_error:
+        return hierarchy_error
+    if classification == "evidence_observation":
+        if (
+            value.get("resolution_state") == "resolved"
+            or value.get("user_disposition") == "selected_choice"
+        ):
+            return "evidence_observation_promoted_without_decision"
+        if value.get("blueprint_representation_state") in {
+            "represented",
+            "represented_in_derived_blueprint",
+        }:
+            return "evidence_observation_blueprint_adoption_invalid"
+    elif classification in {"decision_candidate", "blueprint_decision"}:
+        required_text = (
+            "semantic_role",
+            "applicable_scope",
+            "relationship_to_requirement",
+            "future_review_rule",
+        )
+        if any(not _nonempty_text(value.get(key)) for key in required_text):
+            return f"{classification}_semantics_incomplete"
+        if not _nonempty_text_list(value.get("related_requirement_references")):
+            return f"{classification}_requirement_reference_missing"
+        if not _nonempty_text_list(value.get("evidence_expectation")):
+            return f"{classification}_evidence_expectation_missing"
+        if not _nonempty_text_list(value.get("remaining_non_proofs")):
+            return f"{classification}_non_proof_missing"
+        if classification == "decision_candidate":
+            if not _nonempty_text_list(value.get("unresolved_questions")):
+                return "decision_candidate_question_missing"
+            if (
+                not isinstance(value.get("available_control_treatments"), list)
+                or not value["available_control_treatments"]
+            ):
+                return "decision_candidate_controls_missing"
+        else:
+            if value.get("user_disposition") not in {
+                "selected_choice",
+                "bounded_alternatives",
+                "bounded_value_range",
+            }:
+                return "blueprint_decision_disposition_invalid"
+            if value.get("resolution_state") in {
+                "proposed",
+                "conflicting",
+                "evidence_deferred",
+                "not_applicable",
+            }:
+                return "blueprint_decision_resolution_invalid"
+            if (
+                not isinstance(value.get("provenance_entries"), list)
+                or not value["provenance_entries"]
+            ):
+                return "blueprint_decision_provenance_missing"
+    else:
+        stage = value.get("manifestation_stage")
+        if stage not in DEVELOPMENT_STAGES:
+            return "stage_manifestation_stage_invalid"
+        if stage != "python_source" and value.get("evidence_confidence") == "Observed":
+            return "later_stage_manifestation_observation_invalid"
+    return _control_treatment_error(value)
+
+
 def decision_record_error(value: object) -> str | None:
     if not isinstance(value, dict):
         return "blueprint_decision_record_invalid"
@@ -933,8 +1166,10 @@ def decision_record_error(value: object) -> str | None:
         "bounded_alternatives",
         "bounded_value_range",
     }:
-        return bound_error(value.get("user_approved_bounds"), definition)
-    return None
+        error = bound_error(value.get("user_approved_bounds"), definition)
+        if error:
+            return error
+    return semantic_classification_error(value)
 
 
 def _blocked_summary(
@@ -1116,6 +1351,138 @@ def _parent_references(parents: list[dict[str, Any]]) -> list[dict[str, str]]:
     return references
 
 
+def motif_hierarchy_for_definition(definition: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "motif_id": motif_id,
+            "hierarchy_level": MOTIF_REGISTRY[motif_id]["hierarchy_level"],
+            "hierarchy_label": MOTIF_REGISTRY[motif_id]["hierarchy_label"],
+            "taxonomic_parent_motif_ids": deepcopy(
+                MOTIF_REGISTRY[motif_id]["taxonomic_parent_motif_ids"]
+            ),
+            "composition_parent_motif_ids": deepcopy(
+                MOTIF_REGISTRY[motif_id]["composition_parent_motif_ids"]
+            ),
+            "advisory_profile_lenses": deepcopy(
+                MOTIF_REGISTRY[motif_id]["advisory_profile_lenses"]
+            ),
+            "automatic_decision_promotion": False,
+        }
+        for motif_id in definition["canonical_motif_ids"]
+    ]
+
+
+def available_control_treatments(record: dict[str, Any], definition: dict[str, Any]) -> list[str]:
+    classification = record.get("semantic_classification") or definition["semantic_classification"]
+    result = ["defer"]
+    if classification == "evidence_observation":
+        result.append("current_implementation_detail")
+    if classification in {"decision_candidate", "blueprint_decision"}:
+        result.insert(0, "keep_fixed")
+        if definition["bounded_delegation_eligible"]:
+            result.append("allow_variation_within_bounds")
+        if definition["supported_alternatives"]:
+            result.append("avoid")
+    return list(dict.fromkeys(result))
+
+
+def _candidate_complete(record: dict[str, Any]) -> bool:
+    candidate = deepcopy(record)
+    candidate["semantic_classification"] = "decision_candidate"
+    candidate.setdefault("unresolved_questions", ["Explicit user disposition required."])
+    candidate.setdefault(
+        "available_control_treatments",
+        available_control_treatments(
+            candidate,
+            _catalog_by_id(candidate["selected_profile"])[candidate["profile_decision_id"]],
+        ),
+    )
+    return semantic_classification_error(candidate) is None
+
+
+def applicable_actions_for_decision(
+    record: dict[str, Any], *, resolution_context: str
+) -> list[str]:
+    definition = _catalog_by_id(record["selected_profile"])[record["profile_decision_id"]]
+    classification = record.get("semantic_classification") or definition["semantic_classification"]
+    actions: list[str] = []
+    if resolution_context == "source_alignment" and classification == "decision_candidate":
+        if _candidate_complete(record) and record.get("related_source_findings"):
+            actions.append("accept_and_add_to_blueprint")
+    if classification in {"evidence_observation", "decision_candidate"} or record.get(
+        "resolution_state"
+    ) in {"unresolved", "conflicting", "evidence_deferred"}:
+        actions.append("clarify_requirement")
+    if classification == "decision_candidate" and definition["bounded_delegation_eligible"]:
+        actions.append("constrain_next_generation")
+    if classification == "decision_candidate" and len(definition["supported_alternatives"]) > 1:
+        actions.append("compare_profile_supported_alternatives")
+    if resolution_context == "source_alignment" and classification == "blueprint_decision":
+        actions.append("ask_assistant_to_regenerate")
+    if "logical_circuit" in definition["later_evidence_requirements"]:
+        actions.append("request_logical_circuit_evidence")
+    if record.get("resolution_state") != "resolved" or classification == "evidence_observation":
+        actions.append("leave_unresolved")
+    return [action for action in ACTION_IDS if action in actions]
+
+
+def build_structured_decision_requests(
+    *, profile_id: str, decision_records: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    definitions = _catalog_by_id(profile_id)
+    requests = []
+    for record in decision_records:
+        definition = definitions[record["profile_decision_id"]]
+        classification = (
+            record.get("semantic_classification") or definition["semantic_classification"]
+        )
+        requests.append(
+            {
+                "section_type": "decision_request",
+                "schema_version": 1,
+                "decision_ref": record["decision_ref"],
+                "profile_decision_id": record["profile_decision_id"],
+                "plain_language_question": definition["question"],
+                "why_the_decision_matters": definition["why_the_decision_matters"],
+                "related_requirement_references": deepcopy(
+                    record.get("related_requirement_references") or []
+                ),
+                "relationship_to_requirement": record.get("relationship_to_requirement")
+                or definition["relationship_to_requirement"],
+                "current_evidence_observation": {
+                    "source_finding_references": deepcopy(
+                        record.get("related_source_findings") or []
+                    ),
+                    "choice_origin": record["choice_origin"],
+                    "evidence_confidence": record["evidence_confidence"],
+                    "alignment_status": record["alignment_status"],
+                },
+                "semantic_classification": classification,
+                "semantic_role": record.get("semantic_role") or definition["semantic_role"],
+                "applicable_scope": record.get("applicable_scope")
+                or definition["applicable_scope"],
+                "common_profile_supported_choices": deepcopy(definition["supported_alternatives"]),
+                "supported_bound_types": deepcopy(definition["supported_bound_types"]),
+                "blocks_generation": record["generation_effect"] == "blocking",
+                "bounded_delegation_permitted": definition["bounded_delegation_eligible"],
+                "deferral_permitted": definition["non_blocking_evidence_deferred"],
+                "later_evidence_that_could_help": deepcopy(
+                    definition["later_evidence_requirements"]
+                ),
+                "available_control_treatments": available_control_treatments(record, definition),
+                "contextually_applicable_actions": applicable_actions_for_decision(
+                    record, resolution_context="source_alignment"
+                ),
+                "motif_hierarchy": motif_hierarchy_for_definition(definition),
+                "explanation_available_before_decision": True,
+                "assistant_must_not_answer_or_confirm": True,
+                "profile_is_advisory": True,
+                "non_proof": _NON_PROOF,
+            }
+        )
+    return requests
+
+
 def _action_allowed(context: str, action: str) -> bool:
     if context == "blueprint_readiness":
         return action in {
@@ -1135,6 +1502,18 @@ def _apply_proposed_updates(
     result = deepcopy(records)
     by_ref = {item["decision_ref"]: item for item in result}
     allowed_fields = {
+        "semantic_classification",
+        "control_treatment",
+        "semantic_role",
+        "applicable_scope",
+        "relationship_to_requirement",
+        "related_requirement_references",
+        "evidence_expectation",
+        "future_review_rule",
+        "manifestation_stage",
+        "motif_hierarchy",
+        "remaining_non_proofs",
+        "available_control_treatments",
         "resolution_state",
         "user_disposition",
         "generation_effect",
@@ -1156,6 +1535,35 @@ def _apply_proposed_updates(
         if error:
             raise ValueError(error)
     return result
+
+
+def _resolution_semantics_error(
+    *,
+    selected_action: str,
+    selected_decision_references: list[str],
+    before_records: list[dict[str, Any]],
+    after_records: list[dict[str, Any]],
+) -> str | None:
+    before = {item["decision_ref"]: item for item in before_records}
+    after = {item["decision_ref"]: item for item in after_records}
+    if selected_action == "accept_and_add_to_blueprint":
+        for decision_ref in selected_decision_references:
+            prior = before[decision_ref]
+            proposed = after[decision_ref]
+            if not prior.get("related_source_findings"):
+                return "accept_and_add_source_provenance_missing"
+            if proposed.get("semantic_classification") != "blueprint_decision":
+                return "accept_and_add_semantic_decision_required"
+            error = semantic_classification_error(proposed)
+            if error:
+                return error
+            if proposed.get("control_treatment") not in {
+                "keep_fixed",
+                "allow_variation_within_bounds",
+                "avoid",
+            }:
+                return "accept_and_add_control_treatment_invalid"
+    return None
 
 
 def propose_decision_resolution_pack(
@@ -1188,6 +1596,14 @@ def propose_decision_resolution_pack(
         raise ValueError("blueprint_readiness_source_finding_forbidden")
     before = calculate_blueprint_readiness(profile_id=profile_id, decision_records=decision_records)
     after_records = _apply_proposed_updates(decision_records, proposed_updates)
+    semantic_error = _resolution_semantics_error(
+        selected_action=selected_action,
+        selected_decision_references=selected_decision_references,
+        before_records=decision_records,
+        after_records=after_records,
+    )
+    if semantic_error:
+        raise ValueError(semantic_error)
     after = calculate_blueprint_readiness(profile_id=profile_id, decision_records=after_records)
     proposal_ref = proposal_ref or new_opaque_reference("proposal")
     if not _OPAQUE_REFERENCE_PATTERN.fullmatch(proposal_ref):
@@ -1226,6 +1642,27 @@ def propose_decision_resolution_pack(
         "required_parent_references": _parent_references(parent_artifacts),
         "current_lineage_reference": current_lineage_reference,
         "proposed_outcome": {"decision_updates": deepcopy(proposed_updates)},
+        "semantic_classifications": [
+            {
+                "decision_ref": decision_ref,
+                "before": next(
+                    item for item in decision_records if item["decision_ref"] == decision_ref
+                ).get("semantic_classification"),
+                "after": next(
+                    item for item in after_records if item["decision_ref"] == decision_ref
+                ).get("semantic_classification"),
+            }
+            for decision_ref in selected_decision_references
+        ],
+        "control_treatments": [
+            {
+                "decision_ref": decision_ref,
+                "treatment": next(
+                    item for item in after_records if item["decision_ref"] == decision_ref
+                ).get("control_treatment"),
+            }
+            for decision_ref in selected_decision_references
+        ],
         "before_and_after_preview": {
             "before": before,
             "after": after,
@@ -1304,6 +1741,39 @@ def decision_resolution_pack_error(
         or value.get("motif_mapping_version") != MOTIF_MAPPING_VERSION
     ):
         return "resolution_version_mismatch"
+    if value.get("selected_action") == "accept_and_add_to_blueprint":
+        updates = (value.get("proposed_outcome") or {}).get("decision_updates")
+        if not isinstance(updates, list) or not updates:
+            return "accept_and_add_semantics_missing"
+        for update in updates:
+            if not isinstance(update, dict):
+                return "accept_and_add_semantics_missing"
+            if update.get("semantic_classification") != "blueprint_decision":
+                return "accept_and_add_semantic_decision_required"
+            if update.get("control_treatment") not in {
+                "keep_fixed",
+                "allow_variation_within_bounds",
+                "avoid",
+            }:
+                return "accept_and_add_control_treatment_invalid"
+            if any(
+                not _nonempty_text(update.get(key))
+                for key in (
+                    "semantic_role",
+                    "applicable_scope",
+                    "relationship_to_requirement",
+                    "future_review_rule",
+                )
+            ):
+                return "accept_and_add_semantics_incomplete"
+            if not _nonempty_text_list(update.get("related_requirement_references")):
+                return "accept_and_add_requirement_reference_missing"
+            if not _nonempty_text_list(update.get("evidence_expectation")):
+                return "accept_and_add_evidence_expectation_missing"
+            if not _nonempty_text_list(update.get("remaining_non_proofs")):
+                return "accept_and_add_non_proof_missing"
+        if not _nonempty_text_list(value.get("source_finding_references")):
+            return "accept_and_add_source_provenance_missing"
     if not isinstance(value.get("consistency_digest"), str) or value[
         "consistency_digest"
     ] != consistency_digest(value):
@@ -1372,6 +1842,14 @@ def confirm_decision_resolution_pack(
         raise ValueError("resolution_confirmation_payload_mismatch")
     updates = deepcopy(decision_resolution_pack["proposed_outcome"]["decision_updates"])
     updated_records = _apply_proposed_updates(decision_records, updates)
+    semantic_error = _resolution_semantics_error(
+        selected_action=selected_action,
+        selected_decision_references=list(decision_resolution_pack["decision_references"]),
+        before_records=decision_records,
+        after_records=updated_records,
+    )
+    if semantic_error:
+        raise ValueError(semantic_error)
     readiness = calculate_blueprint_readiness(
         profile_id=decision_resolution_pack["selected_profile"],
         decision_records=updated_records,

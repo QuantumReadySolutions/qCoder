@@ -116,6 +116,13 @@ USER_CONTROLLED_ACTIONS = (
     "Request logical-circuit evidence",
     "Leave unresolved",
 )
+MOTIF_HIERARCHY_LEVELS = (
+    "atomic_evidence",
+    "micro_motif",
+    "composite_motif",
+    "primary_design_motif",
+    "profile_or_circuit_family_lens",
+)
 SOURCE_EVIDENCE_DEPTH_LIMITS = {
     "selected_artifacts": 1,
     "maximum_source_characters": 100_000,
@@ -181,7 +188,12 @@ def _motif(
     next_stage: str = "logical_circuit",
     decisions: Sequence[str] = (),
     alternatives: Sequence[str] = (),
+    hierarchy_level: int = 1,
+    taxonomic_parent_motif_ids: Sequence[str] = (),
+    composition_parent_motif_ids: Sequence[str] = (),
 ) -> dict[str, Any]:
+    if hierarchy_level not in range(len(MOTIF_HIERARCHY_LEVELS)):
+        raise RuntimeError("motif_hierarchy_level_invalid")
     return {
         "motif_id": motif_id,
         "display_name": display_name,
@@ -203,6 +215,17 @@ def _motif(
         "limitations_and_non_claims": [_STATIC_NON_PROOF],
         "sdk_specific_mappings": ["qiskit_ast_v0"],
         "required_next_stage_evidence": next_stage,
+        "hierarchy_level": hierarchy_level,
+        "hierarchy_label": MOTIF_HIERARCHY_LEVELS[hierarchy_level],
+        "taxonomic_parent_motif_ids": list(taxonomic_parent_motif_ids),
+        "composition_parent_motif_ids": list(composition_parent_motif_ids),
+        "related_child_motif_ids": [],
+        "related_decision_candidate_references": [],
+        "related_blueprint_decision_references": [],
+        "stage_manifestation_references": [],
+        "advisory_profile_lenses": list(profiles),
+        "profile_lenses_are_identity_proof": False,
+        "automatic_decision_promotion": False,
     }
 
 
@@ -213,6 +236,7 @@ MOTIF_REGISTRY: dict[str, dict[str, Any]] = {
         PROFILE_IDS,
         ("QuantumCircuit constructor call",),
         decisions=("circuit construction form",),
+        hierarchy_level=3,
     ),
     "qiskit.parameter.use": _motif(
         "qiskit.parameter.use",
@@ -228,6 +252,7 @@ MOTIF_REGISTRY: dict[str, dict[str, Any]] = {
         ("measure or measure_all call",),
         decisions=("measurement mapping",),
         alternatives=("explicit classical-bit mapping", "measure_all candidate mapping"),
+        hierarchy_level=2,
     ),
     "qiskit.controlled.operations": _motif(
         "qiskit.controlled.operations",
@@ -235,6 +260,7 @@ MOTIF_REGISTRY: dict[str, dict[str, Any]] = {
         PROFILE_IDS,
         ("controlled Qiskit circuit operation call",),
         decisions=("controlled-operation form",),
+        hierarchy_level=1,
     ),
     "qiskit.result.processing": _motif(
         "qiskit.result.processing",
@@ -243,6 +269,7 @@ MOTIF_REGISTRY: dict[str, dict[str, Any]] = {
         ("get_counts or quasi-distribution access", "explicit result-decoding function"),
         next_stage="run_results",
         decisions=("result-processing boundary",),
+        hierarchy_level=2,
     ),
     "grover.oracle.structure": _motif(
         "grover.oracle.structure",
@@ -251,6 +278,7 @@ MOTIF_REGISTRY: dict[str, dict[str, Any]] = {
         ("controlled phase-like operation",),
         decisions=("oracle representation",),
         alternatives=("phase-oracle structure", "bit-flip-oracle structure"),
+        hierarchy_level=3,
     ),
     "grover.diffusion.amplification": _motif(
         "grover.diffusion.amplification",
@@ -258,6 +286,7 @@ MOTIF_REGISTRY: dict[str, dict[str, Any]] = {
         ("grover_search",),
         ("bounded H/X/controlled-operation source structure",),
         decisions=("diffusion construction",),
+        hierarchy_level=3,
     ),
     "grover.iteration.structure": _motif(
         "grover.iteration.structure",
@@ -265,6 +294,7 @@ MOTIF_REGISTRY: dict[str, dict[str, Any]] = {
         ("grover_search",),
         ("bounded loop containing amplification-related calls",),
         decisions=("iteration count source",),
+        hierarchy_level=2,
     ),
     "qaoa.cost.layer": _motif(
         "qaoa.cost.layer",
@@ -272,6 +302,7 @@ MOTIF_REGISTRY: dict[str, dict[str, Any]] = {
         ("qaoa",),
         ("parameterized RZ/RZZ or Pauli-evolution-like call",),
         decisions=("cost-layer representation",),
+        hierarchy_level=3,
     ),
     "qaoa.mixer.layer": _motif(
         "qaoa.mixer.layer",
@@ -280,6 +311,7 @@ MOTIF_REGISTRY: dict[str, dict[str, Any]] = {
         ("parameterized RX/RY mixer-like call",),
         decisions=("mixer choice",),
         alternatives=("X mixer", "explicitly supplied alternative mixer"),
+        hierarchy_level=3,
     ),
     "qaoa.repetition.layer": _motif(
         "qaoa.repetition.layer",
@@ -287,6 +319,7 @@ MOTIF_REGISTRY: dict[str, dict[str, Any]] = {
         ("qaoa",),
         ("bounded loop containing cost- and mixer-layer calls",),
         decisions=("repetitions or depth",),
+        hierarchy_level=2,
     ),
     "qaoa.parameterized.layer": _motif(
         "qaoa.parameterized.layer",
@@ -354,6 +387,7 @@ def development_evidence_contract_snapshot() -> dict[str, Any]:
             "declaration_state",
             "non_proof",
         ],
+        "motif_hierarchy_levels": list(MOTIF_HIERARCHY_LEVELS),
         "motif_registry": deepcopy(MOTIF_REGISTRY),
         "qiskit_version_rules": deepcopy(QISKIT_VERSION_RULES),
         "source_evidence_depth": {

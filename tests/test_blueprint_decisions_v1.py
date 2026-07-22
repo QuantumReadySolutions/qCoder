@@ -12,6 +12,7 @@ from qcoder.algorithm_blueprint import (
 )
 from qcoder.blueprint_decisions import (
     ACTION_IDS,
+    CONTROL_TREATMENTS,
     DECISION_LOOP_GATE,
     GENERATION_EFFECTS,
     MOTIF_MAPPING_VERSION,
@@ -21,9 +22,12 @@ from qcoder.blueprint_decisions import (
     READINESS_RESULTS,
     RESOLUTION_CONTEXTS,
     RESOLUTION_STATES,
+    SEMANTIC_CLASSIFICATIONS,
     USER_DISPOSITIONS,
+    applicable_actions_for_decision,
     bound_error,
     build_decision_records,
+    build_structured_decision_requests,
     calculate_blueprint_readiness,
     catalog_entries,
     confirm_decision_resolution_pack,
@@ -45,6 +49,7 @@ from qcoder.development_evidence import (
     CHOICE_ORIGINS,
     EVIDENCE_CONFIDENCE_LABELS,
     MOTIF_REGISTRY,
+    MOTIF_HIERARCHY_LEVELS,
 )
 
 
@@ -141,6 +146,136 @@ def test_exact_contract_inventories_and_authorities() -> None:
     assert tuple(snapshot["choice_origins"]) == CHOICE_ORIGINS
     assert tuple(snapshot["evidence_confidence_labels"]) == EVIDENCE_CONFIDENCE_LABELS
     assert tuple(snapshot["alignment_statuses"]) == ALIGNMENT_STATUSES
+    assert SEMANTIC_CLASSIFICATIONS == (
+        "evidence_observation",
+        "decision_candidate",
+        "blueprint_decision",
+        "stage_manifestation",
+    )
+    assert CONTROL_TREATMENTS == (
+        "keep_fixed",
+        "allow_variation_within_bounds",
+        "avoid",
+        "defer",
+        "current_implementation_detail",
+    )
+    assert tuple(snapshot["motif_hierarchy_levels"]) == MOTIF_HIERARCHY_LEVELS
+
+
+def _controlled_observation() -> tuple[list[dict[str, object]], dict[str, object]]:
+    records = _records("generic_qiskit", _ready_dispositions("generic_qiskit"))
+    target = _selected_record(records, "generic_qiskit.controlled_operations")
+    target.update(
+        {
+            "semantic_classification": "evidence_observation",
+            "control_treatment": "current_implementation_detail",
+            "resolution_state": "evidence_deferred",
+            "user_disposition": "deferred_to_later_evidence",
+            "generation_effect": "non_blocking",
+            "blueprint_representation_state": "deferred",
+            "choice_origin": "introduced_after_blueprint",
+            "evidence_confidence": "Observed",
+            "alignment_status": "introduced",
+            "related_source_findings": ["source-finding-varied-controlled-structure"],
+            "provenance_entries": [
+                {
+                    "choice_origin": "introduced_after_blueprint",
+                    "source_finding_ref": "source-finding-varied-controlled-structure",
+                    "non_causal": True,
+                }
+            ],
+            "motif_hierarchy": [
+                {
+                    "motif_id": "qiskit.controlled.operations",
+                    "hierarchy_level": 1,
+                    "hierarchy_label": "micro_motif",
+                }
+            ],
+        }
+    )
+    assert decision_record_error(target) is None
+    return records, target
+
+
+def test_controlled_micro_motif_remains_observation_and_is_not_adoptable() -> None:
+    records, target = _controlled_observation()
+    actions = applicable_actions_for_decision(target, resolution_context="source_alignment")
+    assert "accept_and_add_to_blueprint" not in actions
+    assert actions == [
+        "clarify_requirement",
+        "request_logical_circuit_evidence",
+        "leave_unresolved",
+    ]
+    before = calculate_blueprint_readiness(profile_id="generic_qiskit", decision_records=records)
+    with pytest.raises(ValueError, match="evidence_observation_promoted_without_decision"):
+        propose_decision_resolution_pack(
+            resolution_context="source_alignment",
+            selected_action="accept_and_add_to_blueprint",
+            profile_id="generic_qiskit",
+            decision_records=records,
+            parent_artifacts=[PARENT],
+            selected_decision_references=[target["decision_ref"]],
+            proposed_updates=[
+                {
+                    "decision_ref": target["decision_ref"],
+                    "resolution_state": "resolved",
+                    "user_disposition": "selected_choice",
+                    "generation_effect": "non_blocking",
+                    "blueprint_representation_state": "represented_in_derived_blueprint",
+                }
+            ],
+            source_finding_references=target["related_source_findings"],
+            current_lineage_reference=LINEAGE,
+        )
+    after = calculate_blueprint_readiness(profile_id="generic_qiskit", decision_records=records)
+    assert before == after
+
+
+def test_current_implementation_detail_can_be_left_unresolved_without_adoption() -> None:
+    records, target = _controlled_observation()
+    pack = propose_decision_resolution_pack(
+        resolution_context="source_alignment",
+        selected_action="leave_unresolved",
+        profile_id="generic_qiskit",
+        decision_records=records,
+        parent_artifacts=[PARENT],
+        selected_decision_references=[target["decision_ref"]],
+        proposed_updates=[
+            {
+                "decision_ref": target["decision_ref"],
+                "semantic_classification": "evidence_observation",
+                "control_treatment": "current_implementation_detail",
+                "resolution_state": "evidence_deferred",
+                "user_disposition": "deferred_to_later_evidence",
+                "generation_effect": "non_blocking",
+                "blueprint_representation_state": "deferred",
+            }
+        ],
+        source_finding_references=target["related_source_findings"],
+        current_lineage_reference=LINEAGE,
+    )
+    assert pack["readiness_impact"]["before"] == pack["readiness_impact"]["after"]
+    assert pack["control_treatments"][0]["treatment"] == ("current_implementation_detail")
+    assert pack["proposed_derived_artifact_types"] == ["unresolved_decision_outcome"]
+
+
+def test_structured_request_explains_without_answering_or_promoting() -> None:
+    records, target = _controlled_observation()
+    request = next(
+        item
+        for item in build_structured_decision_requests(
+            profile_id="generic_qiskit", decision_records=records
+        )
+        if item["decision_ref"] == target["decision_ref"]
+    )
+    assert request["semantic_classification"] == "evidence_observation"
+    assert request["available_control_treatments"] == [
+        "defer",
+        "current_implementation_detail",
+    ]
+    assert request["assistant_must_not_answer_or_confirm"] is True
+    assert request["motif_hierarchy"][0]["hierarchy_label"] == "micro_motif"
+    assert "accept_and_add_to_blueprint" not in request["contextually_applicable_actions"]
 
 
 def test_three_profiles_have_unique_ordered_decisions_and_canonical_motifs() -> None:
@@ -379,6 +514,17 @@ def _proposal(
     updates = [
         {
             "decision_ref": target["decision_ref"],
+            "semantic_classification": "blueprint_decision",
+            "control_treatment": "keep_fixed",
+            "semantic_role": "Oracle implementation used by the supplied Grover search blueprint.",
+            "applicable_scope": "The explicitly supplied oracle subroutine for this blueprint lineage.",
+            "relationship_to_requirement": "Resolves the supplied oracle-approach requirement.",
+            "related_requirement_references": ["requirement-oracle-approach"],
+            "evidence_expectation": ["source-visible oracle construction"],
+            "future_review_rule": "Compare the selected source oracle with the confirmed oracle approach.",
+            "remaining_non_proofs": [
+                "Acceptance does not prove oracle correctness or Grover identity."
+            ],
             "resolution_state": "resolved",
             "user_disposition": "selected_choice",
             "generation_effect": "non_blocking",
