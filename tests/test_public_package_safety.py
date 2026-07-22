@@ -45,6 +45,24 @@ def test_manifest_excludes_private_alpha_docs() -> None:
     assert "graft tests" not in manifest
 
 
+def test_release_gate_excludes_protected_and_operational_material() -> None:
+    release_check = _read(REPO_ROOT / "scripts" / "qcoder-v0-release-check")
+    for marker in (
+        "qcoder_internal/",
+        "protected_qrs_service",
+        "/tests/",
+        "/fixtures/",
+        "docs/private-notes/",
+        "private-proof",
+        "reconciliation-manifest",
+        "qcoder-preview-protected",
+        "/home/rob/projects/",
+        "-----BEGIN PRIVATE KEY-----",
+        ".map",
+    ):
+        assert marker in release_check
+
+
 def test_pro_shell_help_marks_archived_public_boundary() -> None:
     out = io.StringIO()
     with redirect_stdout(out):

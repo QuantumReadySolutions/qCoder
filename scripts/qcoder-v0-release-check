@@ -155,23 +155,60 @@ sdist = Path("$SDIST_PATH")
 
 forbidden = (
     "qcoder/pro_v0/",
+    "qcoder_internal/",
+    "protected_qrs_service",
     "test_pro_v0_",
+    "/tests/",
+    "/fixtures/",
+    "docs/private-notes/",
+    "private-proof",
+    "reconciliation-manifest",
+    "combined-release-decision-packet",
+    "__pycache__/",
+    ".pyc",
+    ".pyo",
+    ".map",
     "docs/pro-v0-install.md",
     "docs/private-alpha-quickstart.md",
     "docs/private-alpha-release-candidate-validation.md",
 )
+
+forbidden_content = (
+    b"docs/private-notes",
+    b"qcoder-preview-protected",
+    b"/home/rob/projects/",
+    b"-----BEGIN PRIVATE KEY-----",
+    b"-----BEGIN RSA PRIVATE KEY-----",
+    b"-----BEGIN OPENSSH PRIVATE KEY-----",
+)
+
+
+def check_content(name: str, contents: bytes) -> None:
+    for marker in forbidden_content:
+        if marker in contents:
+            raise SystemExit(
+                f"release-check: forbidden packaged content in {name}: {marker.decode('ascii')}"
+            )
 
 with zipfile.ZipFile(wheel) as zf:
     names = zf.namelist()
     for fragment in forbidden:
         if any(fragment in name for name in names):
             raise SystemExit(f"release-check: forbidden wheel content: {fragment}")
+    for name in names:
+        if not name.endswith("/"):
+            check_content(name, zf.read(name))
 
 with tarfile.open(sdist, "r:gz") as tf:
     names = tf.getnames()
     for fragment in forbidden:
         if any(fragment in name for name in names):
             raise SystemExit(f"release-check: forbidden sdist content: {fragment}")
+    for member in tf.getmembers():
+        if member.isfile():
+            handle = tf.extractfile(member)
+            if handle is not None:
+                check_content(member.name, handle.read())
 PY
 
 echo "==> public package checks passed"
