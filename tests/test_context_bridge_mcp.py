@@ -112,6 +112,74 @@ def test_tool_descriptors_are_exact_public_context_bridge_tools() -> None:
         "generic 'result evidence is present'"
         in diff["inputSchema"]["properties"]["after"]["description"]
     )
+    blueprint = next(
+        tool for tool in tool_descriptors() if tool["name"] == "create_implementation_blueprint"
+    )
+    assert "allOf" in blueprint["inputSchema"]
+    parent_schema = blueprint["inputSchema"]["properties"]["evidence_parent_artifacts"]
+    assert parent_schema["minItems"] == 1
+    assert "no lookup occurs" in parent_schema["description"]
+
+
+def test_current_build_proposal_call_requires_and_transports_evidence_parents(
+    tmp_path: Path,
+) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    common = {
+        "context_loop": "current_build_context_v1",
+        "decision_loop": "readiness_resolution_v1",
+        "resolution_context": "current_build_context",
+        "resolution_phase": "propose",
+        "algorithm_intent_card": {"artifact_type": "algorithm_intent_card"},
+        "intent_relationship": {"relationship_type": "implemented_by"},
+        "working_blueprint": {"artifact_type": "implementation_blueprint"},
+        "current_build_context": {
+            "schema_id": "qcoder.current_build_context.v1",
+            "artifact_ref": "session-artifact-aaaaaaaaaaaaaaaa",
+        },
+    }
+    missing = post_context_bridge(
+        base_url="https://example.invalid",
+        token_file=token_file,
+        tool_name="create_implementation_blueprint",
+        artifact_text=None,
+        tool_arguments=common,
+        opener=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("network should not be called")
+        ),
+    )
+    assert missing["ok"] is False
+    assert missing["error_category"] == "evidence_parent_artifacts_required"
+
+    captured: dict[str, object] = {}
+
+    def opener(request: object, timeout: int = 20) -> _FakeResponse:
+        captured["body"] = json.loads(request.data.decode("utf-8"))  # type: ignore[attr-defined]
+        return _FakeResponse()
+
+    parents = [
+        {
+            "artifact_type": "request_baseline_handoff",
+            "artifact_ref": "session-artifact-bbbbbbbbbbbbbbbb",
+            "artifact_digest": "a" * 64,
+        },
+        {
+            "artifact_type": "current_build_context",
+            "artifact_ref": "session-artifact-aaaaaaaaaaaaaaaa",
+            "artifact_digest": "b" * 64,
+        },
+    ]
+    complete = post_context_bridge(
+        base_url="https://example.invalid",
+        token_file=token_file,
+        tool_name="create_implementation_blueprint",
+        artifact_text=None,
+        tool_arguments={**common, "evidence_parent_artifacts": parents},
+        opener=opener,
+    )
+    assert complete["ok"] is True
+    assert captured["body"]["evidence_parent_artifacts"] == parents  # type: ignore[index]
 
 
 def test_tool_descriptors_advertise_only_tool_specific_fields() -> None:

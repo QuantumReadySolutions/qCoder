@@ -533,6 +533,18 @@ def _context_loop_argument_error(
             value = arguments.get(field)
             if value is None or value == [] or value == {}:
                 return f"missing_{field}"
+    if (
+        tool_name == "create_implementation_blueprint"
+        and arguments.get("resolution_context") == "current_build_context"
+    ):
+        for field in ("working_blueprint", "current_build_context"):
+            if not isinstance(arguments.get(field), dict):
+                return f"missing_{field}"
+        parents = arguments.get("evidence_parent_artifacts")
+        if not isinstance(parents, list) or not parents:
+            return "evidence_parent_artifacts_required"
+        if any(not isinstance(parent, dict) for parent in parents):
+            return "evidence_parent_artifact_invalid"
     return None
 
 
@@ -577,9 +589,7 @@ def post_context_bridge(
                 return safe_error("conflicting_tool_argument")
             arguments[key] = value
     context_loop_enabled = arguments.get("context_loop") == CONTEXT_LOOP_GATE
-    context_error = _context_loop_argument_error(
-        canonical_tool_name, arguments, artifact_text
-    )
+    context_error = _context_loop_argument_error(canonical_tool_name, arguments, artifact_text)
     if context_error is not None:
         return safe_error(context_error)
     if (
@@ -801,6 +811,13 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
         "evidence_parent_artifacts": {
             "type": "array",
             "items": {"type": "object"},
+            "minItems": 1,
+            "description": (
+                "Every bounded current-session parent relied upon by a current_build_context "
+                "proposal, explicitly resupplied in this request. Include the Request Baseline, "
+                "Working Blueprint, Generation Context, each supplied manifestation, Decision-"
+                "Evidence Lineage, and Current Build Context when referenced; no lookup occurs."
+            ),
         },
         "artifact_references": {
             "type": "object",
@@ -1180,6 +1197,25 @@ def _tool_schema(tool_name: str) -> dict[str, Any]:
                 "required": context_requirements[tool_name],
                 "properties": {"context_loop": {"const": CONTEXT_LOOP_GATE}},
             },
+        ]
+    if tool_name == "create_implementation_blueprint":
+        schema["allOf"] = [
+            {
+                "if": {
+                    "properties": {
+                        "context_loop": {"const": CONTEXT_LOOP_GATE},
+                        "resolution_context": {"const": "current_build_context"},
+                    },
+                    "required": ["context_loop", "resolution_context"],
+                },
+                "then": {
+                    "required": [
+                        "working_blueprint",
+                        "current_build_context",
+                        "evidence_parent_artifacts",
+                    ]
+                },
+            }
         ]
     return schema
 

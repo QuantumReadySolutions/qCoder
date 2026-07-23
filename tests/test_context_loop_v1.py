@@ -10,6 +10,7 @@ from qcoder.blueprint_decisions import (
     build_resource_architecture,
     build_decision_records,
     catalog_entries,
+    consistency_digest,
 )
 from qcoder.context_bridge_mcp import (
     EXPECTED_TOOLS,
@@ -25,6 +26,9 @@ from qcoder.context_loop import (
     GENERATION_POSTURES,
     PROVENANCE_ROLES,
     RESULT_DISCLOSURE_CEILING,
+    PORTABLE_BUNDLE_INVENTORY_STATUS,
+    PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS,
+    PORTABLE_CURRENT_BUILD_CONTEXT_SCHEMA_ID,
     STAGE_AVAILABILITY_VALUES,
     STAGE_IDENTITY_STATUSES,
     build_carry_forward_proposal,
@@ -32,14 +36,20 @@ from qcoder.context_loop import (
     build_current_build_context,
     build_decision_evidence_lineage,
     build_generation_posture,
+    build_portable_current_build_context,
     build_request_baseline,
     build_result_manifestation,
     build_stage_availability,
     build_stage_identity,
     context_loop_contract_snapshot,
     context_loop_gate_matrix,
+    canonical_portable_current_build_context_json,
     determine_stage_availability,
     materialize_evolved_blueprint,
+    evidence_parent_artifacts_error,
+    portable_current_build_context_error,
+    portable_current_build_context_field_inventory,
+    required_evidence_parent_descriptors,
     share_safe_request_baseline,
 )
 from qcoder.development_evidence import (
@@ -183,7 +193,9 @@ def _working_blueprint() -> dict[str, object]:
     }
 
 
-def _current_context(*, results: bool = True) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
+def _current_context(
+    *, results: bool = True
+) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
     circuit = build_circuit_manifestation(
         qasm_text=QASM, stage="logical_circuit", artifact_ref=CIRCUIT_REF
     )
@@ -218,6 +230,23 @@ def _current_context(*, results: bool = True) -> tuple[dict[str, object], dict[s
         **kwargs,
     )
     return context, circuit, result
+
+
+def _evidence_parents(
+    context: dict[str, object],
+    circuit: dict[str, object],
+    result: dict[str, object] | None = None,
+) -> list[dict[str, object]]:
+    parents = [
+        _request_handoff(),
+        _working_blueprint(),
+        circuit,
+        _lineage(),
+        context,
+    ]
+    if result is not None and "result_manifestation" in context["artifact_references"]:
+        parents.insert(3, result)
+    return parents
 
 
 def test_exact_context_loop_inventories_are_additive() -> None:
@@ -273,9 +302,7 @@ def test_request_baseline_preserves_local_text_and_withholds_it_by_default() -> 
 
 
 def test_generation_posture_is_explicit_and_independent_from_readiness() -> None:
-    guided = build_generation_posture(
-        posture="blueprint_guided", artifact_ref=POSTURE_REF
-    )
+    guided = build_generation_posture(posture="blueprint_guided", artifact_ref=POSTURE_REF)
     assert guided["independent_from_readiness"] is True
     clarification = build_generation_posture(
         posture="exploratory_first_pass", explicitly_authorized=False
@@ -306,7 +333,9 @@ def test_generation_posture_is_explicit_and_independent_from_readiness() -> None
         ({"artifact_supplied": True, "supported": False}, "unsupported"),
     ],
 )
-def test_stage_availability_rules_are_deterministic(kwargs: dict[str, object], expected: str) -> None:
+def test_stage_availability_rules_are_deterministic(
+    kwargs: dict[str, object], expected: str
+) -> None:
     assert determine_stage_availability(**kwargs) == expected
 
 
@@ -344,9 +373,10 @@ def test_circuit_manifestation_is_bounded_non_reconstructive_and_non_executing()
     assert artifact["full_operation_sequence_included"] is False
     assert artifact["reconstructive_graph_included"] is False
     assert artifact["source_or_circuit_executed"] is False
-    assert len(artifact["operation_inventory"]) <= CIRCUIT_DISCLOSURE_CEILING[
-        "maximum_operation_categories"
-    ]
+    assert (
+        len(artifact["operation_inventory"])
+        <= CIRCUIT_DISCLOSURE_CEILING["maximum_operation_categories"]
+    )
 
 
 def test_result_manifestation_withholds_distribution_and_labels_by_default() -> None:
@@ -498,7 +528,7 @@ def test_carry_forward_proposal_and_evolved_blueprint_are_stateless_and_idempote
         "provenance_entries": deepcopy(target["provenance_entries"]),
         "unresolved_questions": [],
     }
-    parents = [parent, circuit, result, context]
+    parents = _evidence_parents(context, circuit, result)
     pack = build_carry_forward_proposal(
         selected_action="accept_and_add_to_blueprint",
         profile_id="generic_qiskit",
@@ -561,7 +591,7 @@ def test_altered_or_missing_parent_confirmation_is_rejected() -> None:
         selected_action="leave_unresolved",
         profile_id="generic_qiskit",
         decision_records=records,
-        parent_artifacts=[parent, circuit, result, context],
+        parent_artifacts=_evidence_parents(context, circuit, result),
         current_build_context=context,
         selected_decision_references=[target["decision_ref"]],
         proposed_updates=[{"decision_ref": target["decision_ref"]}],
@@ -574,14 +604,12 @@ def test_altered_or_missing_parent_confirmation_is_rejected() -> None:
     with pytest.raises(ValueError, match="resolution_proposal_altered"):
         materialize_evolved_blueprint(
             decision_resolution_pack=altered,
-            parent_artifacts=[parent, circuit, result, context],
+            parent_artifacts=_evidence_parents(context, circuit, result),
             working_blueprint=parent,
             decision_records=records,
             selected_action="leave_unresolved",
             confirmed=True,
-            confirmation_payload=pack["explicit_confirmation_requirements"][
-                "confirmation_payload"
-            ],
+            confirmation_payload=pack["explicit_confirmation_requirements"]["confirmation_payload"],
             provenance_entries=[],
         )
     with pytest.raises(ValueError, match="resolution_parent_mismatch"):
@@ -592,9 +620,7 @@ def test_altered_or_missing_parent_confirmation_is_rejected() -> None:
             decision_records=records,
             selected_action="leave_unresolved",
             confirmed=True,
-            confirmation_payload=pack["explicit_confirmation_requirements"][
-                "confirmation_payload"
-            ],
+            confirmation_payload=pack["explicit_confirmation_requirements"]["confirmation_payload"],
             provenance_entries=[],
         )
 
@@ -611,8 +637,7 @@ def test_circuit_construction_carry_forward_requires_layered_resource_architectu
     target = next(
         item
         for item in records
-        if item["profile_decision_id"]
-        == "generic_qiskit.circuit_construction"
+        if item["profile_decision_id"] == "generic_qiskit.circuit_construction"
     )
     target.update(
         {
@@ -621,9 +646,7 @@ def test_circuit_construction_carry_forward_requires_layered_resource_architectu
             "applicable_scope": "Current lineage and next generation contract only.",
             "relationship_to_requirement": "Refines requirement req-resource-layout.",
             "related_requirement_references": ["req-resource-layout"],
-            "evidence_expectation": [
-                "Future source shows the selected Qiskit manifestation."
-            ],
+            "evidence_expectation": ["Future source shows the selected Qiskit manifestation."],
             "future_review_rule": (
                 "Compare future source evidence with the confirmed architecture."
             ),
@@ -633,9 +656,7 @@ def test_circuit_construction_carry_forward_requires_layered_resource_architectu
             "resolution_state": "unresolved",
             "user_disposition": "left_unresolved",
             "generation_effect": "bounded_discretion",
-            "provenance_entries": [
-                {"role": "qcoder_observed", "source_ref": "source-safe-ref"}
-            ],
+            "provenance_entries": [{"role": "qcoder_observed", "source_ref": "source-safe-ref"}],
         }
     )
     common = {
@@ -657,7 +678,7 @@ def test_circuit_construction_carry_forward_requires_layered_resource_architectu
         "provenance_entries": deepcopy(target["provenance_entries"]),
         "unresolved_questions": [],
     }
-    parents = [parent, circuit, result, context]
+    parents = _evidence_parents(context, circuit, result)
     with pytest.raises(ValueError, match="resource_architecture_invalid"):
         build_carry_forward_proposal(
             selected_action="accept_and_add_to_blueprint",
@@ -677,9 +698,7 @@ def test_circuit_construction_carry_forward_requires_layered_resource_architectu
         logical_resource_architecture="simple_flat",
         construction_form="quantum_circuit",
         allowed_patterns=("direct_inline",),
-        disallowed_patterns=(
-            "avoid_opaque_or_unbounded_dynamic_construction",
-        ),
+        disallowed_patterns=("avoid_opaque_or_unbounded_dynamic_construction",),
     )
     pack = build_carry_forward_proposal(
         selected_action="accept_and_add_to_blueprint",
@@ -695,20 +714,125 @@ def test_circuit_construction_carry_forward_requires_layered_resource_architectu
     )
     proposal = pack["resource_architecture_proposal"]
     assert proposal["before"]["logical_resource_architecture"] == "unresolved"
-    assert proposal["proposed_after"]["logical_resource_architecture"]["value"] == (
-        "simple_flat"
-    )
+    assert proposal["proposed_after"]["logical_resource_architecture"]["value"] == ("simple_flat")
     assert proposal["qualifications"]["global_generic_qiskit_default"] is False
     assert proposal["qualifications"]["explicit_named_registers_supported"] is True
     assert pack["result_observation_is_design_intent"] is False
 
 
+def test_current_build_proposal_requires_exact_explicit_evidence_parents() -> None:
+    context, circuit, result = _current_context()
+    parents = _evidence_parents(context, circuit, result)
+    required = required_evidence_parent_descriptors(context)
+    assert [item["parent_name"] for item in required] == [
+        "request_baseline",
+        "working_blueprint",
+        "circuit_manifestation",
+        "result_manifestation",
+        "lineage",
+        "current_build_context",
+    ]
+    assert evidence_parent_artifacts_error(context, parents) is None
+    assert evidence_parent_artifacts_error(context, []) == ("evidence_parent_artifacts_required")
+    assert evidence_parent_artifacts_error(context, parents[:-1]) == (
+        "evidence_parent_artifact_missing"
+    )
+    assert evidence_parent_artifacts_error(context, parents + [parents[0]]) == (
+        "evidence_parent_artifact_duplicate"
+    )
+    unexpected = deepcopy(parents)
+    unexpected.append(
+        {
+            "artifact_type": "unrelated",
+            "artifact_ref": "session-artifact-aaaaaaaaaaaaaaaa",
+        }
+    )
+    assert evidence_parent_artifacts_error(context, unexpected) == (
+        "evidence_parent_artifact_unexpected"
+    )
+
+
+def test_portable_current_build_context_is_bounded_and_not_authenticity_proof() -> None:
+    context, _circuit, _result = _current_context()
+    lineage = _lineage()
+    records = build_decision_records(
+        profile_id="generic_qiskit",
+        current_lineage_reference=LINEAGE_REF,
+        parent_artifact_references=[_working_blueprint()],
+        dispositions=_ready_dispositions("generic_qiskit"),
+    )
+    portable = build_portable_current_build_context(
+        current_build_context=context,
+        decision_records=records,
+        decision_evidence_lineage=lineage,
+        readiness={
+            "aggregate_readiness_result": "ready_to_generate",
+            "generation_context_eligibility": True,
+            "blocking_decision_references": [],
+            "bounded_discretion_decision_references": [],
+            "evidence_deferred_decision_references": [],
+            "non_proof": "Readiness is not correctness or run readiness.",
+        },
+        applicable_actions=[
+            {
+                "decision_ref": records[0]["decision_ref"],
+                "action_ids": ["leave_unresolved"],
+                "private_rule": "must not be exported",
+            }
+        ],
+    )
+    assert portable["schema_id"] == PORTABLE_CURRENT_BUILD_CONTEXT_SCHEMA_ID
+    assert portable["inventory_status"] == PORTABLE_BUNDLE_INVENTORY_STATUS
+    assert portable["validation"]["artifact_structure_validated"] is True
+    assert portable["validation"]["artifact_authenticated"] is False
+    assert portable["validation"]["produced_by_qcoder_verified"] is False
+    assert portable["transport"]["self_contained_for_passive_rendering"] is True
+    assert portable["transport"]["url_fetching"] is False
+    assert portable["share_safety"]["raw_source_included"] is False
+    assert portable["applicable_actions"][0] == {
+        "decision_ref": records[0]["decision_ref"],
+        "action_ids": ["leave_unresolved"],
+    }
+    assert portable_current_build_context_error(portable) is None
+    assert canonical_portable_current_build_context_json(portable) == (
+        canonical_portable_current_build_context_json(deepcopy(portable))
+    )
+    inventory = portable_current_build_context_field_inventory()
+    assert inventory
+    assert all(item["authenticity_meaning"] == "none" for item in inventory)
+    assert all(item["protected_policy_dependency"] == "none" for item in inventory)
+
+
+def test_portable_current_build_context_rejects_limits_and_dangerous_properties() -> None:
+    context, _circuit, _result = _current_context()
+    portable = build_portable_current_build_context(
+        current_build_context=context,
+        decision_evidence_lineage=_lineage(),
+    )
+    dangerous = deepcopy(portable)
+    dangerous["transport"]["__proto__"] = {}
+    dangerous["consistency_digest"] = consistency_digest(dangerous)
+    assert portable_current_build_context_error(dangerous) == ("portable_bundle_dangerous_property")
+    oversized = deepcopy(portable)
+    oversized["non_proofs"] = [
+        "x" * (PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS["maximum_individual_text_field_length"] + 1)
+    ]
+    oversized["consistency_digest"] = consistency_digest(oversized)
+    assert portable_current_build_context_error(oversized) == (
+        "portable_bundle_text_field_too_large"
+    )
+    prohibited = deepcopy(portable)
+    prohibited["raw_qasm"] = "withheld"
+    prohibited["consistency_digest"] = consistency_digest(prohibited)
+    assert portable_current_build_context_error(prohibited) == (
+        "portable_bundle_prohibited_content"
+    )
+
+
 def test_adapter_inventory_and_context_loop_schemas_are_additive() -> None:
     descriptors = {item["name"]: item for item in tool_descriptors()}
     assert len(descriptors) == 12
-    assert "context_loop" in descriptors["create_context_session_card"]["inputSchema"][
-        "properties"
-    ]
+    assert "context_loop" in descriptors["create_context_session_card"]["inputSchema"]["properties"]
     assert "anyOf" in descriptors["create_context_session_card"]["inputSchema"]
     assert validate_optional_payload(_request_handoff()) == "ok"
     assert validate_optional_payload({"raw_qasm": "withheld"}) == "forbidden_input_value"

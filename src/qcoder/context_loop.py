@@ -24,6 +24,7 @@ from qcoder.blueprint_decisions import (
     QISKIT_CONSTRUCTION_FORMS,
     RESOURCE_ARCHITECTURE_SCHEMA_ID,
     RESOURCE_ARCHITECTURE_SCOPE,
+    consistency_digest,
     confirm_decision_resolution_pack,
     decision_resolution_pack_error,
     propose_decision_resolution_pack,
@@ -50,6 +51,7 @@ CIRCUIT_MANIFESTATION_SCHEMA_ID = "qcoder.circuit_manifestation.v1"
 RESULT_MANIFESTATION_SCHEMA_ID = "qcoder.result_manifestation.v1"
 LINEAGE_SCHEMA_ID = "qcoder.decision_evidence_lineage.v1"
 CURRENT_BUILD_CONTEXT_SCHEMA_ID = "qcoder.current_build_context.v1"
+PORTABLE_CURRENT_BUILD_CONTEXT_SCHEMA_ID = "qcoder.current_build_context.portable.v1"
 CARRY_FORWARD_SCHEMA_ID = "qcoder.carry_forward_proposal.v1"
 EVOLVED_BLUEPRINT_SCHEMA_ID = "qcoder.evolved_blueprint.v1"
 
@@ -93,6 +95,30 @@ RESULT_DISCLOSURE_CEILING = {
     "full_distribution": False,
     "raw_samples": False,
 }
+PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS = {
+    "maximum_serialized_bytes": 131_072,
+    "maximum_json_nesting_depth": 12,
+    "maximum_object_property_count": 512,
+    "maximum_array_length": 128,
+    "maximum_individual_text_field_length": 4_000,
+    "maximum_total_text_size": 32_768,
+    "maximum_artifact_references": 32,
+    "maximum_decisions": 64,
+    "maximum_lineage_links": 128,
+    "maximum_stage_summaries": 6,
+    "maximum_evidence_findings": 64,
+    "maximum_proposal_before_after_entries": 64,
+}
+PORTABLE_BUNDLE_INVENTORY_STATUS = "candidate_pending_ide_materialization_proof"
+CURRENT_BUILD_EVIDENCE_PARENT_ORDER = (
+    "request_baseline",
+    "working_blueprint",
+    "generation_context",
+    "python_manifestation",
+    "circuit_manifestation",
+    "result_manifestation",
+    "lineage",
+)
 
 _REFERENCE_PATTERN = re.compile(r"^session-artifact-[0-9a-f]{16,64}$")
 _SAFE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
@@ -122,6 +148,32 @@ _NON_PROOFS = (
     "A stage manifestation does not prove that an adjacent artifact produced it or that qCoder "
     "generated, constructed, or ran the artifact.",
 )
+_PORTABLE_DANGEROUS_PROPERTY_NAMES = {
+    "__proto__",
+    "prototype",
+    "constructor",
+}
+_PORTABLE_PROHIBITED_FIELDS = {
+    "authorization",
+    "credential",
+    "credentials",
+    "customer_identifier",
+    "local_path",
+    "password",
+    "path",
+    "private_prompt",
+    "raw_bitstrings",
+    "raw_circuit",
+    "raw_circuit_serialization",
+    "raw_counts",
+    "raw_path",
+    "raw_qasm",
+    "raw_samples",
+    "raw_source",
+    "raw_source_text",
+    "secret",
+    "token",
+}
 
 
 def _canonical_json(value: Any) -> str:
@@ -213,19 +265,16 @@ def build_request_baseline(
         "artifact_type": "request_baseline",
         "artifact_ref": _reference(artifact_ref),
         "original_request": request,
-        "explicit_constraints": _text_list(
-            explicit_constraints, field="explicit_constraints"
-        ),
+        "explicit_constraints": _text_list(explicit_constraints, field="explicit_constraints"),
         "explicit_choices": _text_list(explicit_choices, field="explicit_choices"),
         "assistant_interpretation": assistant,
-        "profile_suggestions": _text_list(
-            profile_suggestions, field="profile_suggestions"
-        ),
-        "unresolved_questions": _text_list(
-            unresolved_questions, field="unresolved_questions"
-        ),
+        "profile_suggestions": _text_list(profile_suggestions, field="profile_suggestions"),
+        "unresolved_questions": _text_list(unresolved_questions, field="unresolved_questions"),
         "provenance_entries": [
-            {"role": "user_stated", "fields": ["original_request", "explicit_constraints", "explicit_choices"]},
+            {
+                "role": "user_stated",
+                "fields": ["original_request", "explicit_constraints", "explicit_choices"],
+            },
             {"role": "assistant_proposed", "fields": ["assistant_interpretation"]},
             {"role": "profile_suggested", "fields": ["profile_suggestions"]},
         ],
@@ -299,9 +348,7 @@ def build_generation_posture(
         raise ValueError("generation_posture_invalid")
     constraints = _text_list(explicit_constraints, field="explicit_constraints")
     prohibitions = _text_list(explicit_prohibitions, field="explicit_prohibitions")
-    unresolved = _text_list(
-        unresolved_assistant_choices, field="unresolved_assistant_choices"
-    )
+    unresolved = _text_list(unresolved_assistant_choices, field="unresolved_assistant_choices")
     base = {
         "schema_id": GENERATION_POSTURE_SCHEMA_ID,
         "schema_version": 1,
@@ -443,8 +490,7 @@ def build_circuit_manifestation(
     ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
     maximum_categories = CIRCUIT_DISCLOSURE_CEILING["maximum_operation_categories"]
     inventory = [
-        {"operation_category": name, "count": count}
-        for name, count in ranked[:maximum_categories]
+        {"operation_category": name, "count": count} for name, count in ranked[:maximum_categories]
     ]
     controlled = []
     for name, count in ranked:
@@ -459,9 +505,7 @@ def build_circuit_manifestation(
                 "occurrences": count,
             }
         )
-        if len(controlled) == CIRCUIT_DISCLOSURE_CEILING[
-            "maximum_controlled_operation_summaries"
-        ]:
+        if len(controlled) == CIRCUIT_DISCLOSURE_CEILING["maximum_controlled_operation_summaries"]:
             break
     parameter_names = sorted(
         {
@@ -557,7 +601,9 @@ def build_result_manifestation(
     if (counts is None) == (sampled_bitstrings is None):
         raise ValueError("exactly_one_result_artifact_required")
     artifact_reference(related_circuit_ref)
-    raw_counts = dict(counts) if counts is not None else _counts_from_samples(sampled_bitstrings or [])
+    raw_counts = (
+        dict(counts) if counts is not None else _counts_from_samples(sampled_bitstrings or [])
+    )
     if len(raw_counts) > RESULT_DISCLOSURE_CEILING["maximum_input_outcomes"]:
         raise ValueError("result_outcome_count_too_large")
     normalized = normalize_counts_v0(
@@ -580,7 +626,9 @@ def build_result_manifestation(
         if safe_outcome_labels:
             record["safe_outcome_label"] = label
         summaries.append(record)
-    probabilities = [value / observed_shots for value in values.values() if observed_shots and value]
+    probabilities = [
+        value / observed_shots for value in values.values() if observed_shots and value
+    ]
     entropy = -sum(probability * math.log2(probability) for probability in probabilities)
     top_fraction = summaries[0]["frequency_fraction"] if summaries else 0.0
     concentration = "high" if top_fraction >= 0.8 else "moderate" if top_fraction >= 0.4 else "low"
@@ -592,9 +640,7 @@ def build_result_manifestation(
         "related_circuit_ref": related_circuit_ref,
         "development_stage": "run_results",
         "stage_availability": "available",
-        "representation_category": (
-            "counts" if counts is not None else "sampled_bitstrings"
-        ),
+        "representation_category": ("counts" if counts is not None else "sampled_bitstrings"),
         "observed_outcome_count": len(values),
         "observed_shot_count": observed_shots,
         "declared_shot_value": (
@@ -778,9 +824,7 @@ def build_current_build_context(
             "explicit_link_count": len(lineage.get("links", [])),
             "transitive_inference": False,
         },
-        "unresolved_questions": _text_list(
-            unresolved_questions, field="unresolved_questions"
-        ),
+        "unresolved_questions": _text_list(unresolved_questions, field="unresolved_questions"),
         "carry_forward_proposal_references": [
             str(item.get("proposal_ref"))
             for item in carry_forward_proposals
@@ -806,6 +850,515 @@ def build_current_build_context(
     return with_artifact_digest(result)
 
 
+def required_evidence_parent_descriptors(
+    current_build_context: Mapping[str, Any],
+) -> list[dict[str, str]]:
+    """Return the exact current-session parents needed by a carry-forward proposal."""
+
+    if current_build_context.get("schema_id") != CURRENT_BUILD_CONTEXT_SCHEMA_ID:
+        raise ValueError("current_build_context_required")
+    references = current_build_context.get("artifact_references")
+    if not isinstance(references, Mapping):
+        raise ValueError("current_build_context_artifact_references_required")
+    required: list[dict[str, str]] = []
+    for name in CURRENT_BUILD_EVIDENCE_PARENT_ORDER:
+        descriptor = references.get(name)
+        if descriptor is None:
+            continue
+        if not isinstance(descriptor, Mapping):
+            raise ValueError("current_build_context_artifact_reference_invalid")
+        artifact_ref = descriptor.get("artifact_ref")
+        digest = descriptor.get("digest")
+        if (
+            not isinstance(artifact_ref, str)
+            or not _REFERENCE_PATTERN.fullmatch(artifact_ref)
+            or not isinstance(digest, str)
+            or len(digest) != 64
+        ):
+            raise ValueError("current_build_context_artifact_reference_invalid")
+        required.append(
+            {
+                "parent_name": name,
+                "artifact_ref": artifact_ref,
+                "digest": digest,
+            }
+        )
+    context_descriptor = _artifact_descriptor(current_build_context)
+    required.append(
+        {
+            "parent_name": "current_build_context",
+            "artifact_ref": context_descriptor["artifact_ref"],
+            "digest": context_descriptor["digest"],
+        }
+    )
+    return required
+
+
+def evidence_parent_artifacts_error(
+    current_build_context: Mapping[str, Any],
+    parent_artifacts: object,
+) -> str | None:
+    """Validate explicit parents without lookup, retrieval, or retained state."""
+
+    if not isinstance(parent_artifacts, list) or not parent_artifacts:
+        return "evidence_parent_artifacts_required"
+    try:
+        required = required_evidence_parent_descriptors(current_build_context)
+    except ValueError as exc:
+        return str(exc)
+    supplied_pairs: set[tuple[str, str]] = set()
+    expected_by_ref: dict[str, set[str]] = {}
+    for item in required:
+        expected_by_ref.setdefault(item["artifact_ref"], set()).add(item["digest"])
+    for parent in parent_artifacts:
+        if not isinstance(parent, Mapping):
+            return "evidence_parent_artifact_invalid"
+        try:
+            descriptor = _artifact_descriptor(parent)
+        except ValueError:
+            return "evidence_parent_artifact_reference_invalid"
+        pair = (descriptor["artifact_ref"], descriptor["digest"])
+        if pair in supplied_pairs:
+            return "evidence_parent_artifact_duplicate"
+        if descriptor["artifact_ref"] not in expected_by_ref:
+            return "evidence_parent_artifact_unexpected"
+        if descriptor["digest"] not in expected_by_ref[descriptor["artifact_ref"]]:
+            return "evidence_parent_artifact_digest_mismatch"
+        supplied_pairs.add(pair)
+    expected_pairs = {(item["artifact_ref"], item["digest"]) for item in required}
+    if expected_pairs - supplied_pairs:
+        return "evidence_parent_artifact_missing"
+    return None
+
+
+def portable_current_build_context_field_inventory() -> list[dict[str, Any]]:
+    """Machine-readable candidate inventory for passive local rendering."""
+
+    def field(
+        path: str,
+        source: str,
+        *,
+        required: bool,
+        maximum_size: int | None = None,
+        maximum_collection_length: int | None = None,
+        depth: int = 1,
+        classification: str = "share_safe_structural",
+        rendered: bool = True,
+        user_text: bool = False,
+        assistant_text: bool = False,
+        opaque_references: bool = False,
+        bounded_evidence: bool = False,
+        prohibited: Sequence[str] = (),
+    ) -> dict[str, Any]:
+        return {
+            "field_path": path,
+            "source_contract": source,
+            "required": required,
+            "maximum_size": maximum_size,
+            "maximum_collection_length": maximum_collection_length,
+            "maximum_nesting_depth_contribution": depth,
+            "share_safety_classification": classification,
+            "rendered": rendered,
+            "hidden": not rendered,
+            "exportable": True,
+            "may_contain_user_text": user_text,
+            "may_contain_assistant_text": assistant_text,
+            "may_contain_opaque_references": opaque_references,
+            "may_contain_bounded_evidence": bounded_evidence,
+            "prohibited_content": list(prohibited),
+            "authenticity_meaning": "none",
+            "protected_policy_dependency": "none",
+        }
+
+    text_limit = PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS["maximum_individual_text_field_length"]
+    return [
+        field("schema_id", "portable_envelope", required=True, rendered=False),
+        field("schema_version", "portable_envelope", required=True, rendered=False),
+        field("artifact_type", "portable_envelope", required=True, rendered=False),
+        field("inventory_status", "portable_envelope", required=True, rendered=False),
+        field(
+            "source_current_build_context_reference",
+            CURRENT_BUILD_CONTEXT_SCHEMA_ID,
+            required=True,
+            opaque_references=True,
+            rendered=False,
+        ),
+        field("profile_id", CURRENT_BUILD_CONTEXT_SCHEMA_ID, required=True),
+        field(
+            "artifact_references[]",
+            CURRENT_BUILD_CONTEXT_SCHEMA_ID,
+            required=True,
+            maximum_collection_length=PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS[
+                "maximum_artifact_references"
+            ],
+            opaque_references=True,
+        ),
+        field(
+            "stage_availability.*",
+            STAGE_AVAILABILITY_SCHEMA_ID,
+            required=True,
+            maximum_collection_length=PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS[
+                "maximum_stage_summaries"
+            ],
+        ),
+        field(
+            "stage_identity.*",
+            CIRCUIT_MANIFESTATION_SCHEMA_ID,
+            required=False,
+            maximum_collection_length=PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS[
+                "maximum_stage_summaries"
+            ],
+        ),
+        field(
+            "selected_share_safe_summaries.*",
+            CURRENT_BUILD_CONTEXT_SCHEMA_ID,
+            required=False,
+            maximum_collection_length=PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS[
+                "maximum_evidence_findings"
+            ],
+            bounded_evidence=True,
+            prohibited=tuple(sorted(_PORTABLE_PROHIBITED_FIELDS)),
+        ),
+        field(
+            "decision_records[]",
+            "blueprint_decision_record.v1",
+            required=False,
+            maximum_collection_length=PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS["maximum_decisions"],
+            maximum_size=text_limit,
+            user_text=True,
+            assistant_text=True,
+            opaque_references=True,
+            bounded_evidence=True,
+        ),
+        field(
+            "decision_evidence_lineage",
+            LINEAGE_SCHEMA_ID,
+            required=True,
+            opaque_references=True,
+        ),
+        field(
+            "decision_evidence_lineage.links[]",
+            LINEAGE_SCHEMA_ID,
+            required=False,
+            maximum_collection_length=PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS[
+                "maximum_lineage_links"
+            ],
+            maximum_size=text_limit,
+            opaque_references=True,
+            bounded_evidence=True,
+        ),
+        field(
+            "readiness",
+            "blueprint_readiness_summary.v1",
+            required=False,
+            maximum_size=text_limit,
+            bounded_evidence=True,
+        ),
+        field(
+            "applicable_actions[]",
+            CARRY_FORWARD_SCHEMA_ID,
+            required=False,
+            maximum_collection_length=len(ACTION_IDS),
+            opaque_references=True,
+        ),
+        field(
+            "carry_forward_proposal",
+            CARRY_FORWARD_SCHEMA_ID,
+            required=False,
+            maximum_size=32_768,
+            maximum_collection_length=PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS[
+                "maximum_proposal_before_after_entries"
+            ],
+            user_text=True,
+            assistant_text=True,
+            opaque_references=True,
+            bounded_evidence=True,
+        ),
+        field(
+            "non_proofs[]",
+            CURRENT_BUILD_CONTEXT_SCHEMA_ID,
+            required=True,
+            maximum_collection_length=16,
+            maximum_size=text_limit,
+        ),
+        field("validation", "portable_envelope", required=True),
+        field("transport", "portable_envelope", required=True),
+        field("share_safety", "portable_envelope", required=True),
+        field("retention", "portable_envelope", required=True),
+        field("persistent", "portable_envelope", required=True),
+        field("consistency_digest", "portable_envelope", required=True, rendered=False),
+    ]
+
+
+def _portable_projection(value: Mapping[str, Any], allowed_fields: Sequence[str]) -> dict[str, Any]:
+    return {field: deepcopy(value[field]) for field in allowed_fields if field in value}
+
+
+def _portable_structure_error(value: object) -> str | None:
+    limits = PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS
+    counters = {"properties": 0, "text": 0}
+
+    def inspect(item: object, *, depth: int, path: tuple[str, ...]) -> str | None:
+        if depth > limits["maximum_json_nesting_depth"]:
+            return "portable_bundle_nesting_too_deep"
+        if isinstance(item, Mapping):
+            counters["properties"] += len(item)
+            if counters["properties"] > limits["maximum_object_property_count"]:
+                return "portable_bundle_too_many_properties"
+            for key, nested in item.items():
+                if not isinstance(key, str):
+                    return "portable_bundle_property_name_invalid"
+                if key in _PORTABLE_DANGEROUS_PROPERTY_NAMES:
+                    return "portable_bundle_dangerous_property"
+                if key.lower() in _PORTABLE_PROHIBITED_FIELDS:
+                    return "portable_bundle_prohibited_content"
+                error = inspect(nested, depth=depth + 1, path=(*path, key))
+                if error:
+                    return error
+            return None
+        if isinstance(item, (list, tuple)):
+            maximum = limits["maximum_array_length"]
+            leaf = path[-1] if path else ""
+            maximum = {
+                "artifact_references": limits["maximum_artifact_references"],
+                "decision_records": limits["maximum_decisions"],
+                "links": limits["maximum_lineage_links"],
+                "applicable_actions": len(ACTION_IDS),
+            }.get(leaf, maximum)
+            if len(item) > maximum:
+                return "portable_bundle_collection_too_large"
+            for nested in item:
+                error = inspect(nested, depth=depth + 1, path=path)
+                if error:
+                    return error
+            return None
+        if isinstance(item, str):
+            if len(item) > limits["maximum_individual_text_field_length"]:
+                return "portable_bundle_text_field_too_large"
+            counters["text"] += len(item)
+            if counters["text"] > limits["maximum_total_text_size"]:
+                return "portable_bundle_total_text_too_large"
+            return None
+        if item is None or isinstance(item, (bool, int)):
+            return None
+        if isinstance(item, float) and math.isfinite(item):
+            return None
+        return "portable_bundle_value_invalid"
+
+    error = inspect(value, depth=1, path=())
+    if error:
+        return error
+    try:
+        serialized = _canonical_json(value).encode("utf-8")
+    except (TypeError, ValueError):
+        return "portable_bundle_not_json_serializable"
+    if len(serialized) > limits["maximum_serialized_bytes"]:
+        return "portable_bundle_serialized_size_exceeded"
+    return None
+
+
+def portable_current_build_context_error(value: object) -> str | None:
+    if not isinstance(value, dict):
+        return "portable_current_build_context_invalid"
+    if (
+        value.get("schema_id") != PORTABLE_CURRENT_BUILD_CONTEXT_SCHEMA_ID
+        or value.get("schema_version") != 1
+        or value.get("artifact_type") != "portable_current_build_context"
+    ):
+        return "portable_current_build_context_version_invalid"
+    if value.get("inventory_status") != PORTABLE_BUNDLE_INVENTORY_STATUS:
+        return "portable_bundle_inventory_status_invalid"
+    structural_error = _portable_structure_error(value)
+    if structural_error:
+        return structural_error
+    digest = value.get("consistency_digest")
+    if not isinstance(digest, str) or digest != consistency_digest(value):
+        return "portable_bundle_consistency_digest_invalid"
+    validation = value.get("validation")
+    if not isinstance(validation, Mapping) or validation != {
+        "artifact_structure_validated": True,
+        "relationships_and_consistency_references_validated_within_supplied_bundle": True,
+        "artifact_authenticated": False,
+        "produced_by_qcoder_verified": False,
+        "artifact_proven_unmodified": False,
+        "customer_ownership_verified": False,
+        "digest_meaning": "deterministic_consistency_reference_only",
+    }:
+        return "portable_bundle_validation_claim_invalid"
+    return None
+
+
+def build_portable_current_build_context(
+    *,
+    current_build_context: Mapping[str, Any],
+    decision_records: Sequence[Mapping[str, Any]] = (),
+    decision_evidence_lineage: Mapping[str, Any],
+    readiness: Mapping[str, Any] | None = None,
+    applicable_actions: Sequence[Mapping[str, Any]] = (),
+    carry_forward_proposal: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Project a supplied Current Build Context for inert, passive rendering."""
+
+    if current_build_context.get("schema_id") != CURRENT_BUILD_CONTEXT_SCHEMA_ID:
+        raise ValueError("current_build_context_required")
+    if decision_evidence_lineage.get("schema_id") != LINEAGE_SCHEMA_ID:
+        raise ValueError("decision_evidence_lineage_required")
+    context_descriptor = _artifact_descriptor(current_build_context)
+    references = current_build_context.get("artifact_references")
+    if not isinstance(references, Mapping):
+        raise ValueError("current_build_context_artifact_references_required")
+    projected_decisions = [
+        _portable_projection(
+            item,
+            (
+                "decision_ref",
+                "profile_decision_id",
+                "semantic_classification",
+                "semantic_role",
+                "applicable_scope",
+                "resolution_state",
+                "user_disposition",
+                "generation_effect",
+                "selected_value",
+                "allowed_choices",
+                "bounds",
+                "control_treatment",
+                "resource_architecture",
+                "provenance_entries",
+                "unresolved_questions",
+                "evidence_expectation",
+                "future_review_rule",
+                "remaining_non_proofs",
+            ),
+        )
+        for item in decision_records
+    ]
+    projected_proposal = (
+        _portable_projection(
+            carry_forward_proposal,
+            (
+                "proposal_ref",
+                "selected_action",
+                "decision_references",
+                "request_basis_reference",
+                "evidence_parent_references",
+                "resource_architecture_proposal",
+                "before_and_after_preview",
+                "decisions_changed",
+                "decisions_unchanged",
+                "requirements_unchanged",
+                "readiness_impact",
+                "generation_context_effect",
+                "remaining_uncertainty",
+                "prospective_derived_artifact_references",
+                "non_proof",
+                "consistency_digest",
+            ),
+        )
+        if carry_forward_proposal is not None
+        else None
+    )
+    result = {
+        "schema_id": PORTABLE_CURRENT_BUILD_CONTEXT_SCHEMA_ID,
+        "schema_version": 1,
+        "artifact_type": "portable_current_build_context",
+        "inventory_status": PORTABLE_BUNDLE_INVENTORY_STATUS,
+        "source_current_build_context_reference": context_descriptor,
+        "profile_id": current_build_context.get("profile_id"),
+        "artifact_references": [
+            {"name": name, **deepcopy(dict(descriptor))}
+            for name, descriptor in sorted(references.items())
+            if isinstance(descriptor, Mapping)
+        ],
+        "stage_availability": deepcopy(current_build_context.get("stage_availability", {})),
+        "stage_identity": deepcopy(current_build_context.get("stage_identity", {})),
+        "selected_share_safe_summaries": deepcopy(
+            current_build_context.get("selected_share_safe_summaries", {})
+        ),
+        "decision_records": projected_decisions,
+        "decision_evidence_lineage": {
+            "artifact_ref": decision_evidence_lineage.get("artifact_ref"),
+            "artifact_digest": decision_evidence_lineage.get("artifact_digest"),
+            "links": deepcopy(decision_evidence_lineage.get("links", [])),
+            "transitive_inference": False,
+            "graph_traversal": False,
+            "retrievable": False,
+            "persistent": False,
+        },
+        "readiness": (
+            _portable_projection(
+                readiness,
+                (
+                    "aggregate_readiness_result",
+                    "generation_context_eligibility",
+                    "blocking_decision_references",
+                    "bounded_discretion_decision_references",
+                    "evidence_deferred_decision_references",
+                    "non_proof",
+                ),
+            )
+            if readiness is not None
+            else None
+        ),
+        "applicable_actions": [
+            _portable_projection(item, ("decision_ref", "action_ids"))
+            for item in applicable_actions
+        ],
+        "carry_forward_proposal": projected_proposal,
+        "non_proofs": list(current_build_context.get("non_proofs", _NON_PROOFS)),
+        "validation": {
+            "artifact_structure_validated": True,
+            "relationships_and_consistency_references_validated_within_supplied_bundle": True,
+            "artifact_authenticated": False,
+            "produced_by_qcoder_verified": False,
+            "artifact_proven_unmodified": False,
+            "customer_ownership_verified": False,
+            "digest_meaning": "deterministic_consistency_reference_only",
+        },
+        "transport": {
+            "scope": "current_session",
+            "user_controlled": True,
+            "self_contained_for_passive_rendering": True,
+            "retrievable": False,
+            "authoritative": False,
+            "file_export_suitable": True,
+            "local_browser_import_candidate": True,
+            "inert_text_only": True,
+            "html_execution": False,
+            "markdown_html_execution": False,
+            "script_execution": False,
+            "dynamic_import": False,
+            "url_fetching": False,
+            "expression_evaluation": False,
+            "component_construction_from_imported_identifiers": False,
+        },
+        "share_safety": {
+            "raw_source_included": False,
+            "raw_qasm_included": False,
+            "raw_circuit_serialization_included": False,
+            "sensitive_raw_results_included": False,
+            "raw_paths_included": False,
+            "credentials_included": False,
+            "proprietary_problem_data_included": False,
+            "protected_policy_included": False,
+        },
+        "retention": "caller_controlled_portable_file",
+        "persistent": False,
+    }
+    result = with_consistency_digest(result)
+    error = portable_current_build_context_error(result)
+    if error:
+        raise ValueError(error)
+    return result
+
+
+def canonical_portable_current_build_context_json(value: object) -> str:
+    error = portable_current_build_context_error(value)
+    if error:
+        raise ValueError(error)
+    return _canonical_json(value)
+
+
 def context_loop_gate_matrix(
     *,
     context_loop: str | None,
@@ -824,9 +1377,7 @@ def context_loop_gate_matrix(
         "decision_loop": decision_loop,
     }
     diagnostics = [
-        f"unsupported_{name}_gate"
-        for name, value in supplied.items()
-        if value not in valid[name]
+        f"unsupported_{name}_gate" for name, value in supplied.items() if value not in valid[name]
     ]
     enabled = {
         "context_loop": context_loop == CONTEXT_LOOP_GATE,
@@ -867,6 +1418,9 @@ def build_carry_forward_proposal(
         raise ValueError("unsupported_action")
     if current_build_context.get("schema_id") != CURRENT_BUILD_CONTEXT_SCHEMA_ID:
         raise ValueError("current_build_context_required")
+    parent_error = evidence_parent_artifacts_error(current_build_context, parent_artifacts)
+    if parent_error:
+        raise ValueError(parent_error)
     pack = propose_decision_resolution_pack(
         resolution_context=RESOLUTION_CONTEXT,
         selected_action=selected_action,
@@ -892,12 +1446,13 @@ def build_carry_forward_proposal(
     pack["generation_context_effect"] = _text(
         generation_context_effect, field="generation_context_effect", maximum=1_000
     )
-    pack["remaining_uncertainty"] = _text_list(
-        remaining_uncertainty, field="remaining_uncertainty"
-    )
+    pack["remaining_uncertainty"] = _text_list(remaining_uncertainty, field="remaining_uncertainty")
     pack["cross_stage_evidence_selects_action"] = False
     pack["user_selected_action"] = True
     pack["result_observation_is_design_intent"] = False
+    pack["evidence_parent_requirements"] = required_evidence_parent_descriptors(
+        current_build_context
+    )
     resource_changes = pack.get("resource_architecture_changes") or []
     if resource_changes:
         change = resource_changes[0]
@@ -905,9 +1460,7 @@ def build_carry_forward_proposal(
         before_record = next(
             item for item in decision_records if item["decision_ref"] == selected_ref
         )
-        explicitly_disallowed = list(
-            before_record.get("explicitly_disallowed_choices") or []
-        )
+        explicitly_disallowed = list(before_record.get("explicitly_disallowed_choices") or [])
         pack["resource_architecture_proposal"] = {
             "schema_id": RESOURCE_ARCHITECTURE_SCHEMA_ID,
             "before": {
@@ -1051,6 +1604,7 @@ def context_loop_contract_snapshot() -> dict[str, Any]:
             "result_manifestation": RESULT_MANIFESTATION_SCHEMA_ID,
             "decision_evidence_lineage": LINEAGE_SCHEMA_ID,
             "current_build_context": CURRENT_BUILD_CONTEXT_SCHEMA_ID,
+            "portable_current_build_context": (PORTABLE_CURRENT_BUILD_CONTEXT_SCHEMA_ID),
             "carry_forward_proposal": CARRY_FORWARD_SCHEMA_ID,
             "evolved_blueprint": EVOLVED_BLUEPRINT_SCHEMA_ID,
             "resource_architecture": RESOURCE_ARCHITECTURE_SCHEMA_ID,
@@ -1065,19 +1619,25 @@ def context_loop_contract_snapshot() -> dict[str, Any]:
         "actions": list(ACTION_IDS),
         "resolution_context": RESOLUTION_CONTEXT,
         "resource_architecture": {
-            "logical_resource_architectures": list(
-                LOGICAL_RESOURCE_ARCHITECTURES
-            ),
+            "logical_resource_architectures": list(LOGICAL_RESOURCE_ARCHITECTURES),
             "construction_policy_patterns": list(CONSTRUCTION_POLICY_PATTERNS),
             "qiskit_construction_forms": list(QISKIT_CONSTRUCTION_FORMS),
-            "qiskit_compatibility_aliases": deepcopy(
-                QISKIT_CONSTRUCTION_ALIASES
-            ),
+            "qiskit_compatibility_aliases": deepcopy(QISKIT_CONSTRUCTION_ALIASES),
             "scope": RESOURCE_ARCHITECTURE_SCOPE,
             "additional_sdks_implemented": [],
         },
         "circuit_disclosure_ceiling": deepcopy(CIRCUIT_DISCLOSURE_CEILING),
         "result_disclosure_ceiling": deepcopy(RESULT_DISCLOSURE_CEILING),
+        "current_build_evidence_parent_order": list(CURRENT_BUILD_EVIDENCE_PARENT_ORDER),
+        "portable_current_build_context": {
+            "inventory_status": PORTABLE_BUNDLE_INVENTORY_STATUS,
+            "limits": deepcopy(PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS),
+            "field_inventory": portable_current_build_context_field_inventory(),
+            "transport_envelope": True,
+            "canonical_stored_form": False,
+            "authentication_meaning": "none",
+            "protected_policy_dependency": "none",
+        },
         "raw_artifacts_hosted": False,
         "hidden_state": False,
         "persistence": False,
