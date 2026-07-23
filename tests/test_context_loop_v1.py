@@ -26,11 +26,13 @@ from qcoder.context_loop import (
     GENERATION_POSTURES,
     PROVENANCE_ROLES,
     RESULT_DISCLOSURE_CEILING,
+    PORTABLE_BUNDLE_FROZEN_STATUS,
     PORTABLE_BUNDLE_INVENTORY_STATUS,
     PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS,
     PORTABLE_CURRENT_BUILD_CONTEXT_SCHEMA_ID,
     STAGE_AVAILABILITY_VALUES,
     STAGE_IDENTITY_STATUSES,
+    attach_portable_confirmation_transport,
     build_carry_forward_proposal,
     build_circuit_manifestation,
     build_current_build_context,
@@ -41,12 +43,15 @@ from qcoder.context_loop import (
     build_result_manifestation,
     build_stage_availability,
     build_stage_identity,
+    canonical_context_bridge_request_sha256,
     context_loop_contract_snapshot,
     context_loop_gate_matrix,
     canonical_portable_current_build_context_json,
     determine_stage_availability,
     materialize_evolved_blueprint,
     evidence_parent_artifacts_error,
+    freeze_portable_current_build_context_candidate,
+    portable_confirmation_transport_error,
     portable_current_build_context_error,
     portable_current_build_context_field_inventory,
     required_evidence_parent_descriptors,
@@ -801,6 +806,123 @@ def test_portable_current_build_context_is_bounded_and_not_authenticity_proof() 
     assert inventory
     assert all(item["authenticity_meaning"] == "none" for item in inventory)
     assert all(item["protected_policy_dependency"] == "none" for item in inventory)
+
+
+def test_portable_confirmation_transport_preserves_exact_resupplied_parents() -> None:
+    context, circuit, result = _current_context()
+    records = build_decision_records(
+        profile_id="generic_qiskit",
+        current_lineage_reference=LINEAGE_REF,
+        parent_artifact_references=[_working_blueprint()],
+        dispositions=_ready_dispositions("generic_qiskit"),
+    )
+    target = next(
+        item
+        for item in records
+        if item["profile_decision_id"] == "generic_qiskit.controlled_operations"
+    )
+    target.update(
+        {
+            "semantic_classification": "decision_candidate",
+            "semantic_role": "Preserve the supplied controlled-operation role.",
+            "applicable_scope": "Current lineage and next generation contract only.",
+            "relationship_to_requirement": "Refines requirement req-controlled-role.",
+            "related_requirement_references": ["req-controlled-role"],
+            "evidence_expectation": ["Future source represents the confirmed role."],
+            "future_review_rule": "Review against later supplied source and circuit evidence.",
+            "remaining_non_proofs": ["No correctness or equivalence is established."],
+            "resolution_state": "unresolved",
+            "user_disposition": "left_unresolved",
+            "generation_effect": "bounded_discretion",
+            "provenance_entries": [{"role": "qcoder_observed", "circuit_ref": CIRCUIT_REF}],
+        }
+    )
+    update = {
+        **deepcopy(target),
+        "semantic_classification": "blueprint_decision",
+        "control_treatment": "keep_fixed",
+        "resolution_state": "resolved",
+        "user_disposition": "selected_choice",
+        "generation_effect": "non_blocking",
+        "selected_value": "supplied_controlled_role",
+        "blueprint_representation_state": "represented_in_derived_blueprint",
+        "unresolved_questions": [],
+    }
+    record_set = {
+        "artifact_type": "blueprint_decision_record_set",
+        "schema_version": 1,
+        "records": records,
+    }
+    working_blueprint = deepcopy(_working_blueprint())
+    working_blueprint["blueprint_decision_records"] = record_set
+    parents = _evidence_parents(context, circuit, result)
+    parents[1] = deepcopy(working_blueprint)
+    proposal = build_carry_forward_proposal(
+        selected_action="accept_and_add_to_blueprint",
+        profile_id="generic_qiskit",
+        decision_records=records,
+        parent_artifacts=parents,
+        current_build_context=context,
+        selected_decision_references=[target["decision_ref"]],
+        proposed_updates=[update],
+        current_lineage_reference=LINEAGE_REF,
+        remaining_uncertainty=["Correctness and runtime behavior remain unproven."],
+        generation_context_effect="Fix only this decision in the next generation contract.",
+        proposal_ref="proposal-portable-confirmation-01",
+        prospective_derived_references=["derived-portable-confirmation-01"],
+    )
+    tool_input = {
+        "context_loop": CONTEXT_LOOP_GATE,
+        "decision_loop": "readiness_resolution_v1",
+        "current_lineage_reference": LINEAGE_REF,
+        "resolution_phase": "confirm",
+        "resolution_context": "current_build_context",
+        "selected_action": "accept_and_add_to_blueprint",
+        "proposal_ref": proposal["proposal_ref"],
+        "decision_resolution_pack": proposal,
+        "resolution_confirmation": {"confirmed": True, "confirmed_by": "Rob"},
+        "confirmation_payload": proposal["explicit_confirmation_requirements"][
+            "confirmation_payload"
+        ],
+        "current_build_context": context,
+        "evidence_parent_artifacts": parents,
+        "working_blueprint": working_blueprint,
+        "blueprint_decision_records": record_set,
+    }
+    portable = build_portable_current_build_context(
+        current_build_context=context,
+        decision_records=records,
+        decision_evidence_lineage=_lineage(),
+        carry_forward_proposal=proposal,
+    )
+    transported = attach_portable_confirmation_transport(
+        portable,
+        tool_input=tool_input,
+    )
+    assert portable_confirmation_transport_error(transported["confirmation_transport"]) is None
+    assert transported["confirmation_transport"]["tool_input"] == tool_input
+    assert (
+        len(transported["confirmation_transport"]["tool_input"]["evidence_parent_artifacts"]) == 6
+    )
+    assert transported["confirmation_transport"]["canonical_request_sha256"] == (
+        canonical_context_bridge_request_sha256(
+            tool_name="create_implementation_blueprint",
+            tool_input=tool_input,
+        )
+    )
+    assert portable_current_build_context_error(transported) is None
+
+    frozen = freeze_portable_current_build_context_candidate(transported)
+    assert frozen["inventory_status"] == PORTABLE_BUNDLE_FROZEN_STATUS
+    assert portable_current_build_context_error(frozen) is None
+
+    changed = deepcopy(transported["confirmation_transport"])
+    changed["tool_input"]["selected_action"] = "leave_unresolved"
+    changed["canonical_request_sha256"] = canonical_context_bridge_request_sha256(
+        tool_name="create_implementation_blueprint",
+        tool_input=changed["tool_input"],
+    )
+    assert portable_confirmation_transport_error(changed) == ("resolution_selected_action_mismatch")
 
 
 def test_portable_current_build_context_rejects_limits_and_dangerous_properties() -> None:

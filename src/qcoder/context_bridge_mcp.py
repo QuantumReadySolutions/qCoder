@@ -34,8 +34,11 @@ from qcoder.context_loop import (
     CONTEXT_LOOP_DISABLED,
     CONTEXT_LOOP_GATE,
     GENERATION_POSTURES,
+    PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS,
     STAGE_IDENTITY_STATUSES,
+    canonical_context_bridge_request_sha256,
     context_loop_contract_snapshot,
+    portable_current_build_context_error,
 )
 
 DEFAULT_BASE_URL = "https://preview-api.qcoder.ai"
@@ -169,6 +172,10 @@ TOOL_INPUT_FIELDS = {
     ),
     **ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS,
 }
+LOCAL_SELECTED_BUNDLE_FIELD = "use_selected_portable_bundle"
+TOOL_INPUT_FIELDS["create_implementation_blueprint"] = TOOL_INPUT_FIELDS[
+    "create_implementation_blueprint"
+] | frozenset({LOCAL_SELECTED_BUNDLE_FIELD})
 TOOL_REQUIRED_FIELDS = {
     tool_name: ("artifact_text",)
     for tool_name in EXPECTED_TOOLS
@@ -328,6 +335,75 @@ FORBIDDEN_PAYLOAD_FIELDS = frozenset(
 
 def default_token_file() -> Path:
     return Path.home() / ".qcoder" / "context-bridge" / "token.txt"
+
+
+def _load_selected_portable_bundle(
+    selected_file: str | Path | None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    if selected_file is None:
+        return None, "selected_portable_bundle_not_configured"
+    path = Path(selected_file)
+    if not path.is_absolute() or ".." in path.parts:
+        return None, "selected_portable_bundle_path_invalid"
+    try:
+        if path.is_symlink():
+            return None, "selected_portable_bundle_symlink_rejected"
+        stat_result = path.stat()
+    except OSError:
+        return None, "selected_portable_bundle_unreadable"
+    if not path.is_file():
+        return None, "selected_portable_bundle_file_required"
+    if path.suffix.lower() != ".json":
+        return None, "selected_portable_bundle_type_unsupported"
+    if stat_result.st_size > PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS["maximum_selected_file_bytes"]:
+        return None, "selected_portable_bundle_file_too_large"
+    try:
+        raw = path.read_bytes()
+        decoded = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None, "selected_portable_bundle_invalid"
+    if not isinstance(decoded, dict):
+        return None, "selected_portable_bundle_invalid"
+    error = portable_current_build_context_error(decoded)
+    if error:
+        return None, error
+    return decoded, None
+
+
+def _expand_selected_portable_bundle(
+    arguments: dict[str, Any],
+    *,
+    selected_file: str | Path | None,
+) -> tuple[dict[str, Any] | None, str | None, str | None]:
+    allowed_overlay = {
+        LOCAL_SELECTED_BUNDLE_FIELD,
+        "proposal_ref",
+        "selected_action",
+        "resolution_confirmation",
+    }
+    if set(arguments) - allowed_overlay:
+        return None, None, "selected_portable_bundle_overlay_invalid"
+    if arguments.get(LOCAL_SELECTED_BUNDLE_FIELD) is not True:
+        return None, None, "selected_portable_bundle_selection_required"
+    bundle, bundle_error = _load_selected_portable_bundle(selected_file)
+    if bundle_error or bundle is None:
+        return None, None, bundle_error
+    transport = bundle.get("confirmation_transport")
+    if not isinstance(transport, dict):
+        return None, None, "portable_confirmation_transport_invalid"
+    exact_input = transport.get("tool_input")
+    if not isinstance(exact_input, dict):
+        return None, None, "portable_confirmation_tool_input_invalid"
+    for field in ("proposal_ref", "selected_action", "resolution_confirmation"):
+        if arguments.get(field) != exact_input.get(field):
+            return None, None, f"selected_portable_bundle_{field}_mismatch"
+    digest = canonical_context_bridge_request_sha256(
+        tool_name="create_implementation_blueprint",
+        tool_input=exact_input,
+    )
+    if digest != transport.get("canonical_request_sha256"):
+        return None, None, "portable_confirmation_request_digest_mismatch"
+    return dict(exact_input), digest, None
 
 
 def safe_error(error_category: str, *, status_category: str = "adapter_rejected") -> dict[str, Any]:
@@ -566,6 +642,7 @@ def post_context_bridge(
     before: object | None = None,
     after: object | None = None,
     tool_arguments: dict[str, Any] | None = None,
+    expected_request_digest: str | None = None,
     opener: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
     canonical_tool_name = _canonical_tool_name(tool_name)
@@ -705,6 +782,18 @@ def post_context_bridge(
     payload.setdefault("raw_response_printed", False)
     if status == 429:
         payload.setdefault("retry_after_category", _retry_after_category(retry_after))
+    if expected_request_digest is not None and 200 <= status < 300:
+        fidelity = payload.get("request_fidelity")
+        if (
+            not isinstance(fidelity, dict)
+            or fidelity.get("local_canonical_request_sha256") != expected_request_digest
+            or fidelity.get("protected_received_request_sha256") != expected_request_digest
+            or fidelity.get("digests_equal") is not True
+        ):
+            return safe_error(
+                "request_digest_proof_mismatch",
+                status_category="transport_consistency_failed",
+            )
     return payload
 
 
@@ -728,6 +817,15 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
             "type": "string",
             "enum": [DEFAULT_ARTIFACT_KIND],
             "default": DEFAULT_ARTIFACT_KIND,
+        },
+        LOCAL_SELECTED_BUNDLE_FIELD: {
+            "type": "boolean",
+            "const": True,
+            "description": (
+                "Use the one explicitly selected local portable bundle configured "
+                "for this adapter process. The local path and file contents are not "
+                "supplied by the assistant."
+            ),
         },
         "client_context": {
             "type": "object",
@@ -973,7 +1071,10 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
         "decision_resolution_pack": {"type": "object"},
         "resolution_confirmation": {
             "type": "object",
-            "properties": {"confirmed": {"type": "boolean"}},
+            "properties": {
+                "confirmed": {"type": "boolean"},
+                "confirmed_by": {"type": "string"},
+            },
             "required": ["confirmed"],
             "additionalProperties": False,
         },
@@ -1282,6 +1383,7 @@ def handle_jsonrpc_message(
     *,
     base_url: str,
     token_file: str | Path,
+    selected_portable_bundle_file: str | Path | None = None,
     opener: Callable[..., Any] | None = None,
 ) -> dict[str, Any] | None:
     method = message.get("method")
@@ -1322,6 +1424,31 @@ def handle_jsonrpc_message(
                     "isError": True,
                 },
             )
+        expected_request_digest: str | None = None
+        if (
+            canonical_tool_name == "create_implementation_blueprint"
+            and arguments.get(LOCAL_SELECTED_BUNDLE_FIELD) is True
+        ):
+            expanded, expected_request_digest, expansion_error = _expand_selected_portable_bundle(
+                arguments,
+                selected_file=selected_portable_bundle_file,
+            )
+            if expansion_error or expanded is None:
+                payload = safe_error(expansion_error or "selected_portable_bundle_invalid")
+                return _jsonrpc_result(
+                    message_id,
+                    {
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": json.dumps(payload, sort_keys=True),
+                            }
+                        ],
+                        "structuredContent": payload,
+                        "isError": True,
+                    },
+                )
+            arguments = expanded
         direct_field_names = {
             "mode",
             "current_goal",
@@ -1339,9 +1466,25 @@ def handle_jsonrpc_message(
             tool_name=normalized_tool_name,
             artifact_text=arguments.get("artifact_text"),
             artifact_kind=str(arguments.get("artifact_kind") or DEFAULT_ARTIFACT_KIND),
-            client_context=arguments.get("client_context")
-            if isinstance(arguments.get("client_context"), dict)
-            else None,
+            client_context=(
+                {
+                    **(
+                        arguments.get("client_context")
+                        if isinstance(arguments.get("client_context"), dict)
+                        else {}
+                    ),
+                    "canonical_request_representation": (
+                        "qcoder.context_bridge.semantic_request.v1"
+                    ),
+                    "canonical_request_sha256": expected_request_digest,
+                }
+                if expected_request_digest is not None
+                else (
+                    arguments.get("client_context")
+                    if isinstance(arguments.get("client_context"), dict)
+                    else None
+                )
+            ),
             mode=str(arguments.get("mode")) if arguments.get("mode") is not None else None,
             current_goal=arguments.get("current_goal"),
             evidence_basis=arguments.get("evidence_basis"),
@@ -1357,6 +1500,7 @@ def handle_jsonrpc_message(
                 if key
                 not in direct_field_names | {"artifact_text", "artifact_kind", "client_context"}
             },
+            expected_request_digest=expected_request_digest,
             opener=opener,
         )
         payload = _client_visible_tool_payload(canonical_tool_name, payload)
@@ -1371,7 +1515,12 @@ def handle_jsonrpc_message(
     return _jsonrpc_error(message_id, -32601, "method_not_supported")
 
 
-def serve_stdio(*, base_url: str, token_file: str | Path) -> int:
+def serve_stdio(
+    *,
+    base_url: str,
+    token_file: str | Path,
+    selected_portable_bundle_file: str | Path | None = None,
+) -> int:
     for raw_line in sys.stdin:
         line = raw_line.strip()
         if not line:
@@ -1384,7 +1533,12 @@ def serve_stdio(*, base_url: str, token_file: str | Path) -> int:
             if not isinstance(message, dict):
                 response = _jsonrpc_error(None, -32600, "invalid_request")
             else:
-                response = handle_jsonrpc_message(message, base_url=base_url, token_file=token_file)
+                response = handle_jsonrpc_message(
+                    message,
+                    base_url=base_url,
+                    token_file=token_file,
+                    selected_portable_bundle_file=selected_portable_bundle_file,
+                )
         if response is None:
             continue
         print(json.dumps(response, sort_keys=True), flush=True)
@@ -1414,7 +1568,12 @@ def _read_mcp_headers(first_line: bytes) -> dict[str, str]:
     return headers
 
 
-def serve_mcp_stdio(*, base_url: str, token_file: str | Path) -> int:
+def serve_mcp_stdio(
+    *,
+    base_url: str,
+    token_file: str | Path,
+    selected_portable_bundle_file: str | Path | None = None,
+) -> int:
     stdin = sys.stdin.buffer
     while True:
         first_line = stdin.readline()
@@ -1428,7 +1587,12 @@ def serve_mcp_stdio(*, base_url: str, token_file: str | Path) -> int:
             except json.JSONDecodeError:
                 response = _jsonrpc_error(None, -32700, "parse_error")
             else:
-                response = handle_jsonrpc_message(message, base_url=base_url, token_file=token_file)
+                response = handle_jsonrpc_message(
+                    message,
+                    base_url=base_url,
+                    token_file=token_file,
+                    selected_portable_bundle_file=selected_portable_bundle_file,
+                )
             if response is not None:
                 print(json.dumps(response, sort_keys=True), flush=True)
             continue
@@ -1451,7 +1615,12 @@ def serve_mcp_stdio(*, base_url: str, token_file: str | Path) -> int:
             if not isinstance(message, dict):
                 response = _jsonrpc_error(None, -32600, "invalid_request")
             else:
-                response = handle_jsonrpc_message(message, base_url=base_url, token_file=token_file)
+                response = handle_jsonrpc_message(
+                    message,
+                    base_url=base_url,
+                    token_file=token_file,
+                    selected_portable_bundle_file=selected_portable_bundle_file,
+                )
         if response is not None:
             _write_content_length_response(response)
     return 0
@@ -1888,6 +2057,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=os.getenv("QCODER_CONTEXT_BRIDGE_BASE_URL", DEFAULT_BASE_URL),
         help="Context Bridge service base URL.",
     )
+    serve.add_argument(
+        "--selected-portable-bundle-file",
+        default=os.getenv("QCODER_CONTEXT_BRIDGE_SELECTED_PORTABLE_BUNDLE_FILE"),
+        help=(
+            "One explicitly selected local portable Context Loop bundle. "
+            "The path and file contents are never sent as path metadata."
+        ),
+    )
     serve.set_defaults(context_bridge_command="mcp", mcp_command="serve")
 
     smoke = mcp_sub.add_parser("smoke", help="Check the Context Bridge connection safely.")
@@ -1918,7 +2095,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 0
     if args.mcp_command == "serve":
-        return serve_mcp_stdio(base_url=args.base_url, token_file=args.token_file)
+        return serve_mcp_stdio(
+            base_url=args.base_url,
+            token_file=args.token_file,
+            selected_portable_bundle_file=args.selected_portable_bundle_file,
+        )
     if args.mcp_command == "smoke":
         result = run_smoke(base_url=args.base_url, token_file=args.token_file, full=args.full)
         if args.json:

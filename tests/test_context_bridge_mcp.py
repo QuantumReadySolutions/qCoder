@@ -13,6 +13,7 @@ from pathlib import Path
 
 from qcoder.cli import main
 from qcoder.algorithm_blueprint import ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS
+from qcoder.blueprint_decisions import with_consistency_digest
 from qcoder.context_bridge_mcp import (
     EXPECTED_TOOLS,
     handle_jsonrpc_message,
@@ -20,6 +21,11 @@ from qcoder.context_bridge_mcp import (
     run_smoke,
     tool_descriptors,
     validate_token_file,
+)
+from qcoder.context_loop import (
+    build_portable_current_build_context,
+    canonical_context_bridge_request_sha256,
+    canonical_portable_current_build_context_json,
 )
 import qcoder.context_bridge_mcp as context_bridge_mcp
 
@@ -182,6 +188,199 @@ def test_current_build_proposal_call_requires_and_transports_evidence_parents(
     assert captured["body"]["evidence_parent_artifacts"] == parents  # type: ignore[index]
 
 
+def _passive_portable_bundle() -> dict[str, object]:
+    return build_portable_current_build_context(
+        current_build_context={
+            "schema_id": "qcoder.current_build_context.v1",
+            "artifact_ref": "session-artifact-aaaaaaaaaaaaaaaa",
+            "profile_id": "generic_qiskit",
+            "artifact_references": {},
+            "stage_availability": {},
+            "stage_identity": {},
+            "selected_share_safe_summaries": {},
+            "non_proofs": ["No correctness or run-readiness claim."],
+        },
+        decision_evidence_lineage={
+            "schema_id": "qcoder.decision_evidence_lineage.v1",
+            "artifact_ref": "session-artifact-bbbbbbbbbbbbbbbb",
+            "artifact_digest": "b" * 64,
+            "links": [],
+        },
+    )
+
+
+def test_selected_portable_bundle_file_is_single_local_safe_input(tmp_path: Path) -> None:
+    portable = _passive_portable_bundle()
+    selected = tmp_path / "selected.json"
+    selected.write_text(
+        canonical_portable_current_build_context_json(portable),
+        encoding="utf-8",
+    )
+    loaded, error = context_bridge_mcp._load_selected_portable_bundle(selected)
+    assert error is None
+    assert loaded == portable
+
+    directory, error = context_bridge_mcp._load_selected_portable_bundle(tmp_path)
+    assert directory is None
+    assert error == "selected_portable_bundle_file_required"
+
+    link = tmp_path / "linked.json"
+    link.symlink_to(selected)
+    linked, error = context_bridge_mcp._load_selected_portable_bundle(link)
+    assert linked is None
+    assert error == "selected_portable_bundle_symlink_rejected"
+
+    unsafe = dict(portable)
+    unsafe["raw_qasm"] = "withheld"
+    unsafe = with_consistency_digest(unsafe)
+    unsafe_file = tmp_path / "unsafe.json"
+    unsafe_file.write_text(json.dumps(unsafe), encoding="utf-8")
+    rejected, error = context_bridge_mcp._load_selected_portable_bundle(unsafe_file)
+    assert rejected is None
+    assert error == "portable_bundle_prohibited_content"
+    assert str(selected) not in error
+
+
+def test_selected_bundle_expansion_preserves_exact_input_and_digest(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    parents = [
+        {
+            "artifact_type": artifact_type,
+            "artifact_ref": f"session-artifact-{index:016x}",
+            "artifact_digest": f"{index:x}" * 64,
+        }
+        for index, artifact_type in enumerate(
+            (
+                "request_baseline_handoff",
+                "implementation_blueprint",
+                "generation_context_pack",
+                "python_source_manifestation",
+                "circuit_manifestation",
+                "result_manifestation",
+                "decision_evidence_lineage",
+                "current_build_context",
+            ),
+            start=1,
+        )
+    ]
+    decision_records = {
+        "artifact_type": "blueprint_decision_record_set",
+        "schema_version": 1,
+        "records": [{"decision_ref": f"decision-{index:019d}"} for index in range(19)],
+    }
+    exact_input = {
+        "context_loop": "current_build_context_v1",
+        "resolution_context": "current_build_context",
+        "resolution_phase": "confirm",
+        "proposal_ref": "proposal-0123456789abcdefghijkl",
+        "selected_action": "accept_and_add_to_blueprint",
+        "resolution_confirmation": {"confirmed": True, "confirmed_by": "Rob"},
+        "confirmation_payload": {
+            "proposal_ref": "proposal-0123456789abcdefghijkl",
+            "selected_action": "accept_and_add_to_blueprint",
+        },
+        "decision_resolution_pack": {
+            "proposal_ref": "proposal-0123456789abcdefghijkl",
+            "selected_action": "accept_and_add_to_blueprint",
+        },
+        "algorithm_intent_card": {"artifact_type": "algorithm_intent_card"},
+        "intent_relationship": {
+            "relationship_type": "represented_by",
+            "parent_artifact_digest": "b" * 64,
+        },
+        "working_blueprint": {
+            "artifact_type": "implementation_blueprint",
+            "blueprint_decision_records": decision_records,
+        },
+        "blueprint_decision_records": decision_records,
+        "current_build_context": {
+            "schema_id": "qcoder.current_build_context.v1",
+            "artifact_ref": "session-artifact-aaaaaaaaaaaaaaaa",
+        },
+        "evidence_parent_artifacts": parents,
+    }
+    digest = canonical_context_bridge_request_sha256(
+        tool_name="create_implementation_blueprint",
+        tool_input=exact_input,
+    )
+    bundle = {
+        "confirmation_transport": {
+            "tool_input": exact_input,
+            "canonical_request_sha256": digest,
+        }
+    }
+    monkeypatch.setattr(  # type: ignore[attr-defined]
+        context_bridge_mcp,
+        "_load_selected_portable_bundle",
+        lambda _selected: (bundle, None),
+    )
+    captured: dict[str, object] = {}
+
+    class Response:
+        status = 200
+        headers: dict[str, str] = {}
+
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "ok": True,
+                    "tool_name": "create_implementation_blueprint",
+                    "retained_artifacts": [],
+                    "request_fidelity": {
+                        "local_canonical_request_sha256": digest,
+                        "protected_received_request_sha256": digest,
+                        "digests_equal": True,
+                    },
+                }
+            ).encode("utf-8")
+
+    def opener(request: object, timeout: int = 20) -> Response:
+        captured["body"] = json.loads(request.data.decode("utf-8"))  # type: ignore[attr-defined]
+        return Response()
+
+    result = handle_jsonrpc_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "create_implementation_blueprint",
+                "arguments": {
+                    "use_selected_portable_bundle": True,
+                    "proposal_ref": exact_input["proposal_ref"],
+                    "selected_action": exact_input["selected_action"],
+                    "resolution_confirmation": exact_input["resolution_confirmation"],
+                },
+            },
+        },
+        base_url="https://example.invalid",
+        token_file=token_file,
+        selected_portable_bundle_file=tmp_path / "selected.json",
+        opener=opener,
+    )
+    assert result is not None
+    assert result["result"]["structuredContent"]["ok"] is True
+    body = captured["body"]
+    assert isinstance(body, dict)
+    for key, value in exact_input.items():
+        assert body[key] == value
+    assert len(body["evidence_parent_artifacts"]) == 8
+    assert len(body["blueprint_decision_records"]["records"]) == 19
+    assert "use_selected_portable_bundle" not in body
+    assert "selected_portable_bundle_file" not in body
+    assert str(tmp_path) not in json.dumps(body, sort_keys=True)
+    assert body["client_context"]["canonical_request_sha256"] == digest
+
+
 def test_tool_descriptors_advertise_only_tool_specific_fields() -> None:
     schemas = {tool["name"]: tool["inputSchema"] for tool in tool_descriptors()}
     expected_properties = {
@@ -282,6 +481,8 @@ def test_tool_descriptors_advertise_only_tool_specific_fields() -> None:
         schema = schemas[tool_name]
         if tool_name in ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS:
             expected = set(ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS[tool_name])
+            if tool_name == "create_implementation_blueprint":
+                expected.add(context_bridge_mcp.LOCAL_SELECTED_BUNDLE_FIELD)
         elif tool_name in {
             "create_context_session_card",
             "create_run_readiness_card",

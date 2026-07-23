@@ -96,12 +96,13 @@ RESULT_DISCLOSURE_CEILING = {
     "raw_samples": False,
 }
 PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS = {
-    "maximum_serialized_bytes": 131_072,
-    "maximum_json_nesting_depth": 12,
-    "maximum_object_property_count": 512,
+    "maximum_serialized_bytes": 262_144,
+    "maximum_selected_file_bytes": 393_216,
+    "maximum_json_nesting_depth": 16,
+    "maximum_object_property_count": 4_096,
     "maximum_array_length": 128,
     "maximum_individual_text_field_length": 4_000,
-    "maximum_total_text_size": 32_768,
+    "maximum_total_text_size": 131_072,
     "maximum_artifact_references": 32,
     "maximum_decisions": 64,
     "maximum_lineage_links": 128,
@@ -110,6 +111,11 @@ PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS = {
     "maximum_proposal_before_after_entries": 64,
 }
 PORTABLE_BUNDLE_INVENTORY_STATUS = "candidate_pending_ide_materialization_proof"
+PORTABLE_BUNDLE_FROZEN_STATUS = "frozen_for_companion_page_v1_candidate"
+PORTABLE_BUNDLE_INVENTORY_STATUSES = (
+    PORTABLE_BUNDLE_INVENTORY_STATUS,
+    PORTABLE_BUNDLE_FROZEN_STATUS,
+)
 CURRENT_BUILD_EVIDENCE_PARENT_ORDER = (
     "request_baseline",
     "working_blueprint",
@@ -178,6 +184,35 @@ _PORTABLE_PROHIBITED_FIELDS = {
 
 def _canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+
+
+def canonical_context_bridge_request_bytes(
+    *, tool_name: str, tool_input: Mapping[str, Any]
+) -> bytes:
+    """Canonical semantic request representation used for transport consistency."""
+
+    if tool_name != "create_implementation_blueprint":
+        raise ValueError("portable_confirmation_tool_invalid")
+    return (
+        json.dumps(
+            {"tool": tool_name, "input": deepcopy(dict(tool_input))},
+            ensure_ascii=True,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    ).encode("utf-8")
+
+
+def canonical_context_bridge_request_sha256(
+    *, tool_name: str, tool_input: Mapping[str, Any]
+) -> str:
+    return hashlib.sha256(
+        canonical_context_bridge_request_bytes(
+            tool_name=tool_name,
+            tool_input=tool_input,
+        )
+    ).hexdigest()
 
 
 def _new_artifact_reference() -> str:
@@ -1075,6 +1110,20 @@ def portable_current_build_context_field_inventory() -> list[dict[str, Any]]:
             bounded_evidence=True,
         ),
         field(
+            "confirmation_transport",
+            PORTABLE_CURRENT_BUILD_CONTEXT_SCHEMA_ID,
+            required=False,
+            maximum_size=PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS["maximum_serialized_bytes"],
+            depth=10,
+            classification="share_safe_confirmation_transport",
+            rendered=False,
+            user_text=True,
+            assistant_text=True,
+            opaque_references=True,
+            bounded_evidence=True,
+            prohibited=tuple(sorted(_PORTABLE_PROHIBITED_FIELDS)),
+        ),
+        field(
             "non_proofs[]",
             CURRENT_BUILD_CONTEXT_SCHEMA_ID,
             required=True,
@@ -1110,7 +1159,7 @@ def _portable_structure_error(value: object) -> str | None:
                     return "portable_bundle_property_name_invalid"
                 if key in _PORTABLE_DANGEROUS_PROPERTY_NAMES:
                     return "portable_bundle_dangerous_property"
-                if key.lower() in _PORTABLE_PROHIBITED_FIELDS:
+                if key.lower() in _PORTABLE_PROHIBITED_FIELDS and nested is not False:
                     return "portable_bundle_prohibited_content"
                 error = inspect(nested, depth=depth + 1, path=(*path, key))
                 if error:
@@ -1157,6 +1206,96 @@ def _portable_structure_error(value: object) -> str | None:
     return None
 
 
+def portable_confirmation_transport_error(value: object) -> str | None:
+    if not isinstance(value, Mapping):
+        return "portable_confirmation_transport_invalid"
+    if (
+        value.get("schema_version") != 1
+        or value.get("purpose") != "current_build_context_confirmation"
+        or value.get("tool_name") != "create_implementation_blueprint"
+    ):
+        return "portable_confirmation_transport_version_invalid"
+    tool_input = value.get("tool_input")
+    if not isinstance(tool_input, Mapping):
+        return "portable_confirmation_tool_input_invalid"
+    if (
+        tool_input.get("context_loop") != CONTEXT_LOOP_GATE
+        or tool_input.get("resolution_context") != RESOLUTION_CONTEXT
+        or tool_input.get("resolution_phase") != "confirm"
+    ):
+        return "portable_confirmation_gate_mismatch"
+    selected_action = tool_input.get("selected_action")
+    if selected_action not in ACTION_IDS:
+        return "portable_confirmation_action_invalid"
+    proposal = tool_input.get("decision_resolution_pack")
+    parents = tool_input.get("evidence_parent_artifacts")
+    context = tool_input.get("current_build_context")
+    working_blueprint = tool_input.get("working_blueprint")
+    record_set = tool_input.get("blueprint_decision_records")
+    if not isinstance(proposal, dict):
+        return "portable_confirmation_proposal_missing"
+    if not isinstance(parents, list) or not isinstance(context, Mapping):
+        return "portable_confirmation_parents_missing"
+    if not isinstance(working_blueprint, Mapping) or not isinstance(record_set, Mapping):
+        return "portable_confirmation_working_blueprint_missing"
+    records = record_set.get("records")
+    if not isinstance(records, list) or not records:
+        return "portable_confirmation_decision_records_missing"
+    if working_blueprint.get("blueprint_decision_records") != record_set:
+        return "portable_confirmation_decision_records_mismatch"
+    parent_error = evidence_parent_artifacts_error(context, parents)
+    if parent_error:
+        return parent_error
+    proposal_error = decision_resolution_pack_error(
+        proposal,
+        parent_artifacts=parents,
+        selected_action=str(selected_action),
+    )
+    if proposal_error:
+        return proposal_error
+    if tool_input.get("proposal_ref") != proposal.get("proposal_ref") or tool_input.get(
+        "selected_action"
+    ) != proposal.get("selected_action"):
+        return "portable_confirmation_binding_mismatch"
+    confirmation = tool_input.get("resolution_confirmation")
+    if (
+        not isinstance(confirmation, Mapping)
+        or confirmation.get("confirmed") is not True
+        or not isinstance(confirmation.get("confirmed_by"), str)
+        or not str(confirmation.get("confirmed_by")).strip()
+    ):
+        return "portable_confirmation_explicit_marker_required"
+    expected_payload = proposal.get("explicit_confirmation_requirements", {}).get(
+        "confirmation_payload"
+    )
+    if tool_input.get("confirmation_payload") != expected_payload:
+        return "portable_confirmation_payload_mismatch"
+    try:
+        request_bytes = canonical_context_bridge_request_bytes(
+            tool_name="create_implementation_blueprint",
+            tool_input=tool_input,
+        )
+    except (TypeError, ValueError):
+        return "portable_confirmation_not_json_serializable"
+    if len(request_bytes) > PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS["maximum_serialized_bytes"]:
+        return "portable_confirmation_request_too_large"
+    digest = value.get("canonical_request_sha256")
+    expected_digest = hashlib.sha256(request_bytes).hexdigest()
+    if digest != expected_digest:
+        return "portable_confirmation_request_digest_mismatch"
+    validation = value.get("validation")
+    if validation != {
+        "artifact_structure_validated": True,
+        "relationships_and_consistency_references_validated": True,
+        "digest_meaning": "deterministic_consistency_reference_only",
+        "authentication_claim": False,
+        "authorship_claim": False,
+        "confirmation_inferred": False,
+    }:
+        return "portable_confirmation_validation_claim_invalid"
+    return None
+
+
 def portable_current_build_context_error(value: object) -> str | None:
     if not isinstance(value, dict):
         return "portable_current_build_context_invalid"
@@ -1166,7 +1305,7 @@ def portable_current_build_context_error(value: object) -> str | None:
         or value.get("artifact_type") != "portable_current_build_context"
     ):
         return "portable_current_build_context_version_invalid"
-    if value.get("inventory_status") != PORTABLE_BUNDLE_INVENTORY_STATUS:
+    if value.get("inventory_status") not in PORTABLE_BUNDLE_INVENTORY_STATUSES:
         return "portable_bundle_inventory_status_invalid"
     structural_error = _portable_structure_error(value)
     if structural_error:
@@ -1174,6 +1313,11 @@ def portable_current_build_context_error(value: object) -> str | None:
     digest = value.get("consistency_digest")
     if not isinstance(digest, str) or digest != consistency_digest(value):
         return "portable_bundle_consistency_digest_invalid"
+    confirmation_transport = value.get("confirmation_transport")
+    if confirmation_transport is not None:
+        transport_error = portable_confirmation_transport_error(confirmation_transport)
+        if transport_error:
+            return transport_error
     validation = value.get("validation")
     if not isinstance(validation, Mapping) or validation != {
         "artifact_structure_validated": True,
@@ -1186,6 +1330,60 @@ def portable_current_build_context_error(value: object) -> str | None:
     }:
         return "portable_bundle_validation_claim_invalid"
     return None
+
+
+def attach_portable_confirmation_transport(
+    portable: Mapping[str, Any],
+    *,
+    tool_input: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Attach one exact, share-safe confirmation request to a portable bundle."""
+
+    if portable_current_build_context_error(dict(portable)):
+        raise ValueError("portable_current_build_context_invalid")
+    request_digest = canonical_context_bridge_request_sha256(
+        tool_name="create_implementation_blueprint",
+        tool_input=tool_input,
+    )
+    result = deepcopy(dict(portable))
+    result.pop("consistency_digest", None)
+    result["confirmation_transport"] = {
+        "schema_version": 1,
+        "purpose": "current_build_context_confirmation",
+        "tool_name": "create_implementation_blueprint",
+        "tool_input": deepcopy(dict(tool_input)),
+        "canonical_request_sha256": request_digest,
+        "validation": {
+            "artifact_structure_validated": True,
+            "relationships_and_consistency_references_validated": True,
+            "digest_meaning": "deterministic_consistency_reference_only",
+            "authentication_claim": False,
+            "authorship_claim": False,
+            "confirmation_inferred": False,
+        },
+    }
+    result = with_consistency_digest(result)
+    error = portable_current_build_context_error(result)
+    if error:
+        raise ValueError(error)
+    return result
+
+
+def freeze_portable_current_build_context_candidate(
+    portable: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Mark a proven bundle inventory as the companion-page v1 freeze candidate."""
+
+    if portable_current_build_context_error(dict(portable)):
+        raise ValueError("portable_current_build_context_invalid")
+    result = deepcopy(dict(portable))
+    result.pop("consistency_digest", None)
+    result["inventory_status"] = PORTABLE_BUNDLE_FROZEN_STATUS
+    result = with_consistency_digest(result)
+    error = portable_current_build_context_error(result)
+    if error:
+        raise ValueError(error)
+    return result
 
 
 def build_portable_current_build_context(
@@ -1631,9 +1829,13 @@ def context_loop_contract_snapshot() -> dict[str, Any]:
         "current_build_evidence_parent_order": list(CURRENT_BUILD_EVIDENCE_PARENT_ORDER),
         "portable_current_build_context": {
             "inventory_status": PORTABLE_BUNDLE_INVENTORY_STATUS,
+            "inventory_statuses": list(PORTABLE_BUNDLE_INVENTORY_STATUSES),
             "limits": deepcopy(PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS),
             "field_inventory": portable_current_build_context_field_inventory(),
             "transport_envelope": True,
+            "deterministic_confirmation_transport": True,
+            "local_selected_path_transmitted": False,
+            "request_digest_meaning": "deterministic_consistency_reference_only",
             "canonical_stored_form": False,
             "authentication_meaning": "none",
             "protected_policy_dependency": "none",
