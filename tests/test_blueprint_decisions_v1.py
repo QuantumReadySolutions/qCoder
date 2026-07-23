@@ -136,7 +136,11 @@ def test_exact_contract_inventories_and_authorities() -> None:
         "not_supplied",
     )
     assert GENERATION_EFFECTS == ("non_blocking", "bounded_discretion", "blocking")
-    assert RESOLUTION_CONTEXTS == ("blueprint_readiness", "source_alignment")
+    assert RESOLUTION_CONTEXTS == (
+        "blueprint_readiness",
+        "source_alignment",
+        "current_build_context",
+    )
     assert len(ACTION_IDS) == 7
     snapshot = profile_decision_catalog_snapshot()
     assert snapshot["catalog_id"] == PROFILE_DECISION_CATALOG_ID

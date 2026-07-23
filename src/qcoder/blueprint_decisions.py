@@ -51,7 +51,11 @@ USER_DISPOSITIONS = (
     "not_supplied",
 )
 GENERATION_EFFECTS = ("non_blocking", "bounded_discretion", "blocking")
-RESOLUTION_CONTEXTS = ("blueprint_readiness", "source_alignment")
+RESOLUTION_CONTEXTS = (
+    "blueprint_readiness",
+    "source_alignment",
+    "current_build_context",
+)
 RESOLUTION_PHASES = ("propose", "confirm")
 ACTION_IDS = (
     "accept_and_add_to_blueprint",
@@ -1493,6 +1497,10 @@ def _action_allowed(context: str, action: str) -> bool:
         }
     if context == "source_alignment":
         return action in ACTION_IDS
+    if context == "current_build_context":
+        # Canonical OSS validation permits the existing action vocabulary. Protected
+        # Explorer policy decides which action is contextually eligible.
+        return action in ACTION_IDS
     return False
 
 
@@ -1539,6 +1547,7 @@ def _apply_proposed_updates(
 
 def _resolution_semantics_error(
     *,
+    resolution_context: str,
     selected_action: str,
     selected_decision_references: list[str],
     before_records: list[dict[str, Any]],
@@ -1550,8 +1559,16 @@ def _resolution_semantics_error(
         for decision_ref in selected_decision_references:
             prior = before[decision_ref]
             proposed = after[decision_ref]
-            if not prior.get("related_source_findings"):
+            if (
+                resolution_context == "source_alignment"
+                and not prior.get("related_source_findings")
+            ):
                 return "accept_and_add_source_provenance_missing"
+            if (
+                resolution_context == "current_build_context"
+                and not proposed.get("provenance_entries")
+            ):
+                return "accept_and_add_evidence_provenance_missing"
             if proposed.get("semantic_classification") != "blueprint_decision":
                 return "accept_and_add_semantic_decision_required"
             error = semantic_classification_error(proposed)
@@ -1597,6 +1614,7 @@ def propose_decision_resolution_pack(
     before = calculate_blueprint_readiness(profile_id=profile_id, decision_records=decision_records)
     after_records = _apply_proposed_updates(decision_records, proposed_updates)
     semantic_error = _resolution_semantics_error(
+        resolution_context=resolution_context,
         selected_action=selected_action,
         selected_decision_references=selected_decision_references,
         before_records=decision_records,
@@ -1772,8 +1790,16 @@ def decision_resolution_pack_error(
                 return "accept_and_add_evidence_expectation_missing"
             if not _nonempty_text_list(update.get("remaining_non_proofs")):
                 return "accept_and_add_non_proof_missing"
-        if not _nonempty_text_list(value.get("source_finding_references")):
+        if (
+            value.get("resolution_context") == "source_alignment"
+            and not _nonempty_text_list(value.get("source_finding_references"))
+        ):
             return "accept_and_add_source_provenance_missing"
+        if (
+            value.get("resolution_context") == "current_build_context"
+            and not isinstance(value.get("evidence_parent_references"), dict)
+        ):
+            return "accept_and_add_evidence_provenance_missing"
     if not isinstance(value.get("consistency_digest"), str) or value[
         "consistency_digest"
     ] != consistency_digest(value):
@@ -1843,6 +1869,7 @@ def confirm_decision_resolution_pack(
     updates = deepcopy(decision_resolution_pack["proposed_outcome"]["decision_updates"])
     updated_records = _apply_proposed_updates(decision_records, updates)
     semantic_error = _resolution_semantics_error(
+        resolution_context=str(decision_resolution_pack["resolution_context"]),
         selected_action=selected_action,
         selected_decision_references=list(decision_resolution_pack["decision_references"]),
         before_records=decision_records,

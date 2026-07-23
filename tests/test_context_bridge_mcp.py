@@ -214,6 +214,14 @@ def test_tool_descriptors_advertise_only_tool_specific_fields() -> None:
         schema = schemas[tool_name]
         if tool_name in ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS:
             expected = set(ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS[tool_name])
+        elif tool_name in {
+            "create_context_session_card",
+            "create_run_readiness_card",
+            "create_result_review_context_card",
+            "create_next_check_plan",
+            "create_single_loop_evidence_diff",
+        }:
+            expected = expected | set(context_bridge_mcp._CONTEXT_LOOP_EVIDENCE_FIELDS)
         assert set(schema["properties"]) == expected
         expected_required = {
             "create_algorithm_intent_card": ["original_user_intent", "profile_id"],
@@ -227,6 +235,9 @@ def test_tool_descriptors_advertise_only_tool_specific_fields() -> None:
                 "output_evidence_contract",
                 "selected_python_source_evidence",
             ],
+            "create_context_session_card": [],
+            "create_result_review_context_card": [],
+            "create_single_loop_evidence_diff": [],
         }.get(tool_name, ["artifact_text"])
         assert schema["required"] == expected_required
         assert schema["additionalProperties"] is False

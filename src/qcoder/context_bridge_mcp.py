@@ -30,6 +30,13 @@ from qcoder.blueprint_decisions import (
     RESOLUTION_CONTEXTS,
     RESOLUTION_PHASES,
 )
+from qcoder.context_loop import (
+    CONTEXT_LOOP_DISABLED,
+    CONTEXT_LOOP_GATE,
+    GENERATION_POSTURES,
+    STAGE_IDENTITY_STATUSES,
+    context_loop_contract_snapshot,
+)
 
 DEFAULT_BASE_URL = "https://preview-api.qcoder.ai"
 ROUTE_PATH = "/v0/internal/hosted-mcp/context"
@@ -47,6 +54,38 @@ EXPECTED_TOOLS = (
 TOOL_ALIASES = {
     "get_context_from_share_safe_artifact": "get_guided_evidence_context",
     "build_assistant_prompt_context": "create_prompt_context",
+}
+_CONTEXT_LOOP_EVIDENCE_FIELDS = {
+    "context_loop",
+    "profile_id",
+    "current_lineage_reference",
+    "request_baseline",
+    "request_share_safe_summary",
+    "request_text_share_safe",
+    "assistant_interpretation",
+    "profile_suggestions",
+    "generation_posture",
+    "exploratory_authorization",
+    "exploratory_constraints",
+    "exploratory_prohibitions",
+    "unresolved_assistant_choices",
+    "working_blueprint",
+    "generation_context",
+    "python_manifestation",
+    "circuit_manifestation",
+    "result_manifestation",
+    "stage_availability",
+    "stage_identities",
+    "decision_evidence_lineage",
+    "current_build_context",
+    "carry_forward_proposal",
+    "evolved_blueprint",
+    "decision_records",
+    "evidence_parent_artifacts",
+    "artifact_references",
+    "missing_stage_requests",
+    "remaining_uncertainty",
+    "generation_context_effect",
 }
 PROMPT_CONTEXT_MODES = frozenset(
     {
@@ -74,6 +113,7 @@ TOOL_INPUT_FIELDS = {
             "evidence_basis",
             "open_questions",
             "explicit_assumptions",
+            *_CONTEXT_LOOP_EVIDENCE_FIELDS,
         }
     ),
     "create_run_readiness_card": frozenset(
@@ -86,6 +126,7 @@ TOOL_INPUT_FIELDS = {
             "open_questions",
             "explicit_assumptions",
             "current_card_context",
+            *_CONTEXT_LOOP_EVIDENCE_FIELDS,
         }
     ),
     "create_result_review_context_card": frozenset(
@@ -99,6 +140,7 @@ TOOL_INPUT_FIELDS = {
             "open_questions",
             "explicit_assumptions",
             "current_card_context",
+            *_CONTEXT_LOOP_EVIDENCE_FIELDS,
         }
     ),
     "create_next_check_plan": frozenset(
@@ -111,6 +153,7 @@ TOOL_INPUT_FIELDS = {
             "open_questions",
             "explicit_assumptions",
             "current_card_context",
+            *_CONTEXT_LOOP_EVIDENCE_FIELDS,
         }
     ),
     "create_single_loop_evidence_diff": frozenset(
@@ -121,6 +164,7 @@ TOOL_INPUT_FIELDS = {
             "current_goal",
             "before",
             "after",
+            *_CONTEXT_LOOP_EVIDENCE_FIELDS,
         }
     ),
     **ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS,
@@ -131,6 +175,12 @@ TOOL_REQUIRED_FIELDS = {
     if tool_name not in ALGORITHM_BLUEPRINT_TOOL_NAMES
 }
 TOOL_REQUIRED_FIELDS.update(ALGORITHM_BLUEPRINT_TOOL_REQUIRED_FIELDS)
+for _context_loop_tool in (
+    "create_context_session_card",
+    "create_result_review_context_card",
+    "create_single_loop_evidence_diff",
+):
+    TOOL_REQUIRED_FIELDS[_context_loop_tool] = ()
 EVIDENCE_CONFIDENCE_LABELS = (
     (
         "observed",
@@ -198,6 +248,7 @@ EVIDENCE_REVIEW_BOUNDARIES = (
 DEFAULT_ARTIFACT_KIND = "share_safe_evidence_summary"
 MAX_ARTIFACT_TEXT_CHARS = 20_000
 MAX_DECISION_LOOP_PAYLOAD_CHARS = 96_000
+MAX_CONTEXT_LOOP_PAYLOAD_CHARS = 131_072
 FORBIDDEN_TEXT_MARKERS = (
     "openqasm",
     "qreg ",
@@ -252,11 +303,13 @@ FORBIDDEN_PAYLOAD_FIELDS = frozenset(
         "raw_source",
         "source_code",
         "source_excerpt",
+        "original_request",
         "raw_circuit",
         "raw_qasm",
         "qasm_text",
         "raw_counts",
         "counts",
+        "sampled_bitstrings",
         "provider_result",
         "provider_result_payload",
         "raw_provider_result",
@@ -438,7 +491,49 @@ def evidence_review_contract_snapshot() -> dict[str, Any]:
         "retention": "process_and_discard",
         "boundaries": list(EVIDENCE_REVIEW_BOUNDARIES),
         "algorithm_blueprint": algorithm_blueprint_contract_snapshot(),
+        "context_loop": context_loop_contract_snapshot(),
     }
+
+
+def _context_loop_argument_error(
+    tool_name: str, arguments: dict[str, Any], artifact_text: object
+) -> str | None:
+    gate = arguments.get("context_loop")
+    if gate not in {None, CONTEXT_LOOP_DISABLED, CONTEXT_LOOP_GATE}:
+        return "context_loop_gate_invalid"
+    enabled = gate == CONTEXT_LOOP_GATE
+    if not enabled:
+        if tool_name in {
+            "create_context_session_card",
+            "create_result_review_context_card",
+            "create_single_loop_evidence_diff",
+        } and (not isinstance(artifact_text, str) or not artifact_text.strip()):
+            return "artifact_text_missing"
+        return None
+    if tool_name == "create_algorithm_intent_card":
+        if arguments.get("request_text_share_safe") is not True and not isinstance(
+            arguments.get("request_share_safe_summary"), str
+        ):
+            return "request_share_safe_selection_required"
+    if tool_name == "create_context_session_card":
+        for field in (
+            "request_baseline",
+            "working_blueprint",
+            "stage_availability",
+            "decision_evidence_lineage",
+        ):
+            if not isinstance(arguments.get(field), dict):
+                return f"missing_{field}"
+    if tool_name == "create_result_review_context_card" and not isinstance(
+        arguments.get("result_manifestation"), dict
+    ):
+        return "missing_result_manifestation"
+    if tool_name == "create_single_loop_evidence_diff":
+        for field in ("current_build_context", "decision_evidence_lineage", "decision_records"):
+            value = arguments.get(field)
+            if value is None or value == [] or value == {}:
+                return f"missing_{field}"
+    return None
 
 
 def post_context_bridge(
@@ -481,6 +576,18 @@ def post_context_bridge(
             if key in arguments and arguments[key] != value:
                 return safe_error("conflicting_tool_argument")
             arguments[key] = value
+    context_loop_enabled = arguments.get("context_loop") == CONTEXT_LOOP_GATE
+    context_error = _context_loop_argument_error(
+        canonical_tool_name, arguments, artifact_text
+    )
+    if context_error is not None:
+        return safe_error(context_error)
+    if (
+        context_loop_enabled
+        and canonical_tool_name == "create_algorithm_intent_card"
+        and arguments.get("request_text_share_safe") is not True
+    ):
+        arguments["original_user_intent"] = arguments["request_share_safe_summary"]
     if canonical_tool_name == "create_source_blueprint_alignment_review" and isinstance(
         arguments.get("selected_python_source_evidence"), dict
     ):
@@ -527,7 +634,9 @@ def post_context_bridge(
         payload_validation = validate_optional_payload(
             payload,
             max_chars=(
-                MAX_DECISION_LOOP_PAYLOAD_CHARS
+                MAX_CONTEXT_LOOP_PAYLOAD_CHARS
+                if context_loop_enabled
+                else MAX_DECISION_LOOP_PAYLOAD_CHARS
                 if decision_loop_enabled
                 else MAX_ARTIFACT_TEXT_CHARS
             ),
@@ -611,6 +720,97 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
             "additionalProperties": True,
             "description": "Optional client metadata without secrets, paths, or raw artifacts.",
         },
+        "context_loop": {
+            "type": "string",
+            "enum": [CONTEXT_LOOP_GATE, CONTEXT_LOOP_DISABLED],
+            "description": "Explicit Current Build Context v1 opt-in. It does not activate either evidence-depth or decision-resolution behavior.",
+        },
+        "generation_posture": {
+            "type": "string",
+            "enum": list(GENERATION_POSTURES),
+            "description": "Explicit generation posture, independent from Blueprint Readiness.",
+        },
+        "request_baseline": {
+            "type": "object",
+            "additionalProperties": True,
+            "description": "Validated share-safe Request Baseline handoff. Local verbatim request text is withheld unless explicitly selected.",
+        },
+        "request_share_safe_summary": {"type": "string"},
+        "request_text_share_safe": {
+            "type": "boolean",
+            "description": "True only when the user explicitly selected the supplied request text for this handoff.",
+        },
+        "assistant_interpretation": {
+            "type": "object",
+            "additionalProperties": True,
+            "description": "Explicitly supplied assistant proposal; it is not user intent.",
+        },
+        "profile_suggestions": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "exploratory_authorization": {"type": "boolean"},
+        "exploratory_constraints": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "exploratory_prohibitions": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "unresolved_assistant_choices": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "working_blueprint": {"type": "object", "additionalProperties": True},
+        "generation_context": {"type": "object", "additionalProperties": True},
+        "python_manifestation": {"type": "object", "additionalProperties": True},
+        "circuit_manifestation": {"type": "object", "additionalProperties": True},
+        "result_manifestation": {"type": "object", "additionalProperties": True},
+        "stage_availability": {
+            "type": "object",
+            "additionalProperties": True,
+            "description": "Evidence availability using the seven canonical Context Loop availability values.",
+        },
+        "stage_identities": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "object",
+                "properties": {
+                    "status": {"type": "string", "enum": list(STAGE_IDENTITY_STATUSES)},
+                },
+                "additionalProperties": True,
+            },
+        },
+        "decision_evidence_lineage": {
+            "type": "object",
+            "additionalProperties": True,
+            "description": "Explicit, directional, non-transitive current-session lineage.",
+        },
+        "current_build_context": {"type": "object", "additionalProperties": True},
+        "carry_forward_proposal": {"type": "object", "additionalProperties": True},
+        "evolved_blueprint": {"type": "object", "additionalProperties": True},
+        "decision_records": {
+            "type": "array",
+            "items": {"type": "object"},
+        },
+        "evidence_parent_artifacts": {
+            "type": "array",
+            "items": {"type": "object"},
+        },
+        "artifact_references": {
+            "type": "object",
+            "additionalProperties": {"type": "string"},
+        },
+        "missing_stage_requests": {
+            "type": "array",
+            "items": {"type": "object"},
+        },
+        "remaining_uncertainty": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "generation_context_effect": {"type": "string"},
         "mode": {
             "type": "string",
             "enum": sorted(PROMPT_CONTEXT_MODES),
@@ -947,12 +1147,37 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
 
 def _tool_schema(tool_name: str) -> dict[str, Any]:
     property_schemas = _tool_property_schemas()
-    return {
+    schema: dict[str, Any] = {
         "type": "object",
         "properties": {name: property_schemas[name] for name in TOOL_INPUT_FIELDS[tool_name]},
         "required": list(TOOL_REQUIRED_FIELDS[tool_name]),
         "additionalProperties": False,
     }
+    context_requirements = {
+        "create_context_session_card": [
+            "context_loop",
+            "request_baseline",
+            "working_blueprint",
+            "stage_availability",
+            "decision_evidence_lineage",
+        ],
+        "create_result_review_context_card": ["context_loop", "result_manifestation"],
+        "create_single_loop_evidence_diff": [
+            "context_loop",
+            "current_build_context",
+            "decision_evidence_lineage",
+            "decision_records",
+        ],
+    }
+    if tool_name in context_requirements:
+        schema["anyOf"] = [
+            {"required": ["artifact_text"]},
+            {
+                "required": context_requirements[tool_name],
+                "properties": {"context_loop": {"const": CONTEXT_LOOP_GATE}},
+            },
+        ]
+    return schema
 
 
 def tool_descriptors() -> list[dict[str, Any]]:

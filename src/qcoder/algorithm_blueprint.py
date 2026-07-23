@@ -41,6 +41,36 @@ _DECISION_LOOP_COMMON_INPUT_FIELDS = {
     "confirmation_payload",
     "resolution_parent_artifact",
 }
+_CONTEXT_LOOP_COMMON_INPUT_FIELDS = {
+    "context_loop",
+    "generation_posture",
+    "request_baseline",
+    "request_share_safe_summary",
+    "request_text_share_safe",
+    "assistant_interpretation",
+    "profile_suggestions",
+    "exploratory_authorization",
+    "exploratory_constraints",
+    "exploratory_prohibitions",
+    "unresolved_assistant_choices",
+    "stage_availability",
+    "stage_identities",
+    "working_blueprint",
+    "generation_context",
+    "python_manifestation",
+    "circuit_manifestation",
+    "result_manifestation",
+    "decision_evidence_lineage",
+    "current_build_context",
+    "carry_forward_proposal",
+    "evolved_blueprint",
+    "decision_records",
+    "evidence_parent_artifacts",
+    "artifact_references",
+    "missing_stage_requests",
+    "remaining_uncertainty",
+    "generation_context_effect",
+}
 ALGORITHM_BLUEPRINT_TOOL_NAMES = (
     "create_algorithm_intent_card",
     "create_implementation_blueprint",
@@ -64,6 +94,7 @@ ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS = {
             "confirmation_assertion",
             "accepted_unresolved_choices",
             *_DECISION_LOOP_COMMON_INPUT_FIELDS,
+            *_CONTEXT_LOOP_COMMON_INPUT_FIELDS,
         }
     ),
     "create_implementation_blueprint": frozenset(
@@ -73,6 +104,7 @@ ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS = {
             "algorithm_intent_card",
             "intent_relationship",
             *_DECISION_LOOP_COMMON_INPUT_FIELDS,
+            *_CONTEXT_LOOP_COMMON_INPUT_FIELDS,
         }
     ),
     "create_generation_context_pack": frozenset(
@@ -82,6 +114,7 @@ ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS = {
             "implementation_blueprint",
             "output_evidence_contract",
             *_DECISION_LOOP_COMMON_INPUT_FIELDS,
+            *_CONTEXT_LOOP_COMMON_INPUT_FIELDS,
         }
     ),
     "create_source_blueprint_alignment_review": frozenset(
@@ -92,6 +125,7 @@ ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS = {
             "output_evidence_contract",
             "selected_python_source_evidence",
             *_DECISION_LOOP_COMMON_INPUT_FIELDS,
+            *_CONTEXT_LOOP_COMMON_INPUT_FIELDS,
         }
     ),
 }
@@ -325,6 +359,8 @@ def profile_definition(profile_id: str) -> dict[str, Any]:
 
 
 def algorithm_blueprint_contract_snapshot() -> dict[str, Any]:
+    from qcoder.context_loop import context_loop_contract_snapshot
+
     return {
         "tool_names": list(ALGORITHM_BLUEPRINT_TOOL_NAMES),
         "confirmation_states": list(CONFIRMATION_STATES),
@@ -366,6 +402,7 @@ def algorithm_blueprint_contract_snapshot() -> dict[str, Any]:
         "raw_source_fields": [],
         "development_evidence": development_evidence_contract_snapshot(),
         "profile_decision_catalog": profile_decision_catalog_snapshot(),
+        "context_loop": context_loop_contract_snapshot(),
     }
 
 
