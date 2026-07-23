@@ -653,6 +653,66 @@ def test_adapter_withholds_unselected_request_text_before_transport(tmp_path) ->
     assert "Bounded selected request summary" in str(captured["body"])
 
 
+def test_adapter_accepts_structured_context_loop_diff_without_legacy_sides(tmp_path) -> None:
+    token = tmp_path / "token"
+    token.write_text("synthetic-token-value", encoding="utf-8")
+    token.chmod(0o600)
+    captured: dict[str, object] = {}
+
+    class _Response:
+        status = 200
+        headers: dict[str, str] = {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self) -> bytes:
+            return b'{"ok":true}'
+
+    def opener(request, timeout):
+        captured["body"] = request.data.decode("utf-8")
+        captured["timeout"] = timeout
+        return _Response()
+
+    response = post_context_bridge(
+        base_url="https://example.invalid",
+        token_file=token,
+        tool_name="create_single_loop_evidence_diff",
+        artifact_text=None,
+        tool_arguments={
+            "context_loop": CONTEXT_LOOP_GATE,
+            "current_build_context": {"artifact_ref": "session-artifact-context"},
+            "decision_evidence_lineage": {"links": []},
+            "decision_records": [{"decision_ref": "decision-context-loop"}],
+        },
+        opener=opener,
+    )
+
+    assert response["ok"] is True
+    assert '"before"' not in str(captured["body"])
+    assert '"after"' not in str(captured["body"])
+
+
+def test_adapter_keeps_legacy_diff_side_requirement(tmp_path) -> None:
+    token = tmp_path / "token"
+    token.write_text("synthetic-token-value", encoding="utf-8")
+    token.chmod(0o600)
+
+    response = post_context_bridge(
+        base_url="https://example.invalid",
+        token_file=token,
+        tool_name="create_single_loop_evidence_diff",
+        artifact_text="Share-safe current evidence summary.",
+        before={"summary": "before only"},
+    )
+
+    assert response["ok"] is False
+    assert response["error_category"] == "missing_explicit_diff_side"
+
+
 def test_no_pro_enterprise_or_persistence_surface_is_introduced() -> None:
     snapshot = context_loop_contract_snapshot()
     serialized = str(snapshot).lower()

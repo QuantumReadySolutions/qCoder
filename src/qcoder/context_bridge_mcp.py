@@ -607,9 +607,13 @@ def post_context_bridge(
             return safe_error("mode_not_supported_for_tool")
         if str(mode).strip() not in PROMPT_CONTEXT_MODES:
             return safe_error("invalid_prompt_context_mode")
-    if canonical_tool_name == "create_single_loop_evidence_diff" and (
-        not _has_explicit_side(arguments.get("before"))
-        or not _has_explicit_side(arguments.get("after"))
+    if (
+        canonical_tool_name == "create_single_loop_evidence_diff"
+        and arguments.get("context_loop") != CONTEXT_LOOP_GATE
+        and (
+            not _has_explicit_side(arguments.get("before"))
+            or not _has_explicit_side(arguments.get("after"))
+        )
     ):
         return safe_error("missing_explicit_diff_side")
     if artifact_kind != DEFAULT_ARTIFACT_KIND:
