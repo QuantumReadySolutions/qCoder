@@ -1348,6 +1348,48 @@ def _source_evidence_depth_error(value: object) -> str | None:
     ):
         if value.get(boundary) is not False:
             return "source_evidence_depth_boundary_invalid"
+    construction_observation = value.get(
+        "qiskit_construction_form_observation"
+    )
+    if construction_observation is not None:
+        if not isinstance(construction_observation, dict):
+            return "qiskit_construction_observation_invalid"
+        compact_boundary = construction_observation.get("boundary")
+        if compact_boundary == "bounded_static_ast_no_execution_no_equivalence":
+            if construction_observation.get("construction_form_observation") not in {
+                "direct_quantum_circuit",
+                "explicit_named_registers",
+                "ambiguous",
+                "not_observed",
+            }:
+                return "qiskit_construction_observation_invalid"
+            construction_observation = None
+        if construction_observation is None:
+            pass
+        elif (
+            construction_observation.get("schema_id")
+            != "qcoder.qiskit_construction_form_observation.v1"
+            or construction_observation.get("schema_version") != 1
+            or construction_observation.get("sdk") != "qiskit"
+            or construction_observation.get("construction_form_observation")
+            not in {
+                "direct_quantum_circuit",
+                "explicit_named_registers",
+                "ambiguous",
+                "not_observed",
+            }
+        ):
+            return "qiskit_construction_observation_invalid"
+        if construction_observation is not None:
+            for boundary in (
+                "imports_followed",
+                "source_executed",
+                "raw_source_included",
+                "effective_circuit_structure_proven",
+                "source_to_circuit_equivalence_proven",
+            ):
+                if construction_observation.get(boundary) is not False:
+                    return "qiskit_construction_observation_boundary_invalid"
     for fact in value.get("source_facts") or []:
         if fact.get("detector_id") not in SOURCE_EVIDENCE_DEPTH_DETECTORS:
             return "source_evidence_depth_detector_invalid"

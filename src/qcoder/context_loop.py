@@ -18,6 +18,12 @@ from typing import Any, Iterable, Mapping, Sequence
 from qcoder.algorithm_blueprint import artifact_digest_matches, with_artifact_digest
 from qcoder.blueprint_decisions import (
     ACTION_IDS,
+    CONSTRUCTION_POLICY_PATTERNS,
+    LOGICAL_RESOURCE_ARCHITECTURES,
+    QISKIT_CONSTRUCTION_ALIASES,
+    QISKIT_CONSTRUCTION_FORMS,
+    RESOURCE_ARCHITECTURE_SCHEMA_ID,
+    RESOURCE_ARCHITECTURE_SCOPE,
     confirm_decision_resolution_pack,
     decision_resolution_pack_error,
     propose_decision_resolution_pack,
@@ -513,6 +519,7 @@ def build_circuit_manifestation(
         "full_operation_sequence_included": False,
         "reconstructive_graph_included": False,
         "source_or_circuit_executed": False,
+        "python_constructor_form_inferred": False,
         "repository_scanned": False,
         "retention": "process_and_discard",
         "non_proofs": list(_NON_PROOFS),
@@ -625,6 +632,8 @@ def build_result_manifestation(
         "raw_samples_included": False,
         "full_distribution_included": False,
         "result_executed_by_qcoder": False,
+        "result_observation_is_design_intent": False,
+        "design_selection_effect": "none",
         "retention": "process_and_discard",
         "non_proofs": list(_NON_PROOFS)
         + [
@@ -889,6 +898,57 @@ def build_carry_forward_proposal(
     pack["cross_stage_evidence_selects_action"] = False
     pack["user_selected_action"] = True
     pack["result_observation_is_design_intent"] = False
+    resource_changes = pack.get("resource_architecture_changes") or []
+    if resource_changes:
+        change = resource_changes[0]
+        selected_ref = change["decision_ref"]
+        before_record = next(
+            item for item in decision_records if item["decision_ref"] == selected_ref
+        )
+        explicitly_disallowed = list(
+            before_record.get("explicitly_disallowed_choices") or []
+        )
+        pack["resource_architecture_proposal"] = {
+            "schema_id": RESOURCE_ARCHITECTURE_SCHEMA_ID,
+            "before": {
+                "logical_resource_architecture": (
+                    (change.get("before") or {})
+                    .get("logical_resource_architecture", {})
+                    .get("value", "unresolved")
+                ),
+                "allowed_qiskit_manifestations": [
+                    "direct_quantum_circuit",
+                    "explicit_named_registers",
+                ],
+                "construction_policy": {
+                    "explicitly_disallowed_legacy_choices": explicitly_disallowed,
+                    "dynamic_factory_policy_inferred": False,
+                },
+                "readiness": pack["readiness_impact"]["before"],
+            },
+            "proposed_after": deepcopy(change["proposed_after"]),
+            "scope": RESOURCE_ARCHITECTURE_SCOPE,
+            "qualifications": {
+                "global_generic_qiskit_default": False,
+                "explorer_wide_restriction": False,
+                "explicit_named_registers_supported": True,
+                "pro_uses_same_logical_architecture_vocabulary": True,
+                "future_sdk_manifestations_may_differ": True,
+                "circuit_or_qasm_proves_python_constructor": False,
+                "result_evidence_selected_design": False,
+                "direct_construction_superior_or_correct": False,
+                "future_evolution_may_change_architecture_and_manifestation": True,
+            },
+            "readiness_scope": "current_generation_contract_only",
+            "readiness_non_proofs": [
+                "correctness",
+                "completeness",
+                "source_to_circuit_equivalence",
+                "run_readiness",
+                "manifestation_quality",
+                "global_preference",
+            ],
+        }
     return with_consistency_digest(pack)
 
 
@@ -944,6 +1004,11 @@ def materialize_evolved_blueprint(
             ),
             "requirements": deepcopy(working_blueprint.get("requirements", [])),
             "decision_records": deepcopy(materialized["decision_records"]),
+            "resource_architecture_decisions": [
+                deepcopy(item["resource_architecture"])
+                for item in materialized["decision_records"]
+                if isinstance(item.get("resource_architecture"), dict)
+            ],
             "changed_decisions": deepcopy(decision_resolution_pack["decisions_changed"]),
             "unchanged_decisions": deepcopy(decision_resolution_pack["decisions_unchanged"]),
             "requirements_unchanged": True,
@@ -988,6 +1053,7 @@ def context_loop_contract_snapshot() -> dict[str, Any]:
             "current_build_context": CURRENT_BUILD_CONTEXT_SCHEMA_ID,
             "carry_forward_proposal": CARRY_FORWARD_SCHEMA_ID,
             "evolved_blueprint": EVOLVED_BLUEPRINT_SCHEMA_ID,
+            "resource_architecture": RESOURCE_ARCHITECTURE_SCHEMA_ID,
         },
         "provenance_roles": list(PROVENANCE_ROLES),
         "generation_postures": list(GENERATION_POSTURES),
@@ -998,6 +1064,18 @@ def context_loop_contract_snapshot() -> dict[str, Any]:
         "profiles": list(PROFILE_IDS),
         "actions": list(ACTION_IDS),
         "resolution_context": RESOLUTION_CONTEXT,
+        "resource_architecture": {
+            "logical_resource_architectures": list(
+                LOGICAL_RESOURCE_ARCHITECTURES
+            ),
+            "construction_policy_patterns": list(CONSTRUCTION_POLICY_PATTERNS),
+            "qiskit_construction_forms": list(QISKIT_CONSTRUCTION_FORMS),
+            "qiskit_compatibility_aliases": deepcopy(
+                QISKIT_CONSTRUCTION_ALIASES
+            ),
+            "scope": RESOURCE_ARCHITECTURE_SCOPE,
+            "additional_sdks_implemented": [],
+        },
         "circuit_disclosure_ceiling": deepcopy(CIRCUIT_DISCLOSURE_CEILING),
         "result_disclosure_ceiling": deepcopy(RESULT_DISCLOSURE_CEILING),
         "raw_artifacts_hosted": False,

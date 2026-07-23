@@ -60,6 +60,15 @@ _ALLOWED_CONFIG_KEYWORDS = {
 _UNSUPPORTED_CONTROL_NODES = (ast.While, ast.Try, ast.Match) + (
     (getattr(ast, "TryStar"),) if hasattr(ast, "TryStar") else ()
 )
+_SDK_CONSTRUCTION_OBSERVATION_SCHEMA_ID = (
+    "qcoder.qiskit_construction_form_observation.v1"
+)
+_QISKIT_CONSTRUCTION_OBSERVATIONS = (
+    "direct_quantum_circuit",
+    "explicit_named_registers",
+    "ambiguous",
+    "not_observed",
+)
 
 
 @dataclass(frozen=True)
@@ -173,6 +182,211 @@ def _safe_scalar(
         value_type = "integer" if isinstance(value, int) else "finite_float"
         return _SafeScalar(value, value_type, max(left.expression_depth, right.expression_depth))
     return None
+
+
+def _qiskit_import_bindings(
+    tree: ast.Module,
+) -> tuple[set[str], dict[str, str]]:
+    module_aliases: set[str] = set()
+    constructor_aliases: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "qiskit":
+                    module_aliases.add(alias.asname or "qiskit")
+        elif isinstance(node, ast.ImportFrom) and (
+            node.module == "qiskit"
+            or isinstance(node.module, str)
+            and node.module.startswith("qiskit.")
+        ):
+            for alias in node.names:
+                if alias.name in _QISKIT_CONSTRUCTORS:
+                    constructor_aliases[alias.asname or alias.name] = alias.name
+    return module_aliases, constructor_aliases
+
+
+def _qiskit_constructor_name(
+    node: ast.AST,
+    *,
+    module_aliases: set[str],
+    constructor_aliases: Mapping[str, str],
+) -> str | None:
+    if isinstance(node, ast.Name):
+        return constructor_aliases.get(node.id)
+    if (
+        isinstance(node, ast.Attribute)
+        and node.attr in _QISKIT_CONSTRUCTORS
+        and isinstance(node.value, ast.Name)
+        and node.value.id in module_aliases
+    ):
+        return node.attr
+    return None
+
+
+def _bounded_integer_bindings(tree: ast.Module) -> dict[str, int]:
+    bindings: dict[str, int] = {}
+    invalid: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        value = node.value
+        for target in targets:
+            if not isinstance(target, ast.Name):
+                continue
+            if (
+                isinstance(value, ast.Constant)
+                and isinstance(value.value, int)
+                and not isinstance(value.value, bool)
+                and 0 <= value.value <= 1_000_000
+                and target.id not in bindings
+            ):
+                bindings[target.id] = value.value
+            else:
+                invalid.add(target.id)
+    return {
+        name: value for name, value in bindings.items() if name not in invalid
+    }
+
+
+def _is_bounded_width_expression(
+    node: ast.AST, integer_bindings: Mapping[str, int]
+) -> bool:
+    if (
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, int)
+        and not isinstance(node.value, bool)
+    ):
+        return 0 <= node.value <= 1_000_000
+    return isinstance(node, ast.Name) and node.id in integer_bindings
+
+
+def _qiskit_construction_form_observation(
+    tree: ast.Module, *, source_reference: Mapping[str, Any]
+) -> dict[str, Any]:
+    module_aliases, constructor_aliases = _qiskit_import_bindings(tree)
+    integer_bindings = _bounded_integer_bindings(tree)
+    register_symbols: dict[str, str] = {}
+    circuit_calls: list[ast.Call] = []
+    unresolved_constructor_like_call = False
+
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        value = node.value
+        if not isinstance(value, ast.Call):
+            continue
+        constructor = _qiskit_constructor_name(
+            value.func,
+            module_aliases=module_aliases,
+            constructor_aliases=constructor_aliases,
+        )
+        if constructor in {"QuantumRegister", "ClassicalRegister"}:
+            for target in targets:
+                if isinstance(target, ast.Name):
+                    register_symbols[target.id] = constructor
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        constructor = _qiskit_constructor_name(
+            node.func,
+            module_aliases=module_aliases,
+            constructor_aliases=constructor_aliases,
+        )
+        if constructor == "QuantumCircuit":
+            circuit_calls.append(node)
+        elif _terminal(node.func) == "QuantumCircuit":
+            unresolved_constructor_like_call = True
+
+    observed_forms: set[str] = set()
+    ambiguous = unresolved_constructor_like_call
+    for call in circuit_calls:
+        positional = list(call.args)
+        direct = (
+            len(positional) in {1, 2}
+            and all(
+                _is_bounded_width_expression(item, integer_bindings)
+                for item in positional
+            )
+            and all(keyword.arg in {"name"} for keyword in call.keywords)
+        )
+        explicit = (
+            bool(positional)
+            and all(
+                isinstance(item, ast.Name) and item.id in register_symbols
+                for item in positional
+            )
+            and any(
+                isinstance(item, ast.Name)
+                and register_symbols.get(item.id) == "QuantumRegister"
+                for item in positional
+            )
+            and not call.keywords
+        )
+        if direct:
+            observed_forms.add("direct_quantum_circuit")
+        elif explicit:
+            observed_forms.add("explicit_named_registers")
+        else:
+            ambiguous = True
+
+    if ambiguous or len(observed_forms) > 1:
+        observation = "ambiguous"
+    elif observed_forms:
+        observation = next(iter(observed_forms))
+    else:
+        observation = "not_observed"
+    if observation not in _QISKIT_CONSTRUCTION_OBSERVATIONS:
+        raise RuntimeError("qiskit_construction_observation_invalid")
+    return {
+        "schema_id": _SDK_CONSTRUCTION_OBSERVATION_SCHEMA_ID,
+        "schema_version": 1,
+        "sdk": "qiskit",
+        "construction_form_observation": observation,
+        "bounded_inspection_method": _INSPECTION_METHOD,
+        "source_evidence_reference": deepcopy(dict(source_reference)),
+        "observed_quantum_circuit_constructor_calls": len(circuit_calls),
+        "imports_followed": False,
+        "source_executed": False,
+        "raw_source_included": False,
+        "effective_circuit_structure_proven": False,
+        "source_to_circuit_equivalence_proven": False,
+        "non_proof": (
+            "The bounded AST observation identifies only a safely established "
+            "Qiskit constructor form; it does not prove effective circuit "
+            "structure, correctness, or source-to-circuit lineage."
+        ),
+    }
+
+
+def observe_qiskit_construction_form(
+    source_text: str, *, source_reference: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Observe one local Qiskit constructor form without importing or executing source."""
+
+    try:
+        tree = ast.parse(source_text, mode="exec")
+    except (SyntaxError, ValueError):
+        return {
+            "schema_id": _SDK_CONSTRUCTION_OBSERVATION_SCHEMA_ID,
+            "schema_version": 1,
+            "sdk": "qiskit",
+            "construction_form_observation": "ambiguous",
+            "bounded_inspection_method": _INSPECTION_METHOD,
+            "source_evidence_reference": deepcopy(dict(source_reference)),
+            "observed_quantum_circuit_constructor_calls": 0,
+            "imports_followed": False,
+            "source_executed": False,
+            "raw_source_included": False,
+            "effective_circuit_structure_proven": False,
+            "source_to_circuit_equivalence_proven": False,
+            "non_proof": "The source did not parse; no constructor form was established.",
+        }
+    return _qiskit_construction_form_observation(
+        tree, source_reference=source_reference
+    )
 
 
 def _collection_shape(node: ast.AST, maximum_length: int) -> dict[str, Any] | None:
@@ -1615,6 +1829,9 @@ def analyze_qiskit_source_depth(
             ],
         }
     source_facts = _compact_source_facts(analyzer.facts)
+    construction_form_observation = _qiskit_construction_form_observation(
+        tree, source_reference=source_reference
+    )
     motif_observations = _qualified_motif_records(
         baseline_observations,
         source_facts=source_facts,
@@ -1661,6 +1878,7 @@ def analyze_qiskit_source_depth(
         "profile_id": profile_id,
         "parser_status": "parsed",
         "source_facts": source_facts,
+        "qiskit_construction_form_observation": construction_form_observation,
         "ambiguities": analyzer.ambiguities,
         "helper_expansion": analyzer.helper_records,
         "motif_observations": motif_observations,

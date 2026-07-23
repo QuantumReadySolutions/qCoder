@@ -651,6 +651,16 @@ def test_hosted_projection_is_compact_valid_and_retains_gated_semantics(profile_
     depth = development["source_evidence_depth"]
     assert depth["local_detail_omitted_from_hosted_projection"] is True
     assert "source_facts" not in depth
+    construction = depth["qiskit_construction_form_observation"]
+    assert construction["construction_form_observation"] in {
+        "direct_quantum_circuit",
+        "explicit_named_registers",
+        "ambiguous",
+        "not_observed",
+    }
+    assert construction["boundary"] == (
+        "bounded_static_ast_no_execution_no_equivalence"
+    )
     assert depth["motif_observation_inventory"]
     assert depth["inspection_scope"]["selected_artifact_reference"]["scope"] == "current_session"
 

@@ -7,6 +7,7 @@ import pytest
 from qcoder.blueprint_decisions import (
     ACTION_IDS,
     RESOLUTION_CONTEXTS,
+    build_resource_architecture,
     build_decision_records,
     catalog_entries,
 )
@@ -596,6 +597,110 @@ def test_altered_or_missing_parent_confirmation_is_rejected() -> None:
             ],
             provenance_entries=[],
         )
+
+
+def test_circuit_construction_carry_forward_requires_layered_resource_architecture() -> None:
+    context, circuit, result = _current_context()
+    parent = _working_blueprint()
+    records = build_decision_records(
+        profile_id="generic_qiskit",
+        current_lineage_reference=LINEAGE_REF,
+        parent_artifact_references=[parent],
+        dispositions=_ready_dispositions("generic_qiskit"),
+    )
+    target = next(
+        item
+        for item in records
+        if item["profile_decision_id"]
+        == "generic_qiskit.circuit_construction"
+    )
+    target.update(
+        {
+            "semantic_classification": "decision_candidate",
+            "semantic_role": "Organize logical resources for this current build.",
+            "applicable_scope": "Current lineage and next generation contract only.",
+            "relationship_to_requirement": "Refines requirement req-resource-layout.",
+            "related_requirement_references": ["req-resource-layout"],
+            "evidence_expectation": [
+                "Future source shows the selected Qiskit manifestation."
+            ],
+            "future_review_rule": (
+                "Compare future source evidence with the confirmed architecture."
+            ),
+            "remaining_non_proofs": [
+                "No correctness or source-to-circuit equivalence is established."
+            ],
+            "resolution_state": "unresolved",
+            "user_disposition": "left_unresolved",
+            "generation_effect": "bounded_discretion",
+            "provenance_entries": [
+                {"role": "qcoder_observed", "source_ref": "source-safe-ref"}
+            ],
+        }
+    )
+    common = {
+        "decision_ref": target["decision_ref"],
+        "semantic_classification": "blueprint_decision",
+        "control_treatment": "keep_fixed",
+        "semantic_role": target["semantic_role"],
+        "applicable_scope": target["applicable_scope"],
+        "relationship_to_requirement": target["relationship_to_requirement"],
+        "related_requirement_references": target["related_requirement_references"],
+        "evidence_expectation": target["evidence_expectation"],
+        "future_review_rule": target["future_review_rule"],
+        "remaining_non_proofs": target["remaining_non_proofs"],
+        "resolution_state": "resolved",
+        "user_disposition": "selected_choice",
+        "generation_effect": "non_blocking",
+        "selected_value": "quantum_circuit",
+        "blueprint_representation_state": "represented_in_derived_blueprint",
+        "provenance_entries": deepcopy(target["provenance_entries"]),
+        "unresolved_questions": [],
+    }
+    parents = [parent, circuit, result, context]
+    with pytest.raises(ValueError, match="resource_architecture_invalid"):
+        build_carry_forward_proposal(
+            selected_action="accept_and_add_to_blueprint",
+            profile_id="generic_qiskit",
+            decision_records=records,
+            parent_artifacts=parents,
+            current_build_context=context,
+            selected_decision_references=[target["decision_ref"]],
+            proposed_updates=[common],
+            current_lineage_reference=LINEAGE_REF,
+            remaining_uncertainty=["Correctness remains unproven."],
+            generation_context_effect="Resolve only the current generation contract.",
+        )
+
+    layered = deepcopy(common)
+    layered["resource_architecture"] = build_resource_architecture(
+        logical_resource_architecture="simple_flat",
+        construction_form="quantum_circuit",
+        allowed_patterns=("direct_inline",),
+        disallowed_patterns=(
+            "avoid_opaque_or_unbounded_dynamic_construction",
+        ),
+    )
+    pack = build_carry_forward_proposal(
+        selected_action="accept_and_add_to_blueprint",
+        profile_id="generic_qiskit",
+        decision_records=records,
+        parent_artifacts=parents,
+        current_build_context=context,
+        selected_decision_references=[target["decision_ref"]],
+        proposed_updates=[layered],
+        current_lineage_reference=LINEAGE_REF,
+        remaining_uncertainty=["Correctness remains unproven."],
+        generation_context_effect="Resolve only the current generation contract.",
+    )
+    proposal = pack["resource_architecture_proposal"]
+    assert proposal["before"]["logical_resource_architecture"] == "unresolved"
+    assert proposal["proposed_after"]["logical_resource_architecture"]["value"] == (
+        "simple_flat"
+    )
+    assert proposal["qualifications"]["global_generic_qiskit_default"] is False
+    assert proposal["qualifications"]["explicit_named_registers_supported"] is True
+    assert pack["result_observation_is_design_intent"] is False
 
 
 def test_adapter_inventory_and_context_loop_schemas_are_additive() -> None:

@@ -883,6 +883,16 @@ def compact_selected_python_source_evidence_for_hosted(
         )
         if key in depth
     }
+    construction_observation = depth.get(
+        "qiskit_construction_form_observation"
+    )
+    if isinstance(construction_observation, dict):
+        hosted_depth["qiskit_construction_form_observation"] = {
+            "construction_form_observation": construction_observation[
+                "construction_form_observation"
+            ],
+            "boundary": "bounded_static_ast_no_execution_no_equivalence",
+        }
     hosted_depth["source_configuration_facts"] = compact_configuration
     hosted_depth["ambiguity_inventory"] = []
     hosted_depth["motif_observation_inventory"] = compact_motifs

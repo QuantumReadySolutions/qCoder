@@ -89,6 +89,33 @@ CONTROL_TREATMENTS = (
     "current_implementation_detail",
 )
 PRESENTATION_LENSES = ("guided", "deliberate")
+RESOURCE_ARCHITECTURE_SCHEMA_ID = "qcoder.resource_architecture.v1"
+LOGICAL_RESOURCE_ARCHITECTURES = (
+    "simple_flat",
+    "named_logical_groups",
+    "topology_aware",
+    "custom_or_experimental",
+    "deferred_or_exploratory",
+)
+CONSTRUCTION_POLICY_PATTERNS = (
+    "direct_inline",
+    "reusable_helpers",
+    "composed_subcircuits",
+    "templates",
+    "bounded_dynamic_construction",
+    "avoid_opaque_or_unbounded_dynamic_construction",
+    "deferred",
+)
+QISKIT_CONSTRUCTION_FORMS = (
+    "direct_quantum_circuit",
+    "explicit_named_registers",
+    "unresolved_or_ambiguous",
+)
+QISKIT_CONSTRUCTION_ALIASES = {
+    "quantum_circuit": "direct_quantum_circuit",
+    "explicit_registers": "explicit_named_registers",
+}
+RESOURCE_ARCHITECTURE_SCOPE = "current_lineage_and_next_generation_contract"
 
 _DECISION_REFERENCE_PATTERN = re.compile(r"^decision-[A-Za-z0-9_-]{22,64}$")
 _LINEAGE_REFERENCE_PATTERN = re.compile(r"^session-artifact-[0-9a-f]{16,64}$")
@@ -103,6 +130,130 @@ _INTRODUCED_NON_CAUSAL = (
     "The selected source contains this bounded choice; the confirmed blueprint did not represent "
     "it. No authorship, intent, or causal attribution is made."
 )
+
+
+def normalize_qiskit_construction_form(value: object) -> str:
+    if not isinstance(value, str):
+        raise ValueError("qiskit_construction_form_invalid")
+    normalized = QISKIT_CONSTRUCTION_ALIASES.get(value, value)
+    if normalized not in QISKIT_CONSTRUCTION_FORMS:
+        raise ValueError("qiskit_construction_form_invalid")
+    return normalized
+
+
+def resource_architecture_error(value: object) -> str | None:
+    if not isinstance(value, dict):
+        return "resource_architecture_invalid"
+    if (
+        value.get("schema_id") != RESOURCE_ARCHITECTURE_SCHEMA_ID
+        or value.get("schema_version") != 1
+    ):
+        return "resource_architecture_version_invalid"
+    logical = value.get("logical_resource_architecture")
+    if (
+        not isinstance(logical, dict)
+        or logical.get("value") not in LOGICAL_RESOURCE_ARCHITECTURES
+    ):
+        return "logical_resource_architecture_invalid"
+    policy = value.get("construction_policy")
+    if not isinstance(policy, dict):
+        return "construction_policy_invalid"
+    allowed = policy.get("allowed_patterns")
+    disallowed = policy.get("disallowed_patterns")
+    if not isinstance(allowed, list) or not isinstance(disallowed, list):
+        return "construction_policy_invalid"
+    if len(allowed) != len(set(allowed)) or len(disallowed) != len(set(disallowed)):
+        return "construction_policy_duplicate"
+    if set(allowed) & set(disallowed):
+        return "construction_policy_conflicting"
+    if any(item not in CONSTRUCTION_POLICY_PATTERNS for item in allowed + disallowed):
+        return "construction_policy_pattern_invalid"
+    manifestation = value.get("sdk_manifestation")
+    if not isinstance(manifestation, dict) or manifestation.get("sdk") != "qiskit":
+        return "sdk_manifestation_invalid"
+    try:
+        form = normalize_qiskit_construction_form(
+            manifestation.get("construction_form")
+        )
+    except ValueError:
+        return "qiskit_construction_form_invalid"
+    if manifestation.get("construction_form") != form:
+        return "qiskit_construction_form_not_canonical"
+    alias = manifestation.get("compatibility_alias")
+    if alias is not None and QISKIT_CONSTRUCTION_ALIASES.get(alias) != form:
+        return "qiskit_construction_alias_invalid"
+    scope = value.get("scope")
+    if not isinstance(scope, dict):
+        return "resource_architecture_scope_invalid"
+    required_scope = {
+        "lineage": RESOURCE_ARCHITECTURE_SCOPE,
+        "global_profile_default": False,
+        "explorer_wide_restriction": False,
+        "explicit_named_registers_supported": True,
+        "pro_uses_same_logical_architecture_vocabulary": True,
+    }
+    if any(scope.get(key) != expected for key, expected in required_scope.items()):
+        return "resource_architecture_scope_invalid"
+    portability = value.get("portability")
+    if not isinstance(portability, dict):
+        return "resource_architecture_portability_invalid"
+    if (
+        portability.get("logical_model_is_cross_sdk") is not True
+        or portability.get("future_sdk_manifestations_may_differ") is not True
+        or portability.get("additional_sdks_implemented") != []
+    ):
+        return "resource_architecture_portability_invalid"
+    return None
+
+
+def build_resource_architecture(
+    *,
+    logical_resource_architecture: str,
+    construction_form: str,
+    allowed_patterns: Iterable[str] = (),
+    disallowed_patterns: Iterable[str] = (),
+) -> dict[str, Any]:
+    canonical_form = normalize_qiskit_construction_form(construction_form)
+    compatibility_alias = (
+        construction_form if construction_form in QISKIT_CONSTRUCTION_ALIASES else None
+    )
+    result = {
+        "schema_id": RESOURCE_ARCHITECTURE_SCHEMA_ID,
+        "schema_version": 1,
+        "logical_resource_architecture": {
+            "value": logical_resource_architecture,
+            "durable_customer_decision": (
+                "How should the circuit's logical resources and roles be organized?"
+            ),
+        },
+        "construction_policy": {
+            "allowed_patterns": list(dict.fromkeys(allowed_patterns)),
+            "disallowed_patterns": list(dict.fromkeys(disallowed_patterns)),
+            "legacy_dynamic_factory_is_global_policy": False,
+        },
+        "sdk_manifestation": {
+            "sdk": "qiskit",
+            "construction_form": canonical_form,
+            "compatibility_alias": compatibility_alias,
+            "subordinate_to_logical_architecture": True,
+        },
+        "scope": {
+            "lineage": RESOURCE_ARCHITECTURE_SCOPE,
+            "global_profile_default": False,
+            "explorer_wide_restriction": False,
+            "explicit_named_registers_supported": True,
+            "pro_uses_same_logical_architecture_vocabulary": True,
+        },
+        "portability": {
+            "logical_model_is_cross_sdk": True,
+            "future_sdk_manifestations_may_differ": True,
+            "additional_sdks_implemented": [],
+        },
+    }
+    error = resource_architecture_error(result)
+    if error:
+        raise ValueError(error)
+    return result
 
 
 def _entry(
@@ -203,16 +354,48 @@ def _entry(
 
 def _generic_catalog() -> list[dict[str, Any]]:
     p = "generic_qiskit"
+    circuit_construction = _entry(
+        p,
+        "circuit_construction",
+        "Logical resource architecture and Qiskit construction",
+        blueprint_fields=("normalized_goal",),
+        motifs=("qiskit.circuit.construction",),
+        alternatives=("quantum_circuit", "explicit_registers"),
+        bound_types=("finite_alternative_set",),
+    )
+    circuit_construction.update(
+        {
+            "question": "How should this circuit's logical resources be organized?",
+            "resource_architecture_contract": RESOURCE_ARCHITECTURE_SCHEMA_ID,
+            "logical_resource_architecture_values": list(
+                LOGICAL_RESOURCE_ARCHITECTURES
+            ),
+            "construction_policy_patterns": list(CONSTRUCTION_POLICY_PATTERNS),
+            "sdk_manifestation": {
+                "sdk": "qiskit",
+                "construction_forms": list(QISKIT_CONSTRUCTION_FORMS),
+                "compatibility_aliases": deepcopy(QISKIT_CONSTRUCTION_ALIASES),
+            },
+            "scope": {
+                "lineage": RESOURCE_ARCHITECTURE_SCOPE,
+                "global_profile_default": False,
+                "explorer_wide_restriction": False,
+                "explicit_named_registers_supported": True,
+                "pro_uses_same_logical_architecture_vocabulary": True,
+            },
+            "legacy_dynamic_factory_treatment": {
+                "automatic_global_mapping": False,
+                "map_only_when_explicitly_disallowed_and_unambiguous": True,
+            },
+            "future_sdk_portability": {
+                "logical_model_is_cross_sdk": True,
+                "native_manifestations_may_differ": True,
+                "additional_sdks_implemented": [],
+            },
+        }
+    )
     return [
-        _entry(
-            p,
-            "circuit_construction",
-            "Circuit and register construction",
-            blueprint_fields=("normalized_goal",),
-            motifs=("qiskit.circuit.construction",),
-            alternatives=("quantum_circuit", "explicit_registers"),
-            bound_types=("finite_alternative_set",),
-        ),
+        circuit_construction,
         _entry(
             p,
             "quantum_width",
@@ -697,6 +880,19 @@ def profile_decision_catalog_snapshot() -> dict[str, Any]:
         "semantic_classifications": list(SEMANTIC_CLASSIFICATIONS),
         "control_treatments": list(CONTROL_TREATMENTS),
         "presentation_lenses": list(PRESENTATION_LENSES),
+        "resource_architecture": {
+            "schema_id": RESOURCE_ARCHITECTURE_SCHEMA_ID,
+            "logical_resource_architectures": list(
+                LOGICAL_RESOURCE_ARCHITECTURES
+            ),
+            "construction_policy_patterns": list(CONSTRUCTION_POLICY_PATTERNS),
+            "qiskit_construction_forms": list(QISKIT_CONSTRUCTION_FORMS),
+            "qiskit_compatibility_aliases": deepcopy(
+                QISKIT_CONSTRUCTION_ALIASES
+            ),
+            "scope": RESOURCE_ARCHITECTURE_SCOPE,
+            "additional_sdks_implemented": [],
+        },
         "motif_hierarchy_levels": list(MOTIF_HIERARCHY_LEVELS),
         "motif_hierarchy": {
             motif_id: {
@@ -820,6 +1016,7 @@ def build_decision_records(
             "motif_hierarchy": disposition.get("motif_hierarchy"),
             "remaining_non_proofs": disposition.get("remaining_non_proofs"),
             "available_control_treatments": disposition.get("available_control_treatments"),
+            "resource_architecture": disposition.get("resource_architecture"),
             "related_intent_references": disposition.get("related_intent_references"),
             "related_requirement_references": disposition.get("related_requirement_references"),
             "allowed_profile_alternatives": definition["supported_alternatives"],
@@ -1173,6 +1370,10 @@ def decision_record_error(value: object) -> str | None:
         error = bound_error(value.get("user_approved_bounds"), definition)
         if error:
             return error
+    if "resource_architecture" in value:
+        error = resource_architecture_error(value.get("resource_architecture"))
+        if error:
+            return error
     return semantic_classification_error(value)
 
 
@@ -1522,6 +1723,7 @@ def _apply_proposed_updates(
         "motif_hierarchy",
         "remaining_non_proofs",
         "available_control_treatments",
+        "resource_architecture",
         "resolution_state",
         "user_disposition",
         "generation_effect",
@@ -1559,6 +1761,29 @@ def _resolution_semantics_error(
         for decision_ref in selected_decision_references:
             prior = before[decision_ref]
             proposed = after[decision_ref]
+            if (
+                resolution_context == "current_build_context"
+                and proposed.get("profile_decision_id")
+                == "generic_qiskit.circuit_construction"
+            ):
+                error = resource_architecture_error(
+                    proposed.get("resource_architecture")
+                )
+                if error:
+                    return error
+                form = proposed["resource_architecture"]["sdk_manifestation"][
+                    "construction_form"
+                ]
+                selected_value = proposed.get("selected_value")
+                if selected_value is not None:
+                    try:
+                        selected_form = normalize_qiskit_construction_form(
+                            selected_value
+                        )
+                    except ValueError:
+                        return "resource_architecture_selected_value_invalid"
+                    if selected_form != form:
+                        return "resource_architecture_selected_value_mismatch"
             if (
                 resolution_context == "source_alignment"
                 and not prior.get("related_source_findings")
@@ -1680,6 +1905,32 @@ def propose_decision_resolution_pack(
                 ).get("control_treatment"),
             }
             for decision_ref in selected_decision_references
+        ],
+        "resource_architecture_changes": [
+            {
+                "decision_ref": decision_ref,
+                "before": deepcopy(
+                    next(
+                        item
+                        for item in decision_records
+                        if item["decision_ref"] == decision_ref
+                    ).get("resource_architecture")
+                ),
+                "proposed_after": deepcopy(
+                    next(
+                        item
+                        for item in after_records
+                        if item["decision_ref"] == decision_ref
+                    ).get("resource_architecture")
+                ),
+            }
+            for decision_ref in selected_decision_references
+            if next(
+                item
+                for item in after_records
+                if item["decision_ref"] == decision_ref
+            ).get("profile_decision_id")
+            == "generic_qiskit.circuit_construction"
         ],
         "before_and_after_preview": {
             "before": before,
