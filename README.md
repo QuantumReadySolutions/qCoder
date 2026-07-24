@@ -10,7 +10,7 @@ The current public local path is **qCoder OSS**. OSS commands run locally and do
 - `qcoder batch`
 - `qcoder context`
 - `qcoder review`
-- `qcoder blueprint` (unreleased branch-local machine-local selected-source evidence)
+- `qcoder blueprint` (machine-local selected-source evidence)
 - `qcoder explorer` (Explorer Beta account-backed status/demo/evidence checks)
 - `qcoder context-bridge` (token-backed Context Bridge MCP adapter for eligible Explorer users)
 - `qcoder student` (temporary compatibility alias for Explorer Beta)
@@ -18,7 +18,9 @@ The current public local path is **qCoder OSS**. OSS commands run locally and do
 
 ## Current product boundaries
 
-Public `qcoder` ships **OSS local commands**, Explorer Beta compatibility commands, and the Context Bridge adapter command for eligible Explorer users. Pro is not launched and is not a current public product path.
+The `0.6.0a1` release candidate combines **OSS local commands**, Explorer compatibility commands,
+and the Context Bridge adapter for eligible Explorer users. Pro is not launched and is not a
+current public product path.
 
 - **OSS commands** (`analyze`, `batch`, `context`, `review`) are Apache-2.0, local-first/offline, and useful without an account or token. They do not upload data, call a qCoder hosted service, or run QPU/simulator jobs.
 - **Explorer Beta commands** (`qcoder explorer status`, `qcoder explorer demo`, `qcoder explorer evidence`) are account-backed checks for Explorer Beta status, built-in guided evidence samples, and derived-context guided evidence for user-owned OpenQASM 2 artifacts. The older `qcoder student ...` commands remain available as beta compatibility aliases.
@@ -29,10 +31,24 @@ Public `qcoder` ships **OSS local commands**, Explorer Beta compatibility comman
 - There is **no generally available production hosted Pro service**, Pro account/token issuance, artifact/source upload, telemetry/training ingest, confidential local analyzer/cards, QPU/provider execution, or launched Pro V0.0 behavior in this public-main surface.
 - **No confidential Pro analysis or cards** are bundled in this package. Token-gating is **access control only**, not a secrecy boundary.
 
+## Explorer Context Loop
+
+The complete IDE-first loop is:
+
+**Human Intent → AI-Generated Python → Logical Circuit / QASM → Run Results →
+Evidence-Grounded Next Intent**
+
+The user and a connected assistant work through the IDE. The local SDK constructs the circuit. A
+simulator, runtime, or QPU produces results only through an externally authorized run. qCoder
+reviews bounded evidence from explicitly selected or supplied artifacts, and the user decides what
+should govern the next iteration. qCoder does not independently generate the Python, construct or
+compile the circuit, execute the run, recover hidden intent, prove correctness, or automatically
+adopt a blueprint decision.
+
 ## Context Bridge inventory
 
-This unreleased development branch preserves the existing eight Evidence Review operations and
-adds four Algorithm Blueprint operations, for exactly twelve Context Bridge capability tools:
+The `0.6.0a1` release candidate preserves the existing eight Evidence Review operations and adds
+four Algorithm Blueprint operations, for exactly twelve Context Bridge capability tools:
 
 - `get_guided_evidence_context`
 - `create_prompt_context`
@@ -61,7 +77,12 @@ Evidence Review is an Explorer capability for understanding what explicitly supp
 
 Core Evidence Review output uses these provenance and evidence-status labels: **Observed**, **User-provided**, **Inferred**, **Assumed**, **Not proven**, and **Suggested next check**. They are not confidence percentages, assurance ratings, or correctness scores. “What the evidence supports” is a bounded interpretation, not independent verification. “What changed” is a descriptive comparison of explicit inputs, not history, causality, or multi-run analysis. Suggested checks remain user-controlled and are not executed by qCoder.
 
-Local qCoder OSS commands provide deterministic local analysis and review artifacts. Circuit Workbench is the machine-local selected-evidence surface in supported Cursor setup. Explorer Evidence Review is the complete guided current-session interpretation capability delivered through Context Bridge; Context Bridge carries the tools into supported coding clients but does not own separate review reasoning. The Explorer Evidence Loop sequences preparation, an external run, review, bounded comparison, next checks, and handoff. ChatGPT uses a manual share-safe Prompt Context handoff and is not a connected Context Bridge client.
+Local qCoder OSS commands provide deterministic local analysis and review artifacts. Circuit
+Workbench is the machine-local selected-evidence surface in supported Cursor setup. Explorer
+Evidence Review supplies bounded current-session interpretation within the complete Explorer
+Context Loop; Context Bridge carries the operations into supported coding clients but does not own
+the workflow or retain lineage. ChatGPT uses a manual share-safe Prompt Context handoff and is
+not a connected Context Bridge client.
 
 See the sanitized [`Evidence Review walkthrough`](examples/08_evidence_review.md).
 
@@ -69,7 +90,7 @@ See the sanitized [`Evidence Review walkthrough`](examples/08_evidence_review.md
 
 Algorithm Blueprint is an Explorer capability for turning explicitly supplied human intent into a
 reviewable, user-confirmed Qiskit-first build contract before code generation, then reviewing
-compact static Python evidence against that contract. The branch-local workflow uses:
+compact static Python evidence against that contract. The current workflow uses:
 
 - `create_algorithm_intent_card` to preserve original intent, provenance, clarification questions,
   and explicit user-reviewed confirmation;
@@ -90,7 +111,7 @@ does not scan a repository, import or execute selected source, generate code, ed
 simulator/backend/QPU, retain artifacts, or retrieve prior artifacts.
 
 See the synthetic [`Algorithm Blueprint walkthrough`](examples/09_algorithm_blueprint.md). This
-feature-branch documentation is preparation only and does not claim publication or public rollout.
+release-candidate documentation does not claim publication or public rollout.
 
 ## Quick start
 
