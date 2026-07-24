@@ -987,30 +987,10 @@ def test_adapter_inventory_and_context_loop_schemas_are_additive() -> None:
     assert validate_optional_payload({"counts": {"0": 1}}) == "forbidden_input_value"
 
 
-def test_adapter_withholds_unselected_request_text_before_transport(tmp_path) -> None:
+def test_adapter_rejects_context_loop_at_intent_stage_before_transport(tmp_path) -> None:
     token = tmp_path / "token"
     token.write_text("synthetic-token-value", encoding="utf-8")
     token.chmod(0o600)
-    captured: dict[str, object] = {}
-
-    class _Response:
-        status = 200
-        headers: dict[str, str] = {}
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return False
-
-        def read(self) -> bytes:
-            return b'{"ok":true}'
-
-    def opener(request, timeout):
-        captured["body"] = request.data.decode("utf-8")
-        captured["timeout"] = timeout
-        return _Response()
-
     response = post_context_bridge(
         base_url="https://example.invalid",
         token_file=token,
@@ -1023,11 +1003,18 @@ def test_adapter_withholds_unselected_request_text_before_transport(tmp_path) ->
             "request_text_share_safe": False,
             "profile_id": "generic_qiskit",
         },
-        opener=opener,
+        opener=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("network should not be called")
+        ),
     )
-    assert response["ok"] is True
-    assert "Verbatim local request" not in str(captured["body"])
-    assert "Bounded selected request summary" in str(captured["body"])
+    assert response["ok"] is False
+    assert response["error_category"] == "context_loop_stage_not_supported"
+    schema = next(
+        item["inputSchema"]
+        for item in tool_descriptors()
+        if item["name"] == "create_algorithm_intent_card"
+    )
+    assert "context_loop" not in schema["properties"]
 
 
 def test_adapter_accepts_structured_context_loop_diff_without_legacy_sides(tmp_path) -> None:

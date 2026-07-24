@@ -94,7 +94,7 @@ ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS = {
             "confirmation_assertion",
             "accepted_unresolved_choices",
             *_DECISION_LOOP_COMMON_INPUT_FIELDS,
-            *_CONTEXT_LOOP_COMMON_INPUT_FIELDS,
+            *(_CONTEXT_LOOP_COMMON_INPUT_FIELDS - {"context_loop"}),
         }
     ),
     "create_implementation_blueprint": frozenset(

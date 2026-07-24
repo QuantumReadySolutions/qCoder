@@ -13,7 +13,11 @@ from pathlib import Path
 
 from qcoder.cli import main
 from qcoder.algorithm_blueprint import ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS
-from qcoder.blueprint_decisions import with_consistency_digest
+from qcoder.blueprint_decisions import (
+    build_decision_records,
+    pack_decision_record_set,
+    with_consistency_digest,
+)
 from qcoder.context_bridge_mcp import (
     EXPECTED_TOOLS,
     handle_jsonrpc_message,
@@ -23,6 +27,7 @@ from qcoder.context_bridge_mcp import (
     validate_token_file,
 )
 from qcoder.context_loop import (
+    build_carry_forward_proposal,
     build_portable_current_build_context,
     canonical_context_bridge_request_sha256,
     canonical_portable_current_build_context_json,
@@ -136,18 +141,90 @@ def test_current_build_proposal_call_requires_and_transports_evidence_parents(
 ) -> None:
     token_file = tmp_path / "token.txt"
     _write_token(token_file)
+    lineage_ref = "session-artifact-0123456789abcdef"
+    records = build_decision_records(
+        profile_id="generic_qiskit",
+        current_lineage_reference=lineage_ref,
+        parent_artifact_references=[{"artifact_ref": lineage_ref}],
+        dispositions={
+            item["profile_decision_id"]: {
+                "resolution_state": "resolved",
+                "user_disposition": "selected_choice",
+                "generation_effect": "non_blocking",
+                "choice_origin": "human_specified",
+            }
+            for item in context_bridge_mcp.catalog_entries("generic_qiskit")
+        },
+    )
+    record_set = pack_decision_record_set(
+        profile_id="generic_qiskit", decision_records=records
+    )
+    target = records[0]
+    working_blueprint = {
+        "artifact_type": "implementation_blueprint",
+        "artifact_ref": "session-artifact-dddddddddddddddd",
+        "artifact_digest": "b" * 64,
+        "blueprint_decision_records": record_set,
+        "blueprint_readiness_summary": {
+            "aggregate_readiness_result": "ready_to_generate",
+            "generation_context_eligibility": True,
+            "blocking_decision_references": [],
+            "bounded_discretion_decision_references": [],
+            "evidence_deferred_decision_references": [],
+            "non_proof": "Readiness is contract-relative.",
+        },
+    }
+    current_context = {
+        **_passive_current_context(),
+        "artifact_digest": "c" * 64,
+        "artifact_references": {
+            "working_blueprint": {
+                "artifact_ref": working_blueprint["artifact_ref"],
+                "digest": working_blueprint["artifact_digest"],
+            },
+            "lineage": {
+                "artifact_ref": _passive_lineage()["artifact_ref"],
+                "digest": _passive_lineage()["artifact_digest"],
+            },
+        },
+    }
+    parents = [
+        working_blueprint,
+        {
+            **_passive_lineage(),
+            "artifact_type": "decision_evidence_lineage",
+        },
+        {
+            **current_context,
+            "artifact_type": "current_build_context",
+        },
+    ]
     common = {
         "context_loop": "current_build_context_v1",
         "decision_loop": "readiness_resolution_v1",
+        "profile_decision_catalog_version": 1,
+        "current_lineage_reference": lineage_ref,
         "resolution_context": "current_build_context",
         "resolution_phase": "propose",
+        "selected_action": "accept_and_add_to_blueprint",
+        "selected_decision_references": [target["decision_ref"]],
+        "proposed_updates": [
+            {
+                "decision_ref": target["decision_ref"],
+                "resource_architecture_selection": {
+                    "logical_resource_architecture": "simple_flat",
+                    "allowed_patterns": ["direct_inline"],
+                    "disallowed_patterns": [
+                        "avoid_opaque_or_unbounded_dynamic_construction"
+                    ],
+                    "construction_form": "direct_quantum_circuit",
+                },
+            }
+        ],
         "algorithm_intent_card": {"artifact_type": "algorithm_intent_card"},
         "intent_relationship": {"relationship_type": "implemented_by"},
-        "working_blueprint": {"artifact_type": "implementation_blueprint"},
-        "current_build_context": {
-            "schema_id": "qcoder.current_build_context.v1",
-            "artifact_ref": "session-artifact-aaaaaaaaaaaaaaaa",
-        },
+        "working_blueprint": working_blueprint,
+        "current_build_context": current_context,
     }
     missing = post_context_bridge(
         base_url="https://example.invalid",
@@ -165,21 +242,34 @@ def test_current_build_proposal_call_requires_and_transports_evidence_parents(
     captured: dict[str, object] = {}
 
     def opener(request: object, timeout: int = 20) -> _FakeResponse:
-        captured["body"] = json.loads(request.data.decode("utf-8"))  # type: ignore[attr-defined]
-        return _FakeResponse()
-
-    parents = [
-        {
-            "artifact_type": "request_baseline_handoff",
-            "artifact_ref": "session-artifact-bbbbbbbbbbbbbbbb",
-            "artifact_digest": "a" * 64,
-        },
-        {
-            "artifact_type": "current_build_context",
-            "artifact_ref": "session-artifact-aaaaaaaaaaaaaaaa",
-            "artifact_digest": "b" * 64,
-        },
-    ]
+        body = json.loads(request.data.decode("utf-8"))  # type: ignore[attr-defined]
+        captured["body"] = body
+        proposal = build_carry_forward_proposal(
+            selected_action=body["selected_action"],
+            profile_id="generic_qiskit",
+            decision_records=records,
+            parent_artifacts=body["evidence_parent_artifacts"],
+            current_build_context=body["current_build_context"],
+            selected_decision_references=body["selected_decision_references"],
+            proposed_updates=body["proposed_updates"],
+            current_lineage_reference=body["current_lineage_reference"],
+            remaining_uncertainty=["Correctness remains unproven."],
+            generation_context_effect="Apply only after explicit confirmation.",
+            proposal_ref="proposal-1234567890abcdefghijkl",
+            prospective_derived_references=["derived-1234567890abcdefghijkl"],
+        )
+        return _FakeResponse(
+            {
+                "ok": True,
+                "tool_name": "create_implementation_blueprint",
+                "context_status": "carry_forward_proposal_ready",
+                "proposal_state": "unconfirmed",
+                "carry_forward_proposal": proposal,
+                "derived_artifact_materialized": False,
+                "retention": "process_and_discard",
+                "retained_artifacts": [],
+            }
+        )
     complete = post_context_bridge(
         base_url="https://example.invalid",
         token_file=token_file,
@@ -188,8 +278,110 @@ def test_current_build_proposal_call_requires_and_transports_evidence_parents(
         tool_arguments={**common, "evidence_parent_artifacts": parents},
         opener=opener,
     )
-    assert complete["ok"] is True
+    assert complete["ok"] is True, complete
     assert captured["body"]["evidence_parent_artifacts"] == parents  # type: ignore[index]
+    assert captured["body"]["blueprint_decision_records"] == record_set  # type: ignore[index]
+    assert len(captured["body"]["blueprint_decision_records"]["records"]) == 19  # type: ignore[index]
+    expanded = captured["body"]["proposed_updates"]  # type: ignore[index]
+    assert len(expanded) == 1
+    assert expanded[0]["semantic_classification"] == "blueprint_decision"
+    assert expanded[0]["resource_architecture"]["logical_resource_architecture"][
+        "value"
+    ] == "simple_flat"
+    assert "resource_architecture_selection" not in expanded[0]
+    assert complete["proposal_state"] == "unconfirmed"
+    assert complete["derived_artifact_materialized"] is False
+    proposal = complete["carry_forward_proposal"]
+    portable = complete["portable_current_build_context"]
+    assert len(portable["decision_records"]) == 19
+    assert portable["carry_forward_proposal"]["proposal_ref"] == (
+        "proposal-1234567890abcdefghijkl"
+    )
+    assert portable["carry_forward_proposal"]["proposed_outcome"]["decision_updates"] == (
+        expanded
+    )
+    assert "confirmation_transport" not in portable
+    expected_tool_input = {
+        key: value
+        for key, value in captured["body"].items()
+        if key not in {"tool_name", "artifact_kind", "client_context"}
+    }
+    assert portable["transport"]["proposal_resupply"]["tool_input"] == expected_tool_input
+    selected_file = tmp_path / "proposal-bearing.portable.json"
+    selected_file.write_text(
+        canonical_portable_current_build_context_json(portable),
+        encoding="utf-8",
+    )
+    confirmation = {"confirmed": True, "confirmed_by": "test-user"}
+    exact_confirm, digest, error = context_bridge_mcp._expand_selected_portable_bundle(
+        {
+            "use_selected_portable_bundle": True,
+            "proposal_ref": proposal["proposal_ref"],
+            "selected_action": proposal["selected_action"],
+            "resolution_confirmation": confirmation,
+        },
+        selected_file=selected_file,
+    )
+    assert error is None
+    assert exact_confirm is not None
+    assert exact_confirm["resolution_phase"] == "confirm"
+    assert exact_confirm["decision_resolution_pack"] == proposal
+    assert exact_confirm["evidence_parent_artifacts"] == parents
+    assert exact_confirm["blueprint_decision_records"] == record_set
+    assert exact_confirm["resolution_confirmation"] == confirmation
+    assert exact_confirm["confirmation_payload"] == proposal[
+        "explicit_confirmation_requirements"
+    ]["confirmation_payload"]
+    assert digest == canonical_context_bridge_request_sha256(
+        tool_name="create_implementation_blueprint",
+        tool_input=exact_confirm,
+    )
+
+
+def test_current_build_accept_proposal_rejects_empty_update_before_network(
+    tmp_path: Path,
+) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    lineage_ref = "session-artifact-0123456789abcdef"
+    records = build_decision_records(
+        profile_id="generic_qiskit",
+        current_lineage_reference=lineage_ref,
+        parent_artifact_references=[{"artifact_ref": lineage_ref}],
+    )
+    record_set = pack_decision_record_set(
+        profile_id="generic_qiskit", decision_records=records
+    )
+    result = post_context_bridge(
+        base_url="https://example.invalid",
+        token_file=token_file,
+        tool_name="create_implementation_blueprint",
+        artifact_text=None,
+        tool_arguments={
+            "context_loop": "current_build_context_v1",
+            "decision_loop": "readiness_resolution_v1",
+            "resolution_context": "current_build_context",
+            "resolution_phase": "propose",
+            "selected_action": "accept_and_add_to_blueprint",
+            "selected_decision_references": [records[0]["decision_ref"]],
+            "proposed_updates": [],
+            "algorithm_intent_card": {"artifact_type": "algorithm_intent_card"},
+            "intent_relationship": {"relationship_type": "implemented_by"},
+            "working_blueprint": {
+                "artifact_type": "implementation_blueprint",
+                "blueprint_decision_records": record_set,
+            },
+            "current_build_context": {
+                "schema_id": "qcoder.current_build_context.v1"
+            },
+            "evidence_parent_artifacts": [{"artifact_type": "parent"}],
+        },
+        opener=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("network should not be called")
+        ),
+    )
+    assert result["ok"] is False
+    assert result["error_category"] == "proposed_updates_missing"
 
 
 def test_current_build_context_composes_share_safe_request_baseline_from_existing_fields(
@@ -354,17 +546,11 @@ def test_current_build_context_rejects_conflicting_reconstructed_request_baselin
     assert result["raw_payload_printed"] is False
 
 
-def test_decision_enabled_intent_composes_share_safe_request_baseline(
+def test_intent_card_context_loop_stage_is_absent_and_rejected_before_network(
     tmp_path: Path,
 ) -> None:
     token_file = tmp_path / "token.txt"
     _write_token(token_file)
-    captured: dict[str, object] = {}
-
-    def opener(request: object, timeout: int = 20) -> _FakeResponse:
-        captured["body"] = json.loads(request.data.decode("utf-8"))  # type: ignore[attr-defined]
-        return _FakeResponse()
-
     result = post_context_bridge(
         base_url="https://example.invalid",
         token_file=token_file,
@@ -383,15 +569,19 @@ def test_decision_enabled_intent_composes_share_safe_request_baseline(
             "profile_suggestions": ["generic_qiskit"],
             "profile_id": "generic_qiskit",
         },
-        opener=opener,
+        opener=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("network should not be called")
+        ),
     )
 
-    assert result["ok"] is True, result
-    baseline = captured["body"]["request_baseline"]  # type: ignore[index]
-    assert baseline["artifact_type"] == "request_baseline_handoff"
-    assert baseline["request_summary"] == "Create a selected Bell circuit example."
-    assert baseline["share_safe_selection"] == "explicit_verbatim_selection"
-    assert baseline["retention"] == "process_and_discard"
+    assert result["ok"] is False
+    assert result["error_category"] == "context_loop_stage_not_supported"
+    intent_schema = next(
+        tool["inputSchema"]
+        for tool in tool_descriptors()
+        if tool["name"] == "create_algorithm_intent_card"
+    )
+    assert "context_loop" not in intent_schema["properties"]
 
 
 def _passive_current_context() -> dict[str, object]:

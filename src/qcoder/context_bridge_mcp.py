@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 import hashlib
 import json
 import os
@@ -25,14 +26,20 @@ from qcoder.algorithm_blueprint import (
 )
 from qcoder.blueprint_decisions import (
     ACTION_IDS,
+    CONSTRUCTION_POLICY_PATTERNS,
     DECISION_LOOP_DISABLED,
     DECISION_LOOP_GATE,
     GENERATION_EFFECTS,
+    LOGICAL_RESOURCE_ARCHITECTURES,
     PROFILE_DECISION_CATALOG_VERSION,
+    QISKIT_CONSTRUCTION_FORMS,
     RESOLUTION_CONTEXTS,
     RESOLUTION_PHASES,
     RESOLUTION_STATES,
     USER_DISPOSITIONS,
+    build_resource_architecture,
+    catalog_entries,
+    unpack_decision_record_set,
 )
 from qcoder.context_loop import (
     CONTEXT_LOOP_DISABLED,
@@ -43,6 +50,7 @@ from qcoder.context_loop import (
     RELATIONSHIP_TYPES,
     STAGE_AVAILABILITY_VALUES,
     STAGE_IDENTITY_STATUSES,
+    attach_portable_proposal_resupply,
     build_portable_current_build_context,
     build_request_baseline,
     canonical_context_bridge_request_sha256,
@@ -189,6 +197,11 @@ TOOL_INPUT_FIELDS = {
     ),
     **ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS,
 }
+# Current Build Context is composed only after intent and blueprint review. The
+# Intent Card must not advertise an opt-in that its protected stage cannot use.
+TOOL_INPUT_FIELDS["create_algorithm_intent_card"] = TOOL_INPUT_FIELDS[
+    "create_algorithm_intent_card"
+] - frozenset({"context_loop"})
 LOCAL_SELECTED_BUNDLE_FIELD = "use_selected_portable_bundle"
 TOOL_INPUT_FIELDS["create_implementation_blueprint"] = TOOL_INPUT_FIELDS[
     "create_implementation_blueprint"
@@ -406,9 +419,57 @@ def _expand_selected_portable_bundle(
     if bundle_error or bundle is None:
         return None, None, bundle_error
     transport = bundle.get("confirmation_transport")
-    if not isinstance(transport, dict):
-        return None, None, "portable_confirmation_transport_invalid"
-    exact_input = transport.get("tool_input")
+    exact_input: object
+    stored_digest: object
+    if isinstance(transport, dict):
+        exact_input = transport.get("tool_input")
+        stored_digest = transport.get("canonical_request_sha256")
+    else:
+        envelope = bundle.get("transport")
+        proposal_resupply = (
+            envelope.get("proposal_resupply")
+            if isinstance(envelope, dict)
+            else None
+        )
+        if not isinstance(proposal_resupply, dict):
+            return None, None, "portable_confirmation_transport_invalid"
+        proposed_input = proposal_resupply.get("tool_input")
+        proposal = proposal_resupply.get("carry_forward_proposal")
+        confirmation = arguments.get("resolution_confirmation")
+        if not isinstance(proposed_input, dict) or not isinstance(proposal, dict):
+            return None, None, "portable_proposal_resupply_input_invalid"
+        if (
+            not isinstance(confirmation, dict)
+            or confirmation.get("confirmed") is not True
+            or not isinstance(confirmation.get("confirmed_by"), str)
+            or not confirmation["confirmed_by"].strip()
+        ):
+            return None, None, "portable_confirmation_explicit_marker_required"
+        exact_input = deepcopy(proposed_input)
+        for field in (
+            "selected_decision_references",
+            "source_finding_references",
+            "proposed_updates",
+            "prospective_derived_artifact_references",
+        ):
+            exact_input.pop(field, None)
+        exact_input.update(
+            {
+                "resolution_phase": "confirm",
+                "proposal_ref": proposal.get("proposal_ref"),
+                "decision_resolution_pack": deepcopy(proposal),
+                "resolution_confirmation": deepcopy(confirmation),
+                "confirmation_payload": deepcopy(
+                    proposal.get("explicit_confirmation_requirements", {}).get(
+                        "confirmation_payload"
+                    )
+                ),
+            }
+        )
+        stored_digest = canonical_context_bridge_request_sha256(
+            tool_name="create_implementation_blueprint",
+            tool_input=exact_input,
+        )
     if not isinstance(exact_input, dict):
         return None, None, "portable_confirmation_tool_input_invalid"
     for field in ("proposal_ref", "selected_action", "resolution_confirmation"):
@@ -418,7 +479,7 @@ def _expand_selected_portable_bundle(
         tool_name="create_implementation_blueprint",
         tool_input=exact_input,
     )
-    if digest != transport.get("canonical_request_sha256"):
+    if digest != stored_digest:
         return None, None, "portable_confirmation_request_digest_mismatch"
     return dict(exact_input), digest, None
 
@@ -594,6 +655,8 @@ def _context_loop_argument_error(
     gate = arguments.get("context_loop")
     if gate not in {None, CONTEXT_LOOP_DISABLED, CONTEXT_LOOP_GATE}:
         return "context_loop_gate_invalid"
+    if tool_name == "create_algorithm_intent_card" and gate == CONTEXT_LOOP_GATE:
+        return "context_loop_stage_not_supported"
     enabled = gate == CONTEXT_LOOP_GATE
     if not enabled:
         if tool_name in {
@@ -603,11 +666,6 @@ def _context_loop_argument_error(
         } and (not isinstance(artifact_text, str) or not artifact_text.strip()):
             return "artifact_text_missing"
         return None
-    if tool_name == "create_algorithm_intent_card":
-        if arguments.get("request_text_share_safe") is not True and not isinstance(
-            arguments.get("request_share_safe_summary"), str
-        ):
-            return "request_share_safe_selection_required"
     if tool_name == "create_context_session_card":
         for field in (
             "request_baseline",
@@ -643,7 +701,7 @@ def _context_loop_argument_error(
 
 def _compose_request_baseline_handoff(tool_name: str, arguments: dict[str, Any]) -> str | None:
     if (
-        tool_name not in {"create_algorithm_intent_card", "create_context_session_card"}
+        tool_name != "create_context_session_card"
         or arguments.get("context_loop") != CONTEXT_LOOP_GATE
     ):
         return None
@@ -713,8 +771,157 @@ def _portable_decision_records(arguments: dict[str, Any]) -> list[dict[str, Any]
         return []
     inherited = blueprint.get("blueprint_decision_records")
     if isinstance(inherited, dict) and isinstance(inherited.get("records"), list):
-        return [dict(item) for item in inherited["records"] if isinstance(item, dict)]
+        try:
+            return unpack_decision_record_set(inherited)
+        except ValueError:
+            return []
     return []
+
+
+def _proposal_lineage(arguments: dict[str, Any]) -> dict[str, Any] | None:
+    supplied = arguments.get("decision_evidence_lineage")
+    if isinstance(supplied, dict):
+        return supplied
+    parents = arguments.get("evidence_parent_artifacts")
+    if not isinstance(parents, list):
+        return None
+    for parent in parents:
+        if not isinstance(parent, dict):
+            continue
+        if (
+            parent.get("schema_id") == "qcoder.decision_evidence_lineage.v1"
+            or parent.get("artifact_type") == "decision_evidence_lineage"
+        ):
+            return parent
+    return None
+
+
+def _expand_resource_architecture_update(
+    update: dict[str, Any],
+    *,
+    records: list[dict[str, Any]],
+    current_build_context: dict[str, Any],
+) -> dict[str, Any]:
+    selection = update.get("resource_architecture_selection")
+    if not isinstance(selection, dict):
+        return update
+    if set(update) != {"decision_ref", "resource_architecture_selection"}:
+        raise ValueError("resource_architecture_selection_overlay_invalid")
+    decision_ref = update.get("decision_ref")
+    record = next(
+        (item for item in records if item.get("decision_ref") == decision_ref),
+        None,
+    )
+    if record is None:
+        raise ValueError("resolution_decision_ref_unknown")
+    if record.get("profile_decision_id") != "generic_qiskit.circuit_construction":
+        raise ValueError("resource_architecture_selection_decision_mismatch")
+    if set(selection) != {
+        "logical_resource_architecture",
+        "allowed_patterns",
+        "disallowed_patterns",
+        "construction_form",
+    }:
+        raise ValueError("resource_architecture_selection_invalid")
+    definition = next(
+        item
+        for item in catalog_entries("generic_qiskit")
+        if item["profile_decision_id"] == "generic_qiskit.circuit_construction"
+    )
+    architecture = build_resource_architecture(
+        logical_resource_architecture=selection["logical_resource_architecture"],
+        construction_form=selection["construction_form"],
+        allowed_patterns=selection["allowed_patterns"],
+        disallowed_patterns=selection["disallowed_patterns"],
+    )
+    provenance = deepcopy(record.get("provenance_entries") or [])
+    provenance.append(
+        {
+            "role": "qcoder_observed",
+            "current_build_context_ref": current_build_context.get("artifact_ref"),
+        }
+    )
+    return {
+        "decision_ref": decision_ref,
+        "semantic_classification": "blueprint_decision",
+        "control_treatment": "keep_fixed",
+        "semantic_role": definition["semantic_role"],
+        "applicable_scope": definition["applicable_scope"],
+        "relationship_to_requirement": definition["relationship_to_requirement"],
+        "related_requirement_references": [
+            definition["relationship_to_requirement"]
+        ],
+        "resolution_state": "resolved",
+        "user_disposition": "selected_choice",
+        "generation_effect": "non_blocking",
+        "evidence_expectation": deepcopy(definition["later_evidence_requirements"]),
+        "future_review_rule": definition["future_review_rule"],
+        "remaining_non_proofs": deepcopy(definition["non_proofs"]),
+        "provenance_entries": provenance,
+        "selected_value": selection["construction_form"],
+        "resource_architecture": architecture,
+    }
+
+
+def _prepare_current_build_proposal(
+    tool_name: str, arguments: dict[str, Any]
+) -> str | None:
+    if not (
+        tool_name == "create_implementation_blueprint"
+        and arguments.get("context_loop") == CONTEXT_LOOP_GATE
+        and arguments.get("decision_loop") == DECISION_LOOP_GATE
+        and arguments.get("resolution_context") == "current_build_context"
+        and arguments.get("resolution_phase") == "propose"
+    ):
+        return None
+    if any(
+        field in arguments
+        for field in (
+            "resolution_confirmation",
+            "confirmation_payload",
+            LOCAL_SELECTED_BUNDLE_FIELD,
+        )
+    ):
+        return "proposal_confirmation_not_allowed"
+    working_blueprint = arguments.get("working_blueprint")
+    if not isinstance(working_blueprint, dict):
+        return "missing_working_blueprint"
+    inherited = working_blueprint.get("blueprint_decision_records")
+    if not isinstance(inherited, dict):
+        return "working_blueprint_decision_records_missing"
+    supplied = arguments.get("blueprint_decision_records")
+    if supplied is not None and supplied != inherited:
+        return "blueprint_decision_records_parent_mismatch"
+    try:
+        records = unpack_decision_record_set(inherited)
+    except ValueError as exc:
+        return str(exc)
+    arguments["blueprint_decision_records"] = deepcopy(inherited)
+    selected = arguments.get("selected_decision_references")
+    updates = arguments.get("proposed_updates")
+    if not isinstance(selected, list) or not selected:
+        return "selected_decision_references_missing"
+    if not isinstance(updates, list) or not updates:
+        return "proposed_updates_missing"
+    current = arguments.get("current_build_context")
+    if not isinstance(current, dict):
+        return "missing_current_build_context"
+    try:
+        expanded = [
+            _expand_resource_architecture_update(
+                dict(update),
+                records=records,
+                current_build_context=current,
+            )
+            for update in updates
+            if isinstance(update, dict)
+        ]
+    except (KeyError, TypeError, ValueError) as exc:
+        return str(exc)
+    if len(expanded) != len(updates):
+        return "proposed_update_invalid"
+    arguments["proposed_updates"] = expanded
+    return None
 
 
 def _attach_portable_current_build_context(
@@ -742,6 +949,51 @@ def _attach_portable_current_build_context(
         )
     except ValueError:
         return "portable_current_build_context_projection_invalid"
+    return None
+
+
+def _attach_proposal_portable_current_build_context(
+    payload: dict[str, Any], arguments: dict[str, Any]
+) -> str | None:
+    current = arguments.get("current_build_context")
+    lineage = _proposal_lineage(arguments)
+    proposal = payload.get("carry_forward_proposal")
+    if not isinstance(proposal, dict):
+        resolution = payload.get("resolution")
+        if isinstance(resolution, dict):
+            proposal = resolution.get("decision_resolution_pack")
+    if (
+        not isinstance(current, dict)
+        or not isinstance(lineage, dict)
+        or not isinstance(proposal, dict)
+    ):
+        return "proposal_portable_inputs_missing"
+    working_blueprint = arguments.get("working_blueprint")
+    readiness = (
+        working_blueprint.get("blueprint_readiness_summary")
+        if isinstance(working_blueprint, dict)
+        and isinstance(working_blueprint.get("blueprint_readiness_summary"), dict)
+        else None
+    )
+    try:
+        portable = build_portable_current_build_context(
+            current_build_context=current,
+            decision_records=_portable_decision_records(arguments),
+            decision_evidence_lineage=lineage,
+            readiness=readiness,
+            applicable_actions=current.get("applicable_actions", ()),
+            carry_forward_proposal=proposal,
+        )
+        portable = attach_portable_proposal_resupply(
+            portable,
+            tool_input=arguments,
+            carry_forward_proposal=proposal,
+        )
+    except ValueError:
+        return "proposal_portable_projection_invalid"
+    if portable.get("confirmation_transport") is not None:
+        return "proposal_portable_confirmation_transport_forbidden"
+    payload["portable_current_build_context"] = portable
     return None
 
 
@@ -790,6 +1042,9 @@ def post_context_bridge(
     baseline_error = _compose_request_baseline_handoff(canonical_tool_name, arguments)
     if baseline_error is not None:
         return safe_error(baseline_error)
+    proposal_error = _prepare_current_build_proposal(canonical_tool_name, arguments)
+    if proposal_error is not None:
+        return safe_error(proposal_error)
     context_error = _context_loop_argument_error(canonical_tool_name, arguments, artifact_text)
     if context_error is not None:
         return safe_error(context_error)
@@ -924,6 +1179,18 @@ def post_context_bridge(
         and canonical_tool_name == "create_context_session_card"
     ):
         portable_error = _attach_portable_current_build_context(payload, arguments)
+        if portable_error is not None:
+            return safe_error(portable_error)
+    if (
+        200 <= status < 300
+        and context_loop_enabled
+        and canonical_tool_name == "create_implementation_blueprint"
+        and arguments.get("resolution_context") == "current_build_context"
+        and arguments.get("resolution_phase") == "propose"
+    ):
+        portable_error = _attach_proposal_portable_current_build_context(
+            payload, arguments
+        )
         if portable_error is not None:
             return safe_error(portable_error)
     return payload
@@ -1400,7 +1667,56 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
             "type": "array",
             "items": {"type": "string"},
         },
-        "proposed_updates": {"type": "array", "items": {"type": "object"}},
+        "proposed_updates": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "decision_ref": {"type": "string"},
+                    "resource_architecture_selection": {
+                        "type": "object",
+                        "properties": {
+                            "logical_resource_architecture": {
+                                "type": "string",
+                                "enum": list(LOGICAL_RESOURCE_ARCHITECTURES),
+                            },
+                            "allowed_patterns": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                    "enum": list(CONSTRUCTION_POLICY_PATTERNS),
+                                },
+                            },
+                            "disallowed_patterns": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                    "enum": list(CONSTRUCTION_POLICY_PATTERNS),
+                                },
+                            },
+                            "construction_form": {
+                                "type": "string",
+                                "enum": list(QISKIT_CONSTRUCTION_FORMS),
+                            },
+                        },
+                        "required": [
+                            "logical_resource_architecture",
+                            "allowed_patterns",
+                            "disallowed_patterns",
+                            "construction_form",
+                        ],
+                        "additionalProperties": False,
+                        "description": (
+                            "Explicit customer-selected resource architecture. The local "
+                            "adapter expands it deterministically from the governing "
+                            "Working Blueprint record; it does not choose values."
+                        ),
+                    },
+                },
+                "required": ["decision_ref"],
+                "additionalProperties": True,
+            },
+        },
         "proposal_ref": {"type": "string"},
         "prospective_derived_artifact_references": {
             "type": "array",

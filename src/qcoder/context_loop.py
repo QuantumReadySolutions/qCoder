@@ -1313,6 +1313,77 @@ def portable_confirmation_transport_error(value: object) -> str | None:
     return None
 
 
+def portable_proposal_resupply_error(value: object) -> str | None:
+    if not isinstance(value, Mapping):
+        return "portable_proposal_resupply_invalid"
+    if (
+        value.get("schema_version") != 1
+        or value.get("purpose") != "current_build_context_proposal_resupply"
+        or value.get("tool_name") != "create_implementation_blueprint"
+    ):
+        return "portable_proposal_resupply_version_invalid"
+    tool_input = value.get("tool_input")
+    proposal = value.get("carry_forward_proposal")
+    if not isinstance(tool_input, Mapping) or not isinstance(proposal, dict):
+        return "portable_proposal_resupply_input_invalid"
+    if (
+        tool_input.get("context_loop") != CONTEXT_LOOP_GATE
+        or tool_input.get("resolution_context") != RESOLUTION_CONTEXT
+        or tool_input.get("resolution_phase") != "propose"
+    ):
+        return "portable_proposal_resupply_gate_mismatch"
+    if any(
+        field in tool_input
+        for field in ("resolution_confirmation", "confirmation_payload")
+    ):
+        return "portable_proposal_resupply_confirmation_forbidden"
+    parents = tool_input.get("evidence_parent_artifacts")
+    context = tool_input.get("current_build_context")
+    working_blueprint = tool_input.get("working_blueprint")
+    record_set = tool_input.get("blueprint_decision_records")
+    if not isinstance(parents, list) or not isinstance(context, Mapping):
+        return "portable_proposal_resupply_parents_missing"
+    if not isinstance(working_blueprint, Mapping) or not isinstance(record_set, Mapping):
+        return "portable_proposal_resupply_working_blueprint_missing"
+    if working_blueprint.get("blueprint_decision_records") != record_set:
+        return "portable_proposal_resupply_decision_records_mismatch"
+    parent_error = evidence_parent_artifacts_error(context, parents)
+    if parent_error:
+        return parent_error
+    proposal_error = decision_resolution_pack_error(
+        proposal,
+        parent_artifacts=parents,
+        selected_action=str(tool_input.get("selected_action")),
+    )
+    if proposal_error:
+        return proposal_error
+    if (
+        tool_input.get("selected_action") != proposal.get("selected_action")
+        or tool_input.get("selected_decision_references")
+        != proposal.get("decision_references")
+        or tool_input.get("proposed_updates")
+        != proposal.get("proposed_outcome", {}).get("decision_updates")
+    ):
+        return "portable_proposal_resupply_binding_mismatch"
+    digest = value.get("canonical_request_sha256")
+    expected_digest = canonical_context_bridge_request_sha256(
+        tool_name="create_implementation_blueprint",
+        tool_input=tool_input,
+    )
+    if digest != expected_digest:
+        return "portable_proposal_resupply_request_digest_mismatch"
+    if value.get("validation") != {
+        "artifact_structure_validated": True,
+        "relationships_and_consistency_references_validated": True,
+        "digest_meaning": "deterministic_consistency_reference_only",
+        "authentication_claim": False,
+        "authorship_claim": False,
+        "confirmation_inferred": False,
+    }:
+        return "portable_proposal_resupply_validation_claim_invalid"
+    return None
+
+
 def portable_current_build_context_error(value: object) -> str | None:
     if not isinstance(value, dict):
         return "portable_current_build_context_invalid"
@@ -1335,6 +1406,13 @@ def portable_current_build_context_error(value: object) -> str | None:
         transport_error = portable_confirmation_transport_error(confirmation_transport)
         if transport_error:
             return transport_error
+    transport = value.get("transport")
+    if isinstance(transport, Mapping) and transport.get("proposal_resupply") is not None:
+        transport_error = portable_proposal_resupply_error(
+            transport["proposal_resupply"]
+        )
+        if transport_error:
+            return transport_error
     validation = value.get("validation")
     if not isinstance(validation, Mapping) or validation != {
         "artifact_structure_validated": True,
@@ -1347,6 +1425,52 @@ def portable_current_build_context_error(value: object) -> str | None:
     }:
         return "portable_bundle_validation_claim_invalid"
     return None
+
+
+def attach_portable_proposal_resupply(
+    portable: Mapping[str, Any],
+    *,
+    tool_input: Mapping[str, Any],
+    carry_forward_proposal: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Attach exact proposal inputs for a later explicit selected-file confirmation."""
+
+    if portable_current_build_context_error(dict(portable)):
+        raise ValueError("portable_current_build_context_invalid")
+    normalized_tool_input = _portable_json_interoperable_numbers(
+        deepcopy(dict(tool_input))
+    )
+    normalized_proposal = _portable_json_interoperable_numbers(
+        deepcopy(dict(carry_forward_proposal))
+    )
+    result = deepcopy(dict(portable))
+    result.pop("consistency_digest", None)
+    transport = deepcopy(result["transport"])
+    transport["proposal_resupply"] = {
+        "schema_version": 1,
+        "purpose": "current_build_context_proposal_resupply",
+        "tool_name": "create_implementation_blueprint",
+        "tool_input": normalized_tool_input,
+        "carry_forward_proposal": normalized_proposal,
+        "canonical_request_sha256": canonical_context_bridge_request_sha256(
+            tool_name="create_implementation_blueprint",
+            tool_input=normalized_tool_input,
+        ),
+        "validation": {
+            "artifact_structure_validated": True,
+            "relationships_and_consistency_references_validated": True,
+            "digest_meaning": "deterministic_consistency_reference_only",
+            "authentication_claim": False,
+            "authorship_claim": False,
+            "confirmation_inferred": False,
+        },
+    }
+    result["transport"] = transport
+    result = with_consistency_digest(_portable_json_interoperable_numbers(result))
+    error = portable_current_build_context_error(result)
+    if error:
+        raise ValueError(error)
+    return result
 
 
 def attach_portable_confirmation_transport(
@@ -1452,27 +1576,7 @@ def build_portable_current_build_context(
         for item in decision_records
     ]
     projected_proposal = (
-        _portable_projection(
-            carry_forward_proposal,
-            (
-                "proposal_ref",
-                "selected_action",
-                "decision_references",
-                "request_basis_reference",
-                "evidence_parent_references",
-                "resource_architecture_proposal",
-                "before_and_after_preview",
-                "decisions_changed",
-                "decisions_unchanged",
-                "requirements_unchanged",
-                "readiness_impact",
-                "generation_context_effect",
-                "remaining_uncertainty",
-                "prospective_derived_artifact_references",
-                "non_proof",
-                "consistency_digest",
-            ),
-        )
+        deepcopy(dict(carry_forward_proposal))
         if carry_forward_proposal is not None
         else None
     )
@@ -1853,6 +1957,7 @@ def context_loop_contract_snapshot() -> dict[str, Any]:
             "limits": deepcopy(PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS),
             "field_inventory": portable_current_build_context_field_inventory(),
             "transport_envelope": True,
+            "deterministic_proposal_resupply": True,
             "deterministic_confirmation_transport": True,
             "local_selected_path_transmitted": False,
             "request_digest_meaning": "deterministic_consistency_reference_only",
