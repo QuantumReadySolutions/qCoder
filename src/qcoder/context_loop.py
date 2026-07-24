@@ -1384,6 +1384,70 @@ def portable_proposal_resupply_error(value: object) -> str | None:
     return None
 
 
+def portable_proposal_parent_resupply_error(value: object) -> str | None:
+    if not isinstance(value, Mapping):
+        return "portable_proposal_parent_resupply_invalid"
+    if (
+        value.get("schema_version") != 1
+        or value.get("purpose") != "current_build_context_proposal_parent_resupply"
+        or value.get("tool_name") != "create_implementation_blueprint"
+    ):
+        return "portable_proposal_parent_resupply_version_invalid"
+    tool_input = value.get("tool_input")
+    if not isinstance(tool_input, Mapping):
+        return "portable_proposal_parent_resupply_input_invalid"
+    if (
+        tool_input.get("context_loop") != CONTEXT_LOOP_GATE
+        or tool_input.get("resolution_context") != RESOLUTION_CONTEXT
+        or tool_input.get("resolution_phase") != "propose"
+    ):
+        return "portable_proposal_parent_resupply_gate_mismatch"
+    prohibited = {
+        "algorithm_intent_card",
+        "intent_relationship",
+        "selected_action",
+        "selected_decision_references",
+        "proposed_updates",
+        "proposal_ref",
+        "resolution_confirmation",
+        "confirmation_payload",
+        "decision_resolution_pack",
+    }
+    if prohibited.intersection(tool_input):
+        return "portable_proposal_parent_resupply_overlay_forbidden"
+    parents = tool_input.get("evidence_parent_artifacts")
+    context = tool_input.get("current_build_context")
+    working_blueprint = tool_input.get("working_blueprint")
+    record_set = tool_input.get("blueprint_decision_records")
+    if not isinstance(parents, list) or not isinstance(context, Mapping):
+        return "portable_proposal_parent_resupply_parents_missing"
+    if not isinstance(working_blueprint, Mapping) or not isinstance(record_set, Mapping):
+        return "portable_proposal_parent_resupply_working_blueprint_missing"
+    if working_blueprint.get("blueprint_decision_records") != record_set:
+        return "portable_proposal_parent_resupply_decision_records_mismatch"
+    parent_error = evidence_parent_artifacts_error(context, parents)
+    if parent_error:
+        return parent_error
+    digest = value.get("canonical_parent_request_sha256")
+    expected_digest = canonical_context_bridge_request_sha256(
+        tool_name="create_implementation_blueprint",
+        tool_input=tool_input,
+    )
+    if digest != expected_digest:
+        return "portable_proposal_parent_resupply_request_digest_mismatch"
+    if value.get("validation") != {
+        "artifact_structure_validated": True,
+        "relationships_and_consistency_references_validated": True,
+        "digest_meaning": "deterministic_consistency_reference_only",
+        "authentication_claim": False,
+        "authorship_claim": False,
+        "confirmation_inferred": False,
+        "proposal_inferred": False,
+    }:
+        return "portable_proposal_parent_resupply_validation_claim_invalid"
+    return None
+
+
 def portable_current_build_context_error(value: object) -> str | None:
     if not isinstance(value, dict):
         return "portable_current_build_context_invalid"
@@ -1407,12 +1471,19 @@ def portable_current_build_context_error(value: object) -> str | None:
         if transport_error:
             return transport_error
     transport = value.get("transport")
-    if isinstance(transport, Mapping) and transport.get("proposal_resupply") is not None:
-        transport_error = portable_proposal_resupply_error(
-            transport["proposal_resupply"]
-        )
-        if transport_error:
-            return transport_error
+    if isinstance(transport, Mapping):
+        if transport.get("proposal_parent_resupply") is not None:
+            transport_error = portable_proposal_parent_resupply_error(
+                transport["proposal_parent_resupply"]
+            )
+            if transport_error:
+                return transport_error
+        if transport.get("proposal_resupply") is not None:
+            transport_error = portable_proposal_resupply_error(
+                transport["proposal_resupply"]
+            )
+            if transport_error:
+                return transport_error
     validation = value.get("validation")
     if not isinstance(validation, Mapping) or validation != {
         "artifact_structure_validated": True,
@@ -1425,6 +1496,48 @@ def portable_current_build_context_error(value: object) -> str | None:
     }:
         return "portable_bundle_validation_claim_invalid"
     return None
+
+
+def attach_portable_proposal_parent_resupply(
+    portable: Mapping[str, Any],
+    *,
+    tool_input: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Attach exact current-build parents for one later local proposal call."""
+
+    if portable_current_build_context_error(dict(portable)):
+        raise ValueError("portable_current_build_context_invalid")
+    normalized_tool_input = _portable_json_interoperable_numbers(
+        deepcopy(dict(tool_input))
+    )
+    result = deepcopy(dict(portable))
+    result.pop("consistency_digest", None)
+    transport = deepcopy(result["transport"])
+    transport["proposal_parent_resupply"] = {
+        "schema_version": 1,
+        "purpose": "current_build_context_proposal_parent_resupply",
+        "tool_name": "create_implementation_blueprint",
+        "tool_input": normalized_tool_input,
+        "canonical_parent_request_sha256": canonical_context_bridge_request_sha256(
+            tool_name="create_implementation_blueprint",
+            tool_input=normalized_tool_input,
+        ),
+        "validation": {
+            "artifact_structure_validated": True,
+            "relationships_and_consistency_references_validated": True,
+            "digest_meaning": "deterministic_consistency_reference_only",
+            "authentication_claim": False,
+            "authorship_claim": False,
+            "confirmation_inferred": False,
+            "proposal_inferred": False,
+        },
+    }
+    result["transport"] = transport
+    result = with_consistency_digest(_portable_json_interoperable_numbers(result))
+    error = portable_current_build_context_error(result)
+    if error:
+        raise ValueError(error)
+    return result
 
 
 def attach_portable_proposal_resupply(

@@ -50,6 +50,7 @@ from qcoder.context_loop import (
     RELATIONSHIP_TYPES,
     STAGE_AVAILABILITY_VALUES,
     STAGE_IDENTITY_STATUSES,
+    attach_portable_proposal_parent_resupply,
     attach_portable_proposal_resupply,
     build_portable_current_build_context,
     build_request_baseline,
@@ -405,19 +406,68 @@ def _expand_selected_portable_bundle(
     *,
     selected_file: str | Path | None,
 ) -> tuple[dict[str, Any] | None, str | None, str | None]:
-    allowed_overlay = {
-        LOCAL_SELECTED_BUNDLE_FIELD,
-        "proposal_ref",
-        "selected_action",
-        "resolution_confirmation",
-    }
-    if set(arguments) - allowed_overlay:
-        return None, None, "selected_portable_bundle_overlay_invalid"
     if arguments.get(LOCAL_SELECTED_BUNDLE_FIELD) is not True:
         return None, None, "selected_portable_bundle_selection_required"
     bundle, bundle_error = _load_selected_portable_bundle(selected_file)
     if bundle_error or bundle is None:
         return None, None, bundle_error
+    envelope = bundle.get("transport")
+    proposal_parent_resupply = (
+        envelope.get("proposal_parent_resupply")
+        if isinstance(envelope, dict)
+        else None
+    )
+    if isinstance(proposal_parent_resupply, dict):
+        allowed_proposal_overlay = {
+            LOCAL_SELECTED_BUNDLE_FIELD,
+            "algorithm_intent_card",
+            "intent_relationship",
+            "selected_action",
+            "selected_decision_references",
+            "proposed_updates",
+            "source_finding_references",
+            "remaining_uncertainty",
+            "generation_context_effect",
+            "prospective_derived_artifact_references",
+            "proposal_ref",
+        }
+        if set(arguments) - allowed_proposal_overlay:
+            return None, None, "selected_portable_bundle_proposal_overlay_invalid"
+        parent_input = proposal_parent_resupply.get("tool_input")
+        if not isinstance(parent_input, dict):
+            return None, None, "portable_proposal_parent_resupply_input_invalid"
+        exact_proposal = deepcopy(parent_input)
+        exact_proposal.update(
+            {
+                key: deepcopy(value)
+                for key, value in arguments.items()
+                if key != LOCAL_SELECTED_BUNDLE_FIELD
+            }
+        )
+        inherited_error = _inherit_decision_loop_context(
+            "create_implementation_blueprint", exact_proposal
+        )
+        if inherited_error is not None:
+            return None, None, inherited_error
+        proposal_error = _prepare_current_build_proposal(
+            "create_implementation_blueprint", exact_proposal
+        )
+        if proposal_error is not None:
+            return None, None, proposal_error
+        digest = canonical_context_bridge_request_sha256(
+            tool_name="create_implementation_blueprint",
+            tool_input=exact_proposal,
+        )
+        return exact_proposal, digest, None
+
+    allowed_confirmation_overlay = {
+        LOCAL_SELECTED_BUNDLE_FIELD,
+        "proposal_ref",
+        "selected_action",
+        "resolution_confirmation",
+    }
+    if set(arguments) - allowed_confirmation_overlay:
+        return None, None, "selected_portable_bundle_overlay_invalid"
     transport = bundle.get("confirmation_transport")
     exact_input: object
     stored_digest: object
@@ -425,7 +475,6 @@ def _expand_selected_portable_bundle(
         exact_input = transport.get("tool_input")
         stored_digest = transport.get("canonical_request_sha256")
     else:
-        envelope = bundle.get("transport")
         proposal_resupply = (
             envelope.get("proposal_resupply")
             if isinstance(envelope, dict)
@@ -987,15 +1036,78 @@ def _attach_portable_current_build_context(
     )
     proposal = arguments.get("carry_forward_proposal")
     try:
-        payload["portable_current_build_context"] = build_portable_current_build_context(
+        portable = build_portable_current_build_context(
             current_build_context=current,
             decision_records=_portable_decision_records(arguments),
             decision_evidence_lineage=lineage,
             readiness=readiness,
             carry_forward_proposal=proposal if isinstance(proposal, dict) else None,
         )
+        working_blueprint = arguments.get("working_blueprint")
+        record_set = (
+            working_blueprint.get("blueprint_decision_records")
+            if isinstance(working_blueprint, dict)
+            else None
+        )
+        artifact_references = current.get("artifact_references")
+        if not isinstance(record_set, dict) or not isinstance(artifact_references, dict):
+            payload["portable_current_build_context"] = portable
+            return None
+        parent_fields = (
+            "request_baseline",
+            "working_blueprint",
+            "generation_context",
+            "python_manifestation",
+            "circuit_manifestation",
+            "result_manifestation",
+            "decision_evidence_lineage",
+        )
+        descriptor_names = {
+            "decision_evidence_lineage": "lineage",
+        }
+        parents = []
+        normalized_by_field: dict[str, dict[str, Any]] = {}
+        for field in parent_fields:
+            supplied = arguments.get(field)
+            if not isinstance(supplied, dict):
+                continue
+            normalized = deepcopy(supplied)
+            descriptor = artifact_references.get(descriptor_names.get(field, field))
+            if not isinstance(descriptor, dict):
+                payload["portable_current_build_context"] = portable
+                return None
+            artifact_ref = descriptor.get("artifact_ref")
+            if not isinstance(artifact_ref, str):
+                payload["portable_current_build_context"] = portable
+                return None
+            if normalized.get("artifact_ref") not in (None, artifact_ref):
+                raise ValueError("current_build_parent_reference_mismatch")
+            normalized["artifact_ref"] = artifact_ref
+            normalized_by_field[field] = normalized
+            parents.append(normalized)
+        parents.append(deepcopy(current))
+        normalized_working_blueprint = normalized_by_field["working_blueprint"]
+        parent_input = {
+            "context_loop": CONTEXT_LOOP_GATE,
+            "decision_loop": DECISION_LOOP_GATE,
+            "profile_decision_catalog_version": PROFILE_DECISION_CATALOG_VERSION,
+            "current_lineage_reference": record_set["current_lineage_reference"],
+            "resolution_context": "current_build_context",
+            "resolution_phase": "propose",
+            "working_blueprint": normalized_working_blueprint,
+            "blueprint_decision_records": deepcopy(record_set),
+            "current_build_context": deepcopy(current),
+            "evidence_parent_artifacts": parents,
+        }
+        portable = attach_portable_proposal_parent_resupply(
+            portable,
+            tool_input=parent_input,
+        )
+        payload["portable_current_build_context"] = portable
     except ValueError:
         return "portable_current_build_context_projection_invalid"
+    except (KeyError, TypeError):
+        return "portable_proposal_parent_resupply_inputs_missing"
     return None
 
 
@@ -1478,8 +1590,9 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
             "const": True,
             "description": (
                 "Use the one explicitly selected local portable bundle configured "
-                "for this adapter process. The local path and file contents are not "
-                "supplied by the assistant."
+                "for this adapter process to resupply exact proposal parents or a "
+                "confirmed proposal. The local path and file contents are not supplied "
+                "by the assistant."
             ),
         },
         "client_context": {

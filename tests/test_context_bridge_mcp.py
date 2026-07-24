@@ -758,6 +758,195 @@ def test_selected_portable_bundle_file_is_single_local_safe_input(tmp_path: Path
     assert str(selected) not in error
 
 
+def test_preproposal_selected_bundle_expands_exact_parents_without_model_reconstruction(
+    tmp_path: Path,
+) -> None:
+    lineage_ref = "session-artifact-0123456789abcdef"
+    records = build_decision_records(
+        profile_id="generic_qiskit",
+        current_lineage_reference=lineage_ref,
+        parent_artifact_references=[{"artifact_ref": lineage_ref}],
+    )
+    record_set = pack_decision_record_set(
+        profile_id="generic_qiskit", decision_records=records
+    )
+    working_blueprint = {
+        "artifact_type": "implementation_blueprint",
+        "artifact_digest": "2" * 64,
+        "decision_loop": {
+            "gate": "readiness_resolution_v1",
+            "catalog_version": 1,
+        },
+        "blueprint_decision_records": record_set,
+        "blueprint_readiness_summary": {
+            "aggregate_readiness_result": "ready_to_generate",
+            "generation_context_eligibility": True,
+        },
+    }
+    supplied = {
+        "request_baseline": {
+            "artifact_type": "request_baseline_handoff",
+            "artifact_ref": "session-artifact-1111111111111111",
+            "artifact_digest": "1" * 64,
+        },
+        "working_blueprint": working_blueprint,
+        "generation_context": {
+            "artifact_type": "generation_context_pack",
+            "artifact_digest": "3" * 64,
+        },
+        "python_manifestation": {
+            "artifact_type": "python_manifestation",
+            "artifact_ref": "session-artifact-4444444444444444",
+            "artifact_digest": "4" * 64,
+        },
+        "circuit_manifestation": {
+            "artifact_type": "circuit_manifestation",
+            "artifact_ref": "session-artifact-5555555555555555",
+            "artifact_digest": "5" * 64,
+        },
+        "result_manifestation": {
+            "artifact_type": "result_manifestation",
+            "artifact_ref": "session-artifact-6666666666666666",
+            "artifact_digest": "6" * 64,
+        },
+        "decision_evidence_lineage": {
+            "schema_id": "qcoder.decision_evidence_lineage.v1",
+            "artifact_type": "decision_evidence_lineage",
+            "artifact_ref": "session-artifact-7777777777777777",
+            "artifact_digest": "7" * 64,
+            "links": [],
+        },
+    }
+    current = {
+        **_passive_current_context(),
+        "artifact_digest": "8" * 64,
+        "artifact_references": {
+            "request_baseline": {
+                "artifact_ref": "session-artifact-1111111111111111",
+                "digest": "1" * 64,
+            },
+            "working_blueprint": {
+                "artifact_ref": "session-artifact-2222222222222222",
+                "digest": "2" * 64,
+            },
+            "generation_context": {
+                "artifact_ref": "session-artifact-3333333333333333",
+                "digest": "3" * 64,
+            },
+            "python_manifestation": {
+                "artifact_ref": "session-artifact-4444444444444444",
+                "digest": "4" * 64,
+            },
+            "circuit_manifestation": {
+                "artifact_ref": "session-artifact-5555555555555555",
+                "digest": "5" * 64,
+            },
+            "result_manifestation": {
+                "artifact_ref": "session-artifact-6666666666666666",
+                "digest": "6" * 64,
+            },
+            "lineage": {
+                "artifact_ref": "session-artifact-7777777777777777",
+                "digest": "7" * 64,
+            },
+        },
+    }
+    payload = {"current_build_context": current}
+    assert context_bridge_mcp._attach_portable_current_build_context(
+        payload, supplied
+    ) is None
+    portable = payload["portable_current_build_context"]
+    selected = tmp_path / "preproposal.json"
+    selected.write_text(
+        canonical_portable_current_build_context_json(portable),
+        encoding="utf-8",
+    )
+    card = {
+        "artifact_type": "algorithm_intent_card",
+        "artifact_digest": "a" * 64,
+        "decision_loop": {
+            "gate": "readiness_resolution_v1",
+            "catalog_version": 1,
+        },
+        "blueprint_decision_records": record_set,
+    }
+    target = next(
+        record
+        for record in records
+        if record["profile_decision_id"] == "generic_qiskit.circuit_construction"
+    )
+    expanded, digest, error = context_bridge_mcp._expand_selected_portable_bundle(
+        {
+            "use_selected_portable_bundle": True,
+            "algorithm_intent_card": card,
+            "intent_relationship": {
+                "relationship_type": "represented_by",
+                "parent_artifact_digest": card["artifact_digest"],
+            },
+            "selected_action": "accept_and_add_to_blueprint",
+            "selected_decision_references": [target["decision_ref"]],
+            "proposed_updates": [
+                {
+                    "decision_ref": target["decision_ref"],
+                    "resource_architecture_selection": {
+                        "logical_resource_architecture": "simple_flat",
+                        "allowed_patterns": ["direct_inline"],
+                        "disallowed_patterns": [
+                            "avoid_opaque_or_unbounded_dynamic_construction"
+                        ],
+                        "construction_form": "direct_quantum_circuit",
+                    },
+                }
+            ],
+        },
+        selected_file=selected,
+    )
+    assert error is None
+    assert expanded is not None
+    assert digest == canonical_context_bridge_request_sha256(
+        tool_name="create_implementation_blueprint",
+        tool_input=expanded,
+    )
+    assert len(expanded["evidence_parent_artifacts"]) == 8
+    assert len(expanded["blueprint_decision_records"]["records"]) == 19
+    assert expanded["working_blueprint"]["artifact_ref"] == (
+        "session-artifact-2222222222222222"
+    )
+    generation_parent = next(
+        parent
+        for parent in expanded["evidence_parent_artifacts"]
+        if parent["artifact_type"] == "generation_context_pack"
+    )
+    assert generation_parent["artifact_ref"] == "session-artifact-3333333333333333"
+    assert len(expanded["proposed_updates"]) == 1
+    assert "resource_architecture_selection" not in expanded["proposed_updates"][0]
+    assert "resolution_confirmation" not in expanded
+    assert "confirmation_payload" not in expanded
+    assert "use_selected_portable_bundle" not in expanded
+
+
+def test_named_client_ref_file_substitution_remains_rejected(tmp_path: Path) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    result = handle_jsonrpc_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "create_implementation_blueprint",
+                "arguments": {"$refFile": "/local/path/that/must/not/be-read.json"},
+            },
+        },
+        base_url="https://example.invalid",
+        token_file=token_file,
+    )
+    assert result is not None
+    payload = result["result"]["structuredContent"]
+    assert payload["error_category"] == "unsupported_tool_argument"
+    assert "/local/path" not in json.dumps(payload)
+
+
 def test_selected_bundle_expansion_preserves_exact_input_and_digest(
     tmp_path: Path, monkeypatch: object
 ) -> None:
