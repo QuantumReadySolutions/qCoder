@@ -1,6 +1,22 @@
 # Changelog
 
 
+## 0.6.0a1
+
+- Add the complete Explorer Context Loop contract across Request Baseline, Working Blueprint,
+  Generation Context, bounded source/circuit/result evidence, Current Build Context,
+  Carry-Forward Proposal, explicit human confirmation, and deterministic Evolved Blueprint
+  materialization.
+- Expose the twelve public-safe Context Bridge operations required by the complete IDE-first
+  workflow while preserving exactly five Prompt Context modes, three profiles, and seven
+  carry-forward actions.
+- Add the versioned, bounded `qcoder.current_build_context.portable.v1` transport envelope for
+  optional passive Current Build Context review without raw-artifact upload, persistence,
+  hidden retrieval, browser confirmation, or browser materialization.
+- Preserve Qiskit as the only active Context Loop SDK and keep simulator, runtime, and QPU
+  execution external to qCoder.
+
+
 ## 0.5.0a9
 
 - Complete the bounded Explorer evidence loop with Context Session Card, Run Readiness Card, Result Review Context Card, Bounded Next Check Planner, and Single-Loop Evidence Diff tools.
