@@ -778,6 +778,53 @@ def _portable_decision_records(arguments: dict[str, Any]) -> list[dict[str, Any]
     return []
 
 
+def _inherit_decision_loop_context(
+    tool_name: str, arguments: dict[str, Any]
+) -> str | None:
+    parent_field = {
+        "create_implementation_blueprint": "algorithm_intent_card",
+        "create_generation_context_pack": "implementation_blueprint",
+        "create_source_blueprint_alignment_review": "implementation_blueprint",
+    }.get(tool_name)
+    if parent_field is None:
+        return None
+    parent = arguments.get(parent_field)
+    if not isinstance(parent, dict):
+        return None
+    record_set = parent.get("blueprint_decision_records")
+    if not isinstance(record_set, dict):
+        return None
+    parent_loop = parent.get("decision_loop")
+    inherited_gate = (
+        parent_loop.get("gate") if isinstance(parent_loop, dict) else None
+    )
+    if inherited_gate != DECISION_LOOP_GATE:
+        return "parent_decision_loop_invalid"
+    inherited = {
+        "decision_loop": inherited_gate,
+        "profile_decision_catalog_version": (
+            parent_loop.get("catalog_version")
+            if isinstance(parent_loop, dict)
+            and parent_loop.get("catalog_version") is not None
+            else PROFILE_DECISION_CATALOG_VERSION
+        ),
+        "current_lineage_reference": record_set.get(
+            "current_lineage_reference"
+        ),
+    }
+    if not isinstance(inherited["current_lineage_reference"], str):
+        return "parent_current_lineage_reference_missing"
+    for field, value in inherited.items():
+        supplied = arguments.get(field)
+        if supplied is not None and supplied != value:
+            return f"{field}_parent_mismatch"
+        arguments[field] = deepcopy(value)
+    supplied_records = arguments.get("blueprint_decision_records")
+    if supplied_records is not None and supplied_records != record_set:
+        return "blueprint_decision_records_parent_mismatch"
+    return None
+
+
 def _proposal_lineage(arguments: dict[str, Any]) -> dict[str, Any] | None:
     supplied = arguments.get("decision_evidence_lineage")
     if isinstance(supplied, dict):
@@ -1042,6 +1089,11 @@ def post_context_bridge(
     baseline_error = _compose_request_baseline_handoff(canonical_tool_name, arguments)
     if baseline_error is not None:
         return safe_error(baseline_error)
+    inherited_decision_error = _inherit_decision_loop_context(
+        canonical_tool_name, arguments
+    )
+    if inherited_decision_error is not None:
+        return safe_error(inherited_decision_error)
     proposal_error = _prepare_current_build_proposal(canonical_tool_name, arguments)
     if proposal_error is not None:
         return safe_error(proposal_error)
@@ -2002,11 +2054,14 @@ def tool_descriptors() -> list[dict[str, Any]]:
         ),
         "create_implementation_blueprint": (
             "Create a Qiskit-first Implementation Blueprint and distinct Output Evidence Contract from an "
-            "explicitly supplied confirmed Algorithm Intent Card; no code or circuit is generated."
+            "explicitly supplied confirmed Algorithm Intent Card. Decision-loop metadata and the complete "
+            "decision-record set are inherited exactly from that supplied card; do not reconstruct them. "
+            "No code or circuit is generated."
         ),
         "create_generation_context_pack": (
             "Create a current-session Generation Context Pack for external code generation from an explicitly "
-            "supplied confirmed blueprint and matching evidence contract; qCoder does not invoke an assistant."
+            "supplied confirmed blueprint and matching evidence contract. Decision-loop metadata is inherited "
+            "exactly from that supplied blueprint; qCoder does not invoke an assistant."
         ),
         "create_source_blueprint_alignment_review": (
             "Review compact machine-local Selected Python Source Evidence against a confirmed blueprint, scoped "

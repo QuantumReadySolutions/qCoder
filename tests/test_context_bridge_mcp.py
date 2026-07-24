@@ -134,6 +134,119 @@ def test_tool_descriptors_are_exact_public_context_bridge_tools() -> None:
     parent_schema = blueprint["inputSchema"]["properties"]["evidence_parent_artifacts"]
     assert parent_schema["minItems"] == 1
     assert "no lookup occurs" in parent_schema["description"]
+    assert "inherited exactly" in blueprint["description"]
+
+
+def test_working_blueprint_inherits_exact_decision_context_from_confirmed_card(
+    tmp_path: Path,
+) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    lineage_ref = "session-artifact-0123456789abcdef"
+    records = build_decision_records(
+        profile_id="generic_qiskit",
+        current_lineage_reference=lineage_ref,
+        parent_artifact_references=[{"artifact_ref": lineage_ref}],
+    )
+    record_set = pack_decision_record_set(
+        profile_id="generic_qiskit", decision_records=records
+    )
+    card = {
+        "artifact_type": "algorithm_intent_card",
+        "artifact_digest": "a" * 64,
+        "decision_loop": {
+            "gate": "readiness_resolution_v1",
+            "catalog_version": 1,
+        },
+        "blueprint_decision_records": record_set,
+    }
+    captured: dict[str, object] = {}
+
+    def opener(request: object, timeout: int = 20) -> _FakeResponse:
+        captured["body"] = json.loads(request.data.decode("utf-8"))  # type: ignore[attr-defined]
+        return _FakeResponse(
+            {
+                "ok": True,
+                "tool_name": "create_implementation_blueprint",
+                "context_status": "implementation_blueprint_ready",
+                "implementation_blueprint": {
+                    "artifact_type": "implementation_blueprint"
+                },
+                "output_evidence_contract": {
+                    "artifact_type": "output_evidence_contract"
+                },
+                "retention": "process_and_discard",
+                "retained_artifacts": [],
+            }
+        )
+
+    result = post_context_bridge(
+        base_url="https://example.invalid",
+        token_file=token_file,
+        tool_name="create_implementation_blueprint",
+        artifact_text=None,
+        tool_arguments={
+            "algorithm_intent_card": card,
+            "intent_relationship": {
+                "relationship_type": "represented_by",
+                "parent_artifact_digest": card["artifact_digest"],
+            },
+        },
+        opener=opener,
+    )
+
+    assert result["ok"] is True, result
+    body = captured["body"]
+    assert isinstance(body, dict)
+    assert body["decision_loop"] == "readiness_resolution_v1"
+    assert body["profile_decision_catalog_version"] == 1
+    assert body["current_lineage_reference"] == lineage_ref
+    assert "blueprint_decision_records" not in body
+
+
+def test_working_blueprint_rejects_reconstructed_decision_context_before_network(
+    tmp_path: Path,
+) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    lineage_ref = "session-artifact-0123456789abcdef"
+    records = build_decision_records(
+        profile_id="generic_qiskit",
+        current_lineage_reference=lineage_ref,
+        parent_artifact_references=[{"artifact_ref": lineage_ref}],
+    )
+    record_set = pack_decision_record_set(
+        profile_id="generic_qiskit", decision_records=records
+    )
+    result = post_context_bridge(
+        base_url="https://example.invalid",
+        token_file=token_file,
+        tool_name="create_implementation_blueprint",
+        artifact_text=None,
+        tool_arguments={
+            "decision_loop": "readiness_resolution_v1",
+            "profile_decision_catalog_version": 1,
+            "current_lineage_reference": "session-artifact-fedcba9876543210",
+            "algorithm_intent_card": {
+                "artifact_type": "algorithm_intent_card",
+                "decision_loop": {
+                    "gate": "readiness_resolution_v1",
+                    "catalog_version": 1,
+                },
+                "blueprint_decision_records": record_set,
+            },
+            "intent_relationship": {
+                "relationship_type": "represented_by",
+                "parent_artifact_digest": "a" * 64,
+            },
+        },
+        opener=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("network should not be called")
+        ),
+    )
+
+    assert result["ok"] is False
+    assert result["error_category"] == "current_lineage_reference_parent_mismatch"
 
 
 def test_current_build_proposal_call_requires_and_transports_evidence_parents(
