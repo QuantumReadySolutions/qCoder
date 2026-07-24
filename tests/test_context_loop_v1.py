@@ -808,6 +808,25 @@ def test_portable_current_build_context_is_bounded_and_not_authenticity_proof() 
     assert all(item["protected_policy_dependency"] == "none" for item in inventory)
 
 
+def test_portable_current_build_context_normalizes_integral_floats_before_digest() -> None:
+    context, _circuit, _result = _current_context()
+    context["selected_share_safe_summaries"]["result"]["distribution_shape"][
+        "entropy_base2"
+    ] = 1.0
+    portable = build_portable_current_build_context(
+        current_build_context=context,
+        decision_evidence_lineage=_lineage(),
+    )
+
+    entropy = portable["selected_share_safe_summaries"]["result"][
+        "distribution_shape"
+    ]["entropy_base2"]
+    assert entropy == 1
+    assert isinstance(entropy, int)
+    assert '"entropy_base2":1' in canonical_portable_current_build_context_json(portable)
+    assert portable["consistency_digest"] == consistency_digest(portable)
+
+
 def test_portable_confirmation_transport_preserves_exact_resupplied_parents() -> None:
     context, circuit, result = _current_context()
     records = build_decision_records(
@@ -855,6 +874,7 @@ def test_portable_confirmation_transport_preserves_exact_resupplied_parents() ->
     }
     working_blueprint = deepcopy(_working_blueprint())
     working_blueprint["blueprint_decision_records"] = record_set
+    working_blueprint["blueprint_decision_records"]["schema_version"] = 1.0
     parents = _evidence_parents(context, circuit, result)
     parents[1] = deepcopy(working_blueprint)
     proposal = build_carry_forward_proposal(
@@ -901,13 +921,19 @@ def test_portable_confirmation_transport_preserves_exact_resupplied_parents() ->
     )
     assert portable_confirmation_transport_error(transported["confirmation_transport"]) is None
     assert transported["confirmation_transport"]["tool_input"] == tool_input
+    assert isinstance(
+        transported["confirmation_transport"]["tool_input"][
+            "blueprint_decision_records"
+        ]["schema_version"],
+        int,
+    )
     assert (
         len(transported["confirmation_transport"]["tool_input"]["evidence_parent_artifacts"]) == 6
     )
     assert transported["confirmation_transport"]["canonical_request_sha256"] == (
         canonical_context_bridge_request_sha256(
             tool_name="create_implementation_blueprint",
-            tool_input=tool_input,
+            tool_input=transported["confirmation_transport"]["tool_input"],
         )
     )
     assert portable_current_build_context_error(transported) is None

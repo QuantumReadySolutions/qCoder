@@ -33,6 +33,9 @@ import qcoder.context_bridge_mcp as context_bridge_mcp
 class _FakeResponse:
     status = 200
 
+    def __init__(self, payload: dict[str, object] | None = None) -> None:
+        self.payload = payload
+
     def __enter__(self) -> "_FakeResponse":
         return self
 
@@ -41,7 +44,8 @@ class _FakeResponse:
 
     def read(self) -> bytes:
         return json.dumps(
-            {
+            self.payload
+            or {
                 "ok": True,
                 "tool_name": "get_guided_evidence_context",
                 "context_status": "assistant_context_ready",
@@ -121,7 +125,7 @@ def test_tool_descriptors_are_exact_public_context_bridge_tools() -> None:
     blueprint = next(
         tool for tool in tool_descriptors() if tool["name"] == "create_implementation_blueprint"
     )
-    assert "allOf" in blueprint["inputSchema"]
+    assert "allOf" not in blueprint["inputSchema"]
     parent_schema = blueprint["inputSchema"]["properties"]["evidence_parent_artifacts"]
     assert parent_schema["minItems"] == 1
     assert "no lookup occurs" in parent_schema["description"]
@@ -188,24 +192,234 @@ def test_current_build_proposal_call_requires_and_transports_evidence_parents(
     assert captured["body"]["evidence_parent_artifacts"] == parents  # type: ignore[index]
 
 
+def test_current_build_context_composes_share_safe_request_baseline_from_existing_fields(
+    tmp_path: Path,
+) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    captured: dict[str, object] = {}
+
+    def opener(request: object, timeout: int = 20) -> _FakeResponse:
+        captured["body"] = json.loads(request.data.decode("utf-8"))  # type: ignore[attr-defined]
+        return _FakeResponse(
+            {
+                "ok": True,
+                "tool_name": "create_context_session_card",
+                "context_status": "current_build_context_ready",
+                "current_build_context": _passive_current_context(),
+                "retained_artifacts": [],
+            }
+        )
+
+    result = post_context_bridge(
+        base_url="https://example.invalid",
+        token_file=token_file,
+        tool_name="create_context_session_card",
+        artifact_text=None,
+        tool_arguments={
+            "context_loop": "current_build_context_v1",
+            "request_baseline": {
+                "text": "Create a selected Bell circuit example.",
+                "profile": "generic_qiskit",
+            },
+            "request_share_safe_summary": "Create a selected Bell circuit example.",
+            "request_text_share_safe": True,
+            "assistant_interpretation": {
+                "summary": "Use a direct two-qubit Qiskit circuit.",
+                "provenance_role": "assistant_proposed",
+            },
+            "profile_suggestions": ["generic_qiskit"],
+            "working_blueprint": {"artifact_type": "implementation_blueprint"},
+            "stage_availability": {"schema_id": "qcoder.stage_availability.v1"},
+            "decision_evidence_lineage": _passive_lineage(),
+        },
+        opener=opener,
+    )
+
+    assert result["ok"] is True, result
+    body = captured["body"]
+    assert isinstance(body, dict)
+    baseline = body["request_baseline"]
+    assert baseline["artifact_type"] == "request_baseline_handoff"
+    assert baseline["request_summary"] == "Create a selected Bell circuit example."
+    assert baseline["original_request_text_withheld"] is False
+    assert baseline["share_safe_selection"] == "explicit_verbatim_selection"
+    assert baseline["share_safe"] is True
+    assert baseline["retention"] == "process_and_discard"
+    assert baseline["assistant_interpretation"]["provenance_role"] == "assistant_proposed"
+    assert baseline["profile_suggestions"] == ["generic_qiskit"]
+    assert len(baseline["artifact_digest"]) == 64
+    assert result["portable_current_build_context"]["schema_id"] == (
+        "qcoder.current_build_context.portable.v1"
+    )
+    assert result["portable_current_build_context"]["decision_records"] == []
+
+    schema = next(
+        tool["inputSchema"]
+        for tool in tool_descriptors()
+        if tool["name"] == "create_context_session_card"
+    )
+    assert any(
+        set(branch.get("required", []))
+        >= {
+            "request_share_safe_summary",
+            "request_text_share_safe",
+            "working_blueprint",
+            "stage_availability",
+            "decision_evidence_lineage",
+        }
+        for branch in schema["anyOf"]
+    )
+    properties = schema["properties"]
+    stage_schema = properties["stage_availability"]
+    assert stage_schema["required"] == ["schema_id", "artifact_type", "stages"]
+    assert set(stage_schema["properties"]["stages"]["required"]) == {
+        "human_intent",
+        "python_source",
+        "logical_circuit",
+        "target_circuit",
+        "run_results",
+        "next_human_intent",
+    }
+    lineage_schema = properties["decision_evidence_lineage"]
+    assert lineage_schema["properties"]["schema_id"]["const"] == (
+        "qcoder.decision_evidence_lineage.v1"
+    )
+    relationship_schema = lineage_schema["properties"]["links"]["items"]["properties"][
+        "relationship"
+    ]
+    assert relationship_schema["required"] == [
+        "relationship_type",
+        "source",
+        "target",
+        "direction",
+        "supplied_evidence_basis",
+        "declaration_state",
+        "non_proof",
+    ]
+    assert relationship_schema["properties"]["source"]["properties"]["artifact_reference"][
+        "properties"
+    ]["retrievable"] == {"const": False}
+    assert properties["current_lineage_reference"]["pattern"] == (
+        r"^session-artifact-[0-9a-f]{16,64}$"
+    )
+    intent_schema = next(
+        tool["inputSchema"]
+        for tool in tool_descriptors()
+        if tool["name"] == "create_algorithm_intent_card"
+    )
+    dispositions = intent_schema["properties"]["decision_dispositions"]["oneOf"][0]["items"]
+    assert dispositions["properties"]["user_disposition"]["enum"] == [
+        "selected_choice",
+        "bounded_alternatives",
+        "bounded_value_range",
+        "deferred_to_source_evidence",
+        "deferred_to_later_evidence",
+        "left_unresolved",
+        "not_supplied",
+    ]
+    assert "selected_value" in dispositions["properties"]
+    assert "selected_choice" not in dispositions["properties"]
+
+
+def test_current_build_context_rejects_conflicting_reconstructed_request_baseline(
+    tmp_path: Path,
+) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+
+    def opener(*args: object, **kwargs: object) -> _FakeResponse:
+        raise AssertionError("conflicting request must not be sent")
+
+    result = post_context_bridge(
+        base_url="https://example.invalid",
+        token_file=token_file,
+        tool_name="create_context_session_card",
+        artifact_text=None,
+        tool_arguments={
+            "context_loop": "current_build_context_v1",
+            "request_baseline": {"text": "Different request."},
+            "request_share_safe_summary": "Create a selected Bell circuit example.",
+            "request_text_share_safe": True,
+            "working_blueprint": {"artifact_type": "implementation_blueprint"},
+            "stage_availability": {"schema_id": "qcoder.stage_availability.v1"},
+            "decision_evidence_lineage": {"schema_id": "qcoder.decision_evidence_lineage.v1"},
+        },
+        opener=opener,
+    )
+
+    assert result["ok"] is False
+    assert result["error_category"] == "conflicting_tool_argument"
+    assert result["retained_artifacts"] == []
+    assert result["raw_payload_printed"] is False
+
+
+def test_decision_enabled_intent_composes_share_safe_request_baseline(
+    tmp_path: Path,
+) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    captured: dict[str, object] = {}
+
+    def opener(request: object, timeout: int = 20) -> _FakeResponse:
+        captured["body"] = json.loads(request.data.decode("utf-8"))  # type: ignore[attr-defined]
+        return _FakeResponse()
+
+    result = post_context_bridge(
+        base_url="https://example.invalid",
+        token_file=token_file,
+        tool_name="create_algorithm_intent_card",
+        artifact_text=None,
+        tool_arguments={
+            "context_loop": "current_build_context_v1",
+            "decision_loop": "readiness_resolution_v1",
+            "request_share_safe_summary": "Create a selected Bell circuit example.",
+            "request_text_share_safe": True,
+            "original_user_intent": "Create a selected Bell circuit example.",
+            "assistant_interpretation": {
+                "summary": "Use a direct two-qubit Qiskit circuit.",
+                "provenance_role": "assistant_proposed",
+            },
+            "profile_suggestions": ["generic_qiskit"],
+            "profile_id": "generic_qiskit",
+        },
+        opener=opener,
+    )
+
+    assert result["ok"] is True, result
+    baseline = captured["body"]["request_baseline"]  # type: ignore[index]
+    assert baseline["artifact_type"] == "request_baseline_handoff"
+    assert baseline["request_summary"] == "Create a selected Bell circuit example."
+    assert baseline["share_safe_selection"] == "explicit_verbatim_selection"
+    assert baseline["retention"] == "process_and_discard"
+
+
+def _passive_current_context() -> dict[str, object]:
+    return {
+        "schema_id": "qcoder.current_build_context.v1",
+        "artifact_ref": "session-artifact-aaaaaaaaaaaaaaaa",
+        "profile_id": "generic_qiskit",
+        "artifact_references": {},
+        "stage_availability": {},
+        "stage_identity": {},
+        "selected_share_safe_summaries": {},
+        "non_proofs": ["No correctness or run-readiness claim."],
+    }
+
+
+def _passive_lineage() -> dict[str, object]:
+    return {
+        "schema_id": "qcoder.decision_evidence_lineage.v1",
+        "artifact_ref": "session-artifact-bbbbbbbbbbbbbbbb",
+        "artifact_digest": "b" * 64,
+        "links": [],
+    }
+
+
 def _passive_portable_bundle() -> dict[str, object]:
     return build_portable_current_build_context(
-        current_build_context={
-            "schema_id": "qcoder.current_build_context.v1",
-            "artifact_ref": "session-artifact-aaaaaaaaaaaaaaaa",
-            "profile_id": "generic_qiskit",
-            "artifact_references": {},
-            "stage_availability": {},
-            "stage_identity": {},
-            "selected_share_safe_summaries": {},
-            "non_proofs": ["No correctness or run-readiness claim."],
-        },
-        decision_evidence_lineage={
-            "schema_id": "qcoder.decision_evidence_lineage.v1",
-            "artifact_ref": "session-artifact-bbbbbbbbbbbbbbbb",
-            "artifact_digest": "b" * 64,
-            "links": [],
-        },
+        current_build_context=_passive_current_context(),
+        decision_evidence_lineage=_passive_lineage(),
     )
 
 
@@ -510,6 +724,10 @@ def test_tool_descriptors_advertise_only_tool_specific_fields() -> None:
         }.get(tool_name, ["artifact_text"])
         assert schema["required"] == expected_required
         assert schema["additionalProperties"] is False
+
+    # Codex projects conditional top-level allOf schemas as zero-argument tools.
+    # The adapter enforces the Current Build Context parent requirements at runtime.
+    assert "allOf" not in schemas["create_implementation_blueprint"]
 
     assert schemas["create_prompt_context"]["properties"]["mode"]["enum"] == sorted(
         ["explain", "review", "revise", "troubleshoot", "plan_next_checks"]

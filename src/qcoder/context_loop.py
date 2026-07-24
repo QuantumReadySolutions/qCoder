@@ -1143,6 +1143,23 @@ def _portable_projection(value: Mapping[str, Any], allowed_fields: Sequence[str]
     return {field: deepcopy(value[field]) for field in allowed_fields if field in value}
 
 
+def _portable_json_interoperable_numbers(value: Any) -> Any:
+    """Match browser JSON number serialization for portable consistency digests."""
+
+    if isinstance(value, float) and math.isfinite(value) and value.is_integer():
+        return int(value)
+    if isinstance(value, list):
+        return [_portable_json_interoperable_numbers(item) for item in value]
+    if isinstance(value, tuple):
+        return [_portable_json_interoperable_numbers(item) for item in value]
+    if isinstance(value, Mapping):
+        return {
+            key: _portable_json_interoperable_numbers(item)
+            for key, item in value.items()
+        }
+    return value
+
+
 def _portable_structure_error(value: object) -> str | None:
     limits = PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS
     counters = {"properties": 0, "text": 0}
@@ -1341,9 +1358,12 @@ def attach_portable_confirmation_transport(
 
     if portable_current_build_context_error(dict(portable)):
         raise ValueError("portable_current_build_context_invalid")
+    normalized_tool_input = _portable_json_interoperable_numbers(
+        deepcopy(dict(tool_input))
+    )
     request_digest = canonical_context_bridge_request_sha256(
         tool_name="create_implementation_blueprint",
-        tool_input=tool_input,
+        tool_input=normalized_tool_input,
     )
     result = deepcopy(dict(portable))
     result.pop("consistency_digest", None)
@@ -1351,7 +1371,7 @@ def attach_portable_confirmation_transport(
         "schema_version": 1,
         "purpose": "current_build_context_confirmation",
         "tool_name": "create_implementation_blueprint",
-        "tool_input": deepcopy(dict(tool_input)),
+        "tool_input": normalized_tool_input,
         "canonical_request_sha256": request_digest,
         "validation": {
             "artifact_structure_validated": True,
@@ -1362,7 +1382,7 @@ def attach_portable_confirmation_transport(
             "confirmation_inferred": False,
         },
     }
-    result = with_consistency_digest(result)
+    result = with_consistency_digest(_portable_json_interoperable_numbers(result))
     error = portable_current_build_context_error(result)
     if error:
         raise ValueError(error)
@@ -1379,7 +1399,7 @@ def freeze_portable_current_build_context_candidate(
     result = deepcopy(dict(portable))
     result.pop("consistency_digest", None)
     result["inventory_status"] = PORTABLE_BUNDLE_FROZEN_STATUS
-    result = with_consistency_digest(result)
+    result = with_consistency_digest(_portable_json_interoperable_numbers(result))
     error = portable_current_build_context_error(result)
     if error:
         raise ValueError(error)
@@ -1543,7 +1563,7 @@ def build_portable_current_build_context(
         "retention": "caller_controlled_portable_file",
         "persistent": False,
     }
-    result = with_consistency_digest(result)
+    result = with_consistency_digest(_portable_json_interoperable_numbers(result))
     error = portable_current_build_context_error(result)
     if error:
         raise ValueError(error)

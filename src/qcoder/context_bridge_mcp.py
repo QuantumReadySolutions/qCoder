@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -26,23 +27,39 @@ from qcoder.blueprint_decisions import (
     ACTION_IDS,
     DECISION_LOOP_DISABLED,
     DECISION_LOOP_GATE,
+    GENERATION_EFFECTS,
     PROFILE_DECISION_CATALOG_VERSION,
     RESOLUTION_CONTEXTS,
     RESOLUTION_PHASES,
+    RESOLUTION_STATES,
+    USER_DISPOSITIONS,
 )
 from qcoder.context_loop import (
     CONTEXT_LOOP_DISABLED,
     CONTEXT_LOOP_GATE,
+    DEVELOPMENT_STAGES,
     GENERATION_POSTURES,
     PORTABLE_CURRENT_BUILD_CONTEXT_LIMITS,
+    RELATIONSHIP_TYPES,
+    STAGE_AVAILABILITY_VALUES,
     STAGE_IDENTITY_STATUSES,
+    build_portable_current_build_context,
+    build_request_baseline,
     canonical_context_bridge_request_sha256,
     context_loop_contract_snapshot,
     portable_current_build_context_error,
+    share_safe_request_baseline,
+)
+from qcoder.development_evidence import (
+    ALIGNMENT_STATUSES,
+    CHOICE_ORIGINS,
+    EVIDENCE_CONFIDENCE_LABELS as DECISION_EVIDENCE_CONFIDENCE_LABELS,
+    RELATIONSHIP_DECLARATION_STATES,
 )
 
 DEFAULT_BASE_URL = "https://preview-api.qcoder.ai"
 ROUTE_PATH = "/v0/internal/hosted-mcp/context"
+SESSION_ARTIFACT_REFERENCE_PATTERN = r"^session-artifact-[0-9a-f]{16,64}$"
 EXPECTED_TOOLS = (
     "get_guided_evidence_context",
     "create_prompt_context",
@@ -624,6 +641,110 @@ def _context_loop_argument_error(
     return None
 
 
+def _compose_request_baseline_handoff(tool_name: str, arguments: dict[str, Any]) -> str | None:
+    if (
+        tool_name not in {"create_algorithm_intent_card", "create_context_session_card"}
+        or arguments.get("context_loop") != CONTEXT_LOOP_GATE
+    ):
+        return None
+    existing_baseline = arguments.get("request_baseline")
+    if (
+        isinstance(existing_baseline, dict)
+        and existing_baseline.get("artifact_type") == "request_baseline_handoff"
+    ):
+        return None
+    summary = arguments.get("request_share_safe_summary")
+    selected = arguments.get("request_text_share_safe")
+    if not isinstance(summary, str) or not summary.strip():
+        return None
+    if not isinstance(selected, bool):
+        return "request_text_share_safe_required"
+    if isinstance(existing_baseline, dict):
+        reconstructed_text = existing_baseline.get("text")
+        if isinstance(reconstructed_text, str) and reconstructed_text.strip() != summary.strip():
+            return "conflicting_tool_argument"
+
+    assistant = arguments.get("assistant_interpretation")
+    suggestions = arguments.get("profile_suggestions")
+    unresolved = arguments.get("open_questions")
+    assistant_value = assistant if isinstance(assistant, dict) else {}
+    suggestions_value = suggestions if isinstance(suggestions, list) else []
+    unresolved_value = unresolved if isinstance(unresolved, list) else []
+    reference_seed = json.dumps(
+        {
+            "request_summary": summary.strip(),
+            "request_text_share_safe": selected,
+            "assistant_interpretation": assistant_value,
+            "profile_suggestions": suggestions_value,
+            "unresolved_questions": unresolved_value,
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    artifact_ref = f"session-artifact-{hashlib.sha256(reference_seed).hexdigest()[:32]}"
+    try:
+        baseline = build_request_baseline(
+            original_request=summary,
+            assistant_interpretation=assistant_value,
+            profile_suggestions=suggestions_value,
+            unresolved_questions=unresolved_value,
+            artifact_ref=artifact_ref,
+        )
+        arguments["request_baseline"] = share_safe_request_baseline(
+            baseline,
+            include_selected_verbatim=selected,
+            selected_verbatim=summary if selected else None,
+            structural_summary=None if selected else summary,
+        )
+    except ValueError:
+        return "request_baseline_handoff_invalid"
+    return None
+
+
+def _portable_decision_records(arguments: dict[str, Any]) -> list[dict[str, Any]]:
+    supplied = arguments.get("decision_records")
+    if isinstance(supplied, list):
+        return [dict(item) for item in supplied if isinstance(item, dict)]
+    if isinstance(supplied, dict) and isinstance(supplied.get("records"), list):
+        return [dict(item) for item in supplied["records"] if isinstance(item, dict)]
+    blueprint = arguments.get("working_blueprint")
+    if not isinstance(blueprint, dict):
+        return []
+    inherited = blueprint.get("blueprint_decision_records")
+    if isinstance(inherited, dict) and isinstance(inherited.get("records"), list):
+        return [dict(item) for item in inherited["records"] if isinstance(item, dict)]
+    return []
+
+
+def _attach_portable_current_build_context(
+    payload: dict[str, Any], arguments: dict[str, Any]
+) -> str | None:
+    current = payload.get("current_build_context")
+    lineage = arguments.get("decision_evidence_lineage")
+    if not isinstance(current, dict) or not isinstance(lineage, dict):
+        return "portable_current_build_context_inputs_missing"
+    working_blueprint = arguments.get("working_blueprint")
+    readiness = (
+        working_blueprint.get("blueprint_readiness_summary")
+        if isinstance(working_blueprint, dict)
+        and isinstance(working_blueprint.get("blueprint_readiness_summary"), dict)
+        else None
+    )
+    proposal = arguments.get("carry_forward_proposal")
+    try:
+        payload["portable_current_build_context"] = build_portable_current_build_context(
+            current_build_context=current,
+            decision_records=_portable_decision_records(arguments),
+            decision_evidence_lineage=lineage,
+            readiness=readiness,
+            carry_forward_proposal=proposal if isinstance(proposal, dict) else None,
+        )
+    except ValueError:
+        return "portable_current_build_context_projection_invalid"
+    return None
+
+
 def post_context_bridge(
     *,
     base_url: str,
@@ -666,6 +787,9 @@ def post_context_bridge(
                 return safe_error("conflicting_tool_argument")
             arguments[key] = value
     context_loop_enabled = arguments.get("context_loop") == CONTEXT_LOOP_GATE
+    baseline_error = _compose_request_baseline_handoff(canonical_tool_name, arguments)
+    if baseline_error is not None:
+        return safe_error(baseline_error)
     context_error = _context_loop_argument_error(canonical_tool_name, arguments, artifact_text)
     if context_error is not None:
         return safe_error(context_error)
@@ -794,6 +918,14 @@ def post_context_bridge(
                 "request_digest_proof_mismatch",
                 status_category="transport_consistency_failed",
             )
+    if (
+        200 <= status < 300
+        and context_loop_enabled
+        and canonical_tool_name == "create_context_session_card"
+    ):
+        portable_error = _attach_portable_current_build_context(payload, arguments)
+        if portable_error is not None:
+            return safe_error(portable_error)
     return payload
 
 
@@ -807,6 +939,210 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
         "assumptions": {"type": "array", "items": {"type": "string"}},
         "expectations": {"type": "array", "items": {"type": "string"}},
         "limitations": {"type": "array", "items": {"type": "string"}},
+    }
+    stage_availability_schema = {
+        "type": "object",
+        "required": ["schema_id", "artifact_type", "stages"],
+        "properties": {
+            "schema_id": {"const": "qcoder.stage_availability.v1"},
+            "schema_version": {"const": 1},
+            "artifact_type": {"const": "stage_availability"},
+            "artifact_ref": {
+                "type": "string",
+                "pattern": SESSION_ARTIFACT_REFERENCE_PATTERN,
+            },
+            "artifact_digest": {"type": "string"},
+            "stages": {
+                "type": "object",
+                "required": list(DEVELOPMENT_STAGES),
+                "properties": {
+                    stage: {"type": "string", "enum": list(STAGE_AVAILABILITY_VALUES)}
+                    for stage in DEVELOPMENT_STAGES
+                },
+                "additionalProperties": False,
+            },
+            "describes_evidence_availability_only": {"const": True},
+            "proves_construction_or_execution": {"const": False},
+            "retention": {"const": "process_and_discard"},
+        },
+        "additionalProperties": True,
+        "description": (
+            "Explicit supplied-evidence availability for all six canonical development "
+            "stages. Availability does not prove construction or execution."
+        ),
+    }
+    lineage_endpoint_schema = {
+        "type": "object",
+        "required": ["stage"],
+        "properties": {
+            "stage": {"type": "string", "enum": list(DEVELOPMENT_STAGES)},
+            "artifact_reference": {
+                "type": "object",
+                "required": [
+                    "reference_id",
+                    "scope",
+                    "opaque",
+                    "retrievable",
+                    "authentication_use",
+                    "proof_use",
+                    "cross_session_correlation",
+                ],
+                "properties": {
+                    "reference_id": {
+                        "type": "string",
+                        "pattern": SESSION_ARTIFACT_REFERENCE_PATTERN,
+                    },
+                    "scope": {"const": "current_session"},
+                    "opaque": {"const": True},
+                    "retrievable": {"const": False},
+                    "authentication_use": {"const": False},
+                    "proof_use": {"const": False},
+                    "cross_session_correlation": {"const": False},
+                },
+                "additionalProperties": False,
+            },
+        },
+        "additionalProperties": False,
+    }
+    decision_evidence_lineage_schema = {
+        "type": "object",
+        "required": [
+            "schema_id",
+            "artifact_type",
+            "links",
+            "transitive_inference",
+            "hidden_lookup",
+            "persistent",
+        ],
+        "properties": {
+            "schema_id": {"const": "qcoder.decision_evidence_lineage.v1"},
+            "schema_version": {"const": 1},
+            "artifact_type": {"const": "decision_evidence_lineage"},
+            "artifact_ref": {
+                "type": "string",
+                "pattern": SESSION_ARTIFACT_REFERENCE_PATTERN,
+            },
+            "artifact_digest": {"type": "string"},
+            "canonical_relationship_vocabulary": {
+                "type": "array",
+                "items": {"type": "string", "enum": list(RELATIONSHIP_TYPES)},
+                "uniqueItems": True,
+            },
+            "links": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["relationship", "explicitly_supplied", "non_transitive"],
+                    "properties": {
+                        "relationship": {
+                            "type": "object",
+                            "required": [
+                                "relationship_type",
+                                "source",
+                                "target",
+                                "direction",
+                                "supplied_evidence_basis",
+                                "declaration_state",
+                                "non_proof",
+                            ],
+                            "properties": {
+                                "relationship_type": {
+                                    "type": "string",
+                                    "enum": list(RELATIONSHIP_TYPES),
+                                },
+                                "source": lineage_endpoint_schema,
+                                "target": lineage_endpoint_schema,
+                                "direction": {"type": "string"},
+                                "supplied_evidence_basis": {"type": "string"},
+                                "declaration_state": {
+                                    "type": "string",
+                                    "enum": list(RELATIONSHIP_DECLARATION_STATES),
+                                },
+                                "non_proof": {"type": "string"},
+                            },
+                            "additionalProperties": False,
+                        },
+                        "decision_references": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "explicitly_supplied": {"const": True},
+                        "non_transitive": {"const": True},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+            "transitive_inference": {"const": False},
+            "graph_traversal": {"const": False},
+            "hidden_lookup": {"const": False},
+            "persistent": {"const": False},
+            "retention": {"const": "process_and_discard"},
+        },
+        "additionalProperties": True,
+        "description": (
+            "Explicit, directional, non-transitive current-session lineage. Every link "
+            "must resupply both artifact references; no graph traversal or hidden lookup occurs."
+        ),
+    }
+    decision_disposition_schema = {
+        "type": "object",
+        "required": [
+            "profile_decision_id",
+            "resolution_state",
+            "user_disposition",
+            "generation_effect",
+        ],
+        "properties": {
+            "profile_decision_id": {"type": "string"},
+            "decision_ref": {
+                "type": "string",
+                "pattern": r"^decision-[A-Za-z0-9_-]{22,64}$",
+            },
+            "resolution_state": {
+                "type": "string",
+                "enum": list(RESOLUTION_STATES),
+            },
+            "user_disposition": {
+                "type": "string",
+                "enum": list(USER_DISPOSITIONS),
+            },
+            "generation_effect": {
+                "type": "string",
+                "enum": list(GENERATION_EFFECTS),
+            },
+            "selected_value": {
+                "description": (
+                    "The explicit user-selected value. The field name is selected_value; "
+                    "do not substitute selected_choice."
+                )
+            },
+            "blueprint_representation_state": {
+                "type": "string",
+                "enum": [
+                    "not_represented",
+                    "represented",
+                    "deferred",
+                    "represented_in_derived_blueprint",
+                ],
+            },
+            "choice_origin": {
+                "type": "string",
+                "enum": list(CHOICE_ORIGINS),
+            },
+            "evidence_confidence": {
+                "type": "string",
+                "enum": list(DECISION_EVIDENCE_CONFIDENCE_LABELS),
+            },
+            "alignment_status": {
+                "type": "string",
+                "enum": list(ALIGNMENT_STATUSES),
+            },
+        },
+        "additionalProperties": True,
+        "description": (
+            "One explicit decision disposition. user_disposition=selected_choice is an "
+            "enum value; the selected content belongs in selected_value."
+        ),
     }
     return {
         "artifact_text": {
@@ -879,11 +1215,7 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
         "python_manifestation": {"type": "object", "additionalProperties": True},
         "circuit_manifestation": {"type": "object", "additionalProperties": True},
         "result_manifestation": {"type": "object", "additionalProperties": True},
-        "stage_availability": {
-            "type": "object",
-            "additionalProperties": True,
-            "description": "Evidence availability using the seven canonical Context Loop availability values.",
-        },
+        "stage_availability": stage_availability_schema,
         "stage_identities": {
             "type": "object",
             "additionalProperties": {
@@ -894,11 +1226,7 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
                 "additionalProperties": True,
             },
         },
-        "decision_evidence_lineage": {
-            "type": "object",
-            "additionalProperties": True,
-            "description": "Explicit, directional, non-transitive current-session lineage.",
-        },
+        "decision_evidence_lineage": decision_evidence_lineage_schema,
         "current_build_context": {"type": "object", "additionalProperties": True},
         "carry_forward_proposal": {"type": "object", "additionalProperties": True},
         "evolved_blueprint": {"type": "object", "additionalProperties": True},
@@ -1028,11 +1356,21 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
             "type": "integer",
             "enum": [PROFILE_DECISION_CATALOG_VERSION],
         },
-        "current_lineage_reference": {"type": "string"},
+        "current_lineage_reference": {
+            "type": "string",
+            "pattern": SESSION_ARTIFACT_REFERENCE_PATTERN,
+            "description": (
+                "Opaque current-session lineage reference. It is non-retrievable and "
+                "must not encode a path, customer identifier, or durable project identity."
+            ),
+        },
         "decision_dispositions": {
             "oneOf": [
-                {"type": "array", "items": {"type": "object"}},
-                {"type": "object", "additionalProperties": {"type": "object"}},
+                {"type": "array", "items": decision_disposition_schema},
+                {
+                    "type": "object",
+                    "additionalProperties": decision_disposition_schema,
+                },
             ]
         },
         "decision_references": {
@@ -1299,25 +1637,20 @@ def _tool_schema(tool_name: str) -> dict[str, Any]:
                 "properties": {"context_loop": {"const": CONTEXT_LOOP_GATE}},
             },
         ]
-    if tool_name == "create_implementation_blueprint":
-        schema["allOf"] = [
-            {
-                "if": {
-                    "properties": {
-                        "context_loop": {"const": CONTEXT_LOOP_GATE},
-                        "resolution_context": {"const": "current_build_context"},
-                    },
-                    "required": ["context_loop", "resolution_context"],
-                },
-                "then": {
+        if tool_name == "create_context_session_card":
+            schema["anyOf"].append(
+                {
                     "required": [
+                        "context_loop",
+                        "request_share_safe_summary",
+                        "request_text_share_safe",
                         "working_blueprint",
-                        "current_build_context",
-                        "evidence_parent_artifacts",
-                    ]
-                },
-            }
-        ]
+                        "stage_availability",
+                        "decision_evidence_lineage",
+                    ],
+                    "properties": {"context_loop": {"const": CONTEXT_LOOP_GATE}},
+                }
+            )
     return schema
 
 
