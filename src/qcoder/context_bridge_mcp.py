@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import stat
 import sys
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 import urllib.error
 import urllib.request
 
@@ -58,6 +58,11 @@ from qcoder.context_loop import (
     context_loop_contract_snapshot,
     portable_current_build_context_error,
     share_safe_request_baseline,
+)
+from qcoder.current_loop import (
+    CurrentLoopError,
+    canonical_operation_request_sha256,
+    expand_next_loop_seed,
 )
 from qcoder.development_evidence import (
     ALIGNMENT_STATUSES,
@@ -204,9 +209,13 @@ TOOL_INPUT_FIELDS["create_algorithm_intent_card"] = TOOL_INPUT_FIELDS[
     "create_algorithm_intent_card"
 ] - frozenset({"context_loop"})
 LOCAL_SELECTED_BUNDLE_FIELD = "use_selected_portable_bundle"
+LOCAL_SELECTED_NEXT_LOOP_SEED_FIELD = "use_selected_next_loop_seed"
 TOOL_INPUT_FIELDS["create_implementation_blueprint"] = TOOL_INPUT_FIELDS[
     "create_implementation_blueprint"
 ] | frozenset({LOCAL_SELECTED_BUNDLE_FIELD})
+TOOL_INPUT_FIELDS["create_generation_context_pack"] = TOOL_INPUT_FIELDS[
+    "create_generation_context_pack"
+] | frozenset({LOCAL_SELECTED_NEXT_LOOP_SEED_FIELD})
 TOOL_REQUIRED_FIELDS = {
     tool_name: ("artifact_text",)
     for tool_name in EXPECTED_TOOLS
@@ -1608,6 +1617,16 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
                 "by the assistant."
             ),
         },
+        LOCAL_SELECTED_NEXT_LOOP_SEED_FIELD: {
+            "type": "boolean",
+            "const": True,
+            "description": (
+                "Use one explicitly selected local next-loop seed and its separately "
+                "configured exact parent files. The adapter validates and expands "
+                "them into this existing operation; no path or loop reference is used "
+                "for protected lookup."
+            ),
+        },
         "client_context": {
             "type": "object",
             "additionalProperties": True,
@@ -2145,6 +2164,18 @@ def _tool_schema(tool_name: str) -> dict[str, Any]:
                     "properties": {"context_loop": {"const": CONTEXT_LOOP_GATE}},
                 }
             )
+    if tool_name == "create_generation_context_pack":
+        normal_required = list(TOOL_REQUIRED_FIELDS[tool_name])
+        schema["required"] = []
+        schema["anyOf"] = [
+            {"required": normal_required},
+            {
+                "required": [LOCAL_SELECTED_NEXT_LOOP_SEED_FIELD],
+                "properties": {
+                    LOCAL_SELECTED_NEXT_LOOP_SEED_FIELD: {"const": True}
+                },
+            },
+        ]
     return schema
 
 
@@ -2214,6 +2245,8 @@ def handle_jsonrpc_message(
     base_url: str,
     token_file: str | Path,
     selected_portable_bundle_file: str | Path | None = None,
+    selected_next_loop_seed_file: str | Path | None = None,
+    selected_next_loop_parent_files: Mapping[str, str | Path] | None = None,
     opener: Callable[..., Any] | None = None,
 ) -> dict[str, Any] | None:
     method = message.get("method")
@@ -2279,6 +2312,75 @@ def handle_jsonrpc_message(
                     },
                 )
             arguments = expanded
+        if (
+            canonical_tool_name == "create_generation_context_pack"
+            and arguments.get(LOCAL_SELECTED_NEXT_LOOP_SEED_FIELD) is True
+        ):
+            if selected_next_loop_seed_file is None:
+                payload = safe_error("selected_next_loop_seed_not_configured")
+                return _jsonrpc_result(
+                    message_id,
+                    {
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": json.dumps(payload, sort_keys=True),
+                            }
+                        ],
+                        "structuredContent": payload,
+                        "isError": True,
+                    },
+                )
+            base_arguments = {
+                key: deepcopy(value)
+                for key, value in arguments.items()
+                if key != LOCAL_SELECTED_NEXT_LOOP_SEED_FIELD
+            }
+            try:
+                expanded_seed = expand_next_loop_seed(
+                    seed_file=selected_next_loop_seed_file,
+                    parent_files=selected_next_loop_parent_files or {},
+                    tool_name=canonical_tool_name,
+                    base_tool_input=base_arguments,
+                )
+            except CurrentLoopError as exc:
+                payload = safe_error(exc.category)
+                return _jsonrpc_result(
+                    message_id,
+                    {
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": json.dumps(payload, sort_keys=True),
+                            }
+                        ],
+                        "structuredContent": payload,
+                        "isError": True,
+                    },
+                )
+            arguments = expanded_seed["tool_input"]
+            inherited_error = _inherit_decision_loop_context(
+                canonical_tool_name, arguments
+            )
+            if inherited_error is not None:
+                payload = safe_error(inherited_error)
+                return _jsonrpc_result(
+                    message_id,
+                    {
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": json.dumps(payload, sort_keys=True),
+                            }
+                        ],
+                        "structuredContent": payload,
+                        "isError": True,
+                    },
+                )
+            expected_request_digest = canonical_operation_request_sha256(
+                tool_name=canonical_tool_name,
+                tool_input=arguments,
+            )
         direct_field_names = {
             "mode",
             "current_goal",
@@ -2350,6 +2452,8 @@ def serve_stdio(
     base_url: str,
     token_file: str | Path,
     selected_portable_bundle_file: str | Path | None = None,
+    selected_next_loop_seed_file: str | Path | None = None,
+    selected_next_loop_parent_files: Mapping[str, str | Path] | None = None,
 ) -> int:
     for raw_line in sys.stdin:
         line = raw_line.strip()
@@ -2368,6 +2472,8 @@ def serve_stdio(
                     base_url=base_url,
                     token_file=token_file,
                     selected_portable_bundle_file=selected_portable_bundle_file,
+                    selected_next_loop_seed_file=selected_next_loop_seed_file,
+                    selected_next_loop_parent_files=selected_next_loop_parent_files,
                 )
         if response is None:
             continue
@@ -2403,6 +2509,8 @@ def serve_mcp_stdio(
     base_url: str,
     token_file: str | Path,
     selected_portable_bundle_file: str | Path | None = None,
+    selected_next_loop_seed_file: str | Path | None = None,
+    selected_next_loop_parent_files: Mapping[str, str | Path] | None = None,
 ) -> int:
     stdin = sys.stdin.buffer
     while True:
@@ -2422,6 +2530,8 @@ def serve_mcp_stdio(
                     base_url=base_url,
                     token_file=token_file,
                     selected_portable_bundle_file=selected_portable_bundle_file,
+                    selected_next_loop_seed_file=selected_next_loop_seed_file,
+                    selected_next_loop_parent_files=selected_next_loop_parent_files,
                 )
             if response is not None:
                 print(json.dumps(response, sort_keys=True), flush=True)
@@ -2450,6 +2560,8 @@ def serve_mcp_stdio(
                     base_url=base_url,
                     token_file=token_file,
                     selected_portable_bundle_file=selected_portable_bundle_file,
+                    selected_next_loop_seed_file=selected_next_loop_seed_file,
+                    selected_next_loop_parent_files=selected_next_loop_parent_files,
                 )
         if response is not None:
             _write_content_length_response(response)
@@ -2867,6 +2979,24 @@ def run_smoke(*, base_url: str, token_file: str | Path, full: bool = False) -> d
     }
 
 
+def _parse_selected_next_loop_parent_files(
+    values: list[str] | None,
+) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for value in values or []:
+        role, separator, path = value.partition("=")
+        if (
+            not separator
+            or not role
+            or not path
+            or role in result
+            or not Path(path).expanduser().is_absolute()
+        ):
+            raise ValueError("selected_next_loop_parent_file_invalid")
+        result[role] = str(Path(path).expanduser())
+    return result
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="qcoder context-bridge",
@@ -2893,6 +3023,24 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "One explicitly selected local portable Context Loop bundle. "
             "The path and file contents are never sent as path metadata."
+        ),
+    )
+    serve.add_argument(
+        "--selected-next-loop-seed-file",
+        default=os.getenv("QCODER_CONTEXT_BRIDGE_SELECTED_NEXT_LOOP_SEED_FILE"),
+        help=(
+            "One explicitly selected local next-loop seed. It is validated with "
+            "separately selected exact parent files; no local path is transmitted."
+        ),
+    )
+    serve.add_argument(
+        "--selected-next-loop-parent-file",
+        action="append",
+        default=[],
+        metavar="ROLE=/ABSOLUTE/PATH",
+        help=(
+            "One exact parent file required by the selected next-loop seed. "
+            "Repeat for each required role."
         ),
     )
     serve.set_defaults(context_bridge_command="mcp", mcp_command="serve")
@@ -2925,10 +3073,20 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 0
     if args.mcp_command == "serve":
+        try:
+            selected_next_loop_parent_files = (
+                _parse_selected_next_loop_parent_files(
+                    args.selected_next_loop_parent_file
+                )
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
         return serve_mcp_stdio(
             base_url=args.base_url,
             token_file=args.token_file,
             selected_portable_bundle_file=args.selected_portable_bundle_file,
+            selected_next_loop_seed_file=args.selected_next_loop_seed_file,
+            selected_next_loop_parent_files=selected_next_loop_parent_files,
         )
     if args.mcp_command == "smoke":
         result = run_smoke(base_url=args.base_url, token_file=args.token_file, full=args.full)

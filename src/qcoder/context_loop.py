@@ -37,6 +37,7 @@ from qcoder.development_evidence import (
     artifact_reference,
     validate_relationship_declaration,
 )
+from qcoder.current_loop import current_loop_contract_snapshot
 from qcoder.engines.feature_extraction.qasm2_regex_parser import parse_qasm2_text
 from qcoder.engines.review.counts_v0 import normalize_counts_v0
 
@@ -2076,6 +2077,7 @@ def context_loop_contract_snapshot() -> dict[str, Any]:
             "authentication_meaning": "none",
             "protected_policy_dependency": "none",
         },
+        "current_loop_continuity": current_loop_contract_snapshot(),
         "raw_artifacts_hosted": False,
         "hidden_state": False,
         "persistence": False,

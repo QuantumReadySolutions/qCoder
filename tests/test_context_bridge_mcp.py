@@ -1352,6 +1352,10 @@ def test_tool_descriptors_advertise_only_tool_specific_fields() -> None:
             expected = set(ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS[tool_name])
             if tool_name == "create_implementation_blueprint":
                 expected.add(context_bridge_mcp.LOCAL_SELECTED_BUNDLE_FIELD)
+            if tool_name == "create_generation_context_pack":
+                expected.add(
+                    context_bridge_mcp.LOCAL_SELECTED_NEXT_LOOP_SEED_FIELD
+                )
         elif tool_name in {
             "create_context_session_card",
             "create_run_readiness_card",
@@ -1364,10 +1368,7 @@ def test_tool_descriptors_advertise_only_tool_specific_fields() -> None:
         expected_required = {
             "create_algorithm_intent_card": ["original_user_intent", "profile_id"],
             "create_implementation_blueprint": ["algorithm_intent_card", "intent_relationship"],
-            "create_generation_context_pack": [
-                "implementation_blueprint",
-                "output_evidence_contract",
-            ],
+            "create_generation_context_pack": [],
             "create_source_blueprint_alignment_review": [
                 "implementation_blueprint",
                 "output_evidence_contract",
