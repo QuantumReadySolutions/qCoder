@@ -1154,10 +1154,7 @@ def _portable_json_interoperable_numbers(value: Any) -> Any:
     if isinstance(value, tuple):
         return [_portable_json_interoperable_numbers(item) for item in value]
     if isinstance(value, Mapping):
-        return {
-            key: _portable_json_interoperable_numbers(item)
-            for key, item in value.items()
-        }
+        return {key: _portable_json_interoperable_numbers(item) for key, item in value.items()}
     return value
 
 
@@ -1333,10 +1330,7 @@ def portable_proposal_resupply_error(value: object) -> str | None:
         or tool_input.get("resolution_phase") != "propose"
     ):
         return "portable_proposal_resupply_gate_mismatch"
-    if any(
-        field in tool_input
-        for field in ("resolution_confirmation", "confirmation_payload")
-    ):
+    if any(field in tool_input for field in ("resolution_confirmation", "confirmation_payload")):
         return "portable_proposal_resupply_confirmation_forbidden"
     parents = tool_input.get("evidence_parent_artifacts")
     context = tool_input.get("current_build_context")
@@ -1360,8 +1354,7 @@ def portable_proposal_resupply_error(value: object) -> str | None:
         return proposal_error
     if (
         tool_input.get("selected_action") != proposal.get("selected_action")
-        or tool_input.get("selected_decision_references")
-        != proposal.get("decision_references")
+        or tool_input.get("selected_decision_references") != proposal.get("decision_references")
         or tool_input.get("proposed_updates")
         != proposal.get("proposed_outcome", {}).get("decision_updates")
     ):
@@ -1480,9 +1473,7 @@ def portable_current_build_context_error(value: object) -> str | None:
             if transport_error:
                 return transport_error
         if transport.get("proposal_resupply") is not None:
-            transport_error = portable_proposal_resupply_error(
-                transport["proposal_resupply"]
-            )
+            transport_error = portable_proposal_resupply_error(transport["proposal_resupply"])
             if transport_error:
                 return transport_error
     validation = value.get("validation")
@@ -1508,9 +1499,7 @@ def attach_portable_proposal_parent_resupply(
 
     if portable_current_build_context_error(dict(portable)):
         raise ValueError("portable_current_build_context_invalid")
-    normalized_tool_input = _portable_json_interoperable_numbers(
-        deepcopy(dict(tool_input))
-    )
+    normalized_tool_input = _portable_json_interoperable_numbers(deepcopy(dict(tool_input)))
     result = deepcopy(dict(portable))
     result.pop("consistency_digest", None)
     transport = deepcopy(result["transport"])
@@ -1551,9 +1540,7 @@ def attach_portable_proposal_resupply(
 
     if portable_current_build_context_error(dict(portable)):
         raise ValueError("portable_current_build_context_invalid")
-    normalized_tool_input = _portable_json_interoperable_numbers(
-        deepcopy(dict(tool_input))
-    )
+    normalized_tool_input = _portable_json_interoperable_numbers(deepcopy(dict(tool_input)))
     normalized_proposal = _portable_json_interoperable_numbers(
         deepcopy(dict(carry_forward_proposal))
     )
@@ -1596,9 +1583,7 @@ def attach_portable_confirmation_transport(
 
     if portable_current_build_context_error(dict(portable)):
         raise ValueError("portable_current_build_context_invalid")
-    normalized_tool_input = _portable_json_interoperable_numbers(
-        deepcopy(dict(tool_input))
-    )
+    normalized_tool_input = _portable_json_interoperable_numbers(deepcopy(dict(tool_input)))
     request_digest = canonical_context_bridge_request_sha256(
         tool_name="create_implementation_blueprint",
         tool_input=normalized_tool_input,
@@ -1690,9 +1675,7 @@ def build_portable_current_build_context(
         for item in decision_records
     ]
     projected_proposal = (
-        deepcopy(dict(carry_forward_proposal))
-        if carry_forward_proposal is not None
-        else None
+        deepcopy(dict(carry_forward_proposal)) if carry_forward_proposal is not None else None
     )
     result = {
         "schema_id": PORTABLE_CURRENT_BUILD_CONTEXT_SCHEMA_ID,
@@ -2026,6 +2009,8 @@ def materialize_evolved_blueprint(
 
 
 def context_loop_contract_snapshot() -> dict[str, Any]:
+    from qcoder.current_loop_coordinator import coordinator_contract_snapshot
+
     return {
         "gate": CONTEXT_LOOP_GATE,
         "disabled": CONTEXT_LOOP_DISABLED,
@@ -2078,6 +2063,7 @@ def context_loop_contract_snapshot() -> dict[str, Any]:
             "protected_policy_dependency": "none",
         },
         "current_loop_continuity": current_loop_contract_snapshot(),
+        "current_loop_orchestration": coordinator_contract_snapshot(),
         "raw_artifacts_hosted": False,
         "hidden_state": False,
         "persistence": False,

@@ -97,10 +97,12 @@ _FORBIDDEN_PORTABLE_KEYS = {
 
 _CANONICAL_ARTIFACT_ROLES = {
     "request_baseline",
+    "request_baseline_handoff",
     "algorithm_intent_card",
     "working_blueprint",
     "output_evidence_contract",
     "generation_context_pack",
+    "stage_availability",
     "python_manifestation",
     "circuit_manifestation",
     "result_manifestation",
@@ -110,6 +112,8 @@ _CANONICAL_ARTIFACT_ROLES = {
     "decision_evidence_lineage",
     "current_build_context",
     "portable_current_build_context",
+    "pre_proposal_portable_current_build_context",
+    "proposal_bearing_portable_current_build_context",
     "carry_forward_proposal",
     "evolved_blueprint",
     "loop_instance_record",

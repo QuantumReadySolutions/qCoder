@@ -89,10 +89,17 @@ def _cmd_analyze(argv: list[str]) -> int:
         "--backend",
         dest="processor",
         default="CPU",
-        help='Processor/backend label (aliases: Scarlet/Amber, CPU/GPU)',
+        help="Processor/backend label (aliases: Scarlet/Amber, CPU/GPU)",
     )
-    p.add_argument("--precision", default="single", help="Precision: single|double (aliases: fp32/fp64)")
-    p.add_argument("--threshold", type=float, default=None, help="Optional threshold/bond-dim conditioning value")
+    p.add_argument(
+        "--precision", default="single", help="Precision: single|double (aliases: fp32/fp64)"
+    )
+    p.add_argument(
+        "--threshold",
+        type=float,
+        default=None,
+        help="Optional threshold/bond-dim conditioning value",
+    )
     p.add_argument(
         "--mirror-artifacts-dir",
         default=None,
@@ -137,7 +144,9 @@ def _cmd_analyze(argv: list[str]) -> int:
     )
 
     if args.json:
-        payload = report.to_json_dict(include_guidance=args.guidance, include_profiles=args.profiles)
+        payload = report.to_json_dict(
+            include_guidance=args.guidance, include_profiles=args.profiles
+        )
         if args.share_safe:
             payload = make_share_safe_payload(payload)
         print(
@@ -158,7 +167,9 @@ def _cmd_analyze(argv: list[str]) -> int:
     if ex.name:
         print(f"name: {ex.name}")
     print(f"function_hint: {ex.function_hint} ({ex.function_source})")
-    print(f"processor: {rc.processor}  backend: {rc.backend}  precision: {rc.precision}  threshold: {rc.threshold}")
+    print(
+        f"processor: {rc.processor}  backend: {rc.backend}  precision: {rc.precision}  threshold: {rc.threshold}"
+    )
     print(f"n_qubits: {ex.ir.n_qubits}")
     print(f"n_ops: {ex.ir.n_ops}")
     fv = ex.global_features
@@ -188,21 +199,41 @@ def _cmd_batch(argv: list[str]) -> int:
     p.add_argument("circuits_dir", help="Directory containing QASM files")
     p.add_argument("--out", required=True, help="Output JSONL path")
     p.set_defaults(recursive=True)
-    p.add_argument("--recursive", dest="recursive", action="store_true", help="Discover files recursively (default)")
-    p.add_argument("--non-recursive", dest="recursive", action="store_false", help="Only discover top-level files")
+    p.add_argument(
+        "--recursive",
+        dest="recursive",
+        action="store_true",
+        help="Discover files recursively (default)",
+    )
+    p.add_argument(
+        "--non-recursive",
+        dest="recursive",
+        action="store_false",
+        help="Only discover top-level files",
+    )
     p.add_argument("--pattern", default="*.qasm", help="Glob pattern for files (default: *.qasm)")
-    p.add_argument("--skip-errors", action="store_true", help="Continue on error, emit error records (default: fail-fast)")
+    p.add_argument(
+        "--skip-errors",
+        action="store_true",
+        help="Continue on error, emit error records (default: fail-fast)",
+    )
     p.add_argument("--processor", default=None, help="Processor/backend label for run_config")
     p.add_argument("--backend", default=None, help="Backend label (CPU/GPU, etc.)")
     p.add_argument("--precision", default=None, help="Precision: single|double|fp32|fp64")
-    p.add_argument("--threshold", type=float, default=None, help="Optional threshold for run_config")
+    p.add_argument(
+        "--threshold", type=float, default=None, help="Optional threshold for run_config"
+    )
     p.add_argument(
         "--mirror-artifacts-dir",
         default=None,
         metavar="DIR",
         help="If set, write mirror QASM to DIR and add adjoint_supported/adjoint_reason/mirror_qasm_ref to each record",
     )
-    p.add_argument("--guidance", action="store_true", help="Include heuristic resource guidance block in each successful JSONL record")
+    p.add_argument(
+        "--guidance",
+        action="store_true",
+        help="Include heuristic resource guidance block in each successful JSONL record",
+    )
     args = p.parse_args(argv)
 
     n = analyze_qasm_dir_to_jsonl(
@@ -229,7 +260,11 @@ def _cmd_context(argv: list[str]) -> int:
     p.add_argument("--out-md", required=True, help="Output preflight Markdown context path")
     p.add_argument("--id", dest="circuit_id", default=None, help="Optional circuit id")
     p.add_argument("--name", dest="circuit_name", default=None, help="Optional circuit name")
-    p.add_argument("--guidance", action="store_true", help="Include heuristic resource guidance in context artifacts")
+    p.add_argument(
+        "--guidance",
+        action="store_true",
+        help="Include heuristic resource guidance in context artifacts",
+    )
     p.add_argument(
         "--profiles",
         action="store_true",
@@ -277,7 +312,11 @@ def _cmd_review(argv: list[str]) -> int:
         default="qcoder",
         help="Input counts format (default: qcoder)",
     )
-    p.add_argument("--preflight-json", default=None, help="Optional preflight context JSON path for linkage/checks")
+    p.add_argument(
+        "--preflight-json",
+        default=None,
+        help="Optional preflight context JSON path for linkage/checks",
+    )
     p.add_argument("--out-json", required=True, help="Output execution review JSON path")
     p.add_argument("--out-md", required=True, help="Output execution review Markdown path")
     p.add_argument(
@@ -367,7 +406,9 @@ def _print_raw_payload_json(payload: dict[str, object] | None, *, share_safe: bo
     print(json.dumps(out, indent=2, sort_keys=True))
 
 
-def _write_json_payload(path: str, payload: dict[str, object] | None, *, share_safe: bool = False) -> None:
+def _write_json_payload(
+    path: str, payload: dict[str, object] | None, *, share_safe: bool = False
+) -> None:
     out = payload or {}
     if share_safe:
         out = make_share_safe_payload(out)
@@ -543,7 +584,9 @@ def _render_student_evidence_markdown(payload: dict[str, object] | None) -> str:
     return "\n".join(lines)
 
 
-def _write_markdown_payload(path: str, payload: dict[str, object] | None, *, share_safe: bool = False) -> None:
+def _write_markdown_payload(
+    path: str, payload: dict[str, object] | None, *, share_safe: bool = False
+) -> None:
     out = payload or {}
     if share_safe:
         out = make_share_safe_payload(out)
@@ -779,8 +822,12 @@ def _cmd_explorer(argv: list[str], *, compatibility_alias: bool = False) -> int:
         default=None,
         help="Use an existing qCoder preflight context JSON artifact; raw paths and source are not sent.",
     )
-    p_evidence.add_argument("--out-json", default=None, help="Write Explorer evidence response JSON.")
-    p_evidence.add_argument("--out-md", default=None, help="Write Explorer evidence response Markdown.")
+    p_evidence.add_argument(
+        "--out-json", default=None, help="Write Explorer evidence response JSON."
+    )
+    p_evidence.add_argument(
+        "--out-md", default=None, help="Write Explorer evidence response Markdown."
+    )
     p_evidence.add_argument(
         "--share-safe",
         "--redact",
@@ -830,6 +877,346 @@ def _cmd_context_bridge(argv: list[str]) -> int:
     return context_bridge_main(argv)
 
 
+def _cmd_current_loop(argv: list[str]) -> int:
+    from qcoder.context_bridge_mcp import DEFAULT_BASE_URL, default_token_file
+    from qcoder.current_loop_coordinator import (
+        ContextBridgeTransport,
+        CurrentLoopCoordinator,
+    )
+
+    parser = argparse.ArgumentParser(
+        prog="qcoder current-loop",
+        description=(
+            "Coordinate one explicit local Explorer Context Loop. Connected assistants "
+            "invoke this surface; customers do not assemble canonical payloads."
+        ),
+    )
+    parser.add_argument(
+        "--workspace",
+        default=".",
+        help="Explicit current-loop workspace (default: current directory).",
+    )
+    parser.add_argument(
+        "--state-file",
+        default=None,
+        help="Explicit external local-state file; never selected automatically.",
+    )
+    sub = parser.add_subparsers(dest="current_loop_command")
+
+    sub.add_parser("status", help="Show the bounded current-loop status.")
+
+    activate = sub.add_parser("activate", help="Explicitly activate one current loop.")
+    activate.add_argument("--request", required=True)
+    activate.add_argument(
+        "--posture",
+        choices=("exploratory_first_pass", "blueprint_guided"),
+        default=None,
+    )
+    activate.add_argument("--approve", action="store_true")
+    activate.add_argument("--label", default=None)
+
+    prepare = sub.add_parser(
+        "prepare-generation",
+        help="Create and save canonical intent, Blueprint, contract, and generation context.",
+    )
+    _add_current_loop_transport_arguments(prepare, DEFAULT_BASE_URL, default_token_file())
+    prepare.add_argument(
+        "--profile",
+        required=True,
+        choices=("generic_qiskit", "grover_search", "qaoa"),
+    )
+    prepare.add_argument("--interpretation-summary", required=True)
+    prepare.add_argument(
+        "--profile-answer",
+        action="append",
+        default=[],
+        metavar="FIELD=VALUE",
+    )
+    prepare.add_argument("--constraint", action="append", default=[])
+    prepare.add_argument("--non-goal", action="append", default=[])
+    prepare.add_argument("--confirm-intent", action="store_true")
+    prepare.add_argument("--confirmation", default=None)
+
+    authority = sub.add_parser(
+        "record-ide-authority",
+        help="Record the IDE host's separate explicit write/run decision.",
+    )
+    authority.add_argument("--allow", action="store_true")
+    authority.add_argument("--explicit", action="store_true")
+
+    register = sub.add_parser(
+        "register-artifacts",
+        help="Register only exact candidate paths; no scan or discovery.",
+    )
+    register.add_argument("--source", action="append", default=[])
+    register.add_argument("--qasm", action="append", default=[])
+    register.add_argument("--results", action="append", default=[])
+    register.add_argument(
+        "--provenance",
+        choices=("assistant_created", "user_supplied"),
+        required=True,
+    )
+    register.add_argument("--related-circuit-ref", default=None)
+    register.add_argument("--allow-external", action="store_true")
+
+    authorize = sub.add_parser(
+        "authorize-artifacts",
+        help="Apply one explicit exact-set authorization action.",
+    )
+    authorize.add_argument(
+        "--action",
+        required=True,
+        choices=("approve_all", "remove_one", "add_one_explicitly", "decline"),
+    )
+    authorize.add_argument("--provenance", required=True)
+    authorize.add_argument("--path", default=None)
+    authorize.add_argument(
+        "--role",
+        choices=("source", "circuit_qasm", "results", "other_supported"),
+        default=None,
+    )
+    authorize.add_argument("--artifact-type", default=None)
+
+    process = sub.add_parser(
+        "process-authorized-artifacts",
+        help="Run supported local extraction for the exact approved set.",
+    )
+    _add_current_loop_transport_arguments(process, DEFAULT_BASE_URL, default_token_file())
+
+    review = sub.add_parser(
+        "review-build",
+        help="Create current-build review from exact saved artifacts.",
+    )
+    _add_current_loop_transport_arguments(review, DEFAULT_BASE_URL, default_token_file())
+
+    unchanged = sub.add_parser(
+        "continue-unchanged",
+        help="Explicitly continue with the unchanged governing Blueprint.",
+    )
+    unchanged.add_argument("--approve", action="store_true")
+    unchanged.add_argument("--statement", required=True)
+    unchanged.add_argument("--decline-proposal", action="store_true")
+
+    propose = sub.add_parser(
+        "propose-change",
+        help="Request one unconfirmed proposal from an explicit semantic selection.",
+    )
+    _add_current_loop_transport_arguments(propose, DEFAULT_BASE_URL, default_token_file())
+    propose.add_argument("--decision-ref", required=True)
+    propose.add_argument("--selected-action", required=True)
+    propose.add_argument("--proposed-value", required=True)
+    propose.add_argument("--control-treatment", required=True)
+    propose.add_argument("--approve-selection", action="store_true")
+
+    confirm = sub.add_parser(
+        "confirm-change",
+        help="Confirm one exact proposal through selected-bundle parent resupply.",
+    )
+    _add_current_loop_transport_arguments(confirm, DEFAULT_BASE_URL, default_token_file())
+    confirm.add_argument("--confirmation", required=True)
+    confirm.add_argument("--approve", action="store_true")
+
+    start_next = sub.add_parser(
+        "start-next",
+        help="Explicitly activate a new loop from one seed and exact parent files.",
+    )
+    start_next.add_argument("--next-workspace", required=True)
+    start_next.add_argument(
+        "--posture",
+        required=True,
+        choices=("exploratory_first_pass", "blueprint_guided"),
+    )
+    start_next.add_argument("--seed-file", required=True)
+    start_next.add_argument(
+        "--parent-file",
+        action="append",
+        default=[],
+        metavar="ROLE=/ABSOLUTE/PATH",
+    )
+    start_next.add_argument("--approve", action="store_true")
+
+    standalone = sub.add_parser(
+        "standalone-review",
+        help="Create bounded evidence without activating a current loop.",
+    )
+    standalone.add_argument("--role", required=True, choices=("source", "circuit_qasm", "results"))
+    standalone.add_argument("--path", required=True)
+    standalone.add_argument("--destination", required=True)
+    standalone.add_argument("--related-circuit-ref", default=None)
+
+    attach = sub.add_parser(
+        "attach-to-loop",
+        help="Propose one exact standalone artifact for explicit loop authorization.",
+    )
+    attach.add_argument(
+        "--role",
+        required=True,
+        choices=("source", "circuit_qasm", "results", "other_supported"),
+    )
+    attach.add_argument("--path", required=True)
+    attach.add_argument(
+        "--provenance",
+        choices=("assistant_created", "user_supplied"),
+        default="user_supplied",
+    )
+
+    abandon = sub.add_parser("abandon", help="Explicitly abandon the active local loop.")
+    abandon.add_argument("--approve", action="store_true")
+
+    args = parser.parse_args(argv)
+    if args.current_loop_command is None:
+        parser.print_help()
+        return 0
+    transport = None
+    if hasattr(args, "base_url"):
+        transport = ContextBridgeTransport(
+            base_url=args.base_url,
+            token_file=args.token_file,
+        )
+    coordinator = CurrentLoopCoordinator(
+        workspace_root=args.workspace,
+        state_path=args.state_file,
+        transport=transport,
+    )
+    try:
+        command = args.current_loop_command
+        if command == "status":
+            result = coordinator.status()
+        elif command == "activate":
+            result = coordinator.activate(
+                original_request=args.request,
+                generation_posture=args.posture,
+                explicit_authority=args.approve,
+                label=args.label,
+            )
+        elif command == "prepare-generation":
+            answers = _parse_current_loop_key_values(args.profile_answer)
+            result = coordinator.prepare_generation(
+                profile_id=args.profile,
+                proposed_interpretation={
+                    "summary": args.interpretation_summary,
+                    "provenance_role": "assistant_proposed",
+                },
+                reviewed_profile_answers=answers,
+                constraints=args.constraint,
+                non_goals=args.non_goal,
+                explicit_intent_approval=args.confirm_intent,
+                confirmation_assertion=args.confirmation,
+            )
+        elif command == "record-ide-authority":
+            result = coordinator.record_ide_authority(
+                allowed=args.allow,
+                explicit_user_action=args.explicit,
+            )
+        elif command == "register-artifacts":
+            candidates = []
+            for role, values in (
+                ("source", args.source),
+                ("circuit_qasm", args.qasm),
+                ("results", args.results),
+            ):
+                candidates.extend(
+                    {
+                        "role": role,
+                        "path": str(Path(value).expanduser().absolute()),
+                        "provenance": args.provenance,
+                        "explicit_external": args.allow_external,
+                        "related_circuit_ref": (
+                            args.related_circuit_ref if role == "results" else None
+                        ),
+                    }
+                    for value in values
+                )
+            result = coordinator.register_artifacts(candidates=candidates)
+        elif command == "authorize-artifacts":
+            result = coordinator.authorize_artifacts(
+                action=args.action,
+                explicit_action_provenance=args.provenance,
+                selected_path=args.path,
+                artifact_role=args.role,
+                artifact_type=args.artifact_type,
+            )
+        elif command == "process-authorized-artifacts":
+            result = coordinator.process_authorized_artifacts()
+        elif command == "review-build":
+            result = coordinator.review_build()
+        elif command == "continue-unchanged":
+            result = coordinator.continue_unchanged(
+                explicit_user_action=args.approve,
+                user_statement=args.statement,
+                decline_unconfirmed_proposal=args.decline_proposal,
+            )
+        elif command == "propose-change":
+            result = coordinator.propose_change(
+                decision_ref=args.decision_ref,
+                selected_action=args.selected_action,
+                proposed_value=_parse_current_loop_scalar(args.proposed_value),
+                control_treatment=args.control_treatment,
+                explicit_user_selection=args.approve_selection,
+            )
+        elif command == "confirm-change":
+            result = coordinator.confirm_change(
+                semantic_confirmation=args.confirmation,
+                explicit_user_confirmation=args.approve,
+            )
+        elif command == "start-next":
+            result = coordinator.start_next(
+                next_workspace_root=args.next_workspace,
+                generation_posture=args.posture,
+                seed_file=args.seed_file,
+                parent_files=_parse_current_loop_key_values(args.parent_file),
+                explicit_authority=args.approve,
+            )
+        elif command == "standalone-review":
+            result = coordinator.standalone_review(
+                role=args.role,
+                path=args.path,
+                destination=args.destination,
+                related_circuit_ref=args.related_circuit_ref,
+            )
+        elif command == "attach-to-loop":
+            result = coordinator.attach_to_loop(
+                role=args.role,
+                path=args.path,
+                provenance=args.provenance,
+            )
+        else:
+            result = coordinator.abandon(explicit_authority=args.approve)
+    except ValueError as exc:
+        parser.error(str(exc))
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0 if result.get("ok") is True else 2
+
+
+def _add_current_loop_transport_arguments(
+    parser: argparse.ArgumentParser,
+    default_base_url: str,
+    default_token_path: Path,
+) -> None:
+    parser.add_argument("--base-url", default=default_base_url)
+    parser.add_argument("--token-file", default=str(default_token_path))
+
+
+def _parse_current_loop_key_values(values: list[str]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for value in values:
+        key, separator, item = value.partition("=")
+        if not separator or not key.strip() or not item or key in result:
+            raise ValueError("current_loop_key_value_invalid")
+        result[key.strip()] = item
+    return result
+
+
+def _parse_current_loop_scalar(value: str) -> object:
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return value
+    if isinstance(parsed, (dict, list)):
+        raise ValueError("current_loop_scalar_value_required")
+    return parsed
+
+
 def _cmd_blueprint(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="qcoder blueprint",
@@ -855,7 +1242,9 @@ def _cmd_blueprint(argv: list[str]) -> int:
         default=None,
         help="Share-safe logical source label; defaults to the selected basename or 'stdin excerpt'.",
     )
-    source_parser.add_argument("--symbol", default=None, help="Optional selected function or class name.")
+    source_parser.add_argument(
+        "--symbol", default=None, help="Optional selected function or class name."
+    )
     source_parser.add_argument("--start-line", type=int, default=None)
     source_parser.add_argument("--end-line", type=int, default=None)
     source_parser.add_argument(
@@ -879,7 +1268,10 @@ def _cmd_blueprint(argv: list[str]) -> int:
         parser.print_help()
         return 0
     if (args.start_line is None) != (args.end_line is None):
-        print("qcoder blueprint: --start-line and --end-line must be supplied together.", file=sys.stderr)
+        print(
+            "qcoder blueprint: --start-line and --end-line must be supplied together.",
+            file=sys.stderr,
+        )
         return 2
     line_span = (
         (args.start_line, args.end_line)
@@ -949,31 +1341,43 @@ def _cmd_pro(argv: list[str]) -> int:
     )
     sub = p.add_subparsers(dest="pro_command")
 
-    p_signup = sub.add_parser("signup", help="Show archived Pro status and current public qCoder paths.")
+    p_signup = sub.add_parser(
+        "signup", help="Show archived Pro status and current public qCoder paths."
+    )
     p_signup.set_defaults(pro_command="signup")
 
     p_status = sub.add_parser("status", help="Show archived Pro client status.")
     p_status.set_defaults(pro_command="status")
 
-    p_login = sub.add_parser("login", help="Store archived pilot token locally (no remote validation in this slice).")
+    p_login = sub.add_parser(
+        "login", help="Store archived pilot token locally (no remote validation in this slice)."
+    )
     p_login.add_argument(
         "--token",
         required=True,
         help="QRS-provided archived pilot token for local config. Treat as private credential.",
     )
-    p_login.add_argument("--api-url", required=False, help="Optional service URL override for local config.")
+    p_login.add_argument(
+        "--api-url", required=False, help="Optional service URL override for local config."
+    )
     p_login.set_defaults(pro_command="login")
 
-    p_install = sub.add_parser("install", help="Configure archived pilot token (no code download in this slice).")
+    p_install = sub.add_parser(
+        "install", help="Configure archived pilot token (no code download in this slice)."
+    )
     p_install.add_argument(
         "--token",
         required=True,
         help="QRS-provided archived pilot token for local config. Treat as private credential.",
     )
-    p_install.add_argument("--api-url", required=False, help="Optional service URL override for local config.")
+    p_install.add_argument(
+        "--api-url", required=False, help="Optional service URL override for local config."
+    )
     p_install.set_defaults(pro_command="install")
 
-    p_validate = sub.add_parser("validate", help="Validate archived Pro client config and public package boundaries.")
+    p_validate = sub.add_parser(
+        "validate", help="Validate archived Pro client config and public package boundaries."
+    )
     p_validate.set_defaults(pro_command="validate")
 
     p_workflow = sub.add_parser(
@@ -1061,16 +1465,24 @@ def _cmd_pro(argv: list[str]) -> int:
         return 0
 
     if cmd == "status":
-        payload = _build_pro_bootstrap_payload(status="configured" if resolve_token().present else "not_configured")
-        submit_ready = bool(payload["token_present"]) and _is_non_default_service_url(resolve_api_url().value)
+        payload = _build_pro_bootstrap_payload(
+            status="configured" if resolve_token().present else "not_configured"
+        )
+        submit_ready = bool(payload["token_present"]) and _is_non_default_service_url(
+            resolve_api_url().value
+        )
         if json_output:
             print(json.dumps(payload, indent=2, sort_keys=True))
         else:
             print(f"qCoder Pro status: {payload['status']}.")
             print("  mode: archived pilot bootstrap shell")
-            print(f"  token: {'present' if payload['token_present'] else 'not set'} ({payload['token_source']})")
+            print(
+                f"  token: {'present' if payload['token_present'] else 'not set'} ({payload['token_source']})"
+            )
             if payload["api_url_source"] == "default":
-                print("  submit-ready service URL: not set (default archived preview URL is informational)")
+                print(
+                    "  submit-ready service URL: not set (default archived preview URL is informational)"
+                )
             else:
                 print("  submit-ready service URL: configured")
             print(f"  service URL source: {payload['api_url_source']}")
@@ -1078,7 +1490,9 @@ def _cmd_pro(argv: list[str]) -> int:
             print("  submit requirement: QRS-provided token + non-default service URL")
             print("  service validation: not available in this slice")
             print("  local cards/analysis: disabled in public package")
-            print(f"  current public paths: Explorer Beta {EXPLORER_BETA_DOCS_URL} / OSS {OSS_DOCS_URL}")
+            print(
+                f"  current public paths: Explorer Beta {EXPLORER_BETA_DOCS_URL} / OSS {OSS_DOCS_URL}"
+            )
         return 0
 
     if cmd in {"login", "install"}:
@@ -1137,11 +1551,15 @@ def _cmd_pro(argv: list[str]) -> int:
             print(f"  status: {payload['status']}")
             print(f"  token: {'present' if token.present else 'not set'} ({token.source})")
             if api_url.source == "default":
-                print("  submit-ready service URL: not set (default archived preview URL is informational)")
+                print(
+                    "  submit-ready service URL: not set (default archived preview URL is informational)"
+                )
             else:
                 print("  submit-ready service URL: configured")
             print(f"  service URL source: {api_url.source}")
-            print(f"  public package boundary checks: {'ok' if payload['public_boundary_ok'] else 'needs attention'}")
+            print(
+                f"  public package boundary checks: {'ok' if payload['public_boundary_ok'] else 'needs attention'}"
+            )
             print(f"  pilot submit readiness: {'ready' if submit_ready else 'not ready'}")
             print("  submit requirement: QRS-provided token + non-default service URL")
             print("  service validation: not available in this slice")
@@ -1274,7 +1692,9 @@ def _cmd_pro(argv: list[str]) -> int:
                 "state": workflow_payload.get("state"),
                 "result_refs": workflow_payload.get("result_refs", []),
                 "analysis_performed": workflow_payload.get("analysis_performed"),
-                "confidential_analysis_performed": workflow_payload.get("confidential_analysis_performed"),
+                "confidential_analysis_performed": workflow_payload.get(
+                    "confidential_analysis_performed"
+                ),
                 "cards_generated": workflow_payload.get("cards_generated"),
                 "production_execution": workflow_payload.get("production_execution"),
                 "local_fake": workflow_payload.get("local_fake"),
@@ -1294,7 +1714,9 @@ def _cmd_pro(argv: list[str]) -> int:
                 print(f"  upload_performed: {payload['upload_performed']}")
                 print(f"  source_contents_included: {payload['source_contents_included']}")
                 print(f"  analysis_performed: {payload['analysis_performed']}")
-                print(f"  confidential_analysis_performed: {payload['confidential_analysis_performed']}")
+                print(
+                    f"  confidential_analysis_performed: {payload['confidential_analysis_performed']}"
+                )
                 print(f"  cards_generated: {payload['cards_generated']}")
                 print(f"  production_execution: {payload['production_execution']}")
                 if manifest_out_path:
@@ -1306,7 +1728,7 @@ def _cmd_pro(argv: list[str]) -> int:
         "For manifest-only submit, pass --submit with --service-url (or QCODER_PRO_API_URL) "
         "only if QRS provided a non-default service URL and token.\n"
         "No generally available production hosted Pro service is configured in this release.\n"
-        f"Run `qcoder pro signup` for current public qCoder paths.",
+        "Run `qcoder pro signup` for current public qCoder paths.",
         file=sys.stderr,
     )
     return 2
@@ -1314,15 +1736,16 @@ def _cmd_pro(argv: list[str]) -> int:
 
 def _print_root_help() -> None:
     print(
-        "usage: qcoder [--version | -V] [-h] {analyze,batch,context,review,blueprint,explorer,context-bridge,pro,student} ...\n\n"
+        "usage: qcoder [--version | -V] [-h] {analyze,batch,context,review,blueprint,current-loop,explorer,context-bridge,pro,student} ...\n\n"
         "Quantum circuit analysis CLI.\n\n"
         "positional arguments:\n"
-        "  {analyze,batch,context,review,blueprint,explorer,context-bridge,pro,student}  subcommand\n\n"
+        "  {analyze,batch,context,review,blueprint,current-loop,explorer,context-bridge,pro,student}  subcommand\n\n"
         "  analyze          Analyze a QASM file (feature extraction + metadata + run config).\n"
         "  batch            Batch extract a directory to JSONL (requires --out).\n"
         "  context          Build deterministic preflight context artifacts.\n"
         "  review           Build deterministic execution review artifacts from counts.\n"
         "  blueprint        Build machine-local static evidence for Algorithm Blueprint.\n"
+        "  current-loop     Coordinate one explicit local Explorer Context Loop.\n"
         "  explorer         Explorer Beta status/demo/evidence checks.\n"
         "  context-bridge   Run the Context Bridge MCP adapter for eligible Explorer users.\n"
         "  pro              Archived Pro client-contract shell (not current public product).\n"
@@ -1357,6 +1780,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_review(rest)
     if cmd == "blueprint":
         return _cmd_blueprint(rest)
+    if cmd == "current-loop":
+        return _cmd_current_loop(rest)
     if cmd == "explorer":
         return _cmd_explorer(rest)
     if cmd == "context-bridge":
@@ -1367,7 +1792,7 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_student(rest)
 
     print(
-        f"qcoder: unknown subcommand {cmd!r} (expected analyze, batch, context, review, blueprint, explorer, context-bridge, pro, or student)",
+        f"qcoder: unknown subcommand {cmd!r} (expected analyze, batch, context, review, blueprint, current-loop, explorer, context-bridge, pro, or student)",
         file=sys.stderr,
     )
     print("Run `qcoder --help` for usage.", file=sys.stderr)
