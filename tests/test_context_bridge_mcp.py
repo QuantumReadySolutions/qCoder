@@ -249,6 +249,95 @@ def test_working_blueprint_rejects_reconstructed_decision_context_before_network
     assert result["error_category"] == "current_lineage_reference_parent_mismatch"
 
 
+def test_next_generation_accepts_bounded_evolved_blueprint_payload(
+    tmp_path: Path,
+) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    lineage_ref = "session-artifact-0123456789abcdef"
+    records = build_decision_records(
+        profile_id="generic_qiskit",
+        current_lineage_reference=lineage_ref,
+        parent_artifact_references=[{"artifact_ref": lineage_ref}],
+    )
+    record_set = pack_decision_record_set(
+        profile_id="generic_qiskit", decision_records=records
+    )
+    blueprint = {
+        "artifact_type": "implementation_blueprint",
+        "decision_loop": {
+            "gate": "readiness_resolution_v1",
+            "catalog_version": 1,
+        },
+        "blueprint_decision_records": record_set,
+        "bounded_projection": "",
+    }
+    base_size = len(json.dumps(blueprint, sort_keys=True, separators=(",", ":")))
+    blueprint["bounded_projection"] = "x" * (100_000 - base_size)
+    serialized_size = len(
+        json.dumps(blueprint, sort_keys=True, separators=(",", ":"))
+    )
+    assert 96_000 < serialized_size < context_bridge_mcp.MAX_DECISION_LOOP_PAYLOAD_CHARS
+    captured: dict[str, object] = {}
+
+    def opener(request: object, timeout: int = 20) -> _FakeResponse:
+        captured["body"] = json.loads(request.data.decode("utf-8"))  # type: ignore[attr-defined]
+        return _FakeResponse(
+            {
+                "ok": True,
+                "tool_name": "create_generation_context_pack",
+                "context_status": "generation_context_ready",
+                "generation_context_pack": {
+                    "artifact_type": "generation_context_pack"
+                },
+                "retention": "process_and_discard",
+                "retained_artifacts": [],
+            }
+        )
+
+    result = post_context_bridge(
+        base_url="https://example.invalid",
+        token_file=token_file,
+        tool_name="create_generation_context_pack",
+        artifact_text=None,
+        tool_arguments={
+            "implementation_blueprint": blueprint,
+            "output_evidence_contract": {
+                "artifact_type": "output_evidence_contract"
+            },
+        },
+        opener=opener,
+    )
+
+    assert result["ok"] is True, result
+    body = captured["body"]
+    assert isinstance(body, dict)
+    assert len(json.dumps(body, sort_keys=True, separators=(",", ":"))) < 131_072
+    assert body["implementation_blueprint"] == blueprint
+
+    oversized = dict(blueprint)
+    oversized["bounded_projection"] = "x" * (
+        context_bridge_mcp.MAX_DECISION_LOOP_PAYLOAD_CHARS
+    )
+    rejected = post_context_bridge(
+        base_url="https://example.invalid",
+        token_file=token_file,
+        tool_name="create_generation_context_pack",
+        artifact_text=None,
+        tool_arguments={
+            "implementation_blueprint": oversized,
+            "output_evidence_contract": {
+                "artifact_type": "output_evidence_contract"
+            },
+        },
+        opener=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("network should not be called")
+        ),
+    )
+    assert rejected["ok"] is False
+    assert rejected["error_category"] == "artifact_text_too_large"
+
+
 def test_current_build_proposal_call_requires_and_transports_evidence_parents(
     tmp_path: Path,
 ) -> None:
