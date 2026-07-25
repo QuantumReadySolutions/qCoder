@@ -718,7 +718,8 @@ def test_circuit_construction_carry_forward_requires_layered_resource_architectu
         generation_context_effect="Resolve only the current generation contract.",
     )
     proposal = pack["resource_architecture_proposal"]
-    assert proposal["before"]["logical_resource_architecture"] == "unresolved"
+    assert proposal["before"]["selected_value"] == target["selected_value"]
+    assert proposal["before"]["resource_architecture"] is None
     assert proposal["proposed_after"]["logical_resource_architecture"]["value"] == ("simple_flat")
     assert proposal["qualifications"]["global_generic_qiskit_default"] is False
     assert proposal["qualifications"]["explicit_named_registers_supported"] is True

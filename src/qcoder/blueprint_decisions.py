@@ -1909,13 +1909,22 @@ def propose_decision_resolution_pack(
         "resource_architecture_changes": [
             {
                 "decision_ref": decision_ref,
-                "before": deepcopy(
-                    next(
-                        item
-                        for item in decision_records
-                        if item["decision_ref"] == decision_ref
-                    ).get("resource_architecture")
-                ),
+                "before": {
+                    "selected_value": deepcopy(
+                        next(
+                            item
+                            for item in decision_records
+                            if item["decision_ref"] == decision_ref
+                        ).get("selected_value")
+                    ),
+                    "resource_architecture": deepcopy(
+                        next(
+                            item
+                            for item in decision_records
+                            if item["decision_ref"] == decision_ref
+                        ).get("resource_architecture")
+                    ),
+                },
                 "proposed_after": deepcopy(
                     next(
                         item

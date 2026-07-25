@@ -1896,14 +1896,12 @@ def build_carry_forward_proposal(
             item for item in decision_records if item["decision_ref"] == selected_ref
         )
         explicitly_disallowed = list(before_record.get("explicitly_disallowed_choices") or [])
+        before = change.get("before") or {}
         pack["resource_architecture_proposal"] = {
             "schema_id": RESOURCE_ARCHITECTURE_SCHEMA_ID,
             "before": {
-                "logical_resource_architecture": (
-                    (change.get("before") or {})
-                    .get("logical_resource_architecture", {})
-                    .get("value", "unresolved")
-                ),
+                "selected_value": deepcopy(before.get("selected_value")),
+                "resource_architecture": deepcopy(before.get("resource_architecture")),
                 "allowed_qiskit_manifestations": [
                     "direct_quantum_circuit",
                     "explicit_named_registers",
