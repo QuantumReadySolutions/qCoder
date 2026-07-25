@@ -338,6 +338,80 @@ def test_next_generation_accepts_bounded_evolved_blueprint_payload(
     assert rejected["error_category"] == "artifact_text_too_large"
 
 
+def test_explicit_decision_loop_generation_rejects_legacy_blueprint_before_network(
+    tmp_path: Path,
+) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    legacy_blueprint = {
+        "artifact_type": "implementation_blueprint",
+        "artifact_digest": "a" * 64,
+    }
+    output_contract = {
+        "artifact_type": "output_evidence_contract",
+        "artifact_digest": "b" * 64,
+    }
+
+    rejected = post_context_bridge(
+        base_url="https://example.invalid",
+        token_file=token_file,
+        tool_name="create_generation_context_pack",
+        artifact_text=None,
+        tool_arguments={
+            "decision_loop": "readiness_resolution_v1",
+            "implementation_blueprint": legacy_blueprint,
+            "output_evidence_contract": output_contract,
+        },
+        opener=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("network should not be called")
+        ),
+    )
+
+    assert rejected["ok"] is False
+    assert rejected["error_category"] == "working_blueprint_not_decision_ready"
+    assert rejected["message"] == (
+        "This Working Blueprint does not contain the decision inventory required "
+        "for Carry-Forward. Return to the Intent review and create a "
+        "decision-loop-confirmed Working Blueprint before generating downstream "
+        "evidence."
+    )
+    assert rejected["retained_artifacts"] == []
+
+    captured: dict[str, object] = {}
+
+    def opener(request: object, timeout: int = 20) -> _FakeResponse:
+        captured["body"] = json.loads(request.data.decode("utf-8"))  # type: ignore[attr-defined]
+        return _FakeResponse(
+            {
+                "ok": True,
+                "tool_name": "create_generation_context_pack",
+                "generation_context_pack": {
+                    "artifact_type": "generation_context_pack"
+                },
+                "retention": "process_and_discard",
+                "retained_artifacts": [],
+            }
+        )
+
+    legacy = post_context_bridge(
+        base_url="https://example.invalid",
+        token_file=token_file,
+        tool_name="create_generation_context_pack",
+        artifact_text=None,
+        tool_arguments={
+            "implementation_blueprint": legacy_blueprint,
+            "output_evidence_contract": output_contract,
+        },
+        opener=opener,
+    )
+
+    assert legacy["ok"] is True
+    body = captured["body"]
+    assert isinstance(body, dict)
+    assert body["implementation_blueprint"] == legacy_blueprint
+    assert "decision_loop" not in body
+
+
 def test_current_build_proposal_call_requires_and_transports_evidence_parents(
     tmp_path: Path,
 ) -> None:

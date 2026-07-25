@@ -534,7 +534,7 @@ def _expand_selected_portable_bundle(
 
 
 def safe_error(error_category: str, *, status_category: str = "adapter_rejected") -> dict[str, Any]:
-    return {
+    payload = {
         "ok": False,
         "error_category": error_category,
         "status_category": status_category,
@@ -544,6 +544,14 @@ def safe_error(error_category: str, *, status_category: str = "adapter_rejected"
         "raw_payload_printed": False,
         "raw_response_printed": False,
     }
+    if error_category == "working_blueprint_not_decision_ready":
+        payload["message"] = (
+            "This Working Blueprint does not contain the decision inventory required "
+            "for Carry-Forward. Return to the Intent review and create a "
+            "decision-loop-confirmed Working Blueprint before generating downstream "
+            "evidence."
+        )
+    return payload
 
 
 def validate_token_file(token_file: str | Path) -> tuple[bool, str, str]:
@@ -842,6 +850,11 @@ def _inherit_decision_loop_context(
         return None
     record_set = parent.get("blueprint_decision_records")
     if not isinstance(record_set, dict):
+        if (
+            tool_name == "create_generation_context_pack"
+            and arguments.get("decision_loop") == DECISION_LOOP_GATE
+        ):
+            return "working_blueprint_not_decision_ready"
         return None
     parent_loop = parent.get("decision_loop")
     inherited_gate = (
