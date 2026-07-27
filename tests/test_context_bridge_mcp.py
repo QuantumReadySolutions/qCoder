@@ -11,6 +11,7 @@ from contextlib import redirect_stdout
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from qcoder import __version__
 from qcoder.cli import main
 from qcoder.algorithm_blueprint import ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS
 from qcoder.blueprint_decisions import (
@@ -180,7 +181,7 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
     token_path = str(token_file.resolve())
     assert runtime == {
         "python_executable": executable,
-        "qcoder_version": "0.6.0a2",
+        "qcoder_version": __version__,
         "coordinator_prefix": [
             executable,
             "-m",
@@ -196,6 +197,7 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
             token_path,
         ],
     }
+    normalized_instructions = " ".join(instructions.split())
     for required in (
         "explicitly asks to use qCoder",
         "Never activate silently",
@@ -233,7 +235,7 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
         "does not grant IDE permission to write or run",
         "does not authorize artifact review",
     ):
-        assert required in instructions
+        assert required in normalized_instructions
     assert token_secret not in instructions
     for value in environment_secrets.values():
         assert value not in instructions
@@ -277,6 +279,47 @@ def test_activation_runtime_paths_with_spaces_are_unambiguous_for_posix_and_wind
         "current-loop",
     ]
     assert windows_runtime["token_file_path"] == windows_token
+
+
+def test_activation_instruction_leads_with_lossless_request_baseline_protocol(
+    tmp_path: Path,
+) -> None:
+    instructions = build_client_activation_instructions(
+        base_url="https://configured.example.invalid",
+        token_file=tmp_path / "token.txt",
+        python_executable=tmp_path / "runtime with spaces" / "python",
+    )
+    headings = [
+        "REQUEST FIDELITY",
+        "ACTIVATION PROTOCOL",
+        "CHECKPOINT PROTOCOL",
+        "CONFIGURED RUNTIME",
+        "AUTHORITY BOUNDARIES",
+        "PROHIBITED ACTIONS",
+    ]
+    assert [instructions.index(heading) for heading in headings] == sorted(
+        instructions.index(heading) for heading in headings
+    )
+    normalized = " ".join(instructions.split())
+    for required in (
+        "complete governing customer message verbatim as original_request",
+        "Do not summarize",
+        "abbreviate",
+        "paraphrase",
+        "reword",
+        "is additive and never removes wording from original_request",
+        "Stop before activation if exact transfer cannot be completed",
+        "stage the exact complete message through activate without --approve",
+        "returned complete capture",
+        "Do not ask the user to repeat the task",
+        "never use a later one-word “Yes” as original_request",
+        "invoke activate with --approve only",
+        "Do not resend or reconstruct the request",
+        "Posture remains separate",
+    ):
+        assert required in normalized
+    assert "Claude-specific prompt hook" not in instructions
+    assert "transcript scraping" not in instructions
 
 
 def test_activation_runtime_preserves_virtual_environment_executable_identity(
@@ -2012,13 +2055,14 @@ def test_mcp_stdio_content_length_lists_exact_tools(tmp_path: Path) -> None:
         initialized = _read_content_length_response(proc.stdout)
         assert initialized["result"]["serverInfo"] == {
             "name": "qcoder-context-bridge",
-            "version": "0.6.0a2",
+            "version": __version__,
         }
         instructions = initialized["result"]["instructions"]
+        normalized_instructions = " ".join(instructions.split())
         runtime = _activation_runtime(instructions)
         executable = str(Path(sys.executable).absolute())
         assert runtime["python_executable"] == executable
-        assert runtime["qcoder_version"] == "0.6.0a2"
+        assert runtime["qcoder_version"] == __version__
         assert runtime["coordinator_prefix"] == [
             executable,
             "-m",
@@ -2058,7 +2102,7 @@ def test_mcp_stdio_content_length_lists_exact_tools(tmp_path: Path) -> None:
             "Unchanged Continuation creates no Evolved Blueprint",
             "Never activate silently",
         ):
-            assert required in instructions
+            assert required in normalized_instructions
         assert "ctxbridge-token-not-printed" not in instructions
 
         proc.stdin.write(

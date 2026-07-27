@@ -473,6 +473,31 @@ def _coordinator(
     )
 
 
+def _activate_exact(
+    coordinator: CurrentLoopCoordinator,
+    *,
+    original_request: str,
+    generation_posture: str,
+    assistant_interpretation: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    staged = coordinator.activate(
+        original_request=original_request,
+        assistant_interpretation=assistant_interpretation,
+    )
+    assert staged["checkpoint_kind"] == "activation_request_baseline_review"
+    assert staged["details"]["original_request"] == original_request
+    return coordinator.activate(
+        explicit_authority=True,
+        generation_posture=generation_posture,
+        explicit_posture_authority=True,
+        posture_authority_provenance=(
+            "user_provided"
+            if infer_requested_posture(original_request) == generation_posture
+            else "user_confirmed_assistant_recommendation"
+        ),
+    )
+
+
 def _activate_and_prepare(
     coordinator: CurrentLoopCoordinator,
     *,
@@ -484,10 +509,10 @@ def _activate_and_prepare(
         if posture == "exploratory_first_pass"
         else "Use qCoder with deliberate Blueprint control before generation."
     )
-    activated = coordinator.activate(
+    activated = _activate_exact(
+        coordinator,
         original_request=request,
         generation_posture=posture,
-        explicit_authority=True,
         assistant_interpretation={"summary": "A separately attributed proposal."},
     )
     assert activated["ok"] is True
@@ -516,10 +541,19 @@ def _activate_and_prepare(
 
 def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
     snapshot = coordinator_contract_snapshot()
-    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v3"
-    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v2"
-    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 3
+    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v4"
+    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v3"
+    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 4
     assert all(snapshot["checkpoint_result_protocol"].values())
+    assert snapshot["request_baseline_transfer"] == {
+        "complete_governing_message_preserved_verbatim": True,
+        "transports": ["inline", "file", "stdin"],
+        "nonactivating_capture_required": True,
+        "approval_reuses_pending_capture": True,
+        "new_request_with_approval_activates": False,
+        "protected_call_before_activation": False,
+        "posture_authority_separate": True,
+    }
     contract_digest = hashlib.sha256(
         json.dumps(
             context_loop_contract_snapshot(),
@@ -528,11 +562,12 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("2277f50a11bd6dbda1543dbbd89c0da6bb7e246a2a5a5fbeb647c8187c8a9a2f")
+    assert contract_digest == ("cbf9974b168c0c5771721f2a6329a321d8bb9e9a8e6c691aee8b4d59897a3897")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
     assert snapshot["recovery_categories"] == [
+        "activation_capture_required",
         "authorization_declined",
         "authorization_partial",
         "canonical_artifact_modified",
@@ -547,6 +582,11 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "protected_service_unavailable",
         "protected_truth_insufficient",
         "reconstruction_attempt_refused",
+        "request_baseline_choice_not_verbatim",
+        "request_baseline_constraint_not_verbatim",
+        "request_baseline_label_not_verbatim",
+        "request_baseline_label_provenance_required",
+        "request_baseline_label_without_value",
         "seed_incomplete",
         "selected_file_missing",
         "selected_file_stale",
@@ -592,14 +632,22 @@ def test_activation_requires_authority_and_preserves_original_words(
         generation_posture="exploratory_first_pass",
         explicit_authority=False,
     )
-    assert denied["checkpoint_kind"] == "activation"
-    assert not (workspace / ".qcoder").exists()
+    assert denied["checkpoint_kind"] == "activation_request_baseline_review"
+    assert denied["details"]["activation_performed"] is False
+    assert not (workspace / ".qcoder/current-loop/artifacts").exists()
     words = "Use qCoder for a quick first pass. Keep my exact words."
-    activated = coordinator.activate(
+    restaged = coordinator.activate(
         original_request=words,
-        generation_posture="exploratory_first_pass",
         explicit_authority=True,
         assistant_interpretation={"summary": "Assistant proposal"},
+    )
+    assert restaged["category"] == "new_request_requires_exact_baseline_review"
+    assert restaged["details"]["original_request"] == words
+    activated = coordinator.activate(
+        explicit_authority=True,
+        generation_posture="exploratory_first_pass",
+        explicit_posture_authority=True,
+        posture_authority_provenance="user_provided",
     )
     assert activated["ok"] is True
     baseline_path = workspace / ".qcoder/current-loop/artifacts/request-baseline.json"
@@ -1174,10 +1222,10 @@ def test_reconstruction_and_unavailable_transport_fail_closed(
     assert refused["category"] == "reconstruction_attempt_refused"
     assert refused["details"]["artifact_reconstructed"] is False
     assert refused["details"]["schema_repair_attempted"] is False
-    coordinator.activate(
+    _activate_exact(
+        coordinator,
         original_request="Use qCoder for a quick first pass.",
         generation_posture="exploratory_first_pass",
-        explicit_authority=True,
     )
     unavailable = coordinator.prepare_generation(
         profile_id="generic_qiskit",
@@ -1232,10 +1280,10 @@ def test_ordinary_prompt_paraphrase_matrix_reaches_complete_lineage(
     transport = PublicBuilderTransport()
     coordinator, _workspace = _coordinator(tmp_path, transport)
     assert infer_requested_posture(prompt) == posture
-    activated = coordinator.activate(
+    activated = _activate_exact(
+        coordinator,
         original_request=prompt,
         generation_posture=posture,
-        explicit_authority=True,
     )
     assert activated["ok"] is True
     result = coordinator.prepare_generation(
@@ -1286,10 +1334,10 @@ def test_non_bell_exploratory_path_preserves_unresolved_decisions(
         "Use qCoder for an exploratory first pass on a Grover search prototype; "
         "leave architecture choices open."
     )
-    assert coordinator.activate(
+    assert _activate_exact(
+        coordinator,
         original_request=request,
         generation_posture="exploratory_first_pass",
-        explicit_authority=True,
     )["ok"]
     result = coordinator.prepare_generation(
         profile_id="grover_search",
@@ -1330,10 +1378,10 @@ def test_non_bell_blueprint_guided_path_resolves_only_generation_blockers(
         "Use qCoder with Blueprint-guided control for a QAOA prototype; decide "
         "generation architecture before code."
     )
-    assert coordinator.activate(
+    assert _activate_exact(
+        coordinator,
         original_request=request,
         generation_posture="blueprint_guided",
-        explicit_authority=True,
     )["ok"]
     interpretation = {"summary": "Prepare the QAOA generation architecture before implementation."}
     blocked = coordinator.prepare_generation(
@@ -1372,12 +1420,12 @@ def test_explicit_answer_is_attributed_validated_and_not_asked_again(
 ) -> None:
     transport = PublicBuilderTransport()
     coordinator, _workspace = _coordinator(tmp_path, transport)
-    coordinator.activate(
+    _activate_exact(
+        coordinator,
         original_request=(
             "Use qCoder with Blueprint-guided control for Grover, using a phase_oracle."
         ),
         generation_posture="blueprint_guided",
-        explicit_authority=True,
     )
     explicit = next(
         item
@@ -1426,10 +1474,10 @@ def test_blueprint_to_exploratory_transition_preserves_exact_blueprint(
 ) -> None:
     transport = PublicBuilderTransport()
     coordinator, workspace = _coordinator(tmp_path, transport)
-    coordinator.activate(
+    _activate_exact(
+        coordinator,
         original_request="Use qCoder with Blueprint-guided control for a Grover prototype.",
         generation_posture="blueprint_guided",
-        explicit_authority=True,
     )
     interpretation = {"summary": "Prepare a bounded Grover prototype."}
     blocked = coordinator.prepare_generation(
@@ -1484,10 +1532,10 @@ def test_exploratory_to_blueprint_transition_activates_readiness_then_pack(
 ) -> None:
     transport = PublicBuilderTransport()
     coordinator, _workspace = _coordinator(tmp_path, transport)
-    coordinator.activate(
+    _activate_exact(
+        coordinator,
         original_request="Use qCoder for an exploratory first pass on a QAOA prototype.",
         generation_posture="exploratory_first_pass",
-        explicit_authority=True,
     )
     interpretation = {"summary": "Prepare one bounded QAOA prototype."}
     exploratory = coordinator.prepare_generation(
@@ -1536,13 +1584,12 @@ def test_existing_workspace_does_not_force_blueprint_guided(tmp_path: Path) -> N
     (workspace / "existing-lineage-marker.txt").write_text(
         "synthetic existing context\n", encoding="utf-8"
     )
-    result = coordinator.activate(
+    result = _activate_exact(
+        coordinator,
         original_request=(
             "Use qCoder for an isolated exploratory first pass in this existing workspace."
         ),
         generation_posture="exploratory_first_pass",
-        explicit_authority=True,
-        parent_loop_ref=None,
     )
     assert result["details"]["generation_posture"] == "exploratory_first_pass"
     assert coordinator.store.read()["directory_scan_performed"] is False
@@ -1588,10 +1635,10 @@ def test_public_builder_transport_covers_three_modes_and_malformed_response(
         (tmp_path / name).mkdir()
     exploratory_transport = PublicBuilderTransport()
     exploratory, _workspace = _coordinator(tmp_path / "exploratory", exploratory_transport)
-    exploratory.activate(
+    _activate_exact(
+        exploratory,
         original_request="Use qCoder for an exploratory first pass on Grover.",
         generation_posture="exploratory_first_pass",
-        explicit_authority=True,
     )
     exploratory_result = exploratory.prepare_generation(
         profile_id="grover_search",
@@ -1604,10 +1651,10 @@ def test_public_builder_transport_covers_three_modes_and_malformed_response(
 
     blocked_transport = PublicBuilderTransport()
     blocked, _workspace = _coordinator(tmp_path / "blocked", blocked_transport)
-    blocked.activate(
+    _activate_exact(
+        blocked,
         original_request="Use qCoder with Blueprint-guided control for Grover.",
         generation_posture="blueprint_guided",
-        explicit_authority=True,
     )
     blocked_result = blocked.prepare_generation(
         profile_id="grover_search",
@@ -1618,10 +1665,10 @@ def test_public_builder_transport_covers_three_modes_and_malformed_response(
 
     ready_transport = PublicBuilderTransport()
     ready, _workspace = _coordinator(tmp_path / "ready", ready_transport)
-    ready.activate(
+    _activate_exact(
+        ready,
         original_request="Use qCoder with Blueprint-guided control for Grover.",
         generation_posture="blueprint_guided",
-        explicit_authority=True,
     )
     ready_result = ready.prepare_generation(
         profile_id="grover_search",
@@ -1634,10 +1681,10 @@ def test_public_builder_transport_covers_three_modes_and_malformed_response(
 
     malformed_transport = PublicBuilderTransport(malformed_generation=True)
     malformed, _workspace = _coordinator(tmp_path / "malformed", malformed_transport)
-    malformed.activate(
+    _activate_exact(
+        malformed,
         original_request="Use qCoder with Blueprint-guided control for Grover.",
         generation_posture="blueprint_guided",
-        explicit_authority=True,
     )
     malformed_result = malformed.prepare_generation(
         profile_id="grover_search",
@@ -1653,10 +1700,10 @@ def test_public_builder_transport_covers_three_modes_and_malformed_response(
 def test_decision_resolution_status_reemits_exact_guidance(tmp_path: Path) -> None:
     transport = PublicBuilderTransport()
     coordinator, workspace = _coordinator(tmp_path, transport)
-    coordinator.activate(
+    _activate_exact(
+        coordinator,
         original_request="Use qCoder with Blueprint-guided control for Grover.",
         generation_posture="blueprint_guided",
-        explicit_authority=True,
     )
     blocked = coordinator.prepare_generation(
         profile_id="grover_search",
@@ -1706,16 +1753,26 @@ def test_current_loop_cli_executes_both_generation_paths(
         assert status == 0, captured
         return json.loads(captured.out)
 
+    def activate_exact(workspace: Path, request: str, posture: str) -> dict[str, Any]:
+        staged = invoke(workspace, "activate", "--request", request)
+        assert staged["checkpoint_kind"] == "activation_request_baseline_review"
+        return invoke(
+            workspace,
+            "activate",
+            "--approve",
+            "--posture",
+            posture,
+            "--approve-posture",
+            "--posture-provenance",
+            "user_provided",
+        )
+
     exploratory_workspace = tmp_path / "cli-exploratory"
     exploratory_workspace.mkdir()
-    invoke(
+    activate_exact(
         exploratory_workspace,
-        "activate",
-        "--request",
         "Use qCoder for an exploratory first pass on a Grover prototype.",
-        "--posture",
         "exploratory_first_pass",
-        "--approve",
     )
     exploratory = invoke(
         exploratory_workspace,
@@ -1735,14 +1792,10 @@ def test_current_loop_cli_executes_both_generation_paths(
 
     guided_workspace = tmp_path / "cli-guided"
     guided_workspace.mkdir()
-    invoke(
+    activate_exact(
         guided_workspace,
-        "activate",
-        "--request",
         "Use qCoder with Blueprint-guided control for Grover.",
-        "--posture",
         "blueprint_guided",
-        "--approve",
     )
     blocked = invoke(
         guided_workspace,
@@ -1792,10 +1845,10 @@ def test_performance_counts_public_coordinator_operations_not_state_writes(
     tmp_path: Path,
 ) -> None:
     coordinator, _workspace = _coordinator(tmp_path, PublicBuilderTransport())
-    activated = coordinator.activate(
+    activated = _activate_exact(
+        coordinator,
         original_request="Use qCoder for a quick first pass.",
         generation_posture="exploratory_first_pass",
-        explicit_authority=True,
     )
     assert activated["ok"] is True
     assert coordinator.private_performance_snapshot()["coordinator_calls"] == 1
@@ -1808,10 +1861,10 @@ def test_abandon_without_authority_does_not_advance_or_complete_loop(
     tmp_path: Path,
 ) -> None:
     coordinator, workspace = _coordinator(tmp_path, PublicBuilderTransport())
-    activated = coordinator.activate(
+    activated = _activate_exact(
+        coordinator,
         original_request="Use qCoder with deliberate Blueprint control.",
         generation_posture="blueprint_guided",
-        explicit_authority=True,
     )
     assert activated["phase"] == "intent_review"
     refused = coordinator.abandon(explicit_authority=False)
@@ -1825,10 +1878,10 @@ def test_start_next_cannot_advance_before_current_loop_is_ready(
     tmp_path: Path,
 ) -> None:
     coordinator, _workspace = _coordinator(tmp_path, PublicBuilderTransport())
-    activated = coordinator.activate(
+    activated = _activate_exact(
+        coordinator,
         original_request="Use qCoder for a quick first pass.",
         generation_posture="exploratory_first_pass",
-        explicit_authority=True,
     )
     assert activated["phase"] == "intent_review"
     result = coordinator.start_next(
@@ -1866,7 +1919,7 @@ def test_current_loop_cli_activation_status_and_standalone_smoke(
     assert status_code == 2
     assert status["category"] == "loop_not_activated"
 
-    activate_code = cli_main(
+    capture_code = cli_main(
         [
             "current-loop",
             "--workspace",
@@ -1874,9 +1927,25 @@ def test_current_loop_cli_activation_status_and_standalone_smoke(
             "activate",
             "--request",
             "Use qCoder for a quick first pass.",
+        ]
+    )
+    capture = json.loads(capsys.readouterr().out)
+    assert capture_code == 0
+    assert capture["checkpoint_kind"] == "activation_request_baseline_review"
+    assert capture["details"]["activation_performed"] is False
+
+    activate_code = cli_main(
+        [
+            "current-loop",
+            "--workspace",
+            str(workspace),
+            "activate",
+            "--approve",
             "--posture",
             "exploratory_first_pass",
-            "--approve",
+            "--approve-posture",
+            "--posture-provenance",
+            "user_provided",
         ]
     )
     activated = json.loads(capsys.readouterr().out)
@@ -1956,8 +2025,8 @@ def test_every_checkpoint_result_is_deterministically_actionable(tmp_path: Path)
             summary="Synthetic checkpoint contract test.",
         )
         _assert_actionable_checkpoint(result)
-        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v3"
-        assert result["schema_version"] == 3
+        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v4"
+        assert result["schema_version"] == 4
 
 
 def test_current_loop_cli_intent_review_confirmation_sequence_is_actionable(
@@ -1973,16 +2042,28 @@ def test_current_loop_cli_intent_review_confirmation_sequence_is_actionable(
         "ContextBridgeTransport",
         lambda **_values: transport,
     )
-    activate = [
+    capture = [
         "current-loop",
         "--workspace",
         str(workspace),
         "activate",
         "--request",
         "Use qCoder for a quick first pass on a synthetic Bell circuit.",
+    ]
+    assert cli_main(capture) == 0
+    staged = json.loads(capsys.readouterr().out)
+    assert staged["checkpoint_kind"] == "activation_request_baseline_review"
+    activate = [
+        "current-loop",
+        "--workspace",
+        str(workspace),
+        "activate",
+        "--approve",
         "--posture",
         "exploratory_first_pass",
-        "--approve",
+        "--approve-posture",
+        "--posture-provenance",
+        "user_provided",
     ]
     assert cli_main(activate) == 0
     activated = json.loads(capsys.readouterr().out)
@@ -2076,9 +2157,24 @@ def test_current_loop_cli_distinguishes_transmitted_clarification(
                 "activate",
                 "--request",
                 "Use qCoder for a quick first pass.",
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+    assert (
+        cli_main(
+            [
+                "current-loop",
+                "--workspace",
+                str(workspace),
+                "activate",
+                "--approve",
                 "--posture",
                 "exploratory_first_pass",
-                "--approve",
+                "--approve-posture",
+                "--posture-provenance",
+                "user_provided",
             ]
         )
         == 0
@@ -2122,7 +2218,15 @@ def test_current_loop_cli_distinguishes_transmitted_clarification(
 @pytest.mark.parametrize(
     ("subcommand", "flags"),
     [
-        ("activate", ("--approve",)),
+        (
+            "activate",
+            (
+                "--approve",
+                "--approve-posture",
+                "--posture-provenance",
+                "--label-provenance",
+            ),
+        ),
         (
             "prepare-generation",
             (

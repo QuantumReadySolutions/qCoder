@@ -50,17 +50,20 @@ from qcoder.current_loop import (
     decision_inventory_binding,
     propose_selected_artifact_authorization,
     save_exact_canonical_artifact,
+    select_current_loop_generation_posture,
     set_artifact_authorization,
     share_safe_artifact_authorization_projection,
+    stage_pending_activation_capture,
     update_selected_artifact_authorization,
 )
 from qcoder.context_loop import CONTEXT_LOOP_GATE
 
-COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v3"
-COORDINATOR_RESULT_SCHEMA_VERSION = 3
-COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v2"
+COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v4"
+COORDINATOR_RESULT_SCHEMA_VERSION = 4
+COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v3"
+PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v2"
 LEGACY_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v1"
-COORDINATOR_STATE_SCHEMA_VERSION = 2
+COORDINATOR_STATE_SCHEMA_VERSION = 3
 CONSEQUENCE_PROJECTION_SCHEMA_ID = "qcoder.current_loop.consequence_projection.v1"
 PERFORMANCE_SCHEMA_ID = "qcoder.current_loop.private_performance.v1"
 
@@ -87,6 +90,7 @@ STATE_STATUSES = (
     "corrupt",
 )
 CHECKPOINT_KINDS = (
+    "activation_request_baseline_review",
     "activation",
     "posture",
     "intent_review",
@@ -156,6 +160,10 @@ _PHASE_TRANSITIONS = {
 }
 
 _CHECKPOINT_AUTHORITY = {
+    "activation_request_baseline_review": (
+        "Explicitly activate qCoder and approve preservation of the complete displayed "
+        "customer message as the exact Request Baseline."
+    ),
     "activation": "Explicitly activate qCoder for this current build.",
     "posture": "Choose exploratory first pass or Blueprint-guided generation.",
     "intent_review": "Review and explicitly approve or correct the proposed interpretation.",
@@ -171,6 +179,12 @@ _CHECKPOINT_AUTHORITY = {
     "privacy_or_trust": "Review the material privacy, trust, or evidence limitation.",
     "none": "No human authority is required for the next deterministic local transition.",
 }
+REQUEST_TRANSPORTS = ("inline", "file", "stdin")
+REQUEST_LABEL_PROVENANCE = (
+    "system_generated",
+    "user_provided",
+    "user_confirmed_assistant_interpretation",
+)
 
 DECISION_AUTHORITY_PROVENANCE = (
     "user_provided",
@@ -195,6 +209,55 @@ EXPLORATORY_FIXED_PROHIBITIONS = (
 )
 
 _RECOVERY = {
+    "activation_capture_required": (
+        "No reviewed exact Request Baseline capture exists in this workspace.",
+        "Stage the complete customer message through activate without approval, review the "
+        "returned exact capture, then approve it.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "request_baseline_constraint_not_verbatim": (
+        "A proposed user-stated constraint was not an exact span of the captured request.",
+        "Preserve the full request and omit the extraction, or supply only its exact wording.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "request_baseline_choice_not_verbatim": (
+        "A proposed user-stated choice was not an exact span of the captured request.",
+        "Preserve the full request and omit the extraction, or supply only its exact wording.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "request_baseline_label_provenance_required": (
+        "A supplied display label lacked attributable user authority.",
+        "Omit the label for a system-generated display label, or supply attributable provenance.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "request_baseline_label_not_verbatim": (
+        "A user-provided label was not an exact span of the captured request.",
+        "Omit the label or use only the exact user-provided wording.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "request_baseline_label_without_value": (
+        "Label provenance was supplied without a label value.",
+        "Omit label provenance or supply the exact attributable label.",
+        True,
+        False,
+        True,
+        False,
+    ),
     "loop_not_activated": (
         "No qCoder current loop is active in this workspace.",
         "Explicitly activate qCoder and choose a generation posture.",
@@ -524,6 +587,123 @@ def infer_requested_posture(original_request: str) -> str | None:
     return matches[0] if len(matches) == 1 else None
 
 
+def _exact_request_value(original_request: object) -> str:
+    if not isinstance(original_request, str) or original_request == "":
+        raise CurrentLoopError("request_baseline_original_request_required")
+    if len(original_request) > 20_000:
+        raise CurrentLoopError("request_baseline_original_request_too_large")
+    return original_request
+
+
+def _attributed_request_spans(
+    original_request: str,
+    values: Sequence[str],
+    *,
+    field: str,
+) -> list[dict[str, str]]:
+    if len(values) > 64:
+        raise CurrentLoopError(f"request_baseline_{field}_too_many")
+    result: list[dict[str, str]] = []
+    for value in values:
+        if not isinstance(value, str) or value == "" or len(value) > 1_000:
+            raise CurrentLoopError(f"request_baseline_{field}_invalid")
+        if value not in original_request:
+            raise CurrentLoopError(f"request_baseline_{field}_not_verbatim")
+        result.append(
+            {
+                "value": value,
+                "provenance": "user_stated",
+                "source": "verbatim_original_request",
+            }
+        )
+    return result
+
+
+def build_pending_activation_capture(
+    *,
+    original_request: str,
+    workspace_root: Path,
+    request_transport: str,
+    explicit_constraints: Sequence[str] = (),
+    explicit_choices: Sequence[str] = (),
+    assistant_interpretation: Mapping[str, Any] | None = None,
+    label: str | None = None,
+    label_provenance: str | None = None,
+    captured_at: float,
+) -> dict[str, Any]:
+    """Build bounded local pending state without canonical activation."""
+
+    request = _exact_request_value(original_request)
+    if request_transport not in REQUEST_TRANSPORTS:
+        raise CurrentLoopError("request_transport_invalid")
+    constraints = _attributed_request_spans(
+        request,
+        explicit_constraints,
+        field="constraint",
+    )
+    choices = _attributed_request_spans(
+        request,
+        explicit_choices,
+        field="choice",
+    )
+    assistant = deepcopy(dict(assistant_interpretation or {}))
+    if (
+        len(
+            json.dumps(
+                assistant,
+                ensure_ascii=True,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+        )
+        > 12_000
+    ):
+        raise CurrentLoopError("assistant_interpretation_too_large")
+    if assistant:
+        assistant["provenance_role"] = "assistant_proposed"
+        assistant["confirmation_state"] = "pending_intent_review"
+    if label is None:
+        label_record = {
+            "value": "qCoder current build",
+            "provenance": "system_generated",
+        }
+    else:
+        if (
+            not isinstance(label, str)
+            or not label
+            or len(label) > 160
+            or label_provenance not in REQUEST_LABEL_PROVENANCE[1:]
+        ):
+            raise CurrentLoopError("request_baseline_label_provenance_required")
+        if label_provenance == "user_provided" and label not in request:
+            raise CurrentLoopError("request_baseline_label_not_verbatim")
+        label_record = {
+            "value": label,
+            "provenance": label_provenance,
+        }
+    if label is None and label_provenance is not None:
+        raise CurrentLoopError("request_baseline_label_without_value")
+    request_digest = sha256(request.encode("utf-8")).hexdigest()
+    return {
+        "schema_id": "qcoder.current_loop.pending_activation_capture.v1",
+        "schema_version": 1,
+        "original_request": request,
+        "original_request_codepoint_length": len(request),
+        "original_request_utf8_sha256": request_digest,
+        "request_transport": request_transport,
+        "explicit_constraints": constraints,
+        "explicit_choices": choices,
+        "assistant_interpretation": assistant,
+        "label": label_record,
+        "captured_at": float(captured_at),
+        "workspace_binding": str(workspace_root),
+        "review_state": "pending_exact_baseline_review",
+        "canonical_request_baseline_created": False,
+        "activation_performed": False,
+        "protected_call_performed": False,
+    }
+
+
 def normalize_decision_dispositions(
     profile_id: str,
     dispositions: Sequence[Mapping[str, Any]],
@@ -627,6 +807,15 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "awaiting_confirmation_fields": True,
             "confirmation_transmission_state": True,
             "identical_repeat_prohibited": True,
+        },
+        "request_baseline_transfer": {
+            "complete_governing_message_preserved_verbatim": True,
+            "transports": list(REQUEST_TRANSPORTS),
+            "nonactivating_capture_required": True,
+            "approval_reuses_pending_capture": True,
+            "new_request_with_approval_activates": False,
+            "protected_call_before_activation": False,
+            "posture_authority_separate": True,
         },
         "generation_context_response_modes": [
             "exploratory_generation_context_ready",
@@ -953,6 +1142,63 @@ class CurrentLoopCoordinator:
     def artifact_directory(self) -> Path:
         return self.workspace_root / ".qcoder" / "current-loop" / "artifacts"
 
+    def _pending_activation_result(
+        self,
+        *,
+        operation: str,
+        state: Mapping[str, Any],
+        category: str = "activation_request_baseline_review_required",
+    ) -> dict[str, Any]:
+        capture = state.get("pending_activation_capture")
+        if not isinstance(capture, Mapping):
+            raise CurrentLoopError("pending_activation_capture_invalid")
+        constraints = [
+            deepcopy(dict(item))
+            for item in capture.get("explicit_constraints", [])
+            if isinstance(item, Mapping)
+        ]
+        choices = [
+            deepcopy(dict(item))
+            for item in capture.get("explicit_choices", [])
+            if isinstance(item, Mapping)
+        ]
+        request = str(capture["original_request"])
+        digest = str(capture["original_request_utf8_sha256"])
+        return self._result_without_state(
+            operation=operation,
+            ok=True,
+            phase="activated",
+            state_status="checkpoint_required",
+            checkpoint_kind="activation_request_baseline_review",
+            category=category,
+            summary=(
+                "Review the complete displayed customer message. Approval will activate "
+                "qCoder for this build and preserve these exact bytes as the canonical "
+                "Request Baseline; posture and all later authorities remain separate."
+            ),
+            details={
+                "pending_capture_reference": f"pending-request-{digest[:16]}",
+                "original_request": request,
+                "original_request_codepoint_length": len(request),
+                "original_request_utf8_sha256": digest,
+                "request_transport": capture.get("request_transport"),
+                "explicit_constraints": constraints,
+                "explicit_choices": choices,
+                "assistant_interpretation": deepcopy(capture.get("assistant_interpretation") or {}),
+                "label": deepcopy(capture.get("label")),
+                "complete_request_displayed": True,
+                "request_will_be_preserved_verbatim": True,
+                "activation_and_baseline_confirmation_combined": True,
+                "posture_authority_separate": True,
+                "ide_write_or_run_authority_separate": True,
+                "artifact_review_authority_separate": True,
+                "governing_change_authority_separate": True,
+                "activation_performed": False,
+                "canonical_request_baseline_created": False,
+                "protected_call_performed": False,
+            },
+        )
+
     def activation_offer(self, original_request: str) -> dict[str, Any]:
         posture = infer_requested_posture(original_request)
         if posture is None:
@@ -1009,6 +1255,8 @@ class CurrentLoopCoordinator:
                 phase="activated",
                 elapsed=self.clock() - started,
             )
+        if state.get("state_kind") == "pending_activation":
+            return self._pending_activation_result(operation="status", state=state)
         coordinator = self._coordinator_state(state)
         status_details: dict[str, Any] = {
             "generation_context_outcome": deepcopy(coordinator.get("generation_context_outcome"))
@@ -1037,38 +1285,160 @@ class CurrentLoopCoordinator:
     def activate(
         self,
         *,
-        original_request: str,
-        generation_posture: str | None,
-        explicit_authority: bool,
+        original_request: str | None = None,
+        generation_posture: str | None = None,
+        explicit_authority: bool = False,
+        explicit_posture_authority: bool = False,
+        posture_authority_provenance: str | None = None,
+        request_transport: str = "inline",
+        explicit_constraints: Sequence[str] = (),
+        explicit_choices: Sequence[str] = (),
         label: str | None = None,
+        label_provenance: str | None = None,
         parent_loop_ref: str | None = None,
         assistant_interpretation: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         started = self.clock()
-        if generation_posture is None:
-            generation_posture = infer_requested_posture(original_request)
-        if generation_posture is None:
-            return self._recovery_result(
-                operation="activate",
-                category="posture_required",
-                phase="activated",
-                elapsed=self.clock() - started,
-            )
-        if explicit_authority is not True:
-            return self._checkpoint_result(
-                operation="activate",
-                phase="activated",
-                checkpoint_kind="activation",
-                summary="qCoder has not been activated. Explicit approval is required.",
-                elapsed=self.clock() - started,
-            )
         try:
+            if original_request is not None:
+                capture = build_pending_activation_capture(
+                    original_request=original_request,
+                    workspace_root=self.workspace_root,
+                    request_transport=request_transport,
+                    explicit_constraints=explicit_constraints,
+                    explicit_choices=explicit_choices,
+                    assistant_interpretation=assistant_interpretation,
+                    label=label,
+                    label_provenance=label_provenance,
+                    captured_at=self.clock(),
+                )
+                state = stage_pending_activation_capture(
+                    workspace_root=self.workspace_root,
+                    capture=capture,
+                    external_state_path=(
+                        self.state_path
+                        if self.state_path
+                        != self.workspace_root / ".qcoder" / "current-loop" / "state.json"
+                        else None
+                    ),
+                )
+                return self._pending_activation_result(
+                    operation="activate",
+                    state=state,
+                    category=(
+                        "new_request_requires_exact_baseline_review"
+                        if explicit_authority
+                        else "activation_request_baseline_review_required"
+                    ),
+                )
+
+            try:
+                state = self.store.read()
+            except CurrentLoopError:
+                if explicit_authority:
+                    return self._recovery_result(
+                        operation="activate",
+                        category="activation_capture_required",
+                        phase="activated",
+                        elapsed=self.clock() - started,
+                    )
+                return self._recovery_result(
+                    operation="activate",
+                    category="loop_not_activated",
+                    phase="activated",
+                    elapsed=self.clock() - started,
+                )
+
+            if state.get("state_kind") == "active_loop":
+                if state.get("generation_posture") is None and generation_posture is not None:
+                    if (
+                        explicit_posture_authority is not True
+                        or posture_authority_provenance not in POSTURE_AUTHORITY_PROVENANCE
+                    ):
+                        return self._checkpoint_result(
+                            operation="activate",
+                            phase="activated",
+                            checkpoint_kind="posture",
+                            category="posture_authority_required",
+                            summary=(
+                                "qCoder is active, but generation posture remains "
+                                "unselected. Obtain a separate explicit posture decision."
+                            ),
+                            elapsed=self.clock() - started,
+                        )
+                    selected = select_current_loop_generation_posture(
+                        store=self.store,
+                        generation_posture=generation_posture,
+                        explicit_authority=True,
+                    )
+                    coordinator = self._coordinator_state(selected["state"])
+                    coordinator.update(
+                        {
+                            "phase": "intent_review",
+                            "state_status": "checkpoint_required",
+                            "checkpoint_kind": "intent_review",
+                            "customer_summary": (
+                                "Generation posture is separately authorized. Review "
+                                "the assistant-proposed interpretation next."
+                            ),
+                            "effective_generation_posture": generation_posture,
+                        }
+                    )
+                    coordinator["posture_selection"] = {
+                        "explicit": True,
+                        "provenance": posture_authority_provenance,
+                    }
+                    self._replace_coordinator(coordinator)
+                    return self._result(
+                        operation="activate",
+                        ok=True,
+                        state=self.store.read(),
+                        summary=coordinator["customer_summary"],
+                        elapsed=self.clock() - started,
+                        details={
+                            "generation_posture": generation_posture,
+                            "posture_authority_transmitted": True,
+                            "request_baseline_saved": True,
+                        },
+                    )
+                return self._recovery_result(
+                    operation="activate",
+                    category="loop_already_active",
+                    phase=self._safe_phase(),
+                    elapsed=self.clock() - started,
+                )
+
+            if explicit_authority is not True:
+                return self._pending_activation_result(
+                    operation="activate",
+                    state=state,
+                )
+            capture = state.get("pending_activation_capture")
+            if not isinstance(capture, Mapping):
+                raise CurrentLoopError("pending_activation_capture_invalid")
+            if generation_posture is not None:
+                if (
+                    explicit_posture_authority is not True
+                    or posture_authority_provenance not in POSTURE_AUTHORITY_PROVENANCE
+                ):
+                    generation_posture = None
+                elif (
+                    posture_authority_provenance == "user_provided"
+                    and infer_requested_posture(str(capture["original_request"]))
+                    != generation_posture
+                ):
+                    raise CurrentLoopError("posture_not_attributable_to_request")
+            elif explicit_posture_authority:
+                raise CurrentLoopError("posture_value_required")
+            label_record = capture.get("label")
+            if not isinstance(label_record, Mapping):
+                raise CurrentLoopError("pending_activation_label_invalid")
             activated = activate_current_loop(
                 workspace_root=self.workspace_root,
                 generation_posture=generation_posture,
                 explicit_authority=True,
                 parent_loop_ref=parent_loop_ref,
-                label=label,
+                label=str(label_record["value"]),
                 external_state_path=(
                     self.state_path
                     if self.state_path
@@ -1077,8 +1447,22 @@ class CurrentLoopCoordinator:
                 ),
             )
             baseline = build_request_baseline(
-                original_request=original_request,
-                assistant_interpretation=assistant_interpretation,
+                original_request=str(capture["original_request"]),
+                explicit_constraints=[
+                    str(item["value"])
+                    for item in capture.get("explicit_constraints", [])
+                    if isinstance(item, Mapping)
+                ],
+                explicit_choices=[
+                    str(item["value"])
+                    for item in capture.get("explicit_choices", [])
+                    if isinstance(item, Mapping)
+                ],
+                assistant_interpretation=(
+                    capture.get("assistant_interpretation")
+                    if isinstance(capture.get("assistant_interpretation"), Mapping)
+                    else None
+                ),
             )
             self._save_artifact(
                 "request_baseline",
@@ -1087,18 +1471,27 @@ class CurrentLoopCoordinator:
             )
             state = self.store.read()
             coordinator = self._initial_coordinator_state(
-                phase="intent_review",
+                phase=("intent_review" if generation_posture is not None else "activated"),
                 state_status="checkpoint_required",
-                checkpoint_kind="intent_review",
+                checkpoint_kind=("intent_review" if generation_posture is not None else "posture"),
                 summary=(
-                    "qCoder is active. Review the separately attributed assistant "
-                    "interpretation before confirming generation intent."
+                    (
+                        "qCoder is active and the complete Request Baseline is saved "
+                        "verbatim. Review the separately attributed assistant "
+                        "interpretation before confirming generation intent."
+                    )
+                    if generation_posture is not None
+                    else (
+                        "qCoder is active and the complete Request Baseline is saved "
+                        "verbatim. Choose the separate generation posture next."
+                    )
                 ),
             )
             coordinator["activation"] = {
                 "explicit": True,
                 "original_request_preserved": True,
-                "generation_posture_explicit": True,
+                "exact_baseline_approved": True,
+                "generation_posture_explicit": generation_posture is not None,
             }
             coordinator["effective_generation_posture"] = generation_posture
             coordinator["request_baseline_reference"] = _artifact_reference(baseline)
@@ -1114,6 +1507,12 @@ class CurrentLoopCoordinator:
                     "loop_ref": activated["state"]["loop_ref"],
                     "generation_posture": generation_posture,
                     "request_baseline_saved": True,
+                    "original_request": baseline["original_request"],
+                    "original_request_utf8_sha256": sha256(
+                        baseline["original_request"].encode("utf-8")
+                    ).hexdigest(),
+                    "activation_authority_transmitted": True,
+                    "posture_authority_transmitted": generation_posture is not None,
                     "ide_write_or_run_authorized": False,
                     "artifact_review_authorized": False,
                 },
@@ -2792,6 +3191,40 @@ class CurrentLoopCoordinator:
 
     def abandon(self, *, explicit_authority: bool) -> dict[str, Any]:
         started = self.clock()
+        try:
+            current_state = self.store.read()
+        except CurrentLoopError:
+            current_state = None
+        if (
+            isinstance(current_state, Mapping)
+            and current_state.get("state_kind") == "pending_activation"
+        ):
+            if not explicit_authority:
+                return self._pending_activation_result(
+                    operation="abandon",
+                    state=current_state,
+                    category="pending_activation_abandon_authority_required",
+                )
+            try:
+                self.store.delete_state(explicit_authority=True)
+                return self._result_without_state(
+                    operation="abandon",
+                    ok=True,
+                    phase="abandoned",
+                    state_status="ready",
+                    checkpoint_kind="none",
+                    summary=(
+                        "The pending noncanonical activation capture was cleared locally. "
+                        "qCoder was not activated and no Request Baseline was created."
+                    ),
+                    details={
+                        "pending_capture_invalidated": True,
+                        "activation_performed": False,
+                        "canonical_request_baseline_created": False,
+                    },
+                )
+            except (CurrentLoopError, CurrentLoopConflict) as exc:
+                return self._exception_result("abandon", exc, started)
         if not explicit_authority:
             return self._checkpoint_result(
                 operation="abandon",
@@ -3753,6 +4186,9 @@ class CurrentLoopCoordinator:
         if (
             result.get("schema_id") == LEGACY_COORDINATOR_STATE_SCHEMA_ID
             and result.get("schema_version") == 1
+        ) or (
+            result.get("schema_id") == PREVIOUS_COORDINATOR_STATE_SCHEMA_ID
+            and result.get("schema_version") == 2
         ):
             result["schema_id"] = COORDINATOR_STATE_SCHEMA_ID
             result["schema_version"] = COORDINATOR_STATE_SCHEMA_VERSION
@@ -3871,7 +4307,36 @@ class CurrentLoopCoordinator:
             return protocol
 
         protocol["identical_repeat_prohibited"] = True
-        if checkpoint_kind == "posture":
+        if checkpoint_kind == "activation_request_baseline_review":
+            protocol.update(
+                {
+                    "supported_next_action": (
+                        "present_exact_request_baseline_and_obtain_activation_approval"
+                    ),
+                    "next_invocation": _invocation_template(
+                        "activate",
+                        required_flags=("--approve",),
+                        reused_inputs=("pending_exact_request_capture",),
+                        new_inputs=(
+                            "explicit_qcoder_activation",
+                            "exact_request_baseline_approval",
+                        ),
+                    ),
+                    "required_authority_input": _authority_input(
+                        "--approve",
+                        (
+                            "Approve qCoder activation and canonical preservation of the "
+                            "complete displayed customer message exactly as captured."
+                        ),
+                    ),
+                    "awaiting_confirmation_fields": [
+                        "qcoder_activation",
+                        "exact_request_baseline_preservation",
+                    ],
+                    "confirmation_transmission_state": "not_supplied",
+                }
+            )
+        elif checkpoint_kind == "posture":
             if category == "posture_transition_authority_required":
                 protocol.update(
                     {
@@ -3919,26 +4384,60 @@ class CurrentLoopCoordinator:
                         if key in override:
                             protocol[key] = deepcopy(override[key])
                 return protocol
+            already_activated = (
+                isinstance(coordinator, Mapping)
+                and isinstance(coordinator.get("activation"), Mapping)
+                and coordinator["activation"].get("explicit") is True
+            )
             protocol.update(
                 {
-                    "supported_next_action": "obtain_generation_posture_and_activation",
-                    "next_invocation": _invocation_template(
-                        "activate",
-                        required_flags=("--request", "--posture", "--approve"),
-                        reused_inputs=("original_request",),
-                        new_inputs=(
-                            "generation_posture_selection",
-                            "explicit_qcoder_activation",
-                        ),
+                    "supported_next_action": (
+                        "obtain_separate_generation_posture_authority"
+                        if already_activated
+                        else "stage_exact_request_before_activation"
                     ),
-                    "required_authority_input": _authority_input(
-                        "--approve",
-                        "Explicitly activate qCoder after selecting the generation posture.",
+                    "next_invocation": (
+                        _invocation_template(
+                            "activate",
+                            required_flags=(
+                                "--posture",
+                                "--approve-posture",
+                                "--posture-provenance",
+                            ),
+                            reused_inputs=("canonical_request_baseline",),
+                            new_inputs=(
+                                "generation_posture_selection",
+                                "explicit_posture_authority",
+                                "posture_authority_provenance",
+                            ),
+                        )
+                        if already_activated
+                        else _invocation_template(
+                            "activate",
+                            required_flags=("--request",),
+                            new_inputs=("complete_governing_customer_message",),
+                        )
                     ),
-                    "awaiting_confirmation_fields": [
-                        "generation_posture",
-                        "qcoder_activation",
-                    ],
+                    "required_authority_input": (
+                        _authority_input(
+                            "--approve-posture",
+                            ("Transmit the user's separate explicit generation-posture decision."),
+                            additional_flags=("--posture", "--posture-provenance"),
+                        )
+                        if already_activated
+                        else _authority_input(
+                            None,
+                            (
+                                "First stage and display the exact Request Baseline; "
+                                "posture authority remains separate."
+                            ),
+                        )
+                    ),
+                    "awaiting_confirmation_fields": (
+                        ["generation_posture"]
+                        if already_activated
+                        else ["exact_request_baseline_capture"]
+                    ),
                     "confirmation_transmission_state": "not_supplied",
                 }
             )

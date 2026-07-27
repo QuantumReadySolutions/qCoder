@@ -36,7 +36,9 @@ LOOP_INSTANCE_RECORD_SCHEMA_ID = "qcoder.loop_instance_record.v1"
 NEXT_LOOP_SEED_SCHEMA_ID = "qcoder.next_loop_seed.v1"
 UNCHANGED_CONTINUATION_SCHEMA_ID = "qcoder.unchanged_continuation.v1"
 SELECTED_ARTIFACT_AUTHORIZATION_SCHEMA_ID = "qcoder.selected_artifact_authorization.v1"
-CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v1"
+LEGACY_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v1"
+CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v2"
+CURRENT_LOOP_STATE_SCHEMA_VERSION = 2
 
 LOOP_INSTANCE_RECORD_MAX_BYTES = 65_536
 NEXT_LOOP_SEED_MAX_BYTES = 65_536
@@ -49,6 +51,7 @@ MAX_LABEL_LENGTH = 160
 MAX_LOCAL_FILE_BYTES = 8 * 1024 * 1024
 
 ACTIVATION_STATES = ("active", "completed", "abandoned")
+CURRENT_LOOP_STATE_KINDS = ("pending_activation", "active_loop")
 COMPLETION_STATES = (
     "in_progress",
     "completed_unchanged",
@@ -1375,7 +1378,7 @@ class CurrentLoopStore:
             "source_artifacts_deleted": False,
             "saved_qcoder_artifacts_deleted": False,
             "protected_deletion_required": False,
-            "loop_ref": state["loop_ref"],
+            "loop_ref": state.get("loop_ref"),
         }
 
 
@@ -1387,21 +1390,63 @@ def _state_digest(value: Mapping[str, Any]) -> str:
 def current_loop_state_error(value: object) -> str | None:
     if not isinstance(value, Mapping):
         return "current_loop_state_invalid"
-    if value.get("schema_id") != CURRENT_LOOP_STATE_SCHEMA_ID or value.get("schema_version") != 1:
+    legacy = (
+        value.get("schema_id") == LEGACY_CURRENT_LOOP_STATE_SCHEMA_ID
+        and value.get("schema_version") == 1
+    )
+    current = (
+        value.get("schema_id") == CURRENT_LOOP_STATE_SCHEMA_ID
+        and value.get("schema_version") == CURRENT_LOOP_STATE_SCHEMA_VERSION
+    )
+    if not legacy and not current:
         return "current_loop_state_version_invalid"
     if not isinstance(value.get("state_revision"), int) or value["state_revision"] < 1:
         return "current_loop_state_revision_invalid"
     if value.get("state_digest") != _state_digest(value):
         return "current_loop_state_digest_mismatch"
+    if current and value.get("state_kind") not in CURRENT_LOOP_STATE_KINDS:
+        return "current_loop_state_kind_invalid"
     if not isinstance(value.get("loop_ref"), str) or not _LOOP_REF_PATTERN.fullmatch(
         value["loop_ref"]
     ):
-        return "loop_ref_invalid"
+        if not (current and value.get("state_kind") == "pending_activation"):
+            return "loop_ref_invalid"
     workspace = value.get("workspace_root")
     if not isinstance(workspace, str) or not Path(workspace).is_absolute():
         return "current_loop_workspace_invalid"
+    if current and value.get("state_kind") == "pending_activation":
+        capture = value.get("pending_activation_capture")
+        if not isinstance(capture, Mapping):
+            return "pending_activation_capture_invalid"
+        if capture.get("workspace_binding") != workspace:
+            return "pending_activation_workspace_mismatch"
+        request = capture.get("original_request")
+        if not isinstance(request, str) or not request or len(request) > 20_000:
+            return "pending_activation_request_invalid"
+        expected_digest = sha256_bytes(request.encode("utf-8"))
+        if capture.get("original_request_utf8_sha256") != expected_digest:
+            return "pending_activation_capture_digest_mismatch"
+        if capture.get("review_state") != "pending_exact_baseline_review":
+            return "pending_activation_review_state_invalid"
+        for key in ("explicit_constraints", "explicit_choices"):
+            if not isinstance(capture.get(key), list):
+                return "pending_activation_additive_fields_invalid"
+        if not isinstance(capture.get("label"), Mapping):
+            return "pending_activation_label_invalid"
+        if value.get("persistent") is not False:
+            return "current_loop_state_boundary_invalid"
+        if value.get("server_lookup") is not False or value.get("automatic_reopen") is not False:
+            return "current_loop_state_boundary_invalid"
+        if _canonical_size(value) > CURRENT_LOOP_STATE_MAX_BYTES:
+            return "current_loop_state_too_large"
+        return None
     if value.get("generation_posture") not in GENERATION_POSTURES:
-        return "generation_posture_invalid"
+        if not (
+            current
+            and value.get("state_kind") == "active_loop"
+            and value.get("generation_posture") is None
+        ):
+            return "generation_posture_invalid"
     if value.get("activation_state") not in ACTIVATION_STATES:
         return "activation_state_invalid"
     if not isinstance(value.get("saved_artifacts"), Mapping):
@@ -1417,10 +1462,67 @@ def current_loop_state_error(value: object) -> str | None:
     return None
 
 
+def stage_pending_activation_capture(
+    *,
+    workspace_root: str | Path,
+    capture: Mapping[str, Any],
+    external_state_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Create or replace one noncanonical exact-request activation capture."""
+
+    workspace = Path(workspace_root).expanduser().absolute()
+    if not workspace.exists() or not workspace.is_dir():
+        raise CurrentLoopError("current_loop_workspace_invalid")
+    if workspace.is_symlink():
+        raise CurrentLoopError("current_loop_workspace_symlink_rejected")
+    explicit_external = external_state_path is not None
+    state_path = (
+        Path(external_state_path).expanduser().absolute()
+        if external_state_path is not None
+        else workspace / ".qcoder" / "current-loop" / "state.json"
+    )
+    store = CurrentLoopStore(
+        state_path=state_path,
+        workspace_root=workspace,
+        explicit_external=explicit_external,
+    )
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    _apply_private_permissions(state_path.parent, directory=True)
+    if not explicit_external:
+        _apply_private_permissions(workspace / ".qcoder", directory=True)
+    state: dict[str, Any] = {
+        "schema_id": CURRENT_LOOP_STATE_SCHEMA_ID,
+        "schema_version": CURRENT_LOOP_STATE_SCHEMA_VERSION,
+        "state_kind": "pending_activation",
+        "state_revision": 1,
+        "workspace_root": str(workspace),
+        "state_location_explicitly_selected": explicit_external,
+        "pending_activation_capture": deepcopy(dict(capture)),
+        "directory_scan_performed": False,
+        "watcher_active": False,
+        "upload_performed": False,
+        "automatic_git_commit": False,
+        "automatic_gitignore_edit": False,
+        "automatic_reopen": False,
+        "server_lookup": False,
+        "persistent": False,
+    }
+    state["state_digest"] = _state_digest(state)
+    try:
+        existing = store.read()
+    except CurrentLoopError as exc:
+        if exc.category != "current_loop_not_active":
+            raise
+        return store.create(state)
+    if existing.get("state_kind") != "pending_activation":
+        raise CurrentLoopConflict("current_loop_already_active")
+    return store.replace(state, expected_revision=int(existing["state_revision"]))
+
+
 def activate_current_loop(
     *,
     workspace_root: str | Path,
-    generation_posture: str,
+    generation_posture: str | None,
     explicit_authority: bool,
     parent_loop_ref: str | None = None,
     label: str | None = None,
@@ -1449,31 +1551,44 @@ def activate_current_loop(
     _apply_private_permissions(state_path.parent, directory=True)
     if not explicit_external:
         _apply_private_permissions(workspace / ".qcoder", directory=True)
+    if generation_posture is not None and generation_posture not in GENERATION_POSTURES:
+        raise CurrentLoopError("generation_posture_invalid")
     loop_ref = new_loop_ref()
-    record = build_loop_instance_record(
-        loop_ref=loop_ref,
-        parent_loop_ref=parent_loop_ref,
-        generation_posture=generation_posture,
-        label=label,
-        governing_blueprint=governing_blueprint,
+    record = (
+        build_loop_instance_record(
+            loop_ref=loop_ref,
+            parent_loop_ref=parent_loop_ref,
+            generation_posture=generation_posture,
+            label=label,
+            governing_blueprint=governing_blueprint,
+        )
+        if generation_posture is not None
+        else None
     )
-    record_path = state_path.with_name(f"loop-instance-record-{loop_ref}.json")
-    if record_path.exists():
-        raise CurrentLoopConflict("current_loop_record_already_exists")
-    _atomic_write_bytes(
-        record_path,
-        canonical_bytes(record),
-        maximum_bytes=LOOP_INSTANCE_RECORD_MAX_BYTES,
+    record_path = (
+        state_path.with_name(f"loop-instance-record-{loop_ref}.json")
+        if record is not None
+        else None
     )
+    if record_path is not None:
+        if record_path.exists():
+            raise CurrentLoopConflict("current_loop_record_already_exists")
+        _atomic_write_bytes(
+            record_path,
+            canonical_bytes(record),
+            maximum_bytes=LOOP_INSTANCE_RECORD_MAX_BYTES,
+        )
     state: dict[str, Any] = {
         "schema_id": CURRENT_LOOP_STATE_SCHEMA_ID,
-        "schema_version": 1,
+        "schema_version": CURRENT_LOOP_STATE_SCHEMA_VERSION,
+        "state_kind": "active_loop",
         "state_revision": 1,
         "loop_ref": loop_ref,
         "parent_loop_ref": parent_loop_ref,
         "workspace_root": str(workspace),
         "state_location_explicitly_selected": explicit_external,
         "generation_posture": generation_posture,
+        "activation_label": label,
         "activation_state": "active",
         "completion_state": "in_progress",
         "artifact_authorization": None,
@@ -1483,8 +1598,8 @@ def activate_current_loop(
         "stage_freshness": {},
         "freshness_events": [],
         "next_operation": None,
-        "loop_instance_record_path": str(record_path),
-        "loop_instance_record_digest": record["artifact_digest"],
+        "loop_instance_record_path": (str(record_path) if record_path is not None else None),
+        "loop_instance_record_digest": (record["artifact_digest"] if record is not None else None),
         "continuation_path": None,
         "next_loop_seed_path": None,
         "directory_scan_performed": False,
@@ -1497,19 +1612,106 @@ def activate_current_loop(
         "persistent": False,
     }
     state["state_digest"] = _state_digest(state)
+    existing_pending = False
+    expected_revision: int | None = None
     try:
-        store.create(state)
+        existing = store.read()
+    except CurrentLoopError as exc:
+        if exc.category != "current_loop_not_active":
+            raise
+    else:
+        if (
+            existing.get("schema_id") == CURRENT_LOOP_STATE_SCHEMA_ID
+            and existing.get("schema_version") == CURRENT_LOOP_STATE_SCHEMA_VERSION
+            and existing.get("state_kind") == "pending_activation"
+        ):
+            existing_pending = True
+            expected_revision = int(existing["state_revision"])
+        else:
+            raise CurrentLoopConflict("current_loop_already_active")
+    try:
+        if existing_pending:
+            assert expected_revision is not None
+            store.replace(state, expected_revision=expected_revision)
+        else:
+            store.create(state)
     except Exception:
         try:
-            record_path.unlink()
-        except OSError:
+            if record_path is not None:
+                record_path.unlink()
+        except (FileNotFoundError, OSError):
             pass
         raise
     return {
-        "state": state,
+        "state": store.read(),
         "loop_instance_record": record,
         "state_path": str(state_path),
-        "loop_instance_record_path": str(record_path),
+        "loop_instance_record_path": (str(record_path) if record_path is not None else None),
+    }
+
+
+def select_current_loop_generation_posture(
+    *,
+    store: CurrentLoopStore,
+    generation_posture: str,
+    explicit_authority: bool,
+) -> dict[str, Any]:
+    """Bind the separately authorized initial posture and materialize the loop record."""
+
+    if explicit_authority is not True:
+        raise CurrentLoopError("generation_posture_authority_required")
+    if generation_posture not in GENERATION_POSTURES:
+        raise CurrentLoopError("generation_posture_invalid")
+    state = store.read()
+    if state.get("state_kind") != "active_loop" or state.get("activation_state") != "active":
+        raise CurrentLoopError("current_loop_not_active")
+    current_posture = state.get("generation_posture")
+    if current_posture is not None:
+        if current_posture == generation_posture:
+            return {
+                "state": state,
+                "loop_instance_record": _load_exact_json_file(
+                    Path(str(state["loop_instance_record_path"])),
+                    maximum_bytes=LOOP_INSTANCE_RECORD_MAX_BYTES,
+                    missing_category="loop_instance_record_missing",
+                    invalid_category="loop_instance_record_invalid",
+                ),
+                "posture_changed": False,
+            }
+        raise CurrentLoopError("generation_posture_already_bound")
+    record = build_loop_instance_record(
+        loop_ref=str(state["loop_ref"]),
+        parent_loop_ref=state.get("parent_loop_ref"),
+        generation_posture=generation_posture,
+        label=state.get("activation_label"),
+    )
+    record_path = store.state_path.with_name(f"loop-instance-record-{state['loop_ref']}.json")
+    if record_path.exists():
+        raise CurrentLoopConflict("current_loop_record_already_exists")
+    _atomic_write_bytes(
+        record_path,
+        canonical_bytes(record),
+        maximum_bytes=LOOP_INSTANCE_RECORD_MAX_BYTES,
+    )
+
+    def mutator(value: dict[str, Any]) -> Mapping[str, Any]:
+        value["generation_posture"] = generation_posture
+        value["loop_instance_record_path"] = str(record_path)
+        value["loop_instance_record_digest"] = record["artifact_digest"]
+        return value
+
+    try:
+        updated = store.update(mutator, expected_revision=int(state["state_revision"]))
+    except Exception:
+        try:
+            record_path.unlink()
+        except (FileNotFoundError, OSError):
+            pass
+        raise
+    return {
+        "state": updated,
+        "loop_instance_record": record,
+        "posture_changed": True,
     }
 
 
@@ -2063,6 +2265,7 @@ def current_loop_contract_snapshot() -> dict[str, Any]:
             "unchanged_continuation": UNCHANGED_CONTINUATION_SCHEMA_ID,
             "selected_artifact_authorization": (SELECTED_ARTIFACT_AUTHORIZATION_SCHEMA_ID),
             "local_state": CURRENT_LOOP_STATE_SCHEMA_ID,
+            "legacy_local_state": LEGACY_CURRENT_LOOP_STATE_SCHEMA_ID,
         },
         "bounds": {
             "loop_instance_record_maximum_serialized_bytes": (LOOP_INSTANCE_RECORD_MAX_BYTES),
@@ -2074,6 +2277,7 @@ def current_loop_contract_snapshot() -> dict[str, Any]:
             "maximum_authorized_artifacts": MAX_AUTHORIZED_ARTIFACTS,
         },
         "generation_postures": list(GENERATION_POSTURES),
+        "local_state_kinds": list(CURRENT_LOOP_STATE_KINDS),
         "authorization_states": list(AUTHORIZATION_STATES),
         "authorization_actions": [
             "approve_all",

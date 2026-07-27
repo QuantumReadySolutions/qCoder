@@ -306,6 +306,18 @@ def test_request_baseline_preserves_local_text_and_withholds_it_by_default() -> 
         )
 
 
+def test_request_baseline_preserves_leading_trailing_and_embedded_whitespace() -> None:
+    request = "\n  Keep this exact request.\r\nDo not normalize it.  \n"
+    baseline = build_request_baseline(original_request=request)
+    assert baseline["original_request"] == request
+    handoff = share_safe_request_baseline(
+        baseline,
+        include_selected_verbatim=True,
+        selected_verbatim=request,
+    )
+    assert handoff["request_summary"] == request
+
+
 def test_generation_posture_is_explicit_and_independent_from_readiness() -> None:
     guided = build_generation_posture(posture="blueprint_guided", artifact_ref=POSTURE_REF)
     assert guided["independent_from_readiness"] is True
@@ -811,17 +823,15 @@ def test_portable_current_build_context_is_bounded_and_not_authenticity_proof() 
 
 def test_portable_current_build_context_normalizes_integral_floats_before_digest() -> None:
     context, _circuit, _result = _current_context()
-    context["selected_share_safe_summaries"]["result"]["distribution_shape"][
-        "entropy_base2"
-    ] = 1.0
+    context["selected_share_safe_summaries"]["result"]["distribution_shape"]["entropy_base2"] = 1.0
     portable = build_portable_current_build_context(
         current_build_context=context,
         decision_evidence_lineage=_lineage(),
     )
 
-    entropy = portable["selected_share_safe_summaries"]["result"][
-        "distribution_shape"
-    ]["entropy_base2"]
+    entropy = portable["selected_share_safe_summaries"]["result"]["distribution_shape"][
+        "entropy_base2"
+    ]
     assert entropy == 1
     assert isinstance(entropy, int)
     assert '"entropy_base2":1' in canonical_portable_current_build_context_json(portable)
@@ -923,9 +933,9 @@ def test_portable_confirmation_transport_preserves_exact_resupplied_parents() ->
     assert portable_confirmation_transport_error(transported["confirmation_transport"]) is None
     assert transported["confirmation_transport"]["tool_input"] == tool_input
     assert isinstance(
-        transported["confirmation_transport"]["tool_input"][
-            "blueprint_decision_records"
-        ]["schema_version"],
+        transported["confirmation_transport"]["tool_input"]["blueprint_decision_records"][
+            "schema_version"
+        ],
         int,
     )
     assert (

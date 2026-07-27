@@ -50,6 +50,8 @@ from qcoder.development_evidence import PROFILE_IDS, SOURCE_EVIDENCE_DEPTH_GATE
 
 EXPLORER_BETA_DOCS_URL = "https://qcoder.ai/manual/student-beta/"
 OSS_DOCS_URL = "https://qcoder.ai/manual/oss/"
+_CURRENT_LOOP_REQUEST_MAX_CODEPOINTS = 20_000
+_CURRENT_LOOP_REQUEST_MAX_UTF8_BYTES = _CURRENT_LOOP_REQUEST_MAX_CODEPOINTS * 4
 
 
 def _is_non_default_service_url(value: str | None) -> bool:
@@ -905,24 +907,125 @@ def _cmd_current_loop(argv: list[str]) -> int:
 
     sub.add_parser("status", help="Show the bounded current-loop status.")
 
-    activate = sub.add_parser("activate", help="Explicitly activate one current loop.")
-    activate.add_argument("--request", required=True)
+    activate = sub.add_parser(
+        "activate",
+        help=(
+            "Stage an exact Request Baseline for review, then explicitly activate "
+            "using the saved capture."
+        ),
+        description=(
+            "A request source stages the complete message verbatim without activation. "
+            "After the customer reviews that exact display, invoke activate again with "
+            "--approve and no request source. Posture remains a separate authority."
+        ),
+    )
+    request_source = activate.add_mutually_exclusive_group()
+    request_source.add_argument(
+        "--request",
+        help=(
+            "Complete governing customer message supplied inline and preserved exactly; "
+            "this stages review and does not activate qCoder."
+        ),
+    )
+    request_source.add_argument(
+        "--request-file",
+        help=(
+            "Path to exact UTF-8 request bytes. The file is read directly without "
+            "newline normalization; this stages review and does not activate qCoder."
+        ),
+    )
+    request_source.add_argument(
+        "--request-stdin",
+        action="store_true",
+        help=(
+            "Read exact UTF-8 request bytes from non-interactive stdin. A TTY is rejected "
+            "rather than awaited; this stages review and does not activate qCoder."
+        ),
+    )
+    activate.add_argument(
+        "--constraint",
+        action="append",
+        default=[],
+        help=(
+            "Add one user-stated constraint that occurs verbatim in the captured "
+            "request. Extraction is additive and never removes request wording."
+        ),
+    )
+    activate.add_argument(
+        "--choice",
+        action="append",
+        default=[],
+        help=(
+            "Add one user-stated choice that occurs verbatim in the captured request. "
+            "Extraction is additive and never removes request wording."
+        ),
+    )
+    activate.add_argument(
+        "--assistant-interpretation",
+        default=None,
+        help=(
+            "Optional assistant proposal stored only as assistant_proposed. It is not "
+            "confirmed by activation and remains subject to intent review."
+        ),
+    )
     activate.add_argument(
         "--posture",
         choices=("exploratory_first_pass", "blueprint_guided"),
         default=None,
-        help="User-selected generation posture; the assistant may not infer a missing choice.",
+        help=(
+            "Separately selected generation posture. The value carries no authority "
+            "without --approve-posture and attributable --posture-provenance."
+        ),
+    )
+    activate.add_argument(
+        "--approve-posture",
+        action="store_true",
+        help=(
+            "Carry separate explicit human authority for --posture. Omission is not "
+            "approval; supply only after the user selects or accepts that posture, "
+            "and never infer or manufacture approval."
+        ),
+    )
+    activate.add_argument(
+        "--posture-provenance",
+        choices=(
+            "user_provided",
+            "user_confirmed_assistant_recommendation",
+            "inherited_confirmed_lineage",
+        ),
+        default=None,
+        help=(
+            "Attributable source of the separate posture choice. It carries no "
+            "authority without --approve-posture."
+        ),
     )
     activate.add_argument(
         "--approve",
         action="store_true",
         help=(
-            "Carry explicit human authority to activate qCoder for this build. "
-            "Omission is not approval; supply only after the user approves, and "
-            "never infer or manufacture that approval."
+            "Carry explicit human authority to activate qCoder and preserve the complete "
+            "previously displayed pending capture as the exact Request Baseline. "
+            "Omission is not approval; supply only after the user approves that exact "
+            "display, and never infer or manufacture approval. A new request supplied "
+            "in the same invocation is staged for review and is not activated."
         ),
     )
-    activate.add_argument("--label", default=None)
+    activate.add_argument(
+        "--label",
+        default=None,
+        help=(
+            "Optional attributed display label; it never replaces or abbreviates original_request."
+        ),
+    )
+    activate.add_argument(
+        "--label-provenance",
+        choices=("user_provided", "user_confirmed_assistant_interpretation"),
+        default=None,
+        help=(
+            "Required provenance for a supplied --label. Omission with a label fails "
+            "closed; the assistant may not invent customer label authority."
+        ),
+    )
 
     prepare = sub.add_parser(
         "prepare-generation",
@@ -1286,11 +1389,26 @@ def _cmd_current_loop(argv: list[str]) -> int:
         if command == "status":
             result = coordinator.status()
         elif command == "activate":
+            request, request_transport = _read_current_loop_request(args)
             result = coordinator.activate(
-                original_request=args.request,
+                original_request=request,
                 generation_posture=args.posture,
                 explicit_authority=args.approve,
+                explicit_posture_authority=args.approve_posture,
+                posture_authority_provenance=args.posture_provenance,
+                request_transport=request_transport or "inline",
+                explicit_constraints=args.constraint,
+                explicit_choices=args.choice,
                 label=args.label,
+                label_provenance=args.label_provenance,
+                assistant_interpretation=(
+                    {
+                        "text": args.assistant_interpretation,
+                        "provenance_role": "assistant_proposed",
+                    }
+                    if args.assistant_interpretation is not None
+                    else None
+                ),
             )
         elif command == "prepare-generation":
             answers = _parse_current_loop_key_values(args.profile_answer)
@@ -1405,6 +1523,51 @@ def _add_current_loop_transport_arguments(
 ) -> None:
     parser.add_argument("--base-url", default=default_base_url)
     parser.add_argument("--token-file", default=str(default_token_path))
+
+
+def _read_current_loop_request(
+    args: argparse.Namespace,
+) -> tuple[str | None, str | None]:
+    if args.request is not None:
+        request = args.request
+        transport = "inline"
+    elif args.request_file is not None:
+        request_path = Path(args.request_file).expanduser()
+        try:
+            if request_path.is_symlink() or not request_path.is_file():
+                raise ValueError("request_file_not_regular")
+            if request_path.stat().st_size > _CURRENT_LOOP_REQUEST_MAX_UTF8_BYTES:
+                raise ValueError("request_baseline_original_request_too_large")
+            raw = request_path.read_bytes()
+        except OSError as exc:
+            raise ValueError("request_file_unreadable") from exc
+        try:
+            request = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError("request_input_invalid_utf8") from exc
+        transport = "file"
+    elif args.request_stdin:
+        if sys.stdin.isatty():
+            raise ValueError("request_stdin_requires_noninteractive_input")
+        stream = getattr(sys.stdin, "buffer", sys.stdin)
+        raw_or_text = stream.read(_CURRENT_LOOP_REQUEST_MAX_UTF8_BYTES + 1)
+        if len(raw_or_text) > _CURRENT_LOOP_REQUEST_MAX_UTF8_BYTES:
+            raise ValueError("request_baseline_original_request_too_large")
+        if isinstance(raw_or_text, bytes):
+            try:
+                request = raw_or_text.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise ValueError("request_input_invalid_utf8") from exc
+        else:
+            request = str(raw_or_text)
+        transport = "stdin"
+    else:
+        return None, None
+    if request == "":
+        raise ValueError("request_input_empty")
+    if len(request) > _CURRENT_LOOP_REQUEST_MAX_CODEPOINTS:
+        raise ValueError("request_baseline_original_request_too_large")
+    return request, transport
 
 
 def _parse_current_loop_key_values(values: list[str]) -> dict[str, str]:

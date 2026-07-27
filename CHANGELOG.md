@@ -1,6 +1,16 @@
 # Changelog
 
 
+## 0.6.0a2+wi0418.requestbaseline1
+
+- Stage the complete governing customer message locally for exact Request Baseline review before
+  activation, then reuse the reviewed bytes without retransmission.
+- Add lossless inline, UTF-8 file, and explicit stdin request transports plus attributable,
+  additive constraint, choice, interpretation, label, and posture authority.
+- Keep activation/baseline approval separate from posture, IDE write/run, exact-artifact review,
+  and governing-change confirmation.
+
+
 ## 0.6.0a2+wi0418.dualpath1
 
 - Handle exploratory context, Blueprint-readiness decision checkpoints, and full Generation

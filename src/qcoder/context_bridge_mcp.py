@@ -88,54 +88,67 @@ EXPECTED_TOOLS = (
     "create_single_loop_evidence_diff",
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
-CLIENT_ACTIVATION_INSTRUCTIONS = (
-    "Use the supplied python_executable exactly. Invoke the coordinator by extending the supplied "
-    "coordinator_prefix argv array; do not reparse or replace its executable. For coordinator "
-    "subcommands that expose transport options, pass the supplied transport_arguments exactly. "
-    "Never run `which` or `where`, inspect PATH or environment variables, traverse the filesystem, "
-    "or otherwise discover a Python runtime. Never inspect Cursor, Claude Code, or Codex "
-    "configuration to rediscover the runtime. Never list, browse, or inspect the executable path's "
-    "parent directories. Never open, read, print, copy, hash, or validate the token-file contents. "
-    "The declared executable and token-file paths authorize only invoking the declared qCoder "
-    "runtime and passing the token-file path to qCoder; they grant no general access outside the "
-    "active workspace. First use the declared coordinator_prefix with `--help`; stop if it does not "
-    "expose qCoder current-loop. Stop on authentication, entitlement, or hosted-service failure. "
-    "Never manually sequence Context Bridge tools and never substitute a local or manual review "
-    "fallback. Conversational approval and canonical confirmation are distinct. After the user "
-    "approves a checkpoint, transmit that authority through the exact required_authority_input "
-    "named by the coordinator result. Follow supported_next_action and next_invocation exactly; "
-    "do not infer or reconstruct an invocation from chat history when the coordinator supplies "
-    "one. Never repeat an identical invocation after an unchanged checkpoint without new "
-    "authority or corrected input. If the same checkpoint remains after the required authority "
-    "was transmitted, report the returned awaiting_confirmation_fields and stop instead of "
-    "searching for state. Never inspect .qcoder state files, recursively search even inside the "
-    "workspace, or inspect parent directories, home-directory qCoder state, client configuration, "
-    "or sibling repositories to repair a checkpoint. Do not replace coordinator truth with a "
-    "locally assembled review. Workspace freshness is not intent and never selects a generation "
-    "posture. Ground posture only in explicit user wording, supplied lineage, or an assistant "
-    "recommendation the user explicitly accepts; preserve assistant provenance. Preserve exact "
-    "user-stated decision answers and do not ask for them again. Never transmit an assistant "
-    "recommendation as a decision disposition before explicit user approval. Exploratory first "
-    "pass is bounded progress with unresolved decisions and is not a full Generation Context "
-    "Pack or Blueprint-readiness claim. Blueprint-guided generation must stop at the returned "
-    "decision_resolution checkpoint and surface only generation-relevant blockers. Follow the "
-    "coordinator's exact decision-disposition authority channel after user approval. A posture "
-    "transition requires its separate explicit authority and must not rewrite the Working "
-    "Blueprint, resolve a decision, or create an Evolved Blueprint. Preserve the user's natural "
-    "request verbatim as the Request "
-    "Baseline and present "
-    "checkpoints conversationally. Never ask the customer for qCoder tool names, JSON, digests, or "
-    "parent reconstruction. Never reconstruct canonical artifacts, scan the repository, inspect "
-    "outside the workspace, or infer neighboring files. qCoder activation does not grant IDE "
-    "permission to write or run and does not authorize artifact review. Keep qCoder activation, "
-    "IDE write/run permission, exact artifact-review permission, and governing-change confirmation "
-    "separate. Present the exact artifact candidates and require explicit exact-set authorization "
-    "before review. Do not confirm a "
-    "governing proposal without proposal-specific explicit confirmation; confirmation and "
-    "materialization stay in the IDE. Offer Review in this IDE, optional passive Build Review, and "
-    "Continue without visual review. Unchanged Continuation creates no Evolved Blueprint. Never "
-    "change a Blueprint silently or transfer raw artifacts."
-)
+CLIENT_ACTIVATION_INSTRUCTIONS = """REQUEST FIDELITY
+Preserve the complete governing customer message verbatim as original_request. Do not summarize,
+abbreviate, paraphrase, reword, or omit activation wording, posture wording, constraints, choices,
+review preferences, continuation wording, or Blueprint boundaries. Extracting activation,
+posture, constraints, choices, a label, or an assistant interpretation is additive and never
+removes wording from original_request. Stop before activation if exact transfer cannot be
+completed.
+
+ACTIVATION PROTOCOL
+qCoder Current Loop is opt-in: do nothing unless the user explicitly asks to use qCoder for the
+current build or explicitly accepts an activation offer. Never activate silently. For a task
+received before activation, stage the exact complete message through activate without --approve.
+Use inline transfer for concise text and prefer explicit --request-stdin for longer or multiline
+text so no project file is created; never ask the customer to create a request file.
+Use qCoder's returned complete capture when asking: “Use qCoder for this build and preserve the
+following exact Request Baseline?” Do not ask the user to repeat the task, and never use a later
+one-word “Yes” as original_request. After approval, invoke activate with --approve only; let qCoder
+reuse the pending capture. Do not resend or reconstruct the request. Posture remains separate
+unless explicitly supplied with its own attributable authority.
+
+CHECKPOINT PROTOCOL
+Conversational approval and canonical confirmation are distinct. After the user approves a
+checkpoint, transmit that authority through the exact required_authority_input. Follow
+supported_next_action and next_invocation exactly; do not infer or reconstruct an invocation from
+chat history. Never repeat an identical invocation after an unchanged checkpoint without new
+authority or corrected input. If the same checkpoint remains after authority was transmitted,
+report awaiting_confirmation_fields and stop instead of searching for state. Workspace freshness
+is not intent. Ground posture in explicit wording, lineage, or an assistant recommendation the
+user explicitly accepts. Preserve exact user-stated decision answers. Exploratory first pass is
+not a full Generation Context Pack; Blueprint-guided generation stops at the decision_resolution
+checkpoint and uses the exact decision-disposition authority channel. A posture transition
+requires its separate explicit authority and must not rewrite the Working Blueprint.
+"""
+
+CLIENT_AUTHORITY_AND_PROHIBITED_INSTRUCTIONS = """AUTHORITY BOUNDARIES
+Keep qCoder activation and exact-baseline confirmation, posture authority, IDE write/run
+permission, exact artifact-review permission, and governing-change confirmation separate. qCoder
+activation does not grant IDE permission to write or run and does not authorize artifact review.
+Keep qCoder activation, IDE write/run permission, exact artifact-review permission, and
+governing-change confirmation distinct. Present exact artifact candidates before review. Never
+confirm a governing proposal without proposal-specific explicit confirmation. Offer Review in
+this IDE, optional passive Build Review, and Continue without visual review. Unchanged
+Continuation creates no Evolved Blueprint.
+
+PROHIBITED ACTIONS
+Use the supplied python_executable exactly and extend coordinator_prefix without replacing its
+executable. Pass transport_arguments exactly where supported. Never run `which` or `where`, inspect
+PATH or environment variables, traverse the filesystem for a runtime, inspect Cursor, Claude Code,
+or Codex configuration. Never inspect Cursor, Claude Code, or Codex configuration to rediscover the
+runtime. Never list, browse, or inspect the executable path's parent directories.
+Never inspect .qcoder state files, recursively search even inside the workspace, inspect parent or
+home-directory qCoder state, or inspect sibling repositories. Never open, read, print, copy, hash,
+or validate the token-file contents. The declared paths authorize only invoking the declared
+qCoder runtime and passing its token-file path; they grant no general access outside the active
+workspace. First use coordinator_prefix with --help; stop if it does not expose qCoder
+current-loop. Stop on authentication, entitlement, or hosted-service failure. Never manually
+sequence Context Bridge tools and never substitute a local or manual review fallback. Do not
+replace coordinator truth with a locally assembled review. Never reconstruct canonical artifacts,
+scan the repository, infer neighboring files, transfer raw artifacts, or inspect client
+configuration.
+"""
 
 
 def _resolved_configuration_path(
@@ -190,12 +203,13 @@ def build_client_activation_instructions(
     }
     runtime_block = json.dumps(runtime, indent=2, sort_keys=False)
     return (
-        "qCoder Current Loop is opt-in: do nothing unless the user explicitly asks to use qCoder "
-        "for the current build or explicitly accepts an activation offer. Never activate silently.\n"
+        f"{CLIENT_ACTIVATION_INSTRUCTIONS}\n"
+        "CONFIGURED RUNTIME\n"
         "Configured qCoder runtime (JSON values are exact operational metadata; "
         "coordinator_prefix is an argv array):\n"
-        f"{runtime_block}\n"
-        f"{CLIENT_ACTIVATION_INSTRUCTIONS}"
+        f"{runtime_block}\n\n"
+        "Use the coordinator_prefix argv array exactly as supplied.\n\n"
+        f"{CLIENT_AUTHORITY_AND_PROHIBITED_INSTRUCTIONS}"
     )
 
 

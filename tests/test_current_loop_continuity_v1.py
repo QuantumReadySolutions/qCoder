@@ -23,6 +23,7 @@ from qcoder.context_bridge_mcp import (
 )
 from qcoder.current_loop import (
     CURRENT_LOOP_STATE_SCHEMA_ID,
+    LEGACY_CURRENT_LOOP_STATE_SCHEMA_ID,
     LOOP_INSTANCE_RECORD_MAX_BYTES,
     LOOP_INSTANCE_RECORD_SCHEMA_ID,
     NEXT_LOOP_SEED_SCHEMA_ID,
@@ -171,6 +172,7 @@ def test_contract_snapshot_is_local_bounded_and_does_not_add_inventory() -> None
         "unchanged_continuation": UNCHANGED_CONTINUATION_SCHEMA_ID,
         "selected_artifact_authorization": (SELECTED_ARTIFACT_AUTHORIZATION_SCHEMA_ID),
         "local_state": CURRENT_LOOP_STATE_SCHEMA_ID,
+        "legacy_local_state": LEGACY_CURRENT_LOOP_STATE_SCHEMA_ID,
     }
     assert snapshot["maximum_parent_loop_references"] == 1
     assert snapshot["server_lookup"] is False

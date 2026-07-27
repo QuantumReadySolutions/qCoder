@@ -235,6 +235,27 @@ def _text(value: object, *, field: str, maximum: int = 4_000) -> str:
     return result
 
 
+def _exact_text(value: object, *, field: str, maximum: int) -> str:
+    if not isinstance(value, str) or value == "":
+        raise ValueError(f"{field}_required")
+    if len(value) > maximum:
+        raise ValueError(f"{field}_too_large")
+    return value
+
+
+def _exact_text_list(
+    value: object,
+    *,
+    field: str,
+    maximum_items: int = 64,
+) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, (list, tuple)) or len(value) > maximum_items:
+        raise ValueError(f"{field}_invalid")
+    return [_exact_text(item, field=field, maximum=1_000) for item in value]
+
+
 def _text_list(value: object, *, field: str, maximum_items: int = 64) -> list[str]:
     if value is None:
         return []
@@ -291,7 +312,7 @@ def build_request_baseline(
 ) -> dict[str, Any]:
     """Preserve one request locally without declaring it share-safe."""
 
-    request = _text(original_request, field="original_request", maximum=20_000)
+    request = _exact_text(original_request, field="original_request", maximum=20_000)
     assistant = deepcopy(dict(assistant_interpretation or {}))
     if len(_canonical_json(assistant)) > 12_000:
         raise ValueError("assistant_interpretation_too_large")
@@ -301,8 +322,14 @@ def build_request_baseline(
         "artifact_type": "request_baseline",
         "artifact_ref": _reference(artifact_ref),
         "original_request": request,
-        "explicit_constraints": _text_list(explicit_constraints, field="explicit_constraints"),
-        "explicit_choices": _text_list(explicit_choices, field="explicit_choices"),
+        "explicit_constraints": _exact_text_list(
+            explicit_constraints,
+            field="explicit_constraints",
+        ),
+        "explicit_choices": _exact_text_list(
+            explicit_choices,
+            field="explicit_choices",
+        ),
         "assistant_interpretation": assistant,
         "profile_suggestions": _text_list(profile_suggestions, field="profile_suggestions"),
         "unresolved_questions": _text_list(unresolved_questions, field="unresolved_questions"),
@@ -335,7 +362,11 @@ def share_safe_request_baseline(
         raise ValueError("request_baseline_invalid")
     original = str(baseline["original_request"])
     if include_selected_verbatim:
-        selected = _text(selected_verbatim, field="selected_verbatim", maximum=20_000)
+        selected = _exact_text(
+            selected_verbatim,
+            field="selected_verbatim",
+            maximum=20_000,
+        )
         if selected != original:
             raise ValueError("selected_request_text_mismatch")
         request_summary = selected

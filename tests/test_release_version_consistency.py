@@ -13,7 +13,7 @@ from qcoder import __version__
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts/verify-release-version.py"
-EXPECTED_VERSION = "0.6.0a2"
+EXPECTED_VERSION = "0.6.0a2+wi0418.requestbaseline1"
 
 
 def _load_verifier():
@@ -24,7 +24,7 @@ def _load_verifier():
     return module
 
 
-def test_source_version_identity_is_0_6_0a2() -> None:
+def test_source_version_identity_is_request_baseline_candidate() -> None:
     verifier = _load_verifier()
     versions = verifier.source_versions(REPO_ROOT)
     assert versions == {
@@ -56,7 +56,7 @@ def test_built_wheel_sdist_and_customer_pin_agree(tmp_path: Path) -> None:
     )
     assert result["version"] == EXPECTED_VERSION
     assert result["public_version"] == "0.6.0a2"
-    assert result["private_candidate_identity"] is False
+    assert result["private_candidate_identity"] is True
     assert result["old_candidate_identity_absent"] is True
 
 
