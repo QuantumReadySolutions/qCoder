@@ -24,6 +24,12 @@
 
 - Package the accepted Current Loop continuity foundation and deterministic coordinator behind the
   existing `qcoder current-loop` entrypoint.
+- Handle exploratory context, Blueprint-readiness decision checkpoints, and full Generation
+  Context Packs as distinct valid outcomes of the existing protected operation.
+- Add explicit, attributable decision-disposition and posture-transition authority to the
+  existing Current Loop CLI without adding a Context Bridge tool or protected operation.
+- Preserve workspace/intent separation, explicit-answer provenance, unresolved decisions, and
+  the four independent customer authority boundaries.
 - Supply explicit, non-silent connected-client activation guidance through the existing local
   Context Bridge initialization response without adding a Context Bridge tool.
 - Preserve exactly twelve qCoder Context Bridge domain tools, separate IDE write/run authority,

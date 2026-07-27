@@ -13,7 +13,7 @@ from qcoder import __version__
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts/verify-release-version.py"
-PRIVATE_CANDIDATE_VERSION = "0.6.0a2+wi0418.dualpath1"
+EXPECTED_VERSION = "0.6.0a2"
 
 
 def _load_verifier():
@@ -28,25 +28,23 @@ def test_source_version_identity_is_0_6_0a2() -> None:
     verifier = _load_verifier()
     versions = verifier.source_versions(REPO_ROOT)
     assert versions == {
-        "pyproject": PRIVATE_CANDIDATE_VERSION,
-        "qcoder.__version__": PRIVATE_CANDIDATE_VERSION,
+        "pyproject": EXPECTED_VERSION,
+        "qcoder.__version__": EXPECTED_VERSION,
     }
-    assert __version__ == PRIVATE_CANDIDATE_VERSION
+    assert __version__ == EXPECTED_VERSION
 
 
 def test_built_wheel_sdist_and_customer_pin_agree(tmp_path: Path) -> None:
     verifier = _load_verifier()
-    wheel = tmp_path / f"qcoder-{PRIVATE_CANDIDATE_VERSION}-py3-none-any.whl"
+    wheel = tmp_path / f"qcoder-{EXPECTED_VERSION}-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
         archive.writestr(
-            f"qcoder-{PRIVATE_CANDIDATE_VERSION}.dist-info/METADATA",
-            (f"Metadata-Version: 2.4\nName: qcoder\nVersion: {PRIVATE_CANDIDATE_VERSION}\n"),
+            f"qcoder-{EXPECTED_VERSION}.dist-info/METADATA",
+            (f"Metadata-Version: 2.4\nName: qcoder\nVersion: {EXPECTED_VERSION}\n"),
         )
-    sdist = tmp_path / f"qcoder-{PRIVATE_CANDIDATE_VERSION}.tar.gz"
-    metadata = (
-        f"Metadata-Version: 2.4\nName: qcoder\nVersion: {PRIVATE_CANDIDATE_VERSION}\n"
-    ).encode()
-    info = tarfile.TarInfo(f"qcoder-{PRIVATE_CANDIDATE_VERSION}/PKG-INFO")
+    sdist = tmp_path / f"qcoder-{EXPECTED_VERSION}.tar.gz"
+    metadata = (f"Metadata-Version: 2.4\nName: qcoder\nVersion: {EXPECTED_VERSION}\n").encode()
+    info = tarfile.TarInfo(f"qcoder-{EXPECTED_VERSION}/PKG-INFO")
     info.size = len(metadata)
     with tarfile.open(sdist, "w:gz") as archive:
         archive.addfile(info, io.BytesIO(metadata))
@@ -56,9 +54,9 @@ def test_built_wheel_sdist_and_customer_pin_agree(tmp_path: Path) -> None:
         sdist=sdist,
         customer_roots=[REPO_ROOT],
     )
-    assert result["version"] == PRIVATE_CANDIDATE_VERSION
+    assert result["version"] == EXPECTED_VERSION
     assert result["public_version"] == "0.6.0a2"
-    assert result["private_candidate_identity"] is True
+    assert result["private_candidate_identity"] is False
     assert result["old_candidate_identity_absent"] is True
 
 

@@ -180,7 +180,7 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
     token_path = str(token_file.resolve())
     assert runtime == {
         "python_executable": executable,
-        "qcoder_version": "0.6.0a2+wi0418.dualpath1",
+        "qcoder_version": "0.6.0a2",
         "coordinator_prefix": [
             executable,
             "-m",
@@ -2012,13 +2012,13 @@ def test_mcp_stdio_content_length_lists_exact_tools(tmp_path: Path) -> None:
         initialized = _read_content_length_response(proc.stdout)
         assert initialized["result"]["serverInfo"] == {
             "name": "qcoder-context-bridge",
-            "version": "0.6.0a2+wi0418.dualpath1",
+            "version": "0.6.0a2",
         }
         instructions = initialized["result"]["instructions"]
         runtime = _activation_runtime(instructions)
         executable = str(Path(sys.executable).absolute())
         assert runtime["python_executable"] == executable
-        assert runtime["qcoder_version"] == "0.6.0a2+wi0418.dualpath1"
+        assert runtime["qcoder_version"] == "0.6.0a2"
         assert runtime["coordinator_prefix"] == [
             executable,
             "-m",
