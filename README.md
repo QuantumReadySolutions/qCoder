@@ -24,7 +24,7 @@ and the Context Bridge adapter for eligible Explorer users. Pro is not launched 
 current public product path.
 
 Private WI-0418 checkpoint proof artifacts use the non-publishable local identity
-`0.6.0a2+wi0418.checkpoint1`. Customer installation remains pinned to the held public target
+`0.6.0a2+wi0418.dualpath1`. Customer installation remains pinned to the held public target
 `0.6.0a2`; the local-identity artifact is installed only by exact private path and hash.
 
 - **OSS commands** (`analyze`, `batch`, `context`, `review`) are Apache-2.0, local-first/offline, and useful without an account or token. They do not upload data, call a qCoder hosted service, or run QPU/simulator jobs.

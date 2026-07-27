@@ -102,6 +102,7 @@ _CANONICAL_ARTIFACT_ROLES = {
     "working_blueprint",
     "output_evidence_contract",
     "generation_context_pack",
+    "exploratory_generation_context",
     "stage_availability",
     "python_manifestation",
     "circuit_manifestation",

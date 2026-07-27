@@ -983,6 +983,68 @@ def _cmd_current_loop(argv: list[str]) -> int:
             "corresponding user approval and never infer or manufacture it."
         ),
     )
+    prepare.add_argument(
+        "--decision-disposition",
+        action="append",
+        nargs=4,
+        default=[],
+        metavar=("DECISION_ID", "ACTION", "VALUE", "PROVENANCE"),
+        help=(
+            "Carry one reviewed decision as four separate argv values: catalog decision "
+            "ID, selected_choice or left_unresolved, the exact value (use - only for "
+            "left_unresolved), and attributable provenance. Repeat for multiple "
+            "decisions. Omission is not approval; use only after explicit user action, "
+            "and never infer or manufacture a value."
+        ),
+    )
+    prepare.add_argument(
+        "--approve-decisions",
+        action="store_true",
+        help=(
+            "Carry explicit human authority for every --decision-disposition in this "
+            "invocation. Omission is not approval; supply only after the user approves "
+            "those exact dispositions, and never infer or manufacture approval."
+        ),
+    )
+    prepare.add_argument(
+        "--posture",
+        choices=("exploratory_first_pass", "blueprint_guided"),
+        default=None,
+        help=(
+            "Keep or explicitly request the generation posture for this attempt. "
+            "Workspace freshness is not posture authority."
+        ),
+    )
+    prepare.add_argument(
+        "--approve-posture-change",
+        action="store_true",
+        help=(
+            "Carry explicit human authority to change this attempt's posture. Omission "
+            "is not approval; supply only after the user approves, and never infer or "
+            "manufacture the transition."
+        ),
+    )
+    prepare.add_argument(
+        "--posture-reason",
+        default=None,
+        help=(
+            "Bounded user meaning for an explicitly authorized posture transition; "
+            "not approval by itself."
+        ),
+    )
+    prepare.add_argument(
+        "--posture-provenance",
+        choices=(
+            "user_provided",
+            "user_confirmed_assistant_recommendation",
+            "inherited_confirmed_lineage",
+        ),
+        default=None,
+        help=(
+            "Attributable source of the posture transition. It carries no authority "
+            "without --approve-posture-change."
+        ),
+    )
 
     authority = sub.add_parser(
         "record-ide-authority",
@@ -1232,6 +1294,7 @@ def _cmd_current_loop(argv: list[str]) -> int:
             )
         elif command == "prepare-generation":
             answers = _parse_current_loop_key_values(args.profile_answer)
+            dispositions = _parse_current_loop_decision_dispositions(args.decision_disposition)
             result = coordinator.prepare_generation(
                 profile_id=args.profile,
                 proposed_interpretation={
@@ -1243,6 +1306,12 @@ def _cmd_current_loop(argv: list[str]) -> int:
                 non_goals=args.non_goal,
                 explicit_intent_approval=args.confirm_intent,
                 confirmation_assertion=args.confirmation,
+                decision_dispositions=dispositions,
+                explicit_decision_authority=args.approve_decisions,
+                requested_generation_posture=args.posture,
+                explicit_posture_authority=args.approve_posture_change,
+                posture_change_reason=args.posture_reason,
+                posture_authority_provenance=args.posture_provenance,
             )
         elif command == "record-ide-authority":
             result = coordinator.record_ide_authority(
@@ -1345,6 +1414,25 @@ def _parse_current_loop_key_values(values: list[str]) -> dict[str, str]:
         if not separator or not key.strip() or not item or key in result:
             raise ValueError("current_loop_key_value_invalid")
         result[key.strip()] = item
+    return result
+
+
+def _parse_current_loop_decision_dispositions(
+    values: list[list[str]],
+) -> list[dict[str, object]]:
+    result: list[dict[str, object]] = []
+    for value in values:
+        if len(value) != 4 or any(not item.strip() for item in value):
+            raise ValueError("current_loop_decision_disposition_invalid")
+        decision_id, action, selected_value, provenance = value
+        result.append(
+            {
+                "profile_decision_id": decision_id.strip(),
+                "user_disposition": action.strip(),
+                "selected_value": selected_value if selected_value != "-" else None,
+                "authority_provenance": provenance.strip(),
+            }
+        )
     return result
 
 

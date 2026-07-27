@@ -1,6 +1,16 @@
 # Changelog
 
 
+## 0.6.0a2+wi0418.dualpath1
+
+- Handle exploratory context, Blueprint-readiness decision checkpoints, and full Generation
+  Context Packs as distinct valid outcomes of the existing protected operation.
+- Add explicit, attributable decision-disposition and posture-transition authority to the
+  existing Current Loop CLI without adding a Context Bridge tool or protected operation.
+- Preserve workspace/intent separation, explicit-answer provenance, unresolved decisions, and
+  the four independent customer authority boundaries.
+
+
 ## 0.6.0a2+wi0418.checkpoint1
 
 - Mark this private, non-publishable WI-0418 checkpoint-protocol candidate with a distinct PEP 440

@@ -12,6 +12,7 @@ from qcoder.algorithm_blueprint import with_artifact_digest
 from qcoder.blueprint_decisions import (
     ACTION_IDS,
     build_decision_records,
+    calculate_blueprint_readiness,
     catalog_entries,
     pack_decision_record_set,
     unpack_decision_record_set,
@@ -22,11 +23,13 @@ from qcoder.cli import _parse_current_loop_scalar, main as cli_main
 from qcoder.context_loop import (
     build_carry_forward_proposal,
     build_current_build_context,
+    build_generation_posture,
     build_portable_current_build_context,
     context_loop_contract_snapshot,
     materialize_evolved_blueprint,
 )
 from qcoder.current_loop import CurrentLoopStore, decision_inventory_binding
+from qcoder.current_loop import CurrentLoopError
 from qcoder.current_loop_coordinator import (
     CHECKPOINT_KINDS,
     CLIENT_NAMES,
@@ -36,6 +39,7 @@ from qcoder.current_loop_coordinator import (
     consequence_projection,
     coordinator_contract_snapshot,
     infer_requested_posture,
+    normalize_decision_dispositions,
 )
 import qcoder.current_loop_coordinator as current_loop_coordinator_module
 
@@ -75,6 +79,12 @@ def _user_dispositions(profile_id: str) -> list[dict[str, str]]:
             "user_disposition": "selected_choice",
             "generation_effect": "non_blocking",
             "choice_origin": "human_specified",
+            "selected_value": (
+                item["supported_alternatives"][0]
+                if item["supported_alternatives"]
+                else f"explicit-{item['profile_decision_id']}"
+            ),
+            "authority_provenance": "user_provided",
         }
         for item in catalog_entries(profile_id)
     ]
@@ -124,6 +134,7 @@ class PublicBuilderTransport:
         *,
         drop_current_portable: bool = False,
         drop_proposal_portable: bool = False,
+        malformed_generation: bool = False,
     ) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self._counter = 100
@@ -132,6 +143,7 @@ class PublicBuilderTransport:
         self.proposal: dict[str, Any] | None = None
         self.drop_current_portable = drop_current_portable
         self.drop_proposal_portable = drop_proposal_portable
+        self.malformed_generation = malformed_generation
 
     def _next_ref(self) -> str:
         self._counter += 1
@@ -147,8 +159,49 @@ class PublicBuilderTransport:
                 return self._proposal(supplied)
             return self._blueprint(supplied)
         if tool_name == "create_generation_context_pack":
+            if self.malformed_generation:
+                return {
+                    "ok": True,
+                    "context_status": "generation_context_pack_ready",
+                    "generation_context_pack": None,
+                    "generation_context_pack_produced": True,
+                }
+            blueprint = supplied["implementation_blueprint"]
+            records = unpack_decision_record_set(blueprint["blueprint_decision_records"])
+            profile_id = records[0]["selected_profile"]
+            readiness = calculate_blueprint_readiness(
+                profile_id=profile_id,
+                decision_records=records,
+            )
+            if supplied.get("generation_posture") == "exploratory_first_pass":
+                exploratory = build_generation_posture(
+                    posture="exploratory_first_pass",
+                    explicitly_authorized=supplied.get("exploratory_authorization") is True,
+                    explicit_constraints=supplied.get("exploratory_constraints") or [],
+                    explicit_prohibitions=supplied.get("exploratory_prohibitions") or [],
+                    unresolved_assistant_choices=supplied.get("unresolved_assistant_choices") or [],
+                    artifact_ref=blueprint["artifact_ref"],
+                )
+                return {
+                    "ok": True,
+                    "context_status": "exploratory_generation_context_ready",
+                    "exploratory_generation_context": exploratory,
+                    "generation_context_pack": None,
+                    "generation_context_pack_produced": False,
+                }
+            if readiness["generation_context_eligibility"] is not True:
+                return {
+                    "ok": True,
+                    "context_status": "generation_context_blocked_pending_decisions",
+                    "blueprint_readiness_summary": readiness,
+                    "generation_context_pack": None,
+                    "generation_context_pack_produced": False,
+                }
             return {
                 "ok": True,
+                "context_status": "generation_context_pack_ready",
+                "generation_context_pack_produced": True,
+                "blueprint_readiness_summary": readiness,
                 "generation_context_pack": _artifact(
                     "generation_context_pack",
                     self._counter + 1,
@@ -190,15 +243,43 @@ class PublicBuilderTransport:
         profile_id = str(supplied["profile_id"])
         lineage = str(supplied["current_lineage_reference"])
         key = (profile_id, lineage)
-        records = self._record_sets.get(key)
-        if records is None:
-            records = build_decision_records(
-                profile_id=profile_id,
-                current_lineage_reference=lineage,
-                parent_artifact_references=[{"artifact_ref": lineage}],
-                dispositions=_protected_dispositions(profile_id),
-            )
-            self._record_sets[key] = records
+        prior = self._record_sets.get(key) or []
+        references = {item["profile_decision_id"]: item["decision_ref"] for item in prior}
+        references.update(
+            {
+                str(decision_id): str(decision_ref)
+                for decision_id, decision_ref in dict(
+                    supplied.get("decision_references") or {}
+                ).items()
+            }
+        )
+        supplied_dispositions = [
+            deepcopy(dict(item))
+            for item in supplied.get("decision_dispositions") or []
+            if isinstance(item, Mapping)
+        ]
+        protected_by_id = {
+            item["profile_decision_id"]: item for item in _protected_dispositions(profile_id)
+        }
+        enriched_dispositions = [
+            {
+                **(
+                    protected_by_id.get(str(item.get("profile_decision_id")), {})
+                    if item.get("user_disposition") == "selected_choice"
+                    else {}
+                ),
+                **item,
+            }
+            for item in supplied_dispositions
+        ]
+        records = build_decision_records(
+            profile_id=profile_id,
+            current_lineage_reference=lineage,
+            parent_artifact_references=[{"artifact_ref": lineage}],
+            dispositions=enriched_dispositions,
+            decision_references=references,
+        )
+        self._record_sets[key] = records
         confirmed = supplied.get("requested_confirmation_state") == "confirmed"
         card = _artifact(
             "algorithm_intent_card",
@@ -225,6 +306,10 @@ class PublicBuilderTransport:
         card = supplied["algorithm_intent_card"]
         records = unpack_decision_record_set(card["blueprint_decision_records"])
         profile_id = records[0]["selected_profile"]
+        readiness = calculate_blueprint_readiness(
+            profile_id=profile_id,
+            decision_records=records,
+        )
         blueprint = _artifact(
             "implementation_blueprint",
             self._counter + 6,
@@ -238,14 +323,7 @@ class PublicBuilderTransport:
                 profile_id=profile_id,
                 decision_records=records,
             ),
-            blueprint_readiness_summary={
-                "aggregate_readiness_result": "ready_to_generate",
-                "generation_context_eligibility": True,
-                "blocking_decision_references": [],
-                "bounded_discretion_decision_references": [],
-                "evidence_deferred_decision_references": [],
-                "non_proof": "Readiness is contract-relative.",
-            },
+            blueprint_readiness_summary=readiness,
             parent_intent_reference={
                 "artifact_ref": card["artifact_ref"],
                 "digest": card["artifact_digest"],
@@ -417,6 +495,7 @@ def _activate_and_prepare(
         profile_id=profile_id,
         proposed_interpretation={"normalized_goal": "Build one bounded example."},
         decision_dispositions=_user_dispositions(profile_id),
+        explicit_decision_authority=True,
         explicit_intent_approval=False,
     )
     assert clarification["details"]["intent_confirmation_state"] == ("needs_clarification")
@@ -424,6 +503,7 @@ def _activate_and_prepare(
         profile_id=profile_id,
         proposed_interpretation={"normalized_goal": "Build one bounded example."},
         decision_dispositions=_user_dispositions(profile_id),
+        explicit_decision_authority=True,
         reviewed_profile_answers={
             "framework_requirement": "Use the explicitly selected SDK.",
         },
@@ -436,8 +516,9 @@ def _activate_and_prepare(
 
 def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
     snapshot = coordinator_contract_snapshot()
-    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v2"
-    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 2
+    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v3"
+    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v2"
+    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 3
     assert all(snapshot["checkpoint_result_protocol"].values())
     contract_digest = hashlib.sha256(
         json.dumps(
@@ -447,7 +528,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("2f985d84fcb046b18142617c0239e7a8ef81073acae8783e118b87cab1b7987e")
+    assert contract_digest == ("2277f50a11bd6dbda1543dbbd89c0da6bb7e246a2a5a5fbeb647c8187c8a9a2f")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
@@ -1161,6 +1242,7 @@ def test_ordinary_prompt_paraphrase_matrix_reaches_complete_lineage(
         profile_id=profile,
         proposed_interpretation={"normalized_goal": prompt},
         decision_dispositions=_user_dispositions(profile),
+        explicit_decision_authority=True,
         reviewed_profile_answers={"problem_size_meaning": "Explicitly bounded."},
         explicit_intent_approval=True,
         confirmation_assertion="Approved for this generation.",
@@ -1180,6 +1262,530 @@ def test_named_clients_share_one_contract_without_client_product_truth() -> None
     assert snapshot["assistant_reconstruction_allowed"] is False
     assert snapshot["protected_operation_added"] is False
     assert "local_run_failed" in snapshot["safe_local_failure_categories"]
+
+
+def _generation_dispositions(profile_id: str) -> list[dict[str, str]]:
+    generation_ids = {
+        item["profile_decision_id"]
+        for item in catalog_entries(profile_id)
+        if item["generation_relevant"]
+    }
+    return [
+        item
+        for item in _user_dispositions(profile_id)
+        if item["profile_decision_id"] in generation_ids
+    ]
+
+
+def test_non_bell_exploratory_path_preserves_unresolved_decisions(
+    tmp_path: Path,
+) -> None:
+    transport = PublicBuilderTransport()
+    coordinator, _workspace = _coordinator(tmp_path, transport)
+    request = (
+        "Use qCoder for an exploratory first pass on a Grover search prototype; "
+        "leave architecture choices open."
+    )
+    assert coordinator.activate(
+        original_request=request,
+        generation_posture="exploratory_first_pass",
+        explicit_authority=True,
+    )["ok"]
+    result = coordinator.prepare_generation(
+        profile_id="grover_search",
+        proposed_interpretation={
+            "summary": "Create one bounded first implementation while architecture remains open."
+        },
+        constraints=["Work only in the selected synthetic workspace."],
+        explicit_intent_approval=True,
+        confirmation_assertion="Approved as an exploratory attempt.",
+    )
+    assert result["phase"] == "generation_ready"
+    assert result["checkpoint_kind"] == "ide_write_or_run"
+    assert result["details"]["context_status"] == ("exploratory_generation_context_ready")
+    assert result["details"]["generation_context_pack_created"] is False
+    assert result["details"]["exploratory_generation_context_created"] is True
+    assert result["details"]["full_blueprint_readiness_claimed"] is False
+    assert result["details"]["unresolved_decision_references"]
+    assert all(
+        item["role"] != "generation_context_pack" for item in result["saved_artifact_references"]
+    )
+    generation_call = next(
+        arguments
+        for tool_name, arguments in transport.calls
+        if tool_name == "create_generation_context_pack"
+    )
+    assert generation_call["generation_posture"] == "exploratory_first_pass"
+    assert generation_call["exploratory_authorization"] is True
+    assert generation_call["exploratory_constraints"]
+    assert generation_call["exploratory_prohibitions"]
+
+
+def test_non_bell_blueprint_guided_path_resolves_only_generation_blockers(
+    tmp_path: Path,
+) -> None:
+    transport = PublicBuilderTransport()
+    coordinator, _workspace = _coordinator(tmp_path, transport)
+    request = (
+        "Use qCoder with Blueprint-guided control for a QAOA prototype; decide "
+        "generation architecture before code."
+    )
+    assert coordinator.activate(
+        original_request=request,
+        generation_posture="blueprint_guided",
+        explicit_authority=True,
+    )["ok"]
+    interpretation = {"summary": "Prepare the QAOA generation architecture before implementation."}
+    blocked = coordinator.prepare_generation(
+        profile_id="qaoa",
+        proposed_interpretation=interpretation,
+        explicit_intent_approval=True,
+        confirmation_assertion="Approved for Blueprint-guided readiness.",
+    )
+    assert blocked["state_status"] == "checkpoint_required"
+    assert blocked["checkpoint_kind"] == "decision_resolution"
+    assert blocked["category"] == "generation_context_blocked_pending_decisions"
+    generation_ids = {
+        item["profile_decision_id"]
+        for item in catalog_entries("qaoa")
+        if item["generation_relevant"]
+    }
+    assert {
+        item["profile_decision_id"] for item in blocked["details"]["decision_resolution"]
+    } == generation_ids
+    assert blocked["supported_next_action"] == ("resolve_generation_decisions_or_switch_posture")
+    ready = coordinator.prepare_generation(
+        profile_id="qaoa",
+        proposed_interpretation=interpretation,
+        decision_dispositions=_generation_dispositions("qaoa"),
+        explicit_decision_authority=True,
+        explicit_intent_approval=True,
+        confirmation_assertion="Approved exact generation dispositions.",
+    )
+    assert ready["phase"] == "generation_ready"
+    assert ready["details"]["generation_context_pack_created"] is True
+    assert ready["details"]["exploratory_generation_context_created"] is False
+
+
+def test_explicit_answer_is_attributed_validated_and_not_asked_again(
+    tmp_path: Path,
+) -> None:
+    transport = PublicBuilderTransport()
+    coordinator, _workspace = _coordinator(tmp_path, transport)
+    coordinator.activate(
+        original_request=(
+            "Use qCoder with Blueprint-guided control for Grover, using a phase_oracle."
+        ),
+        generation_posture="blueprint_guided",
+        explicit_authority=True,
+    )
+    explicit = next(
+        item
+        for item in _generation_dispositions("grover_search")
+        if item["profile_decision_id"] == "grover_search.oracle_approach"
+    )
+    blocked = coordinator.prepare_generation(
+        profile_id="grover_search",
+        proposed_interpretation={"summary": "Use the explicitly requested phase oracle."},
+        decision_dispositions=[explicit],
+        explicit_decision_authority=True,
+        explicit_intent_approval=True,
+        confirmation_assertion="Approved, including the phase-oracle answer.",
+    )
+    assert "grover_search.oracle_approach" not in {
+        item["profile_decision_id"] for item in blocked["details"]["decision_resolution"]
+    }
+    intent_call = next(
+        arguments
+        for tool_name, arguments in transport.calls
+        if tool_name == "create_algorithm_intent_card"
+    )
+    supplied = intent_call["decision_dispositions"][0]
+    assert supplied["selected_value"] == "phase_oracle"
+    assert supplied["authority_provenance"] == "user_provided"
+    assert supplied["provenance_entries"][0]["assistant_inference"] is False
+
+
+def test_unconfirmed_recommendation_cannot_become_a_disposition() -> None:
+    with pytest.raises(CurrentLoopError, match="decision_recommendation_not_confirmed"):
+        normalize_decision_dispositions(
+            "grover_search",
+            [
+                {
+                    "profile_decision_id": "grover_search.oracle_approach",
+                    "user_disposition": "selected_choice",
+                    "selected_value": "phase_oracle",
+                    "authority_provenance": ("assistant_recommendation_pending_confirmation"),
+                }
+            ],
+        )
+
+
+def test_blueprint_to_exploratory_transition_preserves_exact_blueprint(
+    tmp_path: Path,
+) -> None:
+    transport = PublicBuilderTransport()
+    coordinator, workspace = _coordinator(tmp_path, transport)
+    coordinator.activate(
+        original_request="Use qCoder with Blueprint-guided control for a Grover prototype.",
+        generation_posture="blueprint_guided",
+        explicit_authority=True,
+    )
+    interpretation = {"summary": "Prepare a bounded Grover prototype."}
+    blocked = coordinator.prepare_generation(
+        profile_id="grover_search",
+        proposed_interpretation=interpretation,
+        explicit_intent_approval=True,
+        confirmation_assertion="Approved.",
+    )
+    state = coordinator.store.read()
+    retained = {
+        item["role"]: item
+        for item in state["coordinator"]["pending_decision_resolution"]["retained_artifacts"]
+    }
+    pending_blueprint = json.loads(
+        (
+            workspace
+            / ".qcoder/current-loop/artifacts"
+            / retained["working-blueprint"]["local_record"]
+        ).read_text(encoding="utf-8")
+    )
+    intent_calls_before = sum(
+        tool_name == "create_algorithm_intent_card" for tool_name, _arguments in transport.calls
+    )
+    exploratory = coordinator.prepare_generation(
+        profile_id="grover_search",
+        proposed_interpretation=interpretation,
+        explicit_intent_approval=True,
+        requested_generation_posture="exploratory_first_pass",
+        explicit_posture_authority=True,
+        posture_change_reason="Proceed with one isolated first implementation.",
+        posture_authority_provenance="user_provided",
+    )
+    assert exploratory["phase"] == "generation_ready"
+    assert exploratory["details"]["posture_transition_applied"] is True
+    assert exploratory["details"]["working_blueprint_mutated"] is False
+    assert exploratory["details"]["generation_context_pack_created"] is False
+    assert (
+        sum(
+            tool_name == "create_algorithm_intent_card" for tool_name, _arguments in transport.calls
+        )
+        == intent_calls_before
+    )
+    assert (
+        coordinator._saved_artifact(coordinator.store.read(), "working_blueprint")
+        == pending_blueprint
+    )
+    assert blocked["details"]["decision_resolution"]
+
+
+def test_exploratory_to_blueprint_transition_activates_readiness_then_pack(
+    tmp_path: Path,
+) -> None:
+    transport = PublicBuilderTransport()
+    coordinator, _workspace = _coordinator(tmp_path, transport)
+    coordinator.activate(
+        original_request="Use qCoder for an exploratory first pass on a QAOA prototype.",
+        generation_posture="exploratory_first_pass",
+        explicit_authority=True,
+    )
+    interpretation = {"summary": "Prepare one bounded QAOA prototype."}
+    exploratory = coordinator.prepare_generation(
+        profile_id="qaoa",
+        proposed_interpretation=interpretation,
+        explicit_intent_approval=True,
+        confirmation_assertion="Approved exploratory attempt.",
+    )
+    original_blueprint = coordinator._saved_artifact(coordinator.store.read(), "working_blueprint")
+    blocked = coordinator.prepare_generation(
+        profile_id="qaoa",
+        proposed_interpretation=interpretation,
+        explicit_intent_approval=True,
+        requested_generation_posture="blueprint_guided",
+        explicit_posture_authority=True,
+        posture_change_reason="Resolve generation architecture before the next implementation.",
+        posture_authority_provenance="user_provided",
+    )
+    assert exploratory["details"]["generation_context_pack_created"] is False
+    assert blocked["checkpoint_kind"] == "decision_resolution"
+    assert blocked["details"]["working_blueprint_mutated"] is False
+    assert (
+        coordinator._saved_artifact(coordinator.store.read(), "working_blueprint")
+        == original_blueprint
+    )
+    ready = coordinator.prepare_generation(
+        profile_id="qaoa",
+        proposed_interpretation=interpretation,
+        decision_dispositions=_generation_dispositions("qaoa"),
+        explicit_decision_authority=True,
+        explicit_intent_approval=True,
+        confirmation_assertion="Approved exact generation decisions.",
+    )
+    assert ready["details"]["generation_context_pack_created"] is True
+    state = coordinator.store.read()
+    assert state["coordinator"]["generation_parent_history"]
+    assert all(
+        item["explicit_decision_authority_required"] is True
+        for item in state["coordinator"]["generation_parent_history"]
+    )
+
+
+def test_existing_workspace_does_not_force_blueprint_guided(tmp_path: Path) -> None:
+    transport = PublicBuilderTransport()
+    coordinator, workspace = _coordinator(tmp_path, transport)
+    (workspace / "existing-lineage-marker.txt").write_text(
+        "synthetic existing context\n", encoding="utf-8"
+    )
+    result = coordinator.activate(
+        original_request=(
+            "Use qCoder for an isolated exploratory first pass in this existing workspace."
+        ),
+        generation_posture="exploratory_first_pass",
+        explicit_authority=True,
+        parent_loop_ref=None,
+    )
+    assert result["details"]["generation_posture"] == "exploratory_first_pass"
+    assert coordinator.store.read()["directory_scan_performed"] is False
+
+
+def test_decision_authority_channel_rejects_unknown_values_and_contradictions() -> None:
+    with pytest.raises(CurrentLoopError, match="decision_disposition_value_outside_catalog"):
+        normalize_decision_dispositions(
+            "grover_search",
+            [
+                {
+                    "profile_decision_id": "grover_search.oracle_approach",
+                    "user_disposition": "selected_choice",
+                    "selected_value": "invented_oracle",
+                    "authority_provenance": "user_provided",
+                }
+            ],
+        )
+    with pytest.raises(CurrentLoopError, match="decision_disposition_contradictory_duplicate"):
+        normalize_decision_dispositions(
+            "grover_search",
+            [
+                {
+                    "profile_decision_id": "grover_search.oracle_approach",
+                    "user_disposition": "selected_choice",
+                    "selected_value": "phase_oracle",
+                    "authority_provenance": "user_provided",
+                },
+                {
+                    "profile_decision_id": "grover_search.oracle_approach",
+                    "user_disposition": "selected_choice",
+                    "selected_value": "bit_flip_oracle",
+                    "authority_provenance": "user_provided",
+                },
+            ],
+        )
+
+
+def test_public_builder_transport_covers_three_modes_and_malformed_response(
+    tmp_path: Path,
+) -> None:
+    for name in ("exploratory", "blocked", "ready", "malformed"):
+        (tmp_path / name).mkdir()
+    exploratory_transport = PublicBuilderTransport()
+    exploratory, _workspace = _coordinator(tmp_path / "exploratory", exploratory_transport)
+    exploratory.activate(
+        original_request="Use qCoder for an exploratory first pass on Grover.",
+        generation_posture="exploratory_first_pass",
+        explicit_authority=True,
+    )
+    exploratory_result = exploratory.prepare_generation(
+        profile_id="grover_search",
+        proposed_interpretation={"summary": "Prepare Grover."},
+        explicit_intent_approval=True,
+    )
+    assert exploratory_result["details"]["context_status"] == (
+        "exploratory_generation_context_ready"
+    )
+
+    blocked_transport = PublicBuilderTransport()
+    blocked, _workspace = _coordinator(tmp_path / "blocked", blocked_transport)
+    blocked.activate(
+        original_request="Use qCoder with Blueprint-guided control for Grover.",
+        generation_posture="blueprint_guided",
+        explicit_authority=True,
+    )
+    blocked_result = blocked.prepare_generation(
+        profile_id="grover_search",
+        proposed_interpretation={"summary": "Prepare Grover."},
+        explicit_intent_approval=True,
+    )
+    assert blocked_result["category"] == ("generation_context_blocked_pending_decisions")
+
+    ready_transport = PublicBuilderTransport()
+    ready, _workspace = _coordinator(tmp_path / "ready", ready_transport)
+    ready.activate(
+        original_request="Use qCoder with Blueprint-guided control for Grover.",
+        generation_posture="blueprint_guided",
+        explicit_authority=True,
+    )
+    ready_result = ready.prepare_generation(
+        profile_id="grover_search",
+        proposed_interpretation={"summary": "Prepare Grover."},
+        decision_dispositions=_generation_dispositions("grover_search"),
+        explicit_decision_authority=True,
+        explicit_intent_approval=True,
+    )
+    assert ready_result["details"]["context_status"] == ("generation_context_pack_ready")
+
+    malformed_transport = PublicBuilderTransport(malformed_generation=True)
+    malformed, _workspace = _coordinator(tmp_path / "malformed", malformed_transport)
+    malformed.activate(
+        original_request="Use qCoder with Blueprint-guided control for Grover.",
+        generation_posture="blueprint_guided",
+        explicit_authority=True,
+    )
+    malformed_result = malformed.prepare_generation(
+        profile_id="grover_search",
+        proposed_interpretation={"summary": "Prepare Grover."},
+        decision_dispositions=_generation_dispositions("grover_search"),
+        explicit_decision_authority=True,
+        explicit_intent_approval=True,
+    )
+    assert malformed_result["ok"] is False
+    assert malformed_result["category"] == "protected_truth_insufficient"
+
+
+def test_decision_resolution_status_reemits_exact_guidance(tmp_path: Path) -> None:
+    transport = PublicBuilderTransport()
+    coordinator, workspace = _coordinator(tmp_path, transport)
+    coordinator.activate(
+        original_request="Use qCoder with Blueprint-guided control for Grover.",
+        generation_posture="blueprint_guided",
+        explicit_authority=True,
+    )
+    blocked = coordinator.prepare_generation(
+        profile_id="grover_search",
+        proposed_interpretation={"summary": "Prepare Grover generation."},
+        explicit_intent_approval=True,
+        confirmation_assertion="Approved.",
+    )
+    restarted = CurrentLoopCoordinator(
+        workspace_root=workspace,
+        transport=transport,
+    )
+    status = restarted.status()
+    assert status["checkpoint_kind"] == "decision_resolution"
+    assert status["details"]["decision_resolution"] == (blocked["details"]["decision_resolution"])
+    assert status["supported_next_action"] == ("resolve_generation_decisions_or_switch_posture")
+    assert status["next_invocation"]["required_flags"] == [
+        "--profile",
+        "--interpretation-summary",
+        "--confirm-intent",
+        "--decision-disposition",
+        "--approve-decisions",
+    ]
+
+
+def test_current_loop_cli_executes_both_generation_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    transport = PublicBuilderTransport()
+    monkeypatch.setattr(
+        current_loop_coordinator_module.ContextBridgeTransport,
+        "call",
+        lambda _self, tool_name, arguments: transport.call(tool_name, arguments),
+    )
+
+    def invoke(workspace: Path, *arguments: str) -> dict[str, Any]:
+        status = cli_main(
+            [
+                "current-loop",
+                "--workspace",
+                str(workspace),
+                *arguments,
+            ]
+        )
+        captured = capsys.readouterr()
+        assert status == 0, captured
+        return json.loads(captured.out)
+
+    exploratory_workspace = tmp_path / "cli-exploratory"
+    exploratory_workspace.mkdir()
+    invoke(
+        exploratory_workspace,
+        "activate",
+        "--request",
+        "Use qCoder for an exploratory first pass on a Grover prototype.",
+        "--posture",
+        "exploratory_first_pass",
+        "--approve",
+    )
+    exploratory = invoke(
+        exploratory_workspace,
+        "prepare-generation",
+        "--base-url",
+        "https://synthetic.invalid",
+        "--token-file",
+        str(tmp_path / "token.txt"),
+        "--profile",
+        "grover_search",
+        "--interpretation-summary",
+        "Prepare one bounded Grover prototype.",
+        "--confirm-intent",
+    )
+    assert exploratory["details"]["generation_context_pack_created"] is False
+    assert exploratory["checkpoint_kind"] == "ide_write_or_run"
+
+    guided_workspace = tmp_path / "cli-guided"
+    guided_workspace.mkdir()
+    invoke(
+        guided_workspace,
+        "activate",
+        "--request",
+        "Use qCoder with Blueprint-guided control for Grover.",
+        "--posture",
+        "blueprint_guided",
+        "--approve",
+    )
+    blocked = invoke(
+        guided_workspace,
+        "prepare-generation",
+        "--base-url",
+        "https://synthetic.invalid",
+        "--token-file",
+        str(tmp_path / "token.txt"),
+        "--profile",
+        "grover_search",
+        "--interpretation-summary",
+        "Prepare Grover architecture before code.",
+        "--confirm-intent",
+    )
+    assert blocked["checkpoint_kind"] == "decision_resolution"
+    disposition_arguments: list[str] = []
+    for disposition in _generation_dispositions("grover_search"):
+        disposition_arguments.extend(
+            [
+                "--decision-disposition",
+                disposition["profile_decision_id"],
+                disposition["user_disposition"],
+                disposition["selected_value"],
+                disposition["authority_provenance"],
+            ]
+        )
+    guided = invoke(
+        guided_workspace,
+        "prepare-generation",
+        "--base-url",
+        "https://synthetic.invalid",
+        "--token-file",
+        str(tmp_path / "token.txt"),
+        "--profile",
+        "grover_search",
+        "--interpretation-summary",
+        "Prepare Grover architecture before code.",
+        "--confirm-intent",
+        "--approve-decisions",
+        *disposition_arguments,
+    )
+    assert guided["details"]["generation_context_pack_created"] is True
+    assert guided["checkpoint_kind"] == "ide_write_or_run"
 
 
 def test_performance_counts_public_coordinator_operations_not_state_writes(
@@ -1350,8 +1956,8 @@ def test_every_checkpoint_result_is_deterministically_actionable(tmp_path: Path)
             summary="Synthetic checkpoint contract test.",
         )
         _assert_actionable_checkpoint(result)
-        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v2"
-        assert result["schema_version"] == 2
+        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v3"
+        assert result["schema_version"] == 3
 
 
 def test_current_loop_cli_intent_review_confirmation_sequence_is_actionable(
@@ -1517,7 +2123,19 @@ def test_current_loop_cli_distinguishes_transmitted_clarification(
     ("subcommand", "flags"),
     [
         ("activate", ("--approve",)),
-        ("prepare-generation", ("--confirm-intent", "--confirmation")),
+        (
+            "prepare-generation",
+            (
+                "--confirm-intent",
+                "--confirmation",
+                "--decision-disposition",
+                "--approve-decisions",
+                "--posture",
+                "--approve-posture-change",
+                "--posture-reason",
+                "--posture-provenance",
+            ),
+        ),
         ("record-ide-authority", ("--allow", "--explicit")),
         ("register-artifacts", ("--allow-external",)),
         ("authorize-artifacts", ("--action",)),

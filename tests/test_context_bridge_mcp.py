@@ -180,7 +180,7 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
     token_path = str(token_file.resolve())
     assert runtime == {
         "python_executable": executable,
-        "qcoder_version": "0.6.0a2+wi0418.checkpoint1",
+        "qcoder_version": "0.6.0a2+wi0418.dualpath1",
         "coordinator_prefix": [
             executable,
             "-m",
@@ -221,6 +221,14 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
         "home-directory qCoder state",
         "sibling repositories",
         "Do not replace coordinator truth with a locally assembled review",
+        "Workspace freshness is not intent",
+        "assistant recommendation the user explicitly accepts",
+        "Preserve exact user-stated decision answers",
+        "is not a full Generation Context Pack",
+        "decision_resolution checkpoint",
+        "exact decision-disposition authority channel",
+        "posture transition requires its separate explicit authority",
+        "must not rewrite the Working Blueprint",
         "qCoder activation, IDE write/run permission, exact artifact-review permission",
         "does not grant IDE permission to write or run",
         "does not authorize artifact review",
@@ -2004,13 +2012,13 @@ def test_mcp_stdio_content_length_lists_exact_tools(tmp_path: Path) -> None:
         initialized = _read_content_length_response(proc.stdout)
         assert initialized["result"]["serverInfo"] == {
             "name": "qcoder-context-bridge",
-            "version": "0.6.0a2+wi0418.checkpoint1",
+            "version": "0.6.0a2+wi0418.dualpath1",
         }
         instructions = initialized["result"]["instructions"]
         runtime = _activation_runtime(instructions)
         executable = str(Path(sys.executable).absolute())
         assert runtime["python_executable"] == executable
-        assert runtime["qcoder_version"] == "0.6.0a2+wi0418.checkpoint1"
+        assert runtime["qcoder_version"] == "0.6.0a2+wi0418.dualpath1"
         assert runtime["coordinator_prefix"] == [
             executable,
             "-m",
@@ -2036,6 +2044,13 @@ def test_mcp_stdio_content_length_lists_exact_tools(tmp_path: Path) -> None:
             "home-directory qCoder state",
             "client configuration",
             "sibling repositories",
+            "Workspace freshness is not intent",
+            "assistant recommendation the user explicitly accepts",
+            "Preserve exact user-stated decision answers",
+            "is not a full Generation Context Pack",
+            "decision_resolution checkpoint",
+            "exact decision-disposition authority channel",
+            "posture transition requires its separate explicit authority",
             "does not grant IDE permission to write or run",
             "exact artifact candidates",
             "proposal-specific explicit confirmation",

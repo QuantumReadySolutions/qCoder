@@ -30,7 +30,11 @@ from qcoder.context_loop import (
     build_stage_availability,
     share_safe_request_baseline,
 )
-from qcoder.blueprint_decisions import consistency_digest
+from qcoder.blueprint_decisions import (
+    catalog_entries,
+    consistency_digest,
+    unpack_decision_record_set,
+)
 from qcoder.current_loop import (
     AUTHORIZED_ARTIFACT_ROLES,
     CurrentLoopConflict,
@@ -50,10 +54,13 @@ from qcoder.current_loop import (
     share_safe_artifact_authorization_projection,
     update_selected_artifact_authorization,
 )
+from qcoder.context_loop import CONTEXT_LOOP_GATE
 
-COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v2"
-COORDINATOR_RESULT_SCHEMA_VERSION = 2
-COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v1"
+COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v3"
+COORDINATOR_RESULT_SCHEMA_VERSION = 3
+COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v2"
+LEGACY_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v1"
+COORDINATOR_STATE_SCHEMA_VERSION = 2
 CONSEQUENCE_PROJECTION_SCHEMA_ID = "qcoder.current_loop.consequence_projection.v1"
 PERFORMANCE_SCHEMA_ID = "qcoder.current_loop.private_performance.v1"
 
@@ -83,6 +90,7 @@ CHECKPOINT_KINDS = (
     "activation",
     "posture",
     "intent_review",
+    "decision_resolution",
     "ide_write_or_run",
     "artifact_review",
     "governing_change_confirmation",
@@ -113,6 +121,7 @@ _PHASE_TRANSITIONS = {
     "activated": ("intent_review", "abandoned"),
     "intent_review": ("generation_ready", "abandoned"),
     "generation_ready": (
+        "intent_review",
         "awaiting_local_artifacts",
         "artifact_authorization",
         "abandoned",
@@ -150,6 +159,10 @@ _CHECKPOINT_AUTHORITY = {
     "activation": "Explicitly activate qCoder for this current build.",
     "posture": "Choose exploratory first pass or Blueprint-guided generation.",
     "intent_review": "Review and explicitly approve or correct the proposed interpretation.",
+    "decision_resolution": (
+        "Approve only the exact generation-relevant decision dispositions, defer them, "
+        "or explicitly switch this attempt to exploratory first pass."
+    ),
     "ide_write_or_run": "Authorize the IDE host separately before writing or executing code.",
     "artifact_review": "Approve the exact visible artifact set qCoder may inspect locally.",
     "governing_change_confirmation": (
@@ -158,6 +171,28 @@ _CHECKPOINT_AUTHORITY = {
     "privacy_or_trust": "Review the material privacy, trust, or evidence limitation.",
     "none": "No human authority is required for the next deterministic local transition.",
 }
+
+DECISION_AUTHORITY_PROVENANCE = (
+    "user_provided",
+    "user_confirmed_assistant_interpretation",
+    "inherited_confirmed_lineage",
+    "assistant_recommendation_pending_confirmation",
+)
+AUTHORIZED_DECISION_PROVENANCE = frozenset(DECISION_AUTHORITY_PROVENANCE[:3])
+POSTURE_AUTHORITY_PROVENANCE = (
+    "user_provided",
+    "user_confirmed_assistant_recommendation",
+    "inherited_confirmed_lineage",
+)
+EXPLORATORY_FIXED_CONSTRAINTS = (
+    "Keep this attempt bounded to the explicitly authorized active workspace and current build.",
+)
+EXPLORATORY_FIXED_PROHIBITIONS = (
+    "Do not scan outside the authorized workspace.",
+    "Do not treat implementation defaults as governing decisions.",
+    "Do not claim correctness or hardware fidelity without evidence.",
+    "Do not evolve the Working Blueprint without explicit confirmation.",
+)
 
 _RECOVERY = {
     "loop_not_activated": (
@@ -489,6 +524,89 @@ def infer_requested_posture(original_request: str) -> str | None:
     return matches[0] if len(matches) == 1 else None
 
 
+def normalize_decision_dispositions(
+    profile_id: str,
+    dispositions: Sequence[Mapping[str, Any]],
+    *,
+    existing_records: Sequence[Mapping[str, Any]] = (),
+) -> list[dict[str, Any]]:
+    """Validate the bounded CLI authority channel against the selected catalog."""
+
+    definitions = {item["profile_decision_id"]: item for item in catalog_entries(profile_id)}
+    existing_by_id = {
+        str(item.get("profile_decision_id")): item
+        for item in existing_records
+        if isinstance(item, Mapping)
+    }
+    normalized: list[dict[str, Any]] = []
+    seen: dict[str, dict[str, Any]] = {}
+    for supplied in dispositions:
+        decision_id = str(supplied.get("profile_decision_id") or "")
+        definition = definitions.get(decision_id)
+        if definition is None:
+            raise CurrentLoopError("decision_disposition_unknown_decision")
+        action = str(supplied.get("user_disposition") or "")
+        if action not in {"selected_choice", "left_unresolved"}:
+            raise CurrentLoopError("decision_disposition_action_invalid")
+        provenance = str(supplied.get("authority_provenance") or "")
+        if provenance not in AUTHORIZED_DECISION_PROVENANCE:
+            if provenance == "assistant_recommendation_pending_confirmation":
+                raise CurrentLoopError("decision_recommendation_not_confirmed")
+            raise CurrentLoopError("decision_disposition_provenance_invalid")
+        value = supplied.get("selected_value")
+        if action == "selected_choice":
+            if not isinstance(value, str) or not value.strip() or len(value) > 500:
+                raise CurrentLoopError("decision_disposition_value_invalid")
+            value = value.strip()
+            alternatives = list(definition.get("supported_alternatives") or [])
+            if alternatives and value not in alternatives:
+                raise CurrentLoopError("decision_disposition_value_outside_catalog")
+        elif value is not None and value not in ("", "-"):
+            raise CurrentLoopError("unresolved_decision_value_prohibited")
+        choice_origin = (
+            "human_specified" if provenance == "user_provided" else "blueprint_confirmed"
+        )
+        result: dict[str, Any] = {
+            "profile_decision_id": decision_id,
+            "resolution_state": "resolved" if action == "selected_choice" else "unresolved",
+            "user_disposition": action,
+            "generation_effect": (
+                "non_blocking"
+                if action == "selected_choice"
+                else str(definition["default_generation_effect"])
+            ),
+            "blueprint_representation_state": (
+                "represented" if action == "selected_choice" else "not_represented"
+            ),
+            "choice_origin": choice_origin,
+            "evidence_confidence": "User-provided",
+            "alignment_status": (
+                "appears_aligned" if action == "selected_choice" else "not_applicable"
+            ),
+            "provenance_entries": [
+                {
+                    "role": provenance,
+                    "explicit_user_authority": True,
+                    "assistant_inference": False,
+                }
+            ],
+            "authority_provenance": provenance,
+        }
+        existing = existing_by_id.get(decision_id)
+        if isinstance(existing, Mapping) and isinstance(existing.get("decision_ref"), str):
+            result["decision_ref"] = existing["decision_ref"]
+        if action == "selected_choice":
+            result["selected_value"] = value
+        previous = seen.get(decision_id)
+        if previous is not None:
+            if previous != result:
+                raise CurrentLoopError("decision_disposition_contradictory_duplicate")
+            raise CurrentLoopError("decision_disposition_duplicate")
+        seen[decision_id] = result
+        normalized.append(result)
+    return normalized
+
+
 def coordinator_contract_snapshot() -> dict[str, Any]:
     return {
         "schemas": {
@@ -510,6 +628,14 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "confirmation_transmission_state": True,
             "identical_repeat_prohibited": True,
         },
+        "generation_context_response_modes": [
+            "exploratory_generation_context_ready",
+            "generation_context_blocked_pending_decisions",
+            "generation_context_pack_ready",
+        ],
+        "decision_authority_provenance": list(DECISION_AUTHORITY_PROVENANCE),
+        "posture_authority_provenance": list(POSTURE_AUTHORITY_PROVENANCE),
+        "workspace_state_is_intent": False,
         "recovery_categories": sorted(_RECOVERY),
         "high_level_operations": [
             "status",
@@ -884,12 +1010,28 @@ class CurrentLoopCoordinator:
                 elapsed=self.clock() - started,
             )
         coordinator = self._coordinator_state(state)
+        status_details: dict[str, Any] = {
+            "generation_context_outcome": deepcopy(coordinator.get("generation_context_outcome"))
+        }
+        pending_resolution = coordinator.get("pending_decision_resolution")
+        if isinstance(pending_resolution, Mapping):
+            status_details.update(
+                {
+                    "decision_resolution": deepcopy(
+                        pending_resolution.get("blocking_decisions") or []
+                    ),
+                    "blueprint_readiness_summary": deepcopy(
+                        pending_resolution.get("blueprint_readiness_summary")
+                    ),
+                }
+            )
         return self._result(
             operation="status",
             ok=coordinator["state_status"] not in {"blocked", "conflict", "corrupt"},
             state=state,
             summary=coordinator["customer_summary"],
             elapsed=self.clock() - started,
+            details=status_details,
         )
 
     def activate(
@@ -958,6 +1100,7 @@ class CurrentLoopCoordinator:
                 "original_request_preserved": True,
                 "generation_posture_explicit": True,
             }
+            coordinator["effective_generation_posture"] = generation_posture
             coordinator["request_baseline_reference"] = _artifact_reference(baseline)
             self._replace_coordinator(coordinator)
             state = self.store.read()
@@ -991,6 +1134,11 @@ class CurrentLoopCoordinator:
         explicit_intent_approval: bool,
         confirmation_assertion: str | None = None,
         accepted_unresolved_choices: Sequence[str] = (),
+        explicit_decision_authority: bool = False,
+        requested_generation_posture: str | None = None,
+        explicit_posture_authority: bool = False,
+        posture_change_reason: str | None = None,
+        posture_authority_provenance: str | None = None,
     ) -> dict[str, Any]:
         started = self.clock()
         try:
@@ -1002,6 +1150,97 @@ class CurrentLoopCoordinator:
                     phase=self._coordinator_state(state)["phase"],
                     elapsed=self.clock() - started,
                 )
+            coordinator = self._coordinator_state(state)
+            current_posture = str(
+                coordinator.get("effective_generation_posture") or state["generation_posture"]
+            )
+            requested_posture = requested_generation_posture or current_posture
+            posture_transition_applied = False
+            if requested_posture not in {"blueprint_guided", "exploratory_first_pass"}:
+                raise CurrentLoopError("generation_posture_invalid")
+            pending_resolution = coordinator.get("pending_decision_resolution")
+            if requested_posture != current_posture:
+                if (
+                    explicit_posture_authority is not True
+                    or not isinstance(posture_change_reason, str)
+                    or not isinstance(posture_authority_provenance, str)
+                ):
+                    return self._checkpoint_result(
+                        operation="prepare_generation",
+                        phase="intent_review",
+                        checkpoint_kind="posture",
+                        summary=(
+                            "Changing generation posture requires explicit user authority, "
+                            "an attributable reason, and provenance. Workspace state is not intent."
+                        ),
+                        elapsed=self.clock() - started,
+                        category="posture_transition_authority_required",
+                        details={
+                            "source_posture": current_posture,
+                            "requested_posture": requested_posture,
+                            "working_blueprint_mutated": False,
+                            "decision_mutation": False,
+                        },
+                    )
+                if requested_posture == "exploratory_first_pass" and decision_dispositions:
+                    raise CurrentLoopError("posture_transition_decision_mutation_prohibited")
+                self._record_posture_transition(
+                    coordinator,
+                    source_posture=current_posture,
+                    requested_posture=requested_posture,
+                    reason=posture_change_reason,
+                    provenance=posture_authority_provenance,
+                )
+                coordinator["customer_summary"] = (
+                    f"This attempt now uses {requested_posture.replace('_', ' ')} by "
+                    "explicit user authority. The Working Blueprint and unresolved "
+                    "decision inventory remain unchanged."
+                )
+                self._replace_coordinator(coordinator)
+                state = self.store.read()
+                coordinator = self._coordinator_state(state)
+                posture_transition_applied = True
+
+            existing_records: list[Mapping[str, Any]] = []
+            prior_dispositions: list[Mapping[str, Any]] = []
+            if isinstance(pending_resolution, Mapping):
+                existing_records = [
+                    item
+                    for item in pending_resolution.get("decision_records", [])
+                    if isinstance(item, Mapping)
+                ]
+                prior_dispositions = [
+                    item
+                    for item in pending_resolution.get("authorized_dispositions", [])
+                    if isinstance(item, Mapping)
+                ]
+            if decision_dispositions and explicit_decision_authority is not True:
+                return self._checkpoint_result(
+                    operation="prepare_generation",
+                    phase="intent_review",
+                    checkpoint_kind="decision_resolution",
+                    summary=(
+                        "Decision values were supplied without the separate explicit "
+                        "decision authority. Omission of --approve-decisions is not approval."
+                    ),
+                    elapsed=self.clock() - started,
+                    category="decision_authority_not_transmitted",
+                    details={
+                        "decision_dispositions_transmitted": False,
+                        "assistant_recommendations_adopted": False,
+                    },
+                )
+            merged_dispositions: dict[str, Mapping[str, Any]] = {
+                str(item.get("profile_decision_id")): item for item in prior_dispositions
+            }
+            for item in decision_dispositions:
+                decision_id = str(item.get("profile_decision_id") or "")
+                merged_dispositions[decision_id] = item
+            normalized_dispositions = normalize_decision_dispositions(
+                profile_id,
+                list(merged_dispositions.values()),
+                existing_records=existing_records,
+            )
             baseline = self._saved_artifact(state, "request_baseline")
             original_request = baseline.get("original_request")
             if not isinstance(original_request, str):
@@ -1012,12 +1251,62 @@ class CurrentLoopCoordinator:
                 requirements=requirements,
                 constraints=constraints,
                 non_goals=non_goals,
-                decision_dispositions=decision_dispositions,
+                decision_dispositions=normalized_dispositions,
                 reviewed_profile_answers=reviewed_profile_answers,
                 accepted_unresolved_choices=accepted_unresolved_choices,
+                generation_posture=requested_posture,
             )
             review_input_digest = sha256(canonical_bytes(review_input)).hexdigest()
-            coordinator = self._coordinator_state(state)
+            if posture_transition_applied:
+                return self._prepare_generation_after_posture_transition(
+                    state=state,
+                    coordinator=coordinator,
+                    pending_resolution=(
+                        pending_resolution if isinstance(pending_resolution, Mapping) else None
+                    ),
+                    profile_id=profile_id,
+                    requested_posture=requested_posture,
+                    review_input=review_input,
+                    review_input_digest=review_input_digest,
+                    normalized_dispositions=normalized_dispositions,
+                    constraints=constraints,
+                    non_goals=non_goals,
+                    accepted_unresolved_choices=accepted_unresolved_choices,
+                    started=started,
+                )
+            if (
+                requested_posture == "blueprint_guided"
+                and isinstance(pending_resolution, Mapping)
+                and pending_resolution.get("input_digest") == review_input_digest
+            ):
+                summary = (
+                    "The Blueprint-guided readiness checkpoint is unchanged and no new "
+                    "authorized disposition was transmitted. Review the existing blockers, "
+                    "defer, or explicitly switch this attempt to exploratory first pass."
+                )
+                coordinator["customer_summary"] = summary
+                self._replace_coordinator(coordinator)
+                return self._result(
+                    operation="prepare_generation",
+                    ok=True,
+                    state=self.store.read(),
+                    summary=summary,
+                    elapsed=self.clock() - started,
+                    category="decision_resolution_unchanged",
+                    details={
+                        "protected_call_made": False,
+                        "identical_pending_review_reused": True,
+                        "decision_resolution": deepcopy(
+                            pending_resolution.get("blocking_decisions") or []
+                        ),
+                    },
+                    checkpoint_protocol={
+                        "confirmation_transmission_state": "not_supplied",
+                        "awaiting_confirmation_fields": list(
+                            pending_resolution.get("awaiting_confirmation_fields") or []
+                        ),
+                    },
+                )
             pending = coordinator.get("pending_intent_review")
             if (
                 explicit_intent_approval is True
@@ -1103,7 +1392,7 @@ class CurrentLoopCoordinator:
                 "decision_loop": "readiness_resolution_v1",
                 "profile_decision_catalog_version": 1,
                 "current_lineage_reference": baseline["artifact_ref"],
-                "decision_dispositions": [deepcopy(dict(item)) for item in decision_dispositions],
+                "decision_dispositions": deepcopy(normalized_dispositions),
                 "field_provenance": {
                     "original_user_intent": "user",
                     "proposed_interpretation": "connected_assistant",
@@ -1114,6 +1403,13 @@ class CurrentLoopCoordinator:
                 ),
                 "accepted_unresolved_choices": list(accepted_unresolved_choices),
             }
+            if existing_records:
+                intent_arguments["decision_references"] = {
+                    str(item["profile_decision_id"]): str(item["decision_ref"])
+                    for item in existing_records
+                    if isinstance(item.get("profile_decision_id"), str)
+                    and isinstance(item.get("decision_ref"), str)
+                }
             if explicit_intent_approval:
                 intent_arguments["confirmation_assertion"] = {"user_reviewed": True}
             intent_payload = self._protected_call("create_algorithm_intent_card", intent_arguments)
@@ -1170,11 +1466,6 @@ class CurrentLoopCoordinator:
                         "awaiting_confirmation_fields": awaiting,
                     },
                 )
-            self._save_artifact(
-                "algorithm_intent_card",
-                intent,
-                "algorithm-intent-card.json",
-            )
             intent_binding = decision_inventory_binding(intent)
             blueprint_payload = self._protected_call(
                 "create_implementation_blueprint",
@@ -1191,41 +1482,210 @@ class CurrentLoopCoordinator:
             blueprint_binding = decision_inventory_binding(blueprint)
             if blueprint_binding != intent_binding:
                 raise CurrentLoopError("blueprint_decision_inventory_continuity_mismatch")
-            self._save_artifact(
+            generation_arguments: dict[str, Any] = {
+                "context_loop": CONTEXT_LOOP_GATE,
+                "generation_posture": requested_posture,
+                "implementation_blueprint": blueprint,
+                "output_evidence_contract": output_contract,
+            }
+            if requested_posture == "exploratory_first_pass":
+                generation_arguments.update(
+                    {
+                        "exploratory_authorization": True,
+                        "exploratory_constraints": list(
+                            dict.fromkeys([*constraints, *EXPLORATORY_FIXED_CONSTRAINTS])
+                        ),
+                        "exploratory_prohibitions": list(
+                            dict.fromkeys([*non_goals, *EXPLORATORY_FIXED_PROHIBITIONS])
+                        ),
+                        "unresolved_assistant_choices": list(accepted_unresolved_choices),
+                    }
+                )
+            generation_payload = self._protected_call(
+                "create_generation_context_pack",
+                generation_arguments,
+            )
+            context_status = generation_payload.get("context_status")
+            coordinator = self._coordinator_state(self.store.read())
+            coordinator.pop("pending_intent_review", None)
+            coordinator["effective_generation_posture"] = requested_posture
+            coordinator["canonical_decision_inventory"] = intent_binding
+            if context_status == "generation_context_blocked_pending_decisions":
+                if (
+                    generation_payload.get("generation_context_pack") is not None
+                    or generation_payload.get("generation_context_pack_produced") is not False
+                    or not isinstance(
+                        generation_payload.get("blueprint_readiness_summary"), Mapping
+                    )
+                ):
+                    raise CurrentLoopError("protected_truth_insufficient")
+                readiness = deepcopy(dict(generation_payload["blueprint_readiness_summary"]))
+                if (
+                    readiness.get("aggregate_readiness_result") != "blocked_pending_decisions"
+                    or readiness.get("generation_context_eligibility") is not False
+                ):
+                    raise CurrentLoopError("protected_truth_insufficient")
+                blockers, records = self._decision_resolution_details(
+                    profile_id=profile_id,
+                    blueprint=blueprint,
+                    readiness=readiness,
+                )
+                if not blockers:
+                    raise CurrentLoopError("protected_truth_insufficient")
+                retained = [
+                    self._save_pending_generation_artifact("algorithm-intent-card", intent),
+                    self._save_pending_generation_artifact("working-blueprint", blueprint),
+                    self._save_pending_generation_artifact(
+                        "output-evidence-contract", output_contract
+                    ),
+                ]
+                awaiting = [str(item["profile_decision_id"]) for item in blockers]
+                pending_resolution = {
+                    "input_digest": review_input_digest,
+                    "profile_id": profile_id,
+                    "interpretation_summary": (
+                        proposed_interpretation.get("summary")
+                        or proposed_interpretation.get("normalized_goal")
+                        or "Reviewed interpretation"
+                    ),
+                    "profile_answers": deepcopy(dict(reviewed_profile_answers or {})),
+                    "constraints": list(constraints),
+                    "non_goals": list(non_goals),
+                    "accepted_unresolved_choices": list(accepted_unresolved_choices),
+                    "authorized_dispositions": deepcopy(normalized_dispositions),
+                    "decision_records": deepcopy(records),
+                    "blocking_decisions": blockers,
+                    "blueprint_readiness_summary": readiness,
+                    "awaiting_confirmation_fields": awaiting,
+                    "retained_artifacts": retained,
+                }
+                summary = (
+                    "Blueprint-guided generation is waiting only on the returned "
+                    "generation-relevant decisions. Approve exact dispositions, defer, "
+                    "or explicitly switch this attempt to exploratory first pass."
+                )
+                coordinator.update(
+                    {
+                        "phase": "intent_review",
+                        "state_status": "checkpoint_required",
+                        "checkpoint_kind": "decision_resolution",
+                        "customer_summary": summary,
+                        "pending_decision_resolution": pending_resolution,
+                        "generation_context_outcome": {
+                            "context_status": context_status,
+                            "generation_context_pack_created": False,
+                            "exploratory_generation_context_created": False,
+                            "unresolved_decision_references": [
+                                item["decision_ref"] for item in blockers
+                            ],
+                        },
+                    }
+                )
+                self._replace_coordinator(coordinator)
+                return self._result(
+                    operation="prepare_generation",
+                    ok=True,
+                    state=self.store.read(),
+                    summary=summary,
+                    elapsed=self.clock() - started,
+                    category=context_status,
+                    details={
+                        "intent_confirmed": True,
+                        "confirmation_transmission_state": "confirmed",
+                        "working_blueprint_retained": True,
+                        "output_evidence_contract_retained": True,
+                        "generation_context_pack_created": False,
+                        "exploratory_generation_context_created": False,
+                        "blueprint_readiness_summary": readiness,
+                        "decision_resolution": blockers,
+                        "decision_inventory": intent_binding,
+                        "ide_write_or_run_authorized": False,
+                    },
+                    checkpoint_protocol={
+                        "confirmation_transmission_state": "not_supplied",
+                        "awaiting_confirmation_fields": awaiting,
+                    },
+                )
+
+            self._save_generation_parent_artifact(
+                "algorithm_intent_card",
+                intent,
+                "algorithm-intent-card.json",
+            )
+            self._save_generation_parent_artifact(
                 "working_blueprint",
                 blueprint,
                 "working-blueprint.json",
             )
-            self._save_artifact(
+            self._save_generation_parent_artifact(
                 "output_evidence_contract",
                 output_contract,
                 "output-evidence-contract.json",
             )
-            generation_payload = self._protected_call(
-                "create_generation_context_pack",
-                {
-                    "implementation_blueprint": blueprint,
-                    "output_evidence_contract": output_contract,
-                },
-            )
-            generation = self._response_artifact(generation_payload, "generation_context_pack")
-            self._save_artifact(
-                "generation_context_pack",
-                generation,
-                "generation-context-pack.json",
-            )
             coordinator = self._coordinator_state(self.store.read())
-            coordinator.pop("pending_intent_review", None)
+            generation_context_pack_created = False
+            exploratory_context_created = False
+            unresolved_decision_references: list[str] = []
+            if context_status == "exploratory_generation_context_ready":
+                if (
+                    generation_payload.get("generation_context_pack") is not None
+                    or generation_payload.get("generation_context_pack_produced") is not False
+                ):
+                    raise CurrentLoopError("protected_truth_insufficient")
+                generation = self._response_artifact(
+                    generation_payload, "exploratory_generation_context"
+                )
+                if (
+                    generation.get("artifact_type") != "exploratory_generation_context"
+                    or generation.get("non_governing") is not True
+                ):
+                    raise CurrentLoopError("protected_truth_insufficient")
+                self._save_artifact(
+                    "exploratory_generation_context",
+                    generation,
+                    "exploratory-generation-context.json",
+                )
+                exploratory_context_created = True
+                records = unpack_decision_record_set(blueprint["blueprint_decision_records"])
+                unresolved_decision_references = [
+                    str(item["decision_ref"])
+                    for item in records
+                    if item.get("resolution_state") != "resolved"
+                ]
+                summary = (
+                    "Exploratory generation context is ready for this bounded attempt. "
+                    "A full Generation Context Pack does not exist, unresolved decisions "
+                    "remain, and IDE write/run authority is still separate."
+                )
+            elif context_status == "generation_context_pack_ready":
+                if generation_payload.get("generation_context_pack_produced") is not True:
+                    raise CurrentLoopError("protected_truth_insufficient")
+                generation = self._response_artifact(generation_payload, "generation_context_pack")
+                self._save_artifact(
+                    "generation_context_pack",
+                    generation,
+                    "generation-context-pack.json",
+                )
+                generation_context_pack_created = True
+                summary = (
+                    "The full Generation Context Pack is ready. Writing or running code "
+                    "in the IDE is a separate user authority."
+                )
+            else:
+                raise CurrentLoopError("protected_truth_insufficient")
+            coordinator.pop("pending_decision_resolution", None)
             coordinator.update(
                 {
                     "phase": "generation_ready",
                     "state_status": "checkpoint_required",
                     "checkpoint_kind": "ide_write_or_run",
-                    "customer_summary": (
-                        "Generation context is ready. Writing or running code in the "
-                        "IDE is a separate user authority."
-                    ),
-                    "canonical_decision_inventory": intent_binding,
+                    "customer_summary": summary,
+                    "generation_context_outcome": {
+                        "context_status": context_status,
+                        "generation_context_pack_created": generation_context_pack_created,
+                        "exploratory_generation_context_created": exploratory_context_created,
+                        "unresolved_decision_references": unresolved_decision_references,
+                    },
                 }
             )
             self._replace_coordinator(coordinator)
@@ -1241,6 +1701,11 @@ class CurrentLoopCoordinator:
                     "working_blueprint_created": True,
                     "output_evidence_contract_created": True,
                     "generation_context_created": True,
+                    "context_status": context_status,
+                    "generation_context_pack_created": generation_context_pack_created,
+                    "exploratory_generation_context_created": exploratory_context_created,
+                    "unresolved_decision_references": unresolved_decision_references,
+                    "full_blueprint_readiness_claimed": generation_context_pack_created,
                     "decision_inventory": intent_binding,
                     "ide_write_or_run_authorized": False,
                 },
@@ -1663,6 +2128,12 @@ class CurrentLoopCoordinator:
                 )
             state = self.store.read()
             saved = {role: self._saved_artifact(state, role) for role in state["saved_artifacts"]}
+            if "working_blueprint" in state["saved_artifacts"]:
+                saved["working_blueprint"] = self._saved_artifact(state, "working_blueprint")
+            if "output_evidence_contract" in state["saved_artifacts"]:
+                saved["output_evidence_contract"] = self._saved_artifact(
+                    state, "output_evidence_contract"
+                )
             blueprint = saved.get("working_blueprint")
             baseline = saved.get("request_baseline")
             if not isinstance(blueprint, Mapping) or not isinstance(baseline, Mapping):
@@ -1728,6 +2199,7 @@ class CurrentLoopCoordinator:
             }
             role_to_argument = {
                 "generation_context_pack": "generation_context",
+                "exploratory_generation_context": "generation_context",
                 "python_manifestation": "python_manifestation",
                 "circuit_manifestation": "circuit_manifestation",
                 "result_manifestation": "result_manifestation",
@@ -2417,6 +2889,277 @@ class CurrentLoopCoordinator:
             },
         )
 
+    def _transition_parent_artifacts(
+        self,
+        state: Mapping[str, Any],
+        pending_resolution: Mapping[str, Any] | None,
+    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+        names = (
+            "algorithm-intent-card",
+            "working-blueprint",
+            "output-evidence-contract",
+        )
+        if pending_resolution is not None:
+            retained = {
+                str(item.get("role")): item
+                for item in pending_resolution.get("retained_artifacts", [])
+                if isinstance(item, Mapping)
+            }
+            loaded: list[dict[str, Any]] = []
+            for name in names:
+                descriptor = retained.get(name)
+                filename = (
+                    descriptor.get("local_record") if isinstance(descriptor, Mapping) else None
+                )
+                if not isinstance(filename, str) or Path(filename).name != filename:
+                    raise CurrentLoopError("canonical_parent_set_incomplete")
+                loaded.append(_load_json_file(self.artifact_directory / filename))
+            return loaded[0], loaded[1], loaded[2]
+        return (
+            self._saved_artifact(state, "algorithm_intent_card"),
+            self._saved_artifact(state, "working_blueprint"),
+            self._saved_artifact(state, "output_evidence_contract"),
+        )
+
+    def _ensure_transition_parent_saved(
+        self,
+        role: str,
+        artifact: Mapping[str, Any],
+        filename: str,
+    ) -> None:
+        state = self.store.read()
+        if role in state.get("saved_artifacts", {}):
+            if self._saved_artifact(state, role) != dict(artifact):
+                raise CurrentLoopError("posture_transition_working_blueprint_mutation")
+            return
+        self._save_artifact(role, artifact, filename)
+
+    def _prepare_generation_after_posture_transition(
+        self,
+        *,
+        state: Mapping[str, Any],
+        coordinator: dict[str, Any],
+        pending_resolution: Mapping[str, Any] | None,
+        profile_id: str,
+        requested_posture: str,
+        review_input: Mapping[str, Any],
+        review_input_digest: str,
+        normalized_dispositions: Sequence[Mapping[str, Any]],
+        constraints: Sequence[str],
+        non_goals: Sequence[str],
+        accepted_unresolved_choices: Sequence[str],
+        started: float,
+    ) -> dict[str, Any]:
+        intent, blueprint, output_contract = self._transition_parent_artifacts(
+            state, pending_resolution
+        )
+        generation_arguments: dict[str, Any] = {
+            "context_loop": CONTEXT_LOOP_GATE,
+            "generation_posture": requested_posture,
+            "implementation_blueprint": blueprint,
+            "output_evidence_contract": output_contract,
+        }
+        if requested_posture == "exploratory_first_pass":
+            generation_arguments.update(
+                {
+                    "exploratory_authorization": True,
+                    "exploratory_constraints": list(
+                        dict.fromkeys([*constraints, *EXPLORATORY_FIXED_CONSTRAINTS])
+                    ),
+                    "exploratory_prohibitions": list(
+                        dict.fromkeys([*non_goals, *EXPLORATORY_FIXED_PROHIBITIONS])
+                    ),
+                    "unresolved_assistant_choices": list(accepted_unresolved_choices),
+                }
+            )
+        payload = self._protected_call("create_generation_context_pack", generation_arguments)
+        context_status = payload.get("context_status")
+        intent_binding = decision_inventory_binding(intent)
+        if context_status == "generation_context_blocked_pending_decisions":
+            if (
+                requested_posture != "blueprint_guided"
+                or payload.get("generation_context_pack") is not None
+                or payload.get("generation_context_pack_produced") is not False
+                or not isinstance(payload.get("blueprint_readiness_summary"), Mapping)
+            ):
+                raise CurrentLoopError("protected_truth_insufficient")
+            readiness = deepcopy(dict(payload["blueprint_readiness_summary"]))
+            blockers, records = self._decision_resolution_details(
+                profile_id=profile_id,
+                blueprint=blueprint,
+                readiness=readiness,
+            )
+            if not blockers:
+                raise CurrentLoopError("protected_truth_insufficient")
+            retained = (
+                deepcopy(list(pending_resolution.get("retained_artifacts") or []))
+                if pending_resolution is not None
+                else [
+                    self._save_pending_generation_artifact("algorithm-intent-card", intent),
+                    self._save_pending_generation_artifact("working-blueprint", blueprint),
+                    self._save_pending_generation_artifact(
+                        "output-evidence-contract", output_contract
+                    ),
+                ]
+            )
+            awaiting = [str(item["profile_decision_id"]) for item in blockers]
+            coordinator.update(
+                {
+                    "phase": "intent_review",
+                    "state_status": "checkpoint_required",
+                    "checkpoint_kind": "decision_resolution",
+                    "customer_summary": (
+                        "Blueprint-guided generation is waiting only on the returned "
+                        "generation-relevant decisions. The posture transition did not "
+                        "rewrite the Working Blueprint."
+                    ),
+                    "canonical_decision_inventory": intent_binding,
+                    "pending_decision_resolution": {
+                        "input_digest": review_input_digest,
+                        "profile_id": profile_id,
+                        "interpretation_summary": (
+                            dict(review_input.get("proposed_interpretation") or {}).get("summary")
+                            or dict(review_input.get("proposed_interpretation") or {}).get(
+                                "normalized_goal"
+                            )
+                            or "Reviewed interpretation"
+                        ),
+                        "profile_answers": deepcopy(
+                            dict(review_input.get("reviewed_profile_answers") or {})
+                        ),
+                        "constraints": list(constraints),
+                        "non_goals": list(non_goals),
+                        "accepted_unresolved_choices": list(accepted_unresolved_choices),
+                        "authorized_dispositions": [
+                            deepcopy(dict(item)) for item in normalized_dispositions
+                        ],
+                        "decision_records": deepcopy(records),
+                        "blocking_decisions": blockers,
+                        "blueprint_readiness_summary": readiness,
+                        "awaiting_confirmation_fields": awaiting,
+                        "retained_artifacts": retained,
+                    },
+                    "generation_context_outcome": {
+                        "context_status": context_status,
+                        "generation_context_pack_created": False,
+                        "exploratory_generation_context_created": False,
+                        "unresolved_decision_references": [
+                            item["decision_ref"] for item in blockers
+                        ],
+                    },
+                }
+            )
+            self._replace_coordinator(coordinator)
+            return self._result(
+                operation="prepare_generation",
+                ok=True,
+                state=self.store.read(),
+                summary=coordinator["customer_summary"],
+                elapsed=self.clock() - started,
+                category=context_status,
+                details={
+                    "posture_transition_applied": True,
+                    "working_blueprint_mutated": False,
+                    "evolved_blueprint_created": False,
+                    "generation_context_pack_created": False,
+                    "decision_resolution": blockers,
+                    "blueprint_readiness_summary": readiness,
+                    "ide_write_or_run_authorized": False,
+                },
+                checkpoint_protocol={
+                    "confirmation_transmission_state": "not_supplied",
+                    "awaiting_confirmation_fields": awaiting,
+                },
+            )
+
+        self._ensure_transition_parent_saved(
+            "algorithm_intent_card", intent, "algorithm-intent-card.json"
+        )
+        self._ensure_transition_parent_saved(
+            "working_blueprint", blueprint, "working-blueprint.json"
+        )
+        self._ensure_transition_parent_saved(
+            "output_evidence_contract",
+            output_contract,
+            "output-evidence-contract.json",
+        )
+        unresolved_refs: list[str] = []
+        pack_created = False
+        exploratory_created = False
+        if context_status == "exploratory_generation_context_ready":
+            if (
+                requested_posture != "exploratory_first_pass"
+                or payload.get("generation_context_pack") is not None
+                or payload.get("generation_context_pack_produced") is not False
+            ):
+                raise CurrentLoopError("protected_truth_insufficient")
+            generation = self._response_artifact(payload, "exploratory_generation_context")
+            self._save_artifact(
+                "exploratory_generation_context",
+                generation,
+                "exploratory-generation-context.json",
+            )
+            exploratory_created = True
+            unresolved_refs = [
+                str(item["decision_ref"])
+                for item in unpack_decision_record_set(blueprint["blueprint_decision_records"])
+                if item.get("resolution_state") != "resolved"
+            ]
+            summary = (
+                "Exploratory generation context is ready for this attempt without a "
+                "full Generation Context Pack or Blueprint-readiness claim."
+            )
+        elif context_status == "generation_context_pack_ready":
+            if (
+                requested_posture != "blueprint_guided"
+                or payload.get("generation_context_pack_produced") is not True
+            ):
+                raise CurrentLoopError("protected_truth_insufficient")
+            generation = self._response_artifact(payload, "generation_context_pack")
+            self._save_artifact(
+                "generation_context_pack",
+                generation,
+                "generation-context-pack.json",
+            )
+            pack_created = True
+            summary = "The full Generation Context Pack is ready."
+        else:
+            raise CurrentLoopError("protected_truth_insufficient")
+        coordinator.update(
+            {
+                "phase": "generation_ready",
+                "state_status": "checkpoint_required",
+                "checkpoint_kind": "ide_write_or_run",
+                "customer_summary": (f"{summary} IDE write/run authority remains separate."),
+                "canonical_decision_inventory": intent_binding,
+                "pending_decision_resolution": None,
+                "generation_context_outcome": {
+                    "context_status": context_status,
+                    "generation_context_pack_created": pack_created,
+                    "exploratory_generation_context_created": exploratory_created,
+                    "unresolved_decision_references": unresolved_refs,
+                },
+            }
+        )
+        self._replace_coordinator(coordinator)
+        return self._result(
+            operation="prepare_generation",
+            ok=True,
+            state=self.store.read(),
+            summary=coordinator["customer_summary"],
+            elapsed=self.clock() - started,
+            details={
+                "posture_transition_applied": True,
+                "working_blueprint_mutated": False,
+                "evolved_blueprint_created": False,
+                "context_status": context_status,
+                "generation_context_pack_created": pack_created,
+                "exploratory_generation_context_created": exploratory_created,
+                "unresolved_decision_references": unresolved_refs,
+                "ide_write_or_run_authorized": False,
+            },
+        )
+
     def _protected_call(self, tool_name: str, arguments: Mapping[str, Any]) -> dict[str, Any]:
         if self.transport is None:
             raise CurrentLoopError("protected_service_unavailable")
@@ -2492,6 +3235,7 @@ class CurrentLoopCoordinator:
         decision_dispositions: Sequence[Mapping[str, Any]],
         reviewed_profile_answers: Mapping[str, Any] | None,
         accepted_unresolved_choices: Sequence[str],
+        generation_posture: str,
     ) -> dict[str, Any]:
         return {
             "profile_id": profile_id,
@@ -2502,6 +3246,7 @@ class CurrentLoopCoordinator:
             "decision_dispositions": [deepcopy(dict(item)) for item in decision_dispositions],
             "reviewed_profile_answers": deepcopy(dict(reviewed_profile_answers or {})),
             "accepted_unresolved_choices": list(accepted_unresolved_choices),
+            "generation_posture": generation_posture,
         }
 
     def _pending_intent_review(
@@ -2572,6 +3317,104 @@ class CurrentLoopCoordinator:
         )
         self._replace_coordinator(coordinator)
 
+    def _save_pending_generation_artifact(
+        self,
+        role: str,
+        artifact: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        digest = _artifact_digest(artifact)
+        path = self.artifact_directory / f"pending-{role}-{digest[:16]}.json"
+        _atomic_exact_write(path, artifact)
+        reloaded = _load_json_file(path)
+        if reloaded != dict(artifact) or _artifact_digest(reloaded) != digest:
+            raise CurrentLoopError("canonical_artifact_save_verification_failed")
+        return {
+            "role": role,
+            "artifact_reference": _artifact_reference(artifact),
+            "artifact_digest": digest,
+            "local_record": path.name,
+            "exact_protected_artifact_preserved": True,
+        }
+
+    def _decision_resolution_details(
+        self,
+        *,
+        profile_id: str,
+        blueprint: Mapping[str, Any],
+        readiness: Mapping[str, Any],
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        records = unpack_decision_record_set(blueprint["blueprint_decision_records"])
+        by_ref = {str(item["decision_ref"]): item for item in records}
+        definitions = {item["profile_decision_id"]: item for item in catalog_entries(profile_id)}
+        blockers: list[dict[str, Any]] = []
+        for decision_ref in readiness.get("blocking_decision_references") or []:
+            record = by_ref.get(str(decision_ref))
+            if record is None:
+                raise CurrentLoopError("protected_truth_insufficient")
+            definition = definitions.get(str(record.get("profile_decision_id")))
+            if definition is None or definition.get("generation_relevant") is not True:
+                raise CurrentLoopError("protected_truth_insufficient")
+            current_value = (
+                {
+                    "selected_value": deepcopy(record.get("selected_value")),
+                    "provenance_entries": deepcopy(record.get("provenance_entries") or []),
+                }
+                if record.get("selected_value") is not None
+                else None
+            )
+            blockers.append(
+                {
+                    "decision_ref": decision_ref,
+                    "profile_decision_id": record["profile_decision_id"],
+                    "customer_meaning": definition["display_label"],
+                    "question": definition["question"],
+                    "current_attributable_value": current_value,
+                    "profile_supported_alternatives": deepcopy(
+                        definition.get("supported_alternatives") or []
+                    ),
+                    "applicable_actions": deepcopy(
+                        readiness.get("applicable_user_controlled_actions") or []
+                    ),
+                    "may_defer": True,
+                    "may_switch_attempt_to_exploratory_first_pass": True,
+                }
+            )
+        return blockers, records
+
+    def _record_posture_transition(
+        self,
+        coordinator: dict[str, Any],
+        *,
+        source_posture: str,
+        requested_posture: str,
+        reason: str,
+        provenance: str,
+    ) -> None:
+        if requested_posture not in {"blueprint_guided", "exploratory_first_pass"}:
+            raise CurrentLoopError("generation_posture_invalid")
+        if provenance not in POSTURE_AUTHORITY_PROVENANCE:
+            raise CurrentLoopError("posture_transition_provenance_invalid")
+        clean_reason = " ".join(reason.split())
+        if not clean_reason or len(clean_reason) > 500:
+            raise CurrentLoopError("posture_transition_reason_invalid")
+        history = coordinator.setdefault("posture_transition_history", [])
+        if len(history) >= 16:
+            raise CurrentLoopError("posture_transition_history_limit_exceeded")
+        history.append(
+            {
+                "source_posture": source_posture,
+                "requested_posture": requested_posture,
+                "explicit_authority": True,
+                "reason": clean_reason,
+                "provenance": provenance,
+                "timestamp_unix_seconds": int(time.time()),
+                "working_blueprint_mutated": False,
+                "evolved_blueprint_created": False,
+                "decision_mutation": False,
+            }
+        )
+        coordinator["effective_generation_posture"] = requested_posture
+
     def _save_artifact(
         self, role: str, artifact: Mapping[str, Any], filename: str
     ) -> dict[str, Any]:
@@ -2584,8 +3427,64 @@ class CurrentLoopCoordinator:
             expected_revision=state["state_revision"],
         )
 
+    def _save_generation_parent_artifact(
+        self,
+        role: str,
+        artifact: Mapping[str, Any],
+        filename: str,
+    ) -> dict[str, Any]:
+        state = self.store.read()
+        coordinator = self._coordinator_state(state)
+        active = coordinator.get("active_generation_artifacts")
+        if isinstance(active, Mapping) and isinstance(active.get(role), Mapping):
+            current = self._saved_artifact(state, role)
+            if current == dict(artifact):
+                return deepcopy(dict(active[role]))
+        if role not in state.get("saved_artifacts", {}):
+            return self._save_artifact(role, artifact, filename)
+        current = self._saved_artifact(state, role)
+        if current == dict(artifact):
+            return deepcopy(dict(state["saved_artifacts"][role]))
+        digest = _artifact_digest(artifact)
+        path = self.artifact_directory / f"{Path(filename).stem}-{digest[:16]}.json"
+        _atomic_exact_write(path, artifact)
+        reloaded = _load_json_file(path)
+        if reloaded != dict(artifact) or _artifact_digest(reloaded) != digest:
+            raise CurrentLoopError("canonical_artifact_save_verification_failed")
+        descriptor = {
+            "role": role,
+            "artifact_reference": _artifact_reference(artifact),
+            "artifact_digest": digest,
+            "local_path": str(path),
+            "status": "fresh",
+            "generation_stage_revision": True,
+            "prior_artifact_preserved": True,
+        }
+        active_artifacts = coordinator.setdefault("active_generation_artifacts", {})
+        history = coordinator.setdefault("generation_parent_history", [])
+        if len(history) >= 32:
+            raise CurrentLoopError("generation_parent_history_limit_exceeded")
+        history.append(
+            {
+                "role": role,
+                "prior_artifact_digest": _artifact_digest(current),
+                "next_artifact_digest": digest,
+                "explicit_decision_authority_required": True,
+                "posture_transition_only": False,
+            }
+        )
+        active_artifacts[role] = descriptor
+        self._replace_coordinator(coordinator)
+        return deepcopy(descriptor)
+
     def _saved_artifact(self, state: Mapping[str, Any], role: str) -> dict[str, Any]:
-        descriptor = state.get("saved_artifacts", {}).get(role)
+        coordinator = self._coordinator_state(state)
+        active = coordinator.get("active_generation_artifacts")
+        descriptor = (
+            active.get(role)
+            if isinstance(active, Mapping) and isinstance(active.get(role), Mapping)
+            else state.get("saved_artifacts", {}).get(role)
+        )
         if not isinstance(descriptor, Mapping):
             raise CurrentLoopError("canonical_parent_set_incomplete")
         path = Path(str(descriptor.get("local_path") or ""))
@@ -2763,10 +3662,17 @@ class CurrentLoopCoordinator:
         references = current.get("artifact_references")
         if not isinstance(references, Mapping):
             raise CurrentLoopError("canonical_parent_set_incomplete")
+        outcome = self._coordinator_state(self.store.read()).get("generation_context_outcome")
+        generation_role = (
+            "exploratory_generation_context"
+            if isinstance(outcome, Mapping)
+            and outcome.get("exploratory_generation_context_created") is True
+            else "generation_context_pack"
+        )
         mapping = {
             "request_baseline": "request_baseline_handoff",
             "working_blueprint": "working_blueprint",
-            "generation_context": "generation_context_pack",
+            "generation_context": generation_role,
             "python_manifestation": "python_manifestation",
             "circuit_manifestation": "circuit_manifestation",
             "result_manifestation": "result_manifestation",
@@ -2794,7 +3700,7 @@ class CurrentLoopCoordinator:
     ) -> dict[str, Any]:
         return {
             "schema_id": COORDINATOR_STATE_SCHEMA_ID,
-            "schema_version": 1,
+            "schema_version": COORDINATOR_STATE_SCHEMA_VERSION,
             "phase": phase,
             "state_status": state_status,
             "checkpoint_kind": checkpoint_kind,
@@ -2826,6 +3732,12 @@ class CurrentLoopCoordinator:
             "assistant_reconstruction_allowed": False,
             "customer_serialization_required": False,
             "protected_payload_retained": False,
+            "effective_generation_posture": None,
+            "posture_transition_history": [],
+            "pending_decision_resolution": None,
+            "generation_context_outcome": None,
+            "active_generation_artifacts": {},
+            "generation_parent_history": [],
         }
 
     def _coordinator_state(self, state: Mapping[str, Any]) -> dict[str, Any]:
@@ -2839,12 +3751,38 @@ class CurrentLoopCoordinator:
             )
         result = deepcopy(dict(coordinator))
         if (
+            result.get("schema_id") == LEGACY_COORDINATOR_STATE_SCHEMA_ID
+            and result.get("schema_version") == 1
+        ):
+            result["schema_id"] = COORDINATOR_STATE_SCHEMA_ID
+            result["schema_version"] = COORDINATOR_STATE_SCHEMA_VERSION
+            result.setdefault("effective_generation_posture", state.get("generation_posture"))
+            result.setdefault("posture_transition_history", [])
+            result.setdefault("pending_decision_resolution", None)
+            result.setdefault("generation_context_outcome", None)
+            result.setdefault("active_generation_artifacts", {})
+            result.setdefault("generation_parent_history", [])
+        result.setdefault("effective_generation_posture", state.get("generation_posture"))
+        result.setdefault("posture_transition_history", [])
+        result.setdefault("pending_decision_resolution", None)
+        result.setdefault("generation_context_outcome", None)
+        result.setdefault("active_generation_artifacts", {})
+        result.setdefault("generation_parent_history", [])
+        if (
             result.get("schema_id") != COORDINATOR_STATE_SCHEMA_ID
-            or result.get("schema_version") != 1
+            or result.get("schema_version") != COORDINATOR_STATE_SCHEMA_VERSION
             or result.get("phase") not in PHASES
             or result.get("state_status") not in STATE_STATUSES
             or result.get("checkpoint_kind") not in CHECKPOINT_KINDS
         ):
+            raise CurrentLoopError("current_loop_state_corrupt")
+        if result.get("effective_generation_posture") not in {
+            None,
+            "blueprint_guided",
+            "exploratory_first_pass",
+        }:
+            raise CurrentLoopError("current_loop_state_corrupt")
+        if not isinstance(result.get("posture_transition_history"), list):
             raise CurrentLoopError("current_loop_state_corrupt")
         return result
 
@@ -2893,6 +3831,21 @@ class CurrentLoopCoordinator:
                     "status": descriptor.get("status"),
                 }
             )
+        active = self._coordinator_state(state).get("active_generation_artifacts")
+        if isinstance(active, Mapping):
+            for role, descriptor in sorted(active.items()):
+                if not isinstance(descriptor, Mapping):
+                    continue
+                result = [item for item in result if item.get("role") != role]
+                result.append(
+                    {
+                        "role": role,
+                        "artifact_reference": descriptor.get("artifact_reference"),
+                        "artifact_digest": descriptor.get("artifact_digest"),
+                        "status": descriptor.get("status"),
+                        "generation_stage_revision": True,
+                    }
+                )
         return result
 
     def _checkpoint_protocol(
@@ -2919,6 +3872,53 @@ class CurrentLoopCoordinator:
 
         protocol["identical_repeat_prohibited"] = True
         if checkpoint_kind == "posture":
+            if category == "posture_transition_authority_required":
+                protocol.update(
+                    {
+                        "supported_next_action": "obtain_explicit_posture_transition_authority",
+                        "next_invocation": _invocation_template(
+                            "prepare-generation",
+                            required_flags=(
+                                "--posture",
+                                "--approve-posture-change",
+                                "--posture-reason",
+                                "--posture-provenance",
+                            ),
+                            reused_inputs=(
+                                "confirmed_interpretation_inputs",
+                                "current_working_blueprint",
+                                "unresolved_decision_inventory",
+                            ),
+                            new_inputs=(
+                                "requested_generation_posture",
+                                "explicit_posture_transition_authority",
+                                "posture_change_reason",
+                                "posture_authority_provenance",
+                            ),
+                            uses_transport=True,
+                        ),
+                        "required_authority_input": _authority_input(
+                            "--approve-posture-change",
+                            "Authorize only the explicit posture transition for this attempt.",
+                            additional_flags=(
+                                "--posture",
+                                "--posture-reason",
+                                "--posture-provenance",
+                            ),
+                        ),
+                        "awaiting_confirmation_fields": [
+                            "generation_posture_transition",
+                            "posture_change_reason",
+                            "posture_authority_provenance",
+                        ],
+                        "confirmation_transmission_state": "not_supplied",
+                    }
+                )
+                if override:
+                    for key in protocol:
+                        if key in override:
+                            protocol[key] = deepcopy(override[key])
+                return protocol
             protocol.update(
                 {
                     "supported_next_action": "obtain_generation_posture_and_activation",
@@ -2939,6 +3939,96 @@ class CurrentLoopCoordinator:
                         "generation_posture",
                         "qcoder_activation",
                     ],
+                    "confirmation_transmission_state": "not_supplied",
+                }
+            )
+        elif checkpoint_kind == "decision_resolution":
+            pending_resolution = (
+                coordinator.get("pending_decision_resolution")
+                if isinstance(coordinator, Mapping)
+                else None
+            )
+            argument_values: list[dict[str, Any]] = []
+            if isinstance(pending_resolution, Mapping):
+                argument_values.extend(
+                    [
+                        {
+                            "flag": "--profile",
+                            "value": pending_resolution.get("profile_id"),
+                        },
+                        {
+                            "flag": "--interpretation-summary",
+                            "value": pending_resolution.get("interpretation_summary"),
+                        },
+                    ]
+                )
+                for field, value in sorted(
+                    dict(pending_resolution.get("profile_answers") or {}).items()
+                ):
+                    argument_values.append(
+                        {"flag": "--profile-answer", "value": f"{field}={value}"}
+                    )
+                for value in pending_resolution.get("constraints", []):
+                    argument_values.append({"flag": "--constraint", "value": value})
+                for value in pending_resolution.get("non_goals", []):
+                    argument_values.append({"flag": "--non-goal", "value": value})
+                for disposition in pending_resolution.get("authorized_dispositions", []):
+                    if not isinstance(disposition, Mapping):
+                        continue
+                    argument_values.append(
+                        {
+                            "flag": "--decision-disposition",
+                            "values": [
+                                disposition.get("profile_decision_id"),
+                                disposition.get("user_disposition"),
+                                disposition.get("selected_value", "-"),
+                                disposition.get("authority_provenance"),
+                            ],
+                            "reused_authorized_input": True,
+                        }
+                    )
+            protocol.update(
+                {
+                    "supported_next_action": "resolve_generation_decisions_or_switch_posture",
+                    "next_invocation": _invocation_template(
+                        "prepare-generation",
+                        required_flags=(
+                            "--profile",
+                            "--interpretation-summary",
+                            "--confirm-intent",
+                            "--decision-disposition",
+                            "--approve-decisions",
+                        ),
+                        reused_inputs=(
+                            "confirmed_intent_card",
+                            "working_blueprint",
+                            "output_evidence_contract",
+                            "pending_decision_resolution.interpretation_inputs",
+                            "pending_decision_resolution.authorized_dispositions",
+                        ),
+                        new_inputs=("explicitly_approved_decision_dispositions",),
+                        argument_values=argument_values,
+                        alternatives=(
+                            "prepare-generation with explicit exploratory posture transition",
+                            "defer and stop",
+                        ),
+                        uses_transport=True,
+                    ),
+                    "required_authority_input": _authority_input(
+                        "--approve-decisions",
+                        "Transmit only the user's exact approved generation-relevant dispositions.",
+                        additional_flags=("--decision-disposition",),
+                    ),
+                    "awaiting_confirmation_fields": list(
+                        (override or {}).get(
+                            "awaiting_confirmation_fields",
+                            (
+                                pending_resolution.get("awaiting_confirmation_fields", [])
+                                if isinstance(pending_resolution, Mapping)
+                                else []
+                            ),
+                        )
+                    ),
                     "confirmation_transmission_state": "not_supplied",
                 }
             )
