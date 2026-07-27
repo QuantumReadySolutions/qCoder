@@ -180,7 +180,7 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
     token_path = str(token_file.resolve())
     assert runtime == {
         "python_executable": executable,
-        "qcoder_version": "0.6.0a2",
+        "qcoder_version": "0.6.0a2+wi0418.checkpoint1",
         "coordinator_prefix": [
             executable,
             "-m",
@@ -211,6 +211,17 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
         "Stop on authentication, entitlement, or hosted-service failure",
         "Never manually sequence Context Bridge tools",
         "never substitute a local or manual review fallback",
+        "Conversational approval and canonical confirmation are distinct",
+        "required_authority_input",
+        "Follow supported_next_action and next_invocation exactly",
+        "Never repeat an identical invocation after an unchanged checkpoint",
+        "awaiting_confirmation_fields",
+        "Never inspect .qcoder state files",
+        "recursively search even inside the workspace",
+        "home-directory qCoder state",
+        "sibling repositories",
+        "Do not replace coordinator truth with a locally assembled review",
+        "qCoder activation, IDE write/run permission, exact artifact-review permission",
         "does not grant IDE permission to write or run",
         "does not authorize artifact review",
     ):
@@ -1993,13 +2004,13 @@ def test_mcp_stdio_content_length_lists_exact_tools(tmp_path: Path) -> None:
         initialized = _read_content_length_response(proc.stdout)
         assert initialized["result"]["serverInfo"] == {
             "name": "qcoder-context-bridge",
-            "version": "0.6.0a2",
+            "version": "0.6.0a2+wi0418.checkpoint1",
         }
         instructions = initialized["result"]["instructions"]
         runtime = _activation_runtime(instructions)
         executable = str(Path(sys.executable).absolute())
         assert runtime["python_executable"] == executable
-        assert runtime["qcoder_version"] == "0.6.0a2"
+        assert runtime["qcoder_version"] == "0.6.0a2+wi0418.checkpoint1"
         assert runtime["coordinator_prefix"] == [
             executable,
             "-m",
@@ -2017,6 +2028,14 @@ def test_mcp_stdio_content_length_lists_exact_tools(tmp_path: Path) -> None:
             "Never manually sequence Context Bridge tools",
             "Never reconstruct canonical artifacts",
             "scan the repository",
+            "Conversational approval and canonical confirmation are distinct",
+            "Follow supported_next_action and next_invocation exactly",
+            "Never repeat an identical invocation after an unchanged checkpoint",
+            "Never inspect .qcoder state files",
+            "recursively search even inside the workspace",
+            "home-directory qCoder state",
+            "client configuration",
+            "sibling repositories",
             "does not grant IDE permission to write or run",
             "exact artifact candidates",
             "proposal-specific explicit confirmation",

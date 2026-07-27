@@ -13,6 +13,10 @@ import zipfile
 
 
 OLD_CANDIDATE_VERSION = "0.6.0a1"
+PRIVATE_CANDIDATE_PATTERN = re.compile(
+    r"^(?P<public_version>[0-9]+\.[0-9]+\.[0-9]+a[0-9]+)"
+    r"\+wi[0-9]+\.[a-z0-9][a-z0-9.]*$"
+)
 PIN_PATTERN = re.compile(r"\bqcoder(?:\[[A-Za-z0-9_,.-]+\])?==([0-9A-Za-z.!+-]+)")
 TEXT_SUFFIXES = {".js", ".json", ".md", ".mdx", ".mjs", ".toml", ".ts", ".tsx"}
 IGNORED_PARTS = {".git", ".docusaurus", ".pytest_cache", "build", "dist", "node_modules"}
@@ -87,7 +91,9 @@ def verify_release_version(
     versions["wheel"] = wheel_version(wheel)
     versions["sdist"] = sdist_version(sdist)
     expected = versions["pyproject"]
-    release_line = expected.rsplit("a", 1)[0]
+    local_match = PRIVATE_CANDIDATE_PATTERN.fullmatch(expected)
+    public_version = local_match.group("public_version") if local_match is not None else expected
+    release_line = public_version.rsplit("a", 1)[0]
     pins = {
         path: [version for version in values if version.startswith(release_line)]
         for path, values in customer_pin_versions(customer_roots).items()
@@ -95,9 +101,11 @@ def verify_release_version(
     pins = {path: values for path, values in pins.items() if values}
     mismatches = {source: value for source, value in versions.items() if value != expected}
     pin_mismatches = {
-        path: values for path, values in pins.items() if any(value != expected for value in values)
+        path: values
+        for path, values in pins.items()
+        if any(value != public_version for value in values)
     }
-    if expected == OLD_CANDIDATE_VERSION:
+    if public_version == OLD_CANDIDATE_VERSION:
         raise ValueError("candidate_reuses_0.6.0a1")
     if mismatches:
         raise ValueError(f"authoritative_version_mismatch:{mismatches}")
@@ -108,6 +116,8 @@ def verify_release_version(
     return {
         "ok": True,
         "version": expected,
+        "public_version": public_version,
+        "private_candidate_identity": local_match is not None,
         "authoritative_versions": versions,
         "customer_pin_files": sorted(pins),
         "old_candidate_identity_absent": True,

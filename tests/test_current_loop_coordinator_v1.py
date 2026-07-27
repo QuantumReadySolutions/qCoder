@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Mapping
@@ -22,6 +23,7 @@ from qcoder.context_loop import (
     build_carry_forward_proposal,
     build_current_build_context,
     build_portable_current_build_context,
+    context_loop_contract_snapshot,
     materialize_evolved_blueprint,
 )
 from qcoder.current_loop import CurrentLoopStore, decision_inventory_binding
@@ -35,6 +37,7 @@ from qcoder.current_loop_coordinator import (
     coordinator_contract_snapshot,
     infer_requested_posture,
 )
+import qcoder.current_loop_coordinator as current_loop_coordinator_module
 
 
 PROFILE_COUNTS = {
@@ -433,6 +436,18 @@ def _activate_and_prepare(
 
 def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
     snapshot = coordinator_contract_snapshot()
+    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v2"
+    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 2
+    assert all(snapshot["checkpoint_result_protocol"].values())
+    contract_digest = hashlib.sha256(
+        json.dumps(
+            context_loop_contract_snapshot(),
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+    assert contract_digest == ("2f985d84fcb046b18142617c0239e7a8ef81073acae8783e118b87cab1b7987e")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
@@ -1301,3 +1316,257 @@ def test_current_loop_cli_parses_semantic_scalars_without_structured_json() -> N
     assert _parse_current_loop_scalar("simple_flat") == "simple_flat"
     with pytest.raises(ValueError, match="current_loop_scalar_value_required"):
         _parse_current_loop_scalar('{"selected_value": 2048}')
+
+
+def _assert_actionable_checkpoint(result: Mapping[str, Any]) -> None:
+    assert result["state_status"] == "checkpoint_required"
+    assert result["supported_next_action"]
+    assert isinstance(result["next_invocation"], dict)
+    assert isinstance(result["required_authority_input"], dict)
+    assert isinstance(result["awaiting_confirmation_fields"], list)
+    assert result["confirmation_transmission_state"] in {
+        "not_supplied",
+        "supplied",
+        "clarification_required",
+        "confirmed",
+        "declined",
+    }
+    assert result["identical_repeat_prohibited"] is True
+    assert result["next_invocation"]["token_contents_embedded"] is False
+    assert result["next_invocation"]["private_workspace_path_embedded"] is False
+    assert result["next_invocation"]["canonical_artifact_reconstruction_required"] is False
+
+
+def test_every_checkpoint_result_is_deterministically_actionable(tmp_path: Path) -> None:
+    coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
+    for checkpoint_kind in CHECKPOINT_KINDS:
+        phase = "continuation_choice" if checkpoint_kind == "none" else "activated"
+        result = coordinator._result_without_state(
+            operation="contract_test",
+            ok=True,
+            phase=phase,
+            state_status="checkpoint_required",
+            checkpoint_kind=checkpoint_kind,
+            summary="Synthetic checkpoint contract test.",
+        )
+        _assert_actionable_checkpoint(result)
+        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v2"
+        assert result["schema_version"] == 2
+
+
+def test_current_loop_cli_intent_review_confirmation_sequence_is_actionable(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "cli-intent-sequence"
+    workspace.mkdir()
+    transport = PublicBuilderTransport()
+    monkeypatch.setattr(
+        current_loop_coordinator_module,
+        "ContextBridgeTransport",
+        lambda **_values: transport,
+    )
+    activate = [
+        "current-loop",
+        "--workspace",
+        str(workspace),
+        "activate",
+        "--request",
+        "Use qCoder for a quick first pass on a synthetic Bell circuit.",
+        "--posture",
+        "exploratory_first_pass",
+        "--approve",
+    ]
+    assert cli_main(activate) == 0
+    activated = json.loads(capsys.readouterr().out)
+    _assert_actionable_checkpoint(activated)
+
+    prepare = [
+        "current-loop",
+        "--workspace",
+        str(workspace),
+        "prepare-generation",
+        "--base-url",
+        "https://example.invalid",
+        "--token-file",
+        str(tmp_path / "token.txt"),
+        "--profile",
+        "generic_qiskit",
+        "--interpretation-summary",
+        "Build one bounded synthetic Bell circuit.",
+        "--profile-answer",
+        "framework_requirement=Qiskit-compatible Python.",
+    ]
+    assert cli_main(prepare) == 0
+    proposed = json.loads(capsys.readouterr().out)
+    assert proposed["category"] == "intent_confirmation_required"
+    assert proposed["confirmation_transmission_state"] == "not_supplied"
+    assert "--confirm-intent" in proposed["next_invocation"]["required_flags"]
+    assert proposed["details"]["protected_call_made"] is True
+    _assert_actionable_checkpoint(proposed)
+    assert len(transport.calls) == 1
+
+    assert cli_main(prepare) == 0
+    repeated = json.loads(capsys.readouterr().out)
+    assert repeated["category"] == "confirmation_not_transmitted"
+    assert repeated["details"]["protected_call_made"] is False
+    assert repeated["details"]["identical_pending_review_reused"] is True
+    assert "--confirm-intent" in repeated["next_invocation"]["required_flags"]
+    _assert_actionable_checkpoint(repeated)
+    assert len(transport.calls) == 1
+
+    assert cli_main([*prepare, "--confirm-intent"]) == 0
+    confirmed = json.loads(capsys.readouterr().out)
+    assert confirmed["phase"] == "generation_ready"
+    assert confirmed["details"]["intent_confirmed"] is True
+    assert confirmed["details"]["confirmation_transmission_state"] == "confirmed"
+    _assert_actionable_checkpoint(confirmed)
+    assert [name for name, _arguments in transport.calls] == [
+        "create_algorithm_intent_card",
+        "create_algorithm_intent_card",
+        "create_implementation_blueprint",
+        "create_generation_context_pack",
+    ]
+    confirmed_intent_arguments = transport.calls[1][1]
+    assert confirmed_intent_arguments["requested_confirmation_state"] == "confirmed"
+    assert confirmed_intent_arguments["confirmation_assertion"] == {"user_reviewed": True}
+
+
+def test_current_loop_cli_distinguishes_transmitted_clarification(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ClarifyingTransport(PublicBuilderTransport):
+        def _intent(self, supplied: Mapping[str, Any]) -> dict[str, Any]:
+            result = super()._intent(supplied)
+            if supplied.get("requested_confirmation_state") != "confirmed":
+                return result
+            card = deepcopy(result["algorithm_intent_card"])
+            card.pop("artifact_digest")
+            card.update(
+                {
+                    "confirmation_state": "needs_clarification",
+                    "unresolved_questions": ["framework_requirement"],
+                }
+            )
+            return {"ok": True, "algorithm_intent_card": with_artifact_digest(card)}
+
+    workspace = tmp_path / "cli-clarification"
+    workspace.mkdir()
+    transport = ClarifyingTransport()
+    monkeypatch.setattr(
+        current_loop_coordinator_module,
+        "ContextBridgeTransport",
+        lambda **_values: transport,
+    )
+    assert (
+        cli_main(
+            [
+                "current-loop",
+                "--workspace",
+                str(workspace),
+                "activate",
+                "--request",
+                "Use qCoder for a quick first pass.",
+                "--posture",
+                "exploratory_first_pass",
+                "--approve",
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+    prepare = [
+        "current-loop",
+        "--workspace",
+        str(workspace),
+        "prepare-generation",
+        "--base-url",
+        "https://example.invalid",
+        "--token-file",
+        str(tmp_path / "token.txt"),
+        "--profile",
+        "generic_qiskit",
+        "--interpretation-summary",
+        "Build one bounded example.",
+    ]
+    assert cli_main(prepare) == 0
+    capsys.readouterr()
+    assert cli_main([*prepare, "--confirm-intent"]) == 0
+    clarification = json.loads(capsys.readouterr().out)
+    assert clarification["category"] == "intent_clarification_required"
+    assert clarification["category"] != "confirmation_not_transmitted"
+    assert clarification["confirmation_transmission_state"] == "supplied"
+    assert clarification["details"]["confirmation_transmission_state"] == "supplied"
+    assert clarification["awaiting_confirmation_fields"] == ["framework_requirement"]
+    assert clarification["details"]["protected_call_made"] is True
+    _assert_actionable_checkpoint(clarification)
+    calls_after_clarification = len(transport.calls)
+    assert cli_main([*prepare, "--confirm-intent"]) == 0
+    repeated = json.loads(capsys.readouterr().out)
+    assert repeated["category"] == "intent_clarification_unchanged"
+    assert repeated["confirmation_transmission_state"] == "supplied"
+    assert repeated["awaiting_confirmation_fields"] == ["framework_requirement"]
+    assert repeated["details"]["protected_call_made"] is False
+    assert len(transport.calls) == calls_after_clarification
+
+
+@pytest.mark.parametrize(
+    ("subcommand", "flags"),
+    [
+        ("activate", ("--approve",)),
+        ("prepare-generation", ("--confirm-intent", "--confirmation")),
+        ("record-ide-authority", ("--allow", "--explicit")),
+        ("register-artifacts", ("--allow-external",)),
+        ("authorize-artifacts", ("--action",)),
+        ("continue-unchanged", ("--approve", "--decline-proposal")),
+        ("propose-change", ("--approve-selection",)),
+        ("confirm-change", ("--approve",)),
+        ("start-next", ("--approve",)),
+        ("abandon", ("--approve",)),
+    ],
+)
+def test_current_loop_authority_flags_document_fail_closed_human_authority(
+    subcommand: str,
+    flags: tuple[str, ...],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        cli_main(["current-loop", subcommand, "--help"])
+    assert exc_info.value.code == 0
+    help_text = capsys.readouterr().out
+    for flag in flags:
+        assert flag in help_text
+    normalized_help = " ".join(help_text.lower().split())
+    assert "omission is not" in normalized_help
+    assert "never infer or manufacture" in normalized_help
+
+
+def test_public_transport_confirmation_semantics_match_bounded_live_contract() -> None:
+    transport = PublicBuilderTransport()
+    response = transport.call(
+        "create_algorithm_intent_card",
+        {
+            "original_user_intent": "Build one synthetic reviewed example.",
+            "profile_id": "generic_qiskit",
+            "proposed_interpretation": {"normalized_goal": "Build one bounded example."},
+            "decision_dispositions": [],
+            "requested_confirmation_state": "confirmed",
+            "confirmation_assertion": {"user_reviewed": True},
+            "current_lineage_reference": _reference(500),
+        },
+    )
+    assert response["algorithm_intent_card"]["confirmation_state"] == "confirmed"
+    live_gate4_contract = {
+        "response_sha256": ("12a05346542f9decbe70281c2bcd726841b0bdb36e0d1f33c6e615feb6e78fd0"),
+        "requested_confirmation_state": "confirmed",
+        "decision_dispositions_count": 0,
+        "confirmation_state": "confirmed",
+    }
+    assert live_gate4_contract["decision_dispositions_count"] == 0
+    assert (
+        live_gate4_contract["confirmation_state"]
+        == (response["algorithm_intent_card"]["confirmation_state"])
+    )

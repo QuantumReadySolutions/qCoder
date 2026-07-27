@@ -1,6 +1,15 @@
 # Changelog
 
 
+## 0.6.0a2+wi0418.checkpoint1
+
+- Mark this private, non-publishable WI-0418 checkpoint-protocol candidate with a distinct PEP 440
+  local identity while reserving plain `0.6.0a2` for the eventual frozen publication candidate.
+- Make every Current Loop checkpoint deterministically actionable and transmit conversational
+  approval through explicit coordinator authority inputs without adding an MCP tool or protected
+  operation.
+
+
 ## 0.6.0a2
 
 - Package the accepted Current Loop continuity foundation and deterministic coordinator behind the

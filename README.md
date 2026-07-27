@@ -23,6 +23,10 @@ The `0.6.0a2` release candidate combines **OSS local commands**, Explorer compat
 and the Context Bridge adapter for eligible Explorer users. Pro is not launched and is not a
 current public product path.
 
+Private WI-0418 checkpoint proof artifacts use the non-publishable local identity
+`0.6.0a2+wi0418.checkpoint1`. Customer installation remains pinned to the held public target
+`0.6.0a2`; the local-identity artifact is installed only by exact private path and hash.
+
 - **OSS commands** (`analyze`, `batch`, `context`, `review`) are Apache-2.0, local-first/offline, and useful without an account or token. They do not upload data, call a qCoder hosted service, or run QPU/simulator jobs.
 - **Explorer Beta commands** (`qcoder explorer status`, `qcoder explorer demo`, `qcoder explorer evidence`) are account-backed checks for Explorer Beta status, built-in guided evidence samples, and derived-context guided evidence for user-owned OpenQASM 2 artifacts. The older `qcoder student ...` commands remain available as beta compatibility aliases.
 - **Context Bridge adapter commands** (`qcoder context-bridge mcp serve`, `qcoder context-bridge mcp smoke`) are for eligible Explorer users who create a display-once token through Account Center. Support handles revocation and lost-token replacement. The adapter exposes bounded current-evidence context tools to configured Cursor, Claude Code, and Codex clients and reads the token from a local token file.

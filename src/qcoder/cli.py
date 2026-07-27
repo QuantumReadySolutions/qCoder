@@ -911,13 +911,32 @@ def _cmd_current_loop(argv: list[str]) -> int:
         "--posture",
         choices=("exploratory_first_pass", "blueprint_guided"),
         default=None,
+        help="User-selected generation posture; the assistant may not infer a missing choice.",
     )
-    activate.add_argument("--approve", action="store_true")
+    activate.add_argument(
+        "--approve",
+        action="store_true",
+        help=(
+            "Carry explicit human authority to activate qCoder for this build. "
+            "Omission is not approval; supply only after the user approves, and "
+            "never infer or manufacture that approval."
+        ),
+    )
     activate.add_argument("--label", default=None)
 
     prepare = sub.add_parser(
         "prepare-generation",
-        help="Create and save canonical intent, Blueprint, contract, and generation context.",
+        help=(
+            "First create or refresh a proposed interpretation for review; after the "
+            "user approves it, re-invoke with --confirm-intent to create the confirmed "
+            "intent, Blueprint, contract, and generation context."
+        ),
+        description=(
+            "The first unconfirmed call creates or refreshes a proposed interpretation. "
+            "Conversational approval is not canonical by itself: the next invocation "
+            "must transmit it with --confirm-intent and must follow the coordinator's "
+            "supported_next_action and next_invocation."
+        ),
     )
     _add_current_loop_transport_arguments(prepare, DEFAULT_BASE_URL, default_token_file())
     prepare.add_argument(
@@ -925,24 +944,67 @@ def _cmd_current_loop(argv: list[str]) -> int:
         required=True,
         choices=("generic_qiskit", "grover_search", "qaoa"),
     )
-    prepare.add_argument("--interpretation-summary", required=True)
+    prepare.add_argument(
+        "--interpretation-summary",
+        required=True,
+        help=(
+            "Exact reviewed assistant-proposed summary. Reuse the coordinator-supplied "
+            "value on confirmation; do not reconstruct a canonical artifact."
+        ),
+    )
     prepare.add_argument(
         "--profile-answer",
         action="append",
         default=[],
         metavar="FIELD=VALUE",
+        help=(
+            "One reviewed profile answer as FIELD=VALUE; repeat for each answer and "
+            "reuse the reviewed values exactly on confirmation."
+        ),
     )
     prepare.add_argument("--constraint", action="append", default=[])
     prepare.add_argument("--non-goal", action="append", default=[])
-    prepare.add_argument("--confirm-intent", action="store_true")
-    prepare.add_argument("--confirmation", default=None)
+    prepare.add_argument(
+        "--confirm-intent",
+        action="store_true",
+        help=(
+            "Carry explicit human authority confirming the reviewed interpretation. "
+            "Omission is not approval; supply only after the user approves, and never "
+            "infer or manufacture that approval. Chat approval alone does not transmit "
+            "canonical confirmation."
+        ),
+    )
+    prepare.add_argument(
+        "--confirmation",
+        default=None,
+        help=(
+            "Optional bounded human confirmation statement accompanying "
+            "--confirm-intent. It is not approval by itself; supply only after the "
+            "corresponding user approval and never infer or manufacture it."
+        ),
+    )
 
     authority = sub.add_parser(
         "record-ide-authority",
         help="Record the IDE host's separate explicit write/run decision.",
     )
-    authority.add_argument("--allow", action="store_true")
-    authority.add_argument("--explicit", action="store_true")
+    authority.add_argument(
+        "--allow",
+        action="store_true",
+        help=(
+            "Carry the human decision allowing the IDE host to write or run. Omission "
+            "is not approval; supply only after that user approval, and never infer or "
+            "manufacture it."
+        ),
+    )
+    authority.add_argument(
+        "--explicit",
+        action="store_true",
+        help=(
+            "Assert that --allow came from an explicit human action. Omission is not "
+            "approval; supply only after that action, and never infer or manufacture it."
+        ),
+    )
 
     register = sub.add_parser(
         "register-artifacts",
@@ -957,7 +1019,15 @@ def _cmd_current_loop(argv: list[str]) -> int:
         required=True,
     )
     register.add_argument("--related-circuit-ref", default=None)
-    register.add_argument("--allow-external", action="store_true")
+    register.add_argument(
+        "--allow-external",
+        action="store_true",
+        help=(
+            "Carry explicit selection authority for a named artifact outside the active "
+            "workspace. Omission is not approval; supply only after the user selects "
+            "that exact path, and never infer or manufacture approval."
+        ),
+    )
 
     authorize = sub.add_parser(
         "authorize-artifacts",
@@ -967,8 +1037,17 @@ def _cmd_current_loop(argv: list[str]) -> int:
         "--action",
         required=True,
         choices=("approve_all", "remove_one", "add_one_explicitly", "decline"),
+        help=(
+            "Carry the user's exact artifact-set decision. Omission is not approval; "
+            "supply only the action the user selected, and never infer or manufacture "
+            "it."
+        ),
     )
-    authorize.add_argument("--provenance", required=True)
+    authorize.add_argument(
+        "--provenance",
+        required=True,
+        help="Bounded provenance for the explicit artifact-set action.",
+    )
     authorize.add_argument("--path", default=None)
     authorize.add_argument(
         "--role",
@@ -993,9 +1072,32 @@ def _cmd_current_loop(argv: list[str]) -> int:
         "continue-unchanged",
         help="Explicitly continue with the unchanged governing Blueprint.",
     )
-    unchanged.add_argument("--approve", action="store_true")
-    unchanged.add_argument("--statement", required=True)
-    unchanged.add_argument("--decline-proposal", action="store_true")
+    unchanged.add_argument(
+        "--approve",
+        action="store_true",
+        help=(
+            "Carry explicit human authority for Unchanged Continuation. Omission is not "
+            "approval; supply only after the user approves, and never infer or "
+            "manufacture that approval."
+        ),
+    )
+    unchanged.add_argument(
+        "--statement",
+        required=True,
+        help=(
+            "Exact bounded user statement supporting Unchanged Continuation; do not "
+            "invent or paraphrase it as authority."
+        ),
+    )
+    unchanged.add_argument(
+        "--decline-proposal",
+        action="store_true",
+        help=(
+            "Carry the user's explicit decision to decline the pending proposal while "
+            "continuing unchanged. Omission is not a decline; supply only after that "
+            "user decision, and never infer or manufacture it."
+        ),
+    )
 
     propose = sub.add_parser(
         "propose-change",
@@ -1006,15 +1108,38 @@ def _cmd_current_loop(argv: list[str]) -> int:
     propose.add_argument("--selected-action", required=True)
     propose.add_argument("--proposed-value", required=True)
     propose.add_argument("--control-treatment", required=True)
-    propose.add_argument("--approve-selection", action="store_true")
+    propose.add_argument(
+        "--approve-selection",
+        action="store_true",
+        help=(
+            "Carry explicit human authority for the exact semantic selection used to "
+            "request a proposal. Omission is not approval; supply only after the user "
+            "selects it, and never infer or manufacture approval."
+        ),
+    )
 
     confirm = sub.add_parser(
         "confirm-change",
         help="Confirm one exact proposal through selected-bundle parent resupply.",
     )
     _add_current_loop_transport_arguments(confirm, DEFAULT_BASE_URL, default_token_file())
-    confirm.add_argument("--confirmation", required=True)
-    confirm.add_argument("--approve", action="store_true")
+    confirm.add_argument(
+        "--confirmation",
+        required=True,
+        help=(
+            "Exact proposal-specific semantic confirmation from the user. The text is "
+            "not approval without --approve; never infer or manufacture either."
+        ),
+    )
+    confirm.add_argument(
+        "--approve",
+        action="store_true",
+        help=(
+            "Carry proposal-specific human confirmation for the exact reviewed change. "
+            "Omission is not approval; supply only after the user confirms, and never "
+            "infer or manufacture confirmation."
+        ),
+    )
 
     start_next = sub.add_parser(
         "start-next",
@@ -1033,7 +1158,15 @@ def _cmd_current_loop(argv: list[str]) -> int:
         default=[],
         metavar="ROLE=/ABSOLUTE/PATH",
     )
-    start_next.add_argument("--approve", action="store_true")
+    start_next.add_argument(
+        "--approve",
+        action="store_true",
+        help=(
+            "Carry explicit human authority to activate the next loop from the supplied "
+            "seed and parents. Omission is not approval; supply only after the user "
+            "approves, and never infer or manufacture it."
+        ),
+    )
 
     standalone = sub.add_parser(
         "standalone-review",
@@ -1061,7 +1194,15 @@ def _cmd_current_loop(argv: list[str]) -> int:
     )
 
     abandon = sub.add_parser("abandon", help="Explicitly abandon the active local loop.")
-    abandon.add_argument("--approve", action="store_true")
+    abandon.add_argument(
+        "--approve",
+        action="store_true",
+        help=(
+            "Carry explicit human authority to abandon the active loop. Omission is not "
+            "approval; supply only after the user approves, and never infer or "
+            "manufacture that approval."
+        ),
+    )
 
     args = parser.parse_args(argv)
     if args.current_loop_command is None:

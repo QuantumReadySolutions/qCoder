@@ -8,6 +8,7 @@ human checkpoints. It never reconstructs required state from conversation.
 from __future__ import annotations
 
 from copy import deepcopy
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
@@ -50,7 +51,8 @@ from qcoder.current_loop import (
     update_selected_artifact_authorization,
 )
 
-COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v1"
+COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v2"
+COORDINATOR_RESULT_SCHEMA_VERSION = 2
 COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v1"
 CONSEQUENCE_PROJECTION_SCHEMA_ID = "qcoder.current_loop.consequence_projection.v1"
 PERFORMANCE_SCHEMA_ID = "qcoder.current_loop.private_performance.v1"
@@ -86,6 +88,14 @@ CHECKPOINT_KINDS = (
     "governing_change_confirmation",
     "privacy_or_trust",
     "none",
+)
+CONFIRMATION_TRANSMISSION_STATES = (
+    "not_applicable",
+    "not_supplied",
+    "supplied",
+    "clarification_required",
+    "confirmed",
+    "declined",
 )
 CLIENT_NAMES = ("cursor", "claude_code", "codex")
 SAFE_LOCAL_FAILURE_CATEGORIES = frozenset(
@@ -490,6 +500,16 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
         "phases": list(PHASES),
         "state_statuses": list(STATE_STATUSES),
         "checkpoint_kinds": list(CHECKPOINT_KINDS),
+        "confirmation_transmission_states": list(CONFIRMATION_TRANSMISSION_STATES),
+        "checkpoint_result_protocol": {
+            "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
+            "supported_next_action": True,
+            "next_invocation": True,
+            "required_authority_input": True,
+            "awaiting_confirmation_fields": True,
+            "confirmation_transmission_state": True,
+            "identical_repeat_prohibited": True,
+        },
         "recovery_categories": sorted(_RECOVERY),
         "high_level_operations": [
             "status",
@@ -730,6 +750,54 @@ def _atomic_exact_write(path: Path, value: Mapping[str, Any]) -> None:
             pass
 
 
+def _invocation_template(
+    subcommand: str | None,
+    *,
+    required_flags: Sequence[str] = (),
+    reused_inputs: Sequence[str] = (),
+    new_inputs: Sequence[str] = (),
+    argument_values: Sequence[Mapping[str, Any]] = (),
+    alternatives: Sequence[str] = (),
+    uses_transport: bool = False,
+) -> dict[str, Any]:
+    return {
+        "coordinator_prefix_source": "configured_qcoder_runtime.coordinator_prefix",
+        "workspace_argument": {
+            "flag": "--workspace",
+            "value_source": "active_workspace_root",
+        },
+        "transport_argument_source": (
+            "configured_qcoder_runtime.transport_arguments" if uses_transport else None
+        ),
+        "subcommand": subcommand,
+        "required_flags": list(required_flags),
+        "reused_canonical_inputs": list(reused_inputs),
+        "new_input_roles": list(new_inputs),
+        "argument_values": [deepcopy(dict(item)) for item in argument_values],
+        "allowed_subcommand_alternatives": list(alternatives),
+        "private_workspace_path_embedded": False,
+        "token_contents_embedded": False,
+        "account_identifier_embedded": False,
+        "canonical_artifact_reconstruction_required": False,
+    }
+
+
+def _authority_input(
+    flag: str | None,
+    authority: str,
+    *,
+    additional_flags: Sequence[str] = (),
+) -> dict[str, Any]:
+    return {
+        "flag": flag,
+        "additional_flags": list(additional_flags),
+        "authority": authority,
+        "omission_is_approval": False,
+        "supply_only_after_explicit_user_action": True,
+        "assistant_may_infer_or_manufacture": False,
+    }
+
+
 class CurrentLoopCoordinator:
     """One-current-loop deterministic coordinator."""
 
@@ -938,6 +1006,90 @@ class CurrentLoopCoordinator:
             original_request = baseline.get("original_request")
             if not isinstance(original_request, str):
                 raise CurrentLoopError("canonical_artifact_modified")
+            review_input = self._intent_review_input(
+                profile_id=profile_id,
+                proposed_interpretation=proposed_interpretation,
+                requirements=requirements,
+                constraints=constraints,
+                non_goals=non_goals,
+                decision_dispositions=decision_dispositions,
+                reviewed_profile_answers=reviewed_profile_answers,
+                accepted_unresolved_choices=accepted_unresolved_choices,
+            )
+            review_input_digest = sha256(canonical_bytes(review_input)).hexdigest()
+            coordinator = self._coordinator_state(state)
+            pending = coordinator.get("pending_intent_review")
+            if (
+                explicit_intent_approval is True
+                and isinstance(pending, Mapping)
+                and pending.get("input_digest") == review_input_digest
+                and pending.get("confirmation_transmission_state") == "supplied"
+            ):
+                awaiting = list(
+                    pending.get("awaiting_confirmation_fields") or ["reviewed_interpretation"]
+                )
+                summary = (
+                    "Confirmation was already transmitted for these unchanged inputs. "
+                    "Review the returned clarification fields and stop; do not retry "
+                    "until corrected input is available."
+                )
+                coordinator["customer_summary"] = summary
+                self._replace_coordinator(coordinator)
+                return self._result(
+                    operation="prepare_generation",
+                    ok=True,
+                    state=self.store.read(),
+                    summary=summary,
+                    elapsed=self.clock() - started,
+                    category="intent_clarification_unchanged",
+                    details={
+                        "intent_confirmation_state": pending.get("intent_confirmation_state"),
+                        "confirmation_transmission_state": "supplied",
+                        "awaiting_confirmation_fields": awaiting,
+                        "working_blueprint_created": False,
+                        "generation_context_created": False,
+                        "protected_call_made": False,
+                        "identical_pending_review_reused": True,
+                    },
+                    checkpoint_protocol={
+                        "confirmation_transmission_state": "supplied",
+                        "awaiting_confirmation_fields": awaiting,
+                    },
+                )
+            if (
+                explicit_intent_approval is not True
+                and isinstance(pending, Mapping)
+                and pending.get("input_digest") == review_input_digest
+            ):
+                summary = (
+                    "The reviewed interpretation is unchanged, but explicit intent "
+                    "confirmation was not transmitted. Present the existing proposal "
+                    "and re-invoke with --confirm-intent only after user approval."
+                )
+                coordinator["customer_summary"] = summary
+                coordinator["state_status"] = "checkpoint_required"
+                coordinator["checkpoint_kind"] = "intent_review"
+                self._replace_coordinator(coordinator)
+                return self._result(
+                    operation="prepare_generation",
+                    ok=True,
+                    state=self.store.read(),
+                    summary=summary,
+                    elapsed=self.clock() - started,
+                    category="confirmation_not_transmitted",
+                    details={
+                        "intent_confirmation_state": pending.get("intent_confirmation_state"),
+                        "confirmation_transmission_state": "not_supplied",
+                        "working_blueprint_created": False,
+                        "generation_context_created": False,
+                        "protected_call_made": False,
+                        "identical_pending_review_reused": True,
+                    },
+                    checkpoint_protocol={
+                        "confirmation_transmission_state": "not_supplied",
+                        "awaiting_confirmation_fields": ["explicit_intent_confirmation"],
+                    },
+                )
             interpretation = deepcopy(dict(proposed_interpretation))
             if reviewed_profile_answers:
                 interpretation.update(deepcopy(dict(reviewed_profile_answers)))
@@ -962,35 +1114,60 @@ class CurrentLoopCoordinator:
                 ),
                 "accepted_unresolved_choices": list(accepted_unresolved_choices),
             }
-            if confirmation_assertion:
-                intent_arguments["confirmation_assertion"] = confirmation_assertion
+            if explicit_intent_approval:
+                intent_arguments["confirmation_assertion"] = {"user_reviewed": True}
             intent_payload = self._protected_call("create_algorithm_intent_card", intent_arguments)
             intent = self._response_artifact(intent_payload, "algorithm_intent_card")
             if intent.get("confirmation_state") != "confirmed":
                 self._save_intent_review_artifact(intent)
-                coordinator = self._coordinator_state(self.store.read())
-                coordinator.update(
-                    {
-                        "phase": "intent_review",
-                        "state_status": "checkpoint_required",
-                        "checkpoint_kind": "intent_review",
-                        "customer_summary": (
-                            "The assistant-proposed interpretation still needs explicit "
-                            "review or clarification."
-                        ),
-                    }
+                awaiting = self._intent_clarification_fields(intent)
+                transmitted = explicit_intent_approval is True
+                category = (
+                    "intent_clarification_required"
+                    if transmitted
+                    else "intent_confirmation_required"
                 )
-                self._replace_coordinator(coordinator)
+                summary = (
+                    "Intent confirmation was transmitted, but the hosted review "
+                    "requires the returned clarification fields before it can confirm."
+                    if transmitted
+                    else (
+                        "Present the assistant-proposed interpretation for explicit "
+                        "review. After approval, re-invoke with --confirm-intent; do "
+                        "not repeat this invocation unchanged."
+                    )
+                )
+                pending = self._pending_intent_review(
+                    review_input,
+                    intent=intent,
+                    confirmation_transmission_state=("supplied" if transmitted else "not_supplied"),
+                    awaiting_confirmation_fields=awaiting,
+                )
+                self._set_pending_intent_review(pending, summary=summary)
                 return self._result(
                     operation="prepare_generation",
                     ok=True,
                     state=self.store.read(),
-                    summary=coordinator["customer_summary"],
+                    summary=summary,
                     elapsed=self.clock() - started,
+                    category=category,
                     details={
                         "intent_confirmation_state": intent.get("confirmation_state"),
+                        "confirmation_transmission_state": (
+                            "supplied" if transmitted else "not_supplied"
+                        ),
+                        "awaiting_confirmation_fields": awaiting,
+                        "confirmation_statement_supplied": bool(confirmation_assertion),
                         "working_blueprint_created": False,
                         "generation_context_created": False,
+                        "protected_call_made": True,
+                        "identical_pending_review_reused": False,
+                    },
+                    checkpoint_protocol={
+                        "confirmation_transmission_state": (
+                            "supplied" if transmitted else "not_supplied"
+                        ),
+                        "awaiting_confirmation_fields": awaiting,
                     },
                 )
             self._save_artifact(
@@ -1038,6 +1215,7 @@ class CurrentLoopCoordinator:
                 "generation-context-pack.json",
             )
             coordinator = self._coordinator_state(self.store.read())
+            coordinator.pop("pending_intent_review", None)
             coordinator.update(
                 {
                     "phase": "generation_ready",
@@ -1059,6 +1237,7 @@ class CurrentLoopCoordinator:
                 elapsed=self.clock() - started,
                 details={
                     "intent_confirmed": True,
+                    "confirmation_transmission_state": "confirmed",
                     "working_blueprint_created": True,
                     "output_evidence_contract_created": True,
                     "generation_context_created": True,
@@ -2302,6 +2481,97 @@ class CurrentLoopCoordinator:
             "notes_added": False,
         }
 
+    def _intent_review_input(
+        self,
+        *,
+        profile_id: str,
+        proposed_interpretation: Mapping[str, Any],
+        requirements: Sequence[Mapping[str, Any]],
+        constraints: Sequence[str],
+        non_goals: Sequence[str],
+        decision_dispositions: Sequence[Mapping[str, Any]],
+        reviewed_profile_answers: Mapping[str, Any] | None,
+        accepted_unresolved_choices: Sequence[str],
+    ) -> dict[str, Any]:
+        return {
+            "profile_id": profile_id,
+            "proposed_interpretation": deepcopy(dict(proposed_interpretation)),
+            "requirements": [deepcopy(dict(item)) for item in requirements],
+            "constraints": list(constraints),
+            "non_goals": list(non_goals),
+            "decision_dispositions": [deepcopy(dict(item)) for item in decision_dispositions],
+            "reviewed_profile_answers": deepcopy(dict(reviewed_profile_answers or {})),
+            "accepted_unresolved_choices": list(accepted_unresolved_choices),
+        }
+
+    def _pending_intent_review(
+        self,
+        review_input: Mapping[str, Any],
+        *,
+        intent: Mapping[str, Any],
+        confirmation_transmission_state: str,
+        awaiting_confirmation_fields: Sequence[str],
+    ) -> dict[str, Any]:
+        interpretation = dict(review_input.get("proposed_interpretation") or {})
+        answers = dict(review_input.get("reviewed_profile_answers") or {})
+        for key, value in interpretation.items():
+            if key not in {"summary", "provenance_role"}:
+                answers.setdefault(key, value)
+        profile_answers = [
+            f"{key}={value if isinstance(value, str) else json.dumps(value, sort_keys=True)}"
+            for key, value in sorted(answers.items())
+        ]
+        summary = interpretation.get("summary") or interpretation.get("normalized_goal")
+        return {
+            "input_digest": sha256(canonical_bytes(review_input)).hexdigest(),
+            "profile_id": review_input.get("profile_id"),
+            "interpretation_summary": (
+                str(summary) if summary is not None else "Reviewed interpretation"
+            ),
+            "profile_answers": profile_answers,
+            "constraints": list(review_input.get("constraints") or []),
+            "non_goals": list(review_input.get("non_goals") or []),
+            "intent_artifact_reference": _artifact_reference(intent),
+            "intent_artifact_digest": _artifact_digest(intent),
+            "intent_confirmation_state": intent.get("confirmation_state"),
+            "confirmation_transmission_state": confirmation_transmission_state,
+            "awaiting_confirmation_fields": list(awaiting_confirmation_fields),
+        }
+
+    def _intent_clarification_fields(
+        self,
+        intent: Mapping[str, Any],
+    ) -> list[str]:
+        result: list[str] = []
+        for value in intent.get("unresolved_questions", []):
+            if isinstance(value, str) and value and value not in result:
+                result.append(value)
+        for question in intent.get("profile_questions", []):
+            if not isinstance(question, Mapping):
+                continue
+            value = question.get("field") or question.get("id") or question.get("question_id")
+            if isinstance(value, str) and value and value not in result:
+                result.append(value)
+        return result or ["reviewed_interpretation"]
+
+    def _set_pending_intent_review(
+        self,
+        pending: Mapping[str, Any],
+        *,
+        summary: str,
+    ) -> None:
+        coordinator = self._coordinator_state(self.store.read())
+        coordinator.update(
+            {
+                "phase": "intent_review",
+                "state_status": "checkpoint_required",
+                "checkpoint_kind": "intent_review",
+                "customer_summary": summary,
+                "pending_intent_review": deepcopy(dict(pending)),
+            }
+        )
+        self._replace_coordinator(coordinator)
+
     def _save_artifact(
         self, role: str, artifact: Mapping[str, Any], filename: str
     ) -> dict[str, Any]:
@@ -2625,6 +2895,261 @@ class CurrentLoopCoordinator:
             )
         return result
 
+    def _checkpoint_protocol(
+        self,
+        *,
+        operation: str,
+        phase: str,
+        state_status: str,
+        checkpoint_kind: str,
+        category: str | None,
+        coordinator: Mapping[str, Any] | None,
+        override: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        protocol: dict[str, Any] = {
+            "supported_next_action": None,
+            "next_invocation": None,
+            "required_authority_input": None,
+            "awaiting_confirmation_fields": [],
+            "confirmation_transmission_state": "not_applicable",
+            "identical_repeat_prohibited": False,
+        }
+        if state_status != "checkpoint_required":
+            return protocol
+
+        protocol["identical_repeat_prohibited"] = True
+        if checkpoint_kind == "posture":
+            protocol.update(
+                {
+                    "supported_next_action": "obtain_generation_posture_and_activation",
+                    "next_invocation": _invocation_template(
+                        "activate",
+                        required_flags=("--request", "--posture", "--approve"),
+                        reused_inputs=("original_request",),
+                        new_inputs=(
+                            "generation_posture_selection",
+                            "explicit_qcoder_activation",
+                        ),
+                    ),
+                    "required_authority_input": _authority_input(
+                        "--approve",
+                        "Explicitly activate qCoder after selecting the generation posture.",
+                    ),
+                    "awaiting_confirmation_fields": [
+                        "generation_posture",
+                        "qcoder_activation",
+                    ],
+                    "confirmation_transmission_state": "not_supplied",
+                }
+            )
+        elif checkpoint_kind == "activation":
+            subcommand = "start-next" if operation == "start_next" else "activate"
+            protocol.update(
+                {
+                    "supported_next_action": "obtain_explicit_qcoder_activation",
+                    "next_invocation": _invocation_template(
+                        subcommand,
+                        required_flags=("--approve",),
+                        reused_inputs=("current_activation_request",),
+                        new_inputs=("explicit_qcoder_activation",),
+                    ),
+                    "required_authority_input": _authority_input(
+                        "--approve",
+                        "Explicitly activate qCoder for this current build.",
+                    ),
+                    "awaiting_confirmation_fields": ["qcoder_activation"],
+                    "confirmation_transmission_state": "not_supplied",
+                }
+            )
+        elif checkpoint_kind == "intent_review":
+            pending = (
+                coordinator.get("pending_intent_review")
+                if isinstance(coordinator, Mapping)
+                else None
+            )
+            if isinstance(pending, Mapping):
+                argument_values: list[dict[str, Any]] = [
+                    {"flag": "--profile", "value": pending.get("profile_id")},
+                    {
+                        "flag": "--interpretation-summary",
+                        "value": pending.get("interpretation_summary"),
+                    },
+                ]
+                for value in pending.get("profile_answers", []):
+                    argument_values.append({"flag": "--profile-answer", "value": value})
+                for value in pending.get("constraints", []):
+                    argument_values.append({"flag": "--constraint", "value": value})
+                for value in pending.get("non_goals", []):
+                    argument_values.append({"flag": "--non-goal", "value": value})
+                next_invocation = _invocation_template(
+                    "prepare-generation",
+                    required_flags=(
+                        "--profile",
+                        "--interpretation-summary",
+                        "--confirm-intent",
+                    ),
+                    reused_inputs=(
+                        "pending_intent_review.profile_id",
+                        "pending_intent_review.interpretation_inputs",
+                    ),
+                    new_inputs=("explicit_intent_confirmation",),
+                    argument_values=argument_values,
+                    uses_transport=True,
+                )
+            else:
+                next_invocation = _invocation_template(
+                    "prepare-generation",
+                    required_flags=("--profile", "--interpretation-summary"),
+                    reused_inputs=("request_baseline",),
+                    new_inputs=(
+                        "reviewed_interpretation",
+                        "reviewed_profile_answers",
+                    ),
+                    uses_transport=True,
+                )
+            clarification = category in {
+                "intent_clarification_required",
+                "intent_clarification_unchanged",
+            }
+            protocol.update(
+                {
+                    "supported_next_action": (
+                        "review_intent_clarification_and_retransmit_confirmation"
+                        if clarification
+                        else "present_intent_and_transmit_explicit_confirmation"
+                    ),
+                    "next_invocation": next_invocation,
+                    "required_authority_input": _authority_input(
+                        "--confirm-intent",
+                        (
+                            "Transmit the user's explicit approval of the reviewed "
+                            "interpretation; conversational approval alone is not canonical."
+                        ),
+                    ),
+                    "awaiting_confirmation_fields": list(
+                        (override or {}).get(
+                            "awaiting_confirmation_fields",
+                            ["reviewed_interpretation", "explicit_intent_confirmation"],
+                        )
+                    ),
+                    "confirmation_transmission_state": (
+                        "supplied"
+                        if clarification
+                        else (
+                            "not_supplied"
+                            if category == "confirmation_not_transmitted"
+                            else "not_supplied"
+                        )
+                    ),
+                }
+            )
+        elif checkpoint_kind == "ide_write_or_run":
+            protocol.update(
+                {
+                    "supported_next_action": "obtain_separate_ide_write_or_run_authority",
+                    "next_invocation": _invocation_template(
+                        "record-ide-authority",
+                        required_flags=("--allow", "--explicit"),
+                        new_inputs=("explicit_ide_write_or_run_authority",),
+                    ),
+                    "required_authority_input": _authority_input(
+                        "--allow",
+                        "Authorize the IDE host to write or run for this build.",
+                        additional_flags=("--explicit",),
+                    ),
+                    "awaiting_confirmation_fields": ["ide_write_or_run_authority"],
+                    "confirmation_transmission_state": "not_supplied",
+                }
+            )
+        elif checkpoint_kind == "artifact_review":
+            protocol.update(
+                {
+                    "supported_next_action": "obtain_exact_artifact_set_authorization",
+                    "next_invocation": _invocation_template(
+                        "authorize-artifacts",
+                        required_flags=("--action", "--provenance"),
+                        reused_inputs=("exact_visible_artifact_candidates",),
+                        new_inputs=("exact_artifact_review_action",),
+                    ),
+                    "required_authority_input": _authority_input(
+                        "--action",
+                        "Approve, adjust, or decline the exact visible artifact set.",
+                    ),
+                    "awaiting_confirmation_fields": ["exact_artifact_review_action"],
+                    "confirmation_transmission_state": "not_supplied",
+                }
+            )
+        elif checkpoint_kind == "governing_change_confirmation":
+            if operation == "continue_unchanged":
+                next_invocation = _invocation_template(
+                    "continue-unchanged",
+                    required_flags=("--statement", "--approve"),
+                    reused_inputs=("current_working_blueprint",),
+                    new_inputs=("explicit_unchanged_continuation",),
+                )
+                authority_flag = "--approve"
+                supported_action = "obtain_explicit_unchanged_continuation"
+            else:
+                next_invocation = _invocation_template(
+                    "confirm-change",
+                    required_flags=("--confirmation", "--approve"),
+                    reused_inputs=("exact_carry_forward_proposal",),
+                    new_inputs=("proposal_specific_confirmation",),
+                    uses_transport=True,
+                )
+                authority_flag = "--approve"
+                supported_action = "obtain_proposal_specific_confirmation"
+            protocol.update(
+                {
+                    "supported_next_action": supported_action,
+                    "next_invocation": next_invocation,
+                    "required_authority_input": _authority_input(
+                        authority_flag,
+                        "Confirm only the exact reviewed governing action.",
+                    ),
+                    "awaiting_confirmation_fields": ["governing_change_or_unchanged_continuation"],
+                    "confirmation_transmission_state": "not_supplied",
+                }
+            )
+        elif phase == "continuation_choice":
+            protocol.update(
+                {
+                    "supported_next_action": "obtain_continuation_choice",
+                    "next_invocation": _invocation_template(
+                        None,
+                        alternatives=("continue-unchanged", "propose-change"),
+                        reused_inputs=("current_build_review", "working_blueprint"),
+                        new_inputs=("explicit_continuation_choice",),
+                    ),
+                    "required_authority_input": _authority_input(
+                        None,
+                        "Choose unchanged continuation or one bounded proposal selection.",
+                    ),
+                    "awaiting_confirmation_fields": ["continuation_choice"],
+                    "confirmation_transmission_state": "not_supplied",
+                }
+            )
+        else:
+            protocol.update(
+                {
+                    "supported_next_action": "stop_and_present_checkpoint",
+                    "next_invocation": _invocation_template(None),
+                    "required_authority_input": _authority_input(
+                        None,
+                        _CHECKPOINT_AUTHORITY[checkpoint_kind],
+                    ),
+                    "awaiting_confirmation_fields": [checkpoint_kind],
+                    "confirmation_transmission_state": "not_supplied",
+                }
+            )
+        if override:
+            for key in protocol:
+                if key in override:
+                    protocol[key] = deepcopy(override[key])
+        if protocol["confirmation_transmission_state"] not in (CONFIRMATION_TRANSMISSION_STATES):
+            raise CurrentLoopError("confirmation_transmission_state_invalid")
+        return protocol
+
     def _result(
         self,
         *,
@@ -2635,6 +3160,7 @@ class CurrentLoopCoordinator:
         elapsed: float,
         category: str | None = None,
         details: Mapping[str, Any] | None = None,
+        checkpoint_protocol: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         coordinator = self._coordinator_state(state)
         coordinator["performance"]["coordinator_calls"] += 1
@@ -2642,9 +3168,18 @@ class CurrentLoopCoordinator:
         self._replace_coordinator(coordinator)
         state = self.store.read()
         coordinator = self._coordinator_state(state)
+        protocol = self._checkpoint_protocol(
+            operation=operation,
+            phase=coordinator["phase"],
+            state_status=coordinator["state_status"],
+            checkpoint_kind=coordinator["checkpoint_kind"],
+            category=category,
+            coordinator=coordinator,
+            override=checkpoint_protocol,
+        )
         return {
             "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
-            "schema_version": 1,
+            "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
             "operation": operation,
             "ok": ok,
             "category": category,
@@ -2660,6 +3195,7 @@ class CurrentLoopCoordinator:
             "token_contents_included": False,
             "local_paths_transmitted": False,
             "assistant_reconstruction_performed": False,
+            **protocol,
         }
 
     def _result_without_state(
@@ -2673,10 +3209,20 @@ class CurrentLoopCoordinator:
         summary: str,
         category: str | None = None,
         details: Mapping[str, Any] | None = None,
+        checkpoint_protocol: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
+        protocol = self._checkpoint_protocol(
+            operation=operation,
+            phase=phase,
+            state_status=state_status,
+            checkpoint_kind=checkpoint_kind,
+            category=category,
+            coordinator=None,
+            override=checkpoint_protocol,
+        )
         return {
             "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
-            "schema_version": 1,
+            "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
             "operation": operation,
             "ok": ok,
             "category": category,
@@ -2692,6 +3238,7 @@ class CurrentLoopCoordinator:
             "token_contents_included": False,
             "local_paths_transmitted": False,
             "assistant_reconstruction_performed": False,
+            **protocol,
         }
 
     def _checkpoint_result(
@@ -2702,6 +3249,9 @@ class CurrentLoopCoordinator:
         checkpoint_kind: str,
         summary: str,
         elapsed: float,
+        category: str | None = None,
+        details: Mapping[str, Any] | None = None,
+        checkpoint_protocol: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         try:
             state = self.store.read()
@@ -2713,6 +3263,9 @@ class CurrentLoopCoordinator:
                 state_status="checkpoint_required",
                 checkpoint_kind=checkpoint_kind,
                 summary=summary,
+                category=category,
+                details=details,
+                checkpoint_protocol=checkpoint_protocol,
             )
         coordinator = self._coordinator_state(state)
         coordinator.update(
@@ -2730,6 +3283,9 @@ class CurrentLoopCoordinator:
             state=self.store.read(),
             summary=summary,
             elapsed=elapsed,
+            category=category,
+            details=details,
+            checkpoint_protocol=checkpoint_protocol,
         )
 
     def _recovery_result(
