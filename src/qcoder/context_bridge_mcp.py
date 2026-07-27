@@ -4,8 +4,10 @@ import argparse
 from copy import deepcopy
 import hashlib
 import json
+import ntpath
 import os
 from pathlib import Path
+import posixpath
 import stat
 import sys
 from typing import Any, Callable, Mapping
@@ -87,23 +89,87 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_ACTIVATION_INSTRUCTIONS = (
-    "qCoder Current Loop is opt-in: do nothing unless the user explicitly asks to use qCoder for "
-    "the current build or explicitly accepts an activation offer. Then use the same Python "
-    "executable configured for this qCoder Context Bridge server to run "
-    "`python -m qcoder current-loop --help` in the exact open workspace; stop if the coordinator "
-    "is missing or authentication, entitlement, or hosted readiness fails. Use the "
-    "`qcoder current-loop` coordinator for the workflow; never manually sequence Context Bridge "
-    "tools and never substitute a local or manual review fallback. Preserve the user's natural "
-    "request verbatim as the Request Baseline and present checkpoints conversationally. Never ask "
-    "the customer for qCoder tool names, JSON, digests, or parent reconstruction. Never reconstruct "
-    "canonical artifacts, scan the repository, inspect outside the workspace, or infer neighboring "
-    "files. IDE permission to write or run is separate from qCoder activation. Present the exact "
-    "artifact candidates and require explicit exact-set authorization before review. Do not confirm "
-    "a governing proposal without proposal-specific explicit confirmation; confirmation and "
+    "Use the supplied python_executable exactly. Invoke the coordinator by extending the supplied "
+    "coordinator_prefix argv array; do not reparse or replace its executable. For coordinator "
+    "subcommands that expose transport options, pass the supplied transport_arguments exactly. "
+    "Never run `which` or `where`, inspect PATH or environment variables, traverse the filesystem, "
+    "or otherwise discover a Python runtime. Never inspect Cursor, Claude Code, or Codex "
+    "configuration to rediscover the runtime. Never list, browse, or inspect the executable path's "
+    "parent directories. Never open, read, print, copy, hash, or validate the token-file contents. "
+    "The declared executable and token-file paths authorize only invoking the declared qCoder "
+    "runtime and passing the token-file path to qCoder; they grant no general access outside the "
+    "active workspace. First use the declared coordinator_prefix with `--help`; stop if it does not "
+    "expose qCoder current-loop. Stop on authentication, entitlement, or hosted-service failure. "
+    "Never manually sequence Context Bridge tools and never substitute a local or manual review "
+    "fallback. Preserve the user's natural request verbatim as the Request Baseline and present "
+    "checkpoints conversationally. Never ask the customer for qCoder tool names, JSON, digests, or "
+    "parent reconstruction. Never reconstruct canonical artifacts, scan the repository, inspect "
+    "outside the workspace, or infer neighboring files. qCoder activation does not grant IDE "
+    "permission to write or run and does not authorize artifact review. Present the exact artifact "
+    "candidates and require explicit exact-set authorization before review. Do not confirm a "
+    "governing proposal without proposal-specific explicit confirmation; confirmation and "
     "materialization stay in the IDE. Offer Review in this IDE, optional passive Build Review, and "
     "Continue without visual review. Unchanged Continuation creates no Evolved Blueprint. Never "
-    "activate silently, change a Blueprint silently, or transfer raw artifacts."
+    "change a Blueprint silently or transfer raw artifacts."
 )
+
+
+def _resolved_configuration_path(
+    value: str | Path,
+    *,
+    path_style: str | None = None,
+) -> str:
+    style = path_style or os.name
+    if style == os.name:
+        return str(Path(value).expanduser().resolve(strict=False))
+    if style == "nt":
+        return ntpath.abspath(str(value))
+    if style == "posix":
+        return posixpath.abspath(str(value))
+    raise ValueError("configured_runtime_path_style_invalid")
+
+
+def build_client_activation_instructions(
+    *,
+    base_url: str,
+    token_file: str | Path,
+    python_executable: str | Path | None = None,
+    path_style: str | None = None,
+) -> str:
+    executable = _resolved_configuration_path(
+        python_executable or sys.executable,
+        path_style=path_style,
+    )
+    token_path = _resolved_configuration_path(token_file, path_style=path_style)
+    runtime = {
+        "python_executable": executable,
+        "qcoder_version": __version__,
+        "coordinator_prefix": [
+            executable,
+            "-m",
+            "qcoder",
+            "current-loop",
+        ],
+        "base_url": str(base_url),
+        "token_file_path": token_path,
+        "transport_arguments": [
+            "--base-url",
+            str(base_url),
+            "--token-file",
+            token_path,
+        ],
+    }
+    runtime_block = json.dumps(runtime, indent=2, sort_keys=False)
+    return (
+        "qCoder Current Loop is opt-in: do nothing unless the user explicitly asks to use qCoder "
+        "for the current build or explicitly accepts an activation offer. Never activate silently.\n"
+        "Configured qCoder runtime (JSON values are exact operational metadata; "
+        "coordinator_prefix is an argv array):\n"
+        f"{runtime_block}\n"
+        f"{CLIENT_ACTIVATION_INSTRUCTIONS}"
+    )
+
+
 TOOL_ALIASES = {
     "get_context_from_share_safe_artifact": "get_guided_evidence_context",
     "build_assistant_prompt_context": "create_prompt_context",
@@ -441,9 +507,7 @@ def _expand_selected_portable_bundle(
         return None, None, bundle_error
     envelope = bundle.get("transport")
     proposal_parent_resupply = (
-        envelope.get("proposal_parent_resupply")
-        if isinstance(envelope, dict)
-        else None
+        envelope.get("proposal_parent_resupply") if isinstance(envelope, dict) else None
     )
     if isinstance(proposal_parent_resupply, dict):
         allowed_proposal_overlay = {
@@ -504,9 +568,7 @@ def _expand_selected_portable_bundle(
         stored_digest = transport.get("canonical_request_sha256")
     else:
         proposal_resupply = (
-            envelope.get("proposal_resupply")
-            if isinstance(envelope, dict)
-            else None
+            envelope.get("proposal_resupply") if isinstance(envelope, dict) else None
         )
         if not isinstance(proposal_resupply, dict):
             return None, None, "portable_confirmation_transport_invalid"
@@ -863,9 +925,7 @@ def _portable_decision_records(arguments: dict[str, Any]) -> list[dict[str, Any]
     return []
 
 
-def _inherit_decision_loop_context(
-    tool_name: str, arguments: dict[str, Any]
-) -> str | None:
+def _inherit_decision_loop_context(tool_name: str, arguments: dict[str, Any]) -> str | None:
     parent_field = {
         "create_implementation_blueprint": "algorithm_intent_card",
         "create_generation_context_pack": "implementation_blueprint",
@@ -885,22 +945,17 @@ def _inherit_decision_loop_context(
             return "working_blueprint_not_decision_ready"
         return None
     parent_loop = parent.get("decision_loop")
-    inherited_gate = (
-        parent_loop.get("gate") if isinstance(parent_loop, dict) else None
-    )
+    inherited_gate = parent_loop.get("gate") if isinstance(parent_loop, dict) else None
     if inherited_gate != DECISION_LOOP_GATE:
         return "parent_decision_loop_invalid"
     inherited = {
         "decision_loop": inherited_gate,
         "profile_decision_catalog_version": (
             parent_loop.get("catalog_version")
-            if isinstance(parent_loop, dict)
-            and parent_loop.get("catalog_version") is not None
+            if isinstance(parent_loop, dict) and parent_loop.get("catalog_version") is not None
             else PROFILE_DECISION_CATALOG_VERSION
         ),
-        "current_lineage_reference": record_set.get(
-            "current_lineage_reference"
-        ),
+        "current_lineage_reference": record_set.get("current_lineage_reference"),
     }
     if not isinstance(inherited["current_lineage_reference"], str):
         return "parent_current_lineage_reference_missing"
@@ -985,9 +1040,7 @@ def _expand_resource_architecture_update(
         "semantic_role": definition["semantic_role"],
         "applicable_scope": definition["applicable_scope"],
         "relationship_to_requirement": definition["relationship_to_requirement"],
-        "related_requirement_references": [
-            definition["relationship_to_requirement"]
-        ],
+        "related_requirement_references": [definition["relationship_to_requirement"]],
         "resolution_state": "resolved",
         "user_disposition": "selected_choice",
         "generation_effect": "non_blocking",
@@ -1000,9 +1053,7 @@ def _expand_resource_architecture_update(
     }
 
 
-def _prepare_current_build_proposal(
-    tool_name: str, arguments: dict[str, Any]
-) -> str | None:
+def _prepare_current_build_proposal(tool_name: str, arguments: dict[str, Any]) -> str | None:
     if not (
         tool_name == "create_implementation_blueprint"
         and arguments.get("context_loop") == CONTEXT_LOOP_GATE
@@ -1242,9 +1293,7 @@ def post_context_bridge(
     baseline_error = _compose_request_baseline_handoff(canonical_tool_name, arguments)
     if baseline_error is not None:
         return safe_error(baseline_error)
-    inherited_decision_error = _inherit_decision_loop_context(
-        canonical_tool_name, arguments
-    )
+    inherited_decision_error = _inherit_decision_loop_context(canonical_tool_name, arguments)
     if inherited_decision_error is not None:
         return safe_error(inherited_decision_error)
     proposal_error = _prepare_current_build_proposal(canonical_tool_name, arguments)
@@ -1393,9 +1442,7 @@ def post_context_bridge(
         and arguments.get("resolution_context") == "current_build_context"
         and arguments.get("resolution_phase") == "propose"
     ):
-        portable_error = _attach_proposal_portable_current_build_context(
-            payload, arguments
-        )
+        portable_error = _attach_proposal_portable_current_build_context(payload, arguments)
         if portable_error is not None:
             return safe_error(portable_error)
     return payload
@@ -2190,9 +2237,7 @@ def _tool_schema(tool_name: str) -> dict[str, Any]:
             {"required": normal_required},
             {
                 "required": [LOCAL_SELECTED_NEXT_LOOP_SEED_FIELD],
-                "properties": {
-                    LOCAL_SELECTED_NEXT_LOOP_SEED_FIELD: {"const": True}
-                },
+                "properties": {LOCAL_SELECTED_NEXT_LOOP_SEED_FIELD: {"const": True}},
             },
         ]
     return schema
@@ -2279,7 +2324,10 @@ def handle_jsonrpc_message(
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {"listChanged": False}, "resources": {}, "prompts": {}},
                 "serverInfo": {"name": "qcoder-context-bridge", "version": __version__},
-                "instructions": CLIENT_ACTIVATION_INSTRUCTIONS,
+                "instructions": build_client_activation_instructions(
+                    base_url=base_url,
+                    token_file=token_file,
+                ),
             },
         )
     if method == "tools/list":
@@ -2379,9 +2427,7 @@ def handle_jsonrpc_message(
                     },
                 )
             arguments = expanded_seed["tool_input"]
-            inherited_error = _inherit_decision_loop_context(
-                canonical_tool_name, arguments
-            )
+            inherited_error = _inherit_decision_loop_context(canonical_tool_name, arguments)
             if inherited_error is not None:
                 payload = safe_error(inherited_error)
                 return _jsonrpc_result(
@@ -3094,10 +3140,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.mcp_command == "serve":
         try:
-            selected_next_loop_parent_files = (
-                _parse_selected_next_loop_parent_files(
-                    args.selected_next_loop_parent_file
-                )
+            selected_next_loop_parent_files = _parse_selected_next_loop_parent_files(
+                args.selected_next_loop_parent_file
             )
         except ValueError as exc:
             parser.error(str(exc))

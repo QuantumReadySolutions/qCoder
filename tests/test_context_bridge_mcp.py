@@ -20,6 +20,7 @@ from qcoder.blueprint_decisions import (
 )
 from qcoder.context_bridge_mcp import (
     EXPECTED_TOOLS,
+    build_client_activation_instructions,
     handle_jsonrpc_message,
     post_context_bridge,
     run_smoke,
@@ -63,6 +64,17 @@ class _FakeResponse:
 def _write_token(path: Path, text: str = "ctxbridge-token-not-printed") -> None:
     path.write_text(text, encoding="utf-8")
     path.chmod(0o600)
+
+
+def _activation_runtime(instructions: str) -> dict[str, object]:
+    marker = (
+        "Configured qCoder runtime (JSON values are exact operational metadata; "
+        "coordinator_prefix is an argv array):\n"
+    )
+    serialized = instructions.split(marker, 1)[1]
+    runtime, _ = json.JSONDecoder().raw_decode(serialized)
+    assert isinstance(runtime, dict)
+    return runtime
 
 
 def test_context_bridge_root_help_includes_command() -> None:
@@ -137,6 +149,157 @@ def test_tool_descriptors_are_exact_public_context_bridge_tools() -> None:
     assert "inherited exactly" in blueprint["description"]
 
 
+def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    token_dir = tmp_path / "token folder"
+    token_dir.mkdir()
+    token_file = token_dir / "context bridge token.txt"
+    token_secret = "token-secret-must-never-appear"
+    _write_token(token_file, token_secret)
+    environment_secrets = {
+        "QCODER_ACCOUNT_IDENTIFIER": "account-identifier-must-never-appear",
+        "QCODER_ADMIN_CREDENTIAL": "admin-credential-must-never-appear",
+        "QCODER_CONTEXT_BRIDGE_TOKEN": "environment-token-must-never-appear",
+    }
+    for name, value in environment_secrets.items():
+        monkeypatch.setenv(name, value)
+    base_url = "https://configured-runtime.example.invalid"
+
+    initialized = handle_jsonrpc_message(
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+        base_url=base_url,
+        token_file=token_file,
+    )
+
+    assert initialized is not None
+    instructions = initialized["result"]["instructions"]
+    runtime = _activation_runtime(instructions)
+    executable = str(Path(sys.executable).resolve())
+    token_path = str(token_file.resolve())
+    assert runtime == {
+        "python_executable": executable,
+        "qcoder_version": "0.6.0a2",
+        "coordinator_prefix": [
+            executable,
+            "-m",
+            "qcoder",
+            "current-loop",
+        ],
+        "base_url": base_url,
+        "token_file_path": token_path,
+        "transport_arguments": [
+            "--base-url",
+            base_url,
+            "--token-file",
+            token_path,
+        ],
+    }
+    for required in (
+        "explicitly asks to use qCoder",
+        "Never activate silently",
+        "Use the supplied python_executable exactly",
+        "Never run `which` or `where`",
+        "inspect PATH or environment variables",
+        "Never inspect Cursor, Claude Code, or Codex configuration",
+        "Never list, browse, or inspect the executable path's parent directories",
+        "Never open, read, print, copy, hash, or validate the token-file contents",
+        "authorize only invoking the declared qCoder runtime",
+        "grant no general access outside the active workspace",
+        "stop if it does not expose qCoder current-loop",
+        "Stop on authentication, entitlement, or hosted-service failure",
+        "Never manually sequence Context Bridge tools",
+        "never substitute a local or manual review fallback",
+        "does not grant IDE permission to write or run",
+        "does not authorize artifact review",
+    ):
+        assert required in instructions
+    assert token_secret not in instructions
+    for value in environment_secrets.values():
+        assert value not in instructions
+
+
+def test_activation_runtime_paths_with_spaces_are_unambiguous_for_posix_and_windows() -> None:
+    posix_python = "/opt/qCoder Runtime/bin/python"
+    posix_token = "/Users/example/.qcoder/context bridge/token.txt"
+    posix_runtime = _activation_runtime(
+        build_client_activation_instructions(
+            base_url="https://posix.example.invalid",
+            token_file=posix_token,
+            python_executable=posix_python,
+            path_style="posix",
+        )
+    )
+    assert posix_runtime["python_executable"] == posix_python
+    assert posix_runtime["coordinator_prefix"] == [
+        posix_python,
+        "-m",
+        "qcoder",
+        "current-loop",
+    ]
+    assert posix_runtime["token_file_path"] == posix_token
+
+    windows_python = r"C:\Program Files\qCoder Runtime\python.exe"
+    windows_token = r"C:\Users\Example User\.qcoder\context bridge\token.txt"
+    windows_runtime = _activation_runtime(
+        build_client_activation_instructions(
+            base_url="https://windows.example.invalid",
+            token_file=windows_token,
+            python_executable=windows_python,
+            path_style="nt",
+        )
+    )
+    assert windows_runtime["python_executable"] == windows_python
+    assert windows_runtime["coordinator_prefix"] == [
+        windows_python,
+        "-m",
+        "qcoder",
+        "current-loop",
+    ]
+    assert windows_runtime["token_file_path"] == windows_token
+
+
+def test_initialize_adds_no_mcp_operation_or_domain_tool(tmp_path: Path) -> None:
+    token_file = tmp_path / "not-read-during-initialize.txt"
+    initialized = handle_jsonrpc_message(
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+        base_url="https://example.invalid",
+        token_file=token_file,
+    )
+    listed = handle_jsonrpc_message(
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+        base_url="https://example.invalid",
+        token_file=token_file,
+    )
+    prompts = handle_jsonrpc_message(
+        {"jsonrpc": "2.0", "id": 3, "method": "prompts/list"},
+        base_url="https://example.invalid",
+        token_file=token_file,
+    )
+    resources = handle_jsonrpc_message(
+        {"jsonrpc": "2.0", "id": 4, "method": "resources/list"},
+        base_url="https://example.invalid",
+        token_file=token_file,
+    )
+    unknown = handle_jsonrpc_message(
+        {"jsonrpc": "2.0", "id": 5, "method": "qcoder/runtime"},
+        base_url="https://example.invalid",
+        token_file=token_file,
+    )
+
+    assert initialized is not None
+    assert listed is not None
+    assert prompts is not None
+    assert resources is not None
+    assert unknown is not None
+    assert len(listed["result"]["tools"]) == 12
+    assert [tool["name"] for tool in listed["result"]["tools"]] == list(EXPECTED_TOOLS)
+    assert prompts["result"]["prompts"] == []
+    assert resources["result"]["resources"] == []
+    assert unknown["error"] == {"code": -32601, "message": "method_not_supported"}
+
+
 def test_working_blueprint_inherits_exact_decision_context_from_confirmed_card(
     tmp_path: Path,
 ) -> None:
@@ -148,9 +311,7 @@ def test_working_blueprint_inherits_exact_decision_context_from_confirmed_card(
         current_lineage_reference=lineage_ref,
         parent_artifact_references=[{"artifact_ref": lineage_ref}],
     )
-    record_set = pack_decision_record_set(
-        profile_id="generic_qiskit", decision_records=records
-    )
+    record_set = pack_decision_record_set(profile_id="generic_qiskit", decision_records=records)
     card = {
         "artifact_type": "algorithm_intent_card",
         "artifact_digest": "a" * 64,
@@ -169,12 +330,8 @@ def test_working_blueprint_inherits_exact_decision_context_from_confirmed_card(
                 "ok": True,
                 "tool_name": "create_implementation_blueprint",
                 "context_status": "implementation_blueprint_ready",
-                "implementation_blueprint": {
-                    "artifact_type": "implementation_blueprint"
-                },
-                "output_evidence_contract": {
-                    "artifact_type": "output_evidence_contract"
-                },
+                "implementation_blueprint": {"artifact_type": "implementation_blueprint"},
+                "output_evidence_contract": {"artifact_type": "output_evidence_contract"},
                 "retention": "process_and_discard",
                 "retained_artifacts": [],
             }
@@ -215,9 +372,7 @@ def test_working_blueprint_rejects_reconstructed_decision_context_before_network
         current_lineage_reference=lineage_ref,
         parent_artifact_references=[{"artifact_ref": lineage_ref}],
     )
-    record_set = pack_decision_record_set(
-        profile_id="generic_qiskit", decision_records=records
-    )
+    record_set = pack_decision_record_set(profile_id="generic_qiskit", decision_records=records)
     result = post_context_bridge(
         base_url="https://example.invalid",
         token_file=token_file,
@@ -260,9 +415,7 @@ def test_next_generation_accepts_bounded_evolved_blueprint_payload(
         current_lineage_reference=lineage_ref,
         parent_artifact_references=[{"artifact_ref": lineage_ref}],
     )
-    record_set = pack_decision_record_set(
-        profile_id="generic_qiskit", decision_records=records
-    )
+    record_set = pack_decision_record_set(profile_id="generic_qiskit", decision_records=records)
     blueprint = {
         "artifact_type": "implementation_blueprint",
         "decision_loop": {
@@ -274,9 +427,7 @@ def test_next_generation_accepts_bounded_evolved_blueprint_payload(
     }
     base_size = len(json.dumps(blueprint, sort_keys=True, separators=(",", ":")))
     blueprint["bounded_projection"] = "x" * (100_000 - base_size)
-    serialized_size = len(
-        json.dumps(blueprint, sort_keys=True, separators=(",", ":"))
-    )
+    serialized_size = len(json.dumps(blueprint, sort_keys=True, separators=(",", ":")))
     assert 96_000 < serialized_size < context_bridge_mcp.MAX_DECISION_LOOP_PAYLOAD_CHARS
     captured: dict[str, object] = {}
 
@@ -287,9 +438,7 @@ def test_next_generation_accepts_bounded_evolved_blueprint_payload(
                 "ok": True,
                 "tool_name": "create_generation_context_pack",
                 "context_status": "generation_context_ready",
-                "generation_context_pack": {
-                    "artifact_type": "generation_context_pack"
-                },
+                "generation_context_pack": {"artifact_type": "generation_context_pack"},
                 "retention": "process_and_discard",
                 "retained_artifacts": [],
             }
@@ -302,9 +451,7 @@ def test_next_generation_accepts_bounded_evolved_blueprint_payload(
         artifact_text=None,
         tool_arguments={
             "implementation_blueprint": blueprint,
-            "output_evidence_contract": {
-                "artifact_type": "output_evidence_contract"
-            },
+            "output_evidence_contract": {"artifact_type": "output_evidence_contract"},
         },
         opener=opener,
     )
@@ -316,9 +463,7 @@ def test_next_generation_accepts_bounded_evolved_blueprint_payload(
     assert body["implementation_blueprint"] == blueprint
 
     oversized = dict(blueprint)
-    oversized["bounded_projection"] = "x" * (
-        context_bridge_mcp.MAX_DECISION_LOOP_PAYLOAD_CHARS
-    )
+    oversized["bounded_projection"] = "x" * (context_bridge_mcp.MAX_DECISION_LOOP_PAYLOAD_CHARS)
     rejected = post_context_bridge(
         base_url="https://example.invalid",
         token_file=token_file,
@@ -326,9 +471,7 @@ def test_next_generation_accepts_bounded_evolved_blueprint_payload(
         artifact_text=None,
         tool_arguments={
             "implementation_blueprint": oversized,
-            "output_evidence_contract": {
-                "artifact_type": "output_evidence_contract"
-            },
+            "output_evidence_contract": {"artifact_type": "output_evidence_contract"},
         },
         opener=lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssertionError("network should not be called")
@@ -385,9 +528,7 @@ def test_explicit_decision_loop_generation_rejects_legacy_blueprint_before_netwo
             {
                 "ok": True,
                 "tool_name": "create_generation_context_pack",
-                "generation_context_pack": {
-                    "artifact_type": "generation_context_pack"
-                },
+                "generation_context_pack": {"artifact_type": "generation_context_pack"},
                 "retention": "process_and_discard",
                 "retained_artifacts": [],
             }
@@ -432,9 +573,7 @@ def test_current_build_proposal_call_requires_and_transports_evidence_parents(
             for item in context_bridge_mcp.catalog_entries("generic_qiskit")
         },
     )
-    record_set = pack_decision_record_set(
-        profile_id="generic_qiskit", decision_records=records
-    )
+    record_set = pack_decision_record_set(profile_id="generic_qiskit", decision_records=records)
     target = records[0]
     working_blueprint = {
         "artifact_type": "implementation_blueprint",
@@ -490,9 +629,7 @@ def test_current_build_proposal_call_requires_and_transports_evidence_parents(
                 "resource_architecture_selection": {
                     "logical_resource_architecture": "simple_flat",
                     "allowed_patterns": ["direct_inline"],
-                    "disallowed_patterns": [
-                        "avoid_opaque_or_unbounded_dynamic_construction"
-                    ],
+                    "disallowed_patterns": ["avoid_opaque_or_unbounded_dynamic_construction"],
                     "construction_form": "direct_quantum_circuit",
                 },
             }
@@ -546,6 +683,7 @@ def test_current_build_proposal_call_requires_and_transports_evidence_parents(
                 "retained_artifacts": [],
             }
         )
+
     complete = post_context_bridge(
         base_url="https://example.invalid",
         token_file=token_file,
@@ -561,21 +699,18 @@ def test_current_build_proposal_call_requires_and_transports_evidence_parents(
     expanded = captured["body"]["proposed_updates"]  # type: ignore[index]
     assert len(expanded) == 1
     assert expanded[0]["semantic_classification"] == "blueprint_decision"
-    assert expanded[0]["resource_architecture"]["logical_resource_architecture"][
-        "value"
-    ] == "simple_flat"
+    assert (
+        expanded[0]["resource_architecture"]["logical_resource_architecture"]["value"]
+        == "simple_flat"
+    )
     assert "resource_architecture_selection" not in expanded[0]
     assert complete["proposal_state"] == "unconfirmed"
     assert complete["derived_artifact_materialized"] is False
     proposal = complete["carry_forward_proposal"]
     portable = complete["portable_current_build_context"]
     assert len(portable["decision_records"]) == 19
-    assert portable["carry_forward_proposal"]["proposal_ref"] == (
-        "proposal-1234567890abcdefghijkl"
-    )
-    assert portable["carry_forward_proposal"]["proposed_outcome"]["decision_updates"] == (
-        expanded
-    )
+    assert portable["carry_forward_proposal"]["proposal_ref"] == ("proposal-1234567890abcdefghijkl")
+    assert portable["carry_forward_proposal"]["proposed_outcome"]["decision_updates"] == (expanded)
     assert "confirmation_transport" not in portable
     expected_tool_input = {
         key: value
@@ -605,9 +740,10 @@ def test_current_build_proposal_call_requires_and_transports_evidence_parents(
     assert exact_confirm["evidence_parent_artifacts"] == parents
     assert exact_confirm["blueprint_decision_records"] == record_set
     assert exact_confirm["resolution_confirmation"] == confirmation
-    assert exact_confirm["confirmation_payload"] == proposal[
-        "explicit_confirmation_requirements"
-    ]["confirmation_payload"]
+    assert (
+        exact_confirm["confirmation_payload"]
+        == proposal["explicit_confirmation_requirements"]["confirmation_payload"]
+    )
     assert digest == canonical_context_bridge_request_sha256(
         tool_name="create_implementation_blueprint",
         tool_input=exact_confirm,
@@ -625,9 +761,7 @@ def test_current_build_accept_proposal_rejects_empty_update_before_network(
         current_lineage_reference=lineage_ref,
         parent_artifact_references=[{"artifact_ref": lineage_ref}],
     )
-    record_set = pack_decision_record_set(
-        profile_id="generic_qiskit", decision_records=records
-    )
+    record_set = pack_decision_record_set(profile_id="generic_qiskit", decision_records=records)
     result = post_context_bridge(
         base_url="https://example.invalid",
         token_file=token_file,
@@ -647,9 +781,7 @@ def test_current_build_accept_proposal_rejects_empty_update_before_network(
                 "artifact_type": "implementation_blueprint",
                 "blueprint_decision_records": record_set,
             },
-            "current_build_context": {
-                "schema_id": "qcoder.current_build_context.v1"
-            },
+            "current_build_context": {"schema_id": "qcoder.current_build_context.v1"},
             "evidence_parent_artifacts": [{"artifact_type": "parent"}],
         },
         opener=lambda *_args, **_kwargs: (_ for _ in ()).throw(
@@ -930,9 +1062,7 @@ def test_preproposal_selected_bundle_expands_exact_parents_without_model_reconst
         current_lineage_reference=lineage_ref,
         parent_artifact_references=[{"artifact_ref": lineage_ref}],
     )
-    record_set = pack_decision_record_set(
-        profile_id="generic_qiskit", decision_records=records
-    )
+    record_set = pack_decision_record_set(profile_id="generic_qiskit", decision_records=records)
     working_blueprint = {
         "artifact_type": "implementation_blueprint",
         "artifact_digest": "2" * 64,
@@ -1015,9 +1145,7 @@ def test_preproposal_selected_bundle_expands_exact_parents_without_model_reconst
         },
     }
     payload = {"current_build_context": current}
-    assert context_bridge_mcp._attach_portable_current_build_context(
-        payload, supplied
-    ) is None
+    assert context_bridge_mcp._attach_portable_current_build_context(payload, supplied) is None
     portable = payload["portable_current_build_context"]
     selected = tmp_path / "preproposal.json"
     selected.write_text(
@@ -1054,9 +1182,7 @@ def test_preproposal_selected_bundle_expands_exact_parents_without_model_reconst
                     "resource_architecture_selection": {
                         "logical_resource_architecture": "simple_flat",
                         "allowed_patterns": ["direct_inline"],
-                        "disallowed_patterns": [
-                            "avoid_opaque_or_unbounded_dynamic_construction"
-                        ],
+                        "disallowed_patterns": ["avoid_opaque_or_unbounded_dynamic_construction"],
                         "construction_form": "direct_quantum_circuit",
                     },
                 }
@@ -1072,9 +1198,7 @@ def test_preproposal_selected_bundle_expands_exact_parents_without_model_reconst
     )
     assert len(expanded["evidence_parent_artifacts"]) == 8
     assert len(expanded["blueprint_decision_records"]["records"]) == 19
-    assert expanded["working_blueprint"]["artifact_ref"] == (
-        "session-artifact-2222222222222222"
-    )
+    assert expanded["working_blueprint"]["artifact_ref"] == ("session-artifact-2222222222222222")
     generation_parent = next(
         parent
         for parent in expanded["evidence_parent_artifacts"]
@@ -1353,9 +1477,7 @@ def test_tool_descriptors_advertise_only_tool_specific_fields() -> None:
             if tool_name == "create_implementation_blueprint":
                 expected.add(context_bridge_mcp.LOCAL_SELECTED_BUNDLE_FIELD)
             if tool_name == "create_generation_context_pack":
-                expected.add(
-                    context_bridge_mcp.LOCAL_SELECTED_NEXT_LOOP_SEED_FIELD
-                )
+                expected.add(context_bridge_mcp.LOCAL_SELECTED_NEXT_LOOP_SEED_FIELD)
         elif tool_name in {
             "create_context_session_card",
             "create_run_readiness_card",
@@ -1851,15 +1973,28 @@ def test_mcp_stdio_content_length_lists_exact_tools(tmp_path: Path) -> None:
             "version": "0.6.0a2",
         }
         instructions = initialized["result"]["instructions"]
+        runtime = _activation_runtime(instructions)
+        executable = str(Path(sys.executable).resolve())
+        assert runtime["python_executable"] == executable
+        assert runtime["qcoder_version"] == "0.6.0a2"
+        assert runtime["coordinator_prefix"] == [
+            executable,
+            "-m",
+            "qcoder",
+            "current-loop",
+        ]
+        assert runtime["base_url"] == "https://preview-api.qcoder.ai"
+        assert runtime["token_file_path"] == str(token_file.resolve())
         for required in (
             "explicitly asks to use qCoder",
-            "same Python executable",
-            "qcoder current-loop",
+            "Use the supplied python_executable exactly",
+            "coordinator_prefix argv array",
+            "Never run `which` or `where`",
             "Request Baseline",
-            "never manually sequence Context Bridge tools",
+            "Never manually sequence Context Bridge tools",
             "Never reconstruct canonical artifacts",
             "scan the repository",
-            "IDE permission to write or run is separate",
+            "does not grant IDE permission to write or run",
             "exact artifact candidates",
             "proposal-specific explicit confirmation",
             "local or manual review fallback",
@@ -1867,7 +2002,7 @@ def test_mcp_stdio_content_length_lists_exact_tools(tmp_path: Path) -> None:
             "Never activate silently",
         ):
             assert required in instructions
-        assert "token.txt" not in instructions
+        assert "ctxbridge-token-not-printed" not in instructions
 
         proc.stdin.write(
             _content_length_message({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
