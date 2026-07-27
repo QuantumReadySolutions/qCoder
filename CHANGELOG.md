@@ -1,6 +1,16 @@
 # Changelog
 
 
+## 0.6.0a2
+
+- Package the accepted Current Loop continuity foundation and deterministic coordinator behind the
+  existing `qcoder current-loop` entrypoint.
+- Supply explicit, non-silent connected-client activation guidance through the existing local
+  Context Bridge initialization response without adding a Context Bridge tool.
+- Preserve exactly twelve qCoder Context Bridge domain tools, separate IDE write/run authority,
+  exact-artifact review authorization, and fail-closed hosted review behavior.
+
+
 ## 0.6.0a1
 
 - Add the complete Explorer Context Loop contract across Request Baseline, Working Blueprint,

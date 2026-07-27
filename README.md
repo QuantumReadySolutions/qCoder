@@ -11,6 +11,7 @@ The current public local path is **qCoder OSS**. OSS commands run locally and do
 - `qcoder context`
 - `qcoder review`
 - `qcoder blueprint` (machine-local selected-source evidence)
+- `qcoder current-loop` (explicit assistant-driven coordination for one current IDE build)
 - `qcoder explorer` (Explorer Beta account-backed status/demo/evidence checks)
 - `qcoder context-bridge` (token-backed Context Bridge MCP adapter for eligible Explorer users)
 - `qcoder student` (temporary compatibility alias for Explorer Beta)
@@ -18,7 +19,7 @@ The current public local path is **qCoder OSS**. OSS commands run locally and do
 
 ## Current product boundaries
 
-The `0.6.0a1` release candidate combines **OSS local commands**, Explorer compatibility commands,
+The `0.6.0a2` release candidate combines **OSS local commands**, Explorer compatibility commands,
 and the Context Bridge adapter for eligible Explorer users. Pro is not launched and is not a
 current public product path.
 
@@ -47,7 +48,7 @@ adopt a blueprint decision.
 
 ## Context Bridge inventory
 
-The `0.6.0a1` release candidate preserves the existing eight Evidence Review operations and adds
+The `0.6.0a2` release candidate preserves the existing eight Evidence Review operations and adds
 four Algorithm Blueprint operations, for exactly twelve Context Bridge capability tools:
 
 - `get_guided_evidence_context`
@@ -118,7 +119,7 @@ release-candidate documentation does not claim publication or public rollout.
 Install:
 
 ```bash
-pip install qcoder
+python -m pip install "qcoder==0.6.0a2"
 ```
 
 Analyze a circuit:
@@ -156,10 +157,17 @@ qcoder explorer evidence --context-json preflight.context.json
 qcoder explorer evidence --qasm path/to/circuit.qasm --out-json explorer.json --out-md explorer.md --share-safe
 python -m qcoder context-bridge mcp serve --help
 python -m qcoder context-bridge mcp smoke --token-file ~/.qcoder/context-bridge/token.txt
+python -m qcoder current-loop --help
 qcoder pro --help
 ```
 
 Run the Context Bridge commands in the Python environment where qCoder is installed. The default smoke prints a concise connection result. Add `--json` for structured troubleshooting, or `--full` for the exhaustive support/release diagnostic; full mode stops without automatic retry when the current rate window requires a pause.
+
+Connected clients receive an explicit opt-in Current Loop instruction from the local Context Bridge
+server. The instruction activates only after the customer asks to use qCoder or accepts an offer,
+uses the same configured Python runtime to invoke `qcoder current-loop`, and keeps IDE write/run
+permission and exact-artifact review permission separate. It never contains the Context Bridge
+token.
 
 **Support-safe checklist**
 

@@ -12,6 +12,7 @@ from typing import Any, Callable, Mapping
 import urllib.error
 import urllib.request
 
+from qcoder import __version__
 from qcoder.algorithm_blueprint import (
     ALGORITHM_BLUEPRINT_ARTIFACT_DISCRIMINATORS,
     ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS,
@@ -84,6 +85,24 @@ EXPECTED_TOOLS = (
     "create_next_check_plan",
     "create_single_loop_evidence_diff",
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
+)
+CLIENT_ACTIVATION_INSTRUCTIONS = (
+    "qCoder Current Loop is opt-in: do nothing unless the user explicitly asks to use qCoder for "
+    "the current build or explicitly accepts an activation offer. Then use the same Python "
+    "executable configured for this qCoder Context Bridge server to run "
+    "`python -m qcoder current-loop --help` in the exact open workspace; stop if the coordinator "
+    "is missing or authentication, entitlement, or hosted readiness fails. Use the "
+    "`qcoder current-loop` coordinator for the workflow; never manually sequence Context Bridge "
+    "tools and never substitute a local or manual review fallback. Preserve the user's natural "
+    "request verbatim as the Request Baseline and present checkpoints conversationally. Never ask "
+    "the customer for qCoder tool names, JSON, digests, or parent reconstruction. Never reconstruct "
+    "canonical artifacts, scan the repository, inspect outside the workspace, or infer neighboring "
+    "files. IDE permission to write or run is separate from qCoder activation. Present the exact "
+    "artifact candidates and require explicit exact-set authorization before review. Do not confirm "
+    "a governing proposal without proposal-specific explicit confirmation; confirmation and "
+    "materialization stay in the IDE. Offer Review in this IDE, optional passive Build Review, and "
+    "Continue without visual review. Unchanged Continuation creates no Evolved Blueprint. Never "
+    "activate silently, change a Blueprint silently, or transfer raw artifacts."
 )
 TOOL_ALIASES = {
     "get_context_from_share_safe_artifact": "get_guided_evidence_context",
@@ -2259,7 +2278,8 @@ def handle_jsonrpc_message(
             {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {"listChanged": False}, "resources": {}, "prompts": {}},
-                "serverInfo": {"name": "qcoder-context-bridge", "version": "1.0.0"},
+                "serverInfo": {"name": "qcoder-context-bridge", "version": __version__},
+                "instructions": CLIENT_ACTIVATION_INSTRUCTIONS,
             },
         )
     if method == "tools/list":

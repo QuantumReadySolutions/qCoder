@@ -1846,7 +1846,28 @@ def test_mcp_stdio_content_length_lists_exact_tools(tmp_path: Path) -> None:
         )
         proc.stdin.flush()
         initialized = _read_content_length_response(proc.stdout)
-        assert initialized["result"]["serverInfo"]["name"] == "qcoder-context-bridge"
+        assert initialized["result"]["serverInfo"] == {
+            "name": "qcoder-context-bridge",
+            "version": "0.6.0a2",
+        }
+        instructions = initialized["result"]["instructions"]
+        for required in (
+            "explicitly asks to use qCoder",
+            "same Python executable",
+            "qcoder current-loop",
+            "Request Baseline",
+            "never manually sequence Context Bridge tools",
+            "Never reconstruct canonical artifacts",
+            "scan the repository",
+            "IDE permission to write or run is separate",
+            "exact artifact candidates",
+            "proposal-specific explicit confirmation",
+            "local or manual review fallback",
+            "Unchanged Continuation creates no Evolved Blueprint",
+            "Never activate silently",
+        ):
+            assert required in instructions
+        assert "token.txt" not in instructions
 
         proc.stdin.write(
             _content_length_message({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
