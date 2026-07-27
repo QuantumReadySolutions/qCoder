@@ -176,7 +176,7 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
     assert initialized is not None
     instructions = initialized["result"]["instructions"]
     runtime = _activation_runtime(instructions)
-    executable = str(Path(sys.executable).resolve())
+    executable = str(Path(sys.executable).absolute())
     token_path = str(token_file.resolve())
     assert runtime == {
         "python_executable": executable,
@@ -258,6 +258,29 @@ def test_activation_runtime_paths_with_spaces_are_unambiguous_for_posix_and_wind
         "current-loop",
     ]
     assert windows_runtime["token_file_path"] == windows_token
+
+
+def test_activation_runtime_preserves_virtual_environment_executable_identity(
+    tmp_path: Path,
+) -> None:
+    real_python = tmp_path / "system" / "python"
+    real_python.parent.mkdir()
+    real_python.touch()
+    virtualenv_python = tmp_path / "candidate venv" / "bin" / "python"
+    virtualenv_python.parent.mkdir(parents=True)
+    virtualenv_python.symlink_to(real_python)
+
+    runtime = _activation_runtime(
+        build_client_activation_instructions(
+            base_url="https://example.invalid",
+            token_file=tmp_path / "token.txt",
+            python_executable=virtualenv_python,
+        )
+    )
+
+    assert runtime["python_executable"] == str(virtualenv_python.absolute())
+    assert runtime["python_executable"] != str(real_python.resolve())
+    assert runtime["coordinator_prefix"][0] == str(virtualenv_python.absolute())
 
 
 def test_initialize_adds_no_mcp_operation_or_domain_tool(tmp_path: Path) -> None:
@@ -1974,7 +1997,7 @@ def test_mcp_stdio_content_length_lists_exact_tools(tmp_path: Path) -> None:
         }
         instructions = initialized["result"]["instructions"]
         runtime = _activation_runtime(instructions)
-        executable = str(Path(sys.executable).resolve())
+        executable = str(Path(sys.executable).absolute())
         assert runtime["python_executable"] == executable
         assert runtime["qcoder_version"] == "0.6.0a2"
         assert runtime["coordinator_prefix"] == [

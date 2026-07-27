@@ -118,10 +118,14 @@ def _resolved_configuration_path(
     value: str | Path,
     *,
     path_style: str | None = None,
+    preserve_symlink_identity: bool = False,
 ) -> str:
     style = path_style or os.name
     if style == os.name:
-        return str(Path(value).expanduser().resolve(strict=False))
+        path = Path(value).expanduser()
+        if preserve_symlink_identity:
+            return str(path.absolute())
+        return str(path.resolve(strict=False))
     if style == "nt":
         return ntpath.abspath(str(value))
     if style == "posix":
@@ -139,6 +143,7 @@ def build_client_activation_instructions(
     executable = _resolved_configuration_path(
         python_executable or sys.executable,
         path_style=path_style,
+        preserve_symlink_identity=True,
     )
     token_path = _resolved_configuration_path(token_file, path_style=path_style)
     runtime = {
