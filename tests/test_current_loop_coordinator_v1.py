@@ -30,6 +30,10 @@ from qcoder.context_loop import (
 )
 from qcoder.current_loop import CurrentLoopStore, decision_inventory_binding
 from qcoder.current_loop import CurrentLoopError
+from qcoder.current_loop_checkpoint_input import (
+    CHECKPOINT_INPUT_SCHEMA_ID,
+    decode_checkpoint_input,
+)
 from qcoder.current_loop_coordinator import (
     CHECKPOINT_KINDS,
     CLIENT_NAMES,
@@ -49,6 +53,31 @@ PROFILE_COUNTS = {
     "grover_search": 12,
     "qaoa": 17,
 }
+
+
+def _checkpoint_payload(
+    operation: str,
+    checkpoint_kind: str,
+    fields: Mapping[str, object],
+) -> bytes:
+    return json.dumps(
+        {
+            "schema_id": CHECKPOINT_INPUT_SCHEMA_ID,
+            "schema_version": 1,
+            "operation": operation,
+            "checkpoint_kind": checkpoint_kind,
+            "fields": [
+                {
+                    "name": name,
+                    "value": value,
+                    "provenance": "user_confirmed_assistant_interpretation",
+                }
+                for name, value in fields.items()
+            ],
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
 
 
 def _reference(index: int) -> str:
@@ -541,9 +570,9 @@ def _activate_and_prepare(
 
 def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
     snapshot = coordinator_contract_snapshot()
-    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v4"
-    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v4"
-    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 4
+    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v5"
+    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v5"
+    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 5
     assert all(snapshot["checkpoint_result_protocol"].values())
     assert snapshot["request_baseline_transfer"] == {
         "complete_governing_message_preserved_verbatim": True,
@@ -577,7 +606,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("6555c9be63e544202d5e23d18e54118827e0aba5a2b7dbfbf0662e317bd8b0cc")
+    assert contract_digest == ("8681207a3bb0acea0493e9106a3551ca6d417370488ec6f2579d5269a4da542a")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
@@ -1561,6 +1590,75 @@ def test_one_proposal_selected_bundle_confirmation_and_next_loop(
     )
 
 
+def test_branch_consistent_proposal_decline_then_unchanged_continuation(
+    tmp_path: Path,
+) -> None:
+    coordinator, _transport, workspace, _review = _through_current_build(tmp_path)
+    blueprint = json.loads(
+        (workspace / ".qcoder/current-loop/artifacts/working-blueprint.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    selected = next(
+        record
+        for record in unpack_decision_record_set(blueprint["blueprint_decision_records"])
+        if record["profile_decision_id"] == "generic_qiskit.shots"
+    )
+    proposal = coordinator.propose_change(
+        decision_ref=selected["decision_ref"],
+        selected_action="accept_and_add_to_blueprint",
+        proposed_value=2048,
+        control_treatment="keep_fixed",
+        explicit_user_selection=True,
+    )
+    assert proposal["phase"] == "change_confirmation"
+    raw = _checkpoint_payload(
+        "continue_unchanged",
+        "governing_change_confirmation",
+        {
+            "user_statement": "Decline this proposal and continue unchanged.",
+            "decline_unconfirmed_proposal": True,
+        },
+    )
+    staged = coordinator.stage_checkpoint_input(
+        operation="continue_unchanged",
+        checkpoint_kind="governing_change_confirmation",
+        payload=decode_checkpoint_input(raw),
+        transport="stdin",
+    )
+    assert staged["supported_next_action"] == "review_staged_checkpoint_input"
+    continued = coordinator.approve_staged_checkpoint_input(explicit_authority=True)
+    assert continued["phase"] == "next_loop_ready"
+    assert continued["details"]["proposal_adopted"] is False
+    assert continued["details"]["evolved_blueprint_created"] is False
+    assert continued["details"]["completed_build_governing_change_branch_closed"] is True
+    assert continued["supported_next_action"] == "start_next_or_stop"
+    assert continued["stop_option"]["no_further_action_required"] is True
+    assert continued["propose_change_available_for_completed_build"] is False
+    assert continued["next_invocation"]["required_flags"] == [
+        "--next-workspace",
+        "--posture",
+        "--use-current-seed",
+        "--approve",
+    ]
+    assert (
+        "evolved_blueprint"
+        not in CurrentLoopStore.for_workspace(workspace).read()["saved_artifacts"]
+    )
+    next_workspace = tmp_path / "managed-next-workspace"
+    next_workspace.mkdir()
+    started = coordinator.start_next(
+        next_workspace_root=next_workspace,
+        generation_posture="exploratory_first_pass",
+        seed_file=None,
+        parent_files={},
+        explicit_authority=True,
+        use_current_seed=True,
+    )
+    assert started["ok"] is True
+    assert started["details"]["qcoder_managed_seed_used"] is True
+
+
 def test_current_build_review_fails_closed_without_portable(
     tmp_path: Path,
 ) -> None:
@@ -1828,7 +1926,7 @@ def test_non_bell_blueprint_guided_path_resolves_only_generation_blockers(
     assert {
         item["profile_decision_id"] for item in blocked["details"]["decision_resolution"]
     } == generation_ids
-    assert blocked["supported_next_action"] == ("resolve_generation_decisions_or_switch_posture")
+    assert blocked["supported_next_action"] == ("stage_exact_decision_resolution_or_switch_posture")
     ready = coordinator.prepare_generation(
         profile_id="qaoa",
         proposed_interpretation=interpretation,
@@ -2145,14 +2243,13 @@ def test_decision_resolution_status_reemits_exact_guidance(tmp_path: Path) -> No
     status = restarted.status()
     assert status["checkpoint_kind"] == "decision_resolution"
     assert status["details"]["decision_resolution"] == (blocked["details"]["decision_resolution"])
-    assert status["supported_next_action"] == ("resolve_generation_decisions_or_switch_posture")
+    assert status["supported_next_action"] == ("stage_exact_decision_resolution_or_switch_posture")
     assert status["next_invocation"]["required_flags"] == [
-        "--profile",
-        "--interpretation-summary",
-        "--confirm-intent",
-        "--decision-disposition",
-        "--approve-decisions",
+        "--operation",
+        "--checkpoint-kind",
+        "--checkpoint-input-stdin or --checkpoint-input-file",
     ]
+    assert status["next_invocation"]["literal_free_text_in_argv"] is False
 
 
 def test_current_loop_cli_executes_both_generation_paths(
@@ -2452,8 +2549,8 @@ def test_every_checkpoint_result_is_deterministically_actionable(tmp_path: Path)
             summary="Synthetic checkpoint contract test.",
         )
         _assert_actionable_checkpoint(result)
-        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v4"
-        assert result["schema_version"] == 4
+        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v5"
+        assert result["schema_version"] == 5
 
 
 @pytest.mark.parametrize(
@@ -2465,7 +2562,7 @@ def test_every_checkpoint_result_is_deterministically_actionable(tmp_path: Path)
         ),
         ("evidence_processing", "process_exact_authorized_artifacts"),
         ("current_build_review", "review_current_build"),
-        ("next_loop_ready", "start_next_loop_with_explicit_authority_or_stop"),
+        ("next_loop_ready", "start_next_or_stop"),
     ),
 )
 def test_every_ready_nonterminal_phase_has_a_deterministic_action(
@@ -2487,6 +2584,106 @@ def test_every_ready_nonterminal_phase_has_a_deterministic_action(
     assert result["next_invocation"]["subcommand"]
     assert result["next_invocation"]["token_contents_embedded"] is False
     assert result["next_invocation"]["private_workspace_path_embedded"] is False
+
+
+def test_complete_ready_phase_protocol_matrix_has_no_unexplained_null(
+    tmp_path: Path,
+) -> None:
+    coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
+    snapshot = coordinator_contract_snapshot()
+    assert set(snapshot["ready_phase_protocol_dispositions"]) == set(PHASES)
+    for phase in PHASES:
+        result = coordinator._result_without_state(
+            operation="phase_matrix_contract_test",
+            ok=True,
+            phase=phase,
+            state_status="ready",
+            checkpoint_kind="none",
+            summary=f"Synthetic {phase} ready-state proof.",
+        )
+        if phase in {"completed", "abandoned"}:
+            assert result["terminal"] is True
+            assert result["supported_next_action"] is None
+            assert result["no_action_reason"] == f"current_loop_{phase}_terminal"
+        else:
+            assert result["terminal"] is False
+            assert result["supported_next_action"]
+            assert result["next_invocation"] is not None
+            assert result["no_action_reason"] is None
+
+
+@pytest.mark.parametrize("state_status", ("stale", "blocked", "conflict", "corrupt"))
+def test_nonready_active_state_has_explicit_no_action_reason(
+    tmp_path: Path,
+    state_status: str,
+) -> None:
+    result = CurrentLoopCoordinator(workspace_root=tmp_path)._result_without_state(
+        operation="phase_matrix_contract_test",
+        ok=False,
+        phase="intent_review",
+        state_status=state_status,
+        checkpoint_kind="privacy_or_trust",
+        summary="Synthetic bounded recovery.",
+    )
+    assert result["supported_next_action"] is None
+    assert result["next_invocation"] is None
+    assert result["no_action_reason"] == (f"state_status_{state_status}_requires_bounded_recovery")
+
+
+def test_connected_protocol_never_emits_arbitrary_free_text_in_argv(
+    tmp_path: Path,
+) -> None:
+    coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
+    results = [
+        coordinator._result_without_state(
+            operation="prepare_generation",
+            ok=True,
+            phase="intent_review",
+            state_status="checkpoint_required",
+            checkpoint_kind="intent_review",
+            summary="Synthetic intent review.",
+        ),
+        coordinator._result_without_state(
+            operation="prepare_generation",
+            ok=True,
+            phase="intent_review",
+            state_status="checkpoint_required",
+            checkpoint_kind="decision_resolution",
+            summary="Synthetic decision review.",
+        ),
+        coordinator._result_without_state(
+            operation="prepare_generation",
+            ok=True,
+            phase="intent_review",
+            state_status="checkpoint_required",
+            checkpoint_kind="posture",
+            category="posture_transition_authority_required",
+            summary="Synthetic posture transition.",
+        ),
+        coordinator._result_without_state(
+            operation="propose_change",
+            ok=True,
+            phase="change_confirmation",
+            state_status="checkpoint_required",
+            checkpoint_kind="governing_change_confirmation",
+            summary="Synthetic proposal review.",
+        ),
+    ]
+    forbidden = {
+        "--interpretation-summary",
+        "--profile-answer",
+        "--constraint",
+        "--non-goal",
+        "--confirmation",
+        "--decision-disposition",
+        "--posture-reason",
+        "--statement",
+        "--proposed-value",
+        "--control-treatment",
+    }
+    for result in results:
+        serialized = json.dumps(result["next_invocation"], sort_keys=True)
+        assert not any(flag in serialized for flag in forbidden)
 
 
 def test_current_loop_cli_intent_review_confirmation_sequence_is_actionable(
@@ -2549,7 +2746,10 @@ def test_current_loop_cli_intent_review_confirmation_sequence_is_actionable(
     proposed = json.loads(capsys.readouterr().out)
     assert proposed["category"] == "intent_confirmation_required"
     assert proposed["confirmation_transmission_state"] == "not_supplied"
-    assert "--confirm-intent" in proposed["next_invocation"]["required_flags"]
+    assert (
+        "--checkpoint-input-stdin or --checkpoint-input-file"
+        in (proposed["next_invocation"]["required_flags"])
+    )
     assert proposed["details"]["protected_call_made"] is True
     _assert_actionable_checkpoint(proposed)
     assert len(transport.calls) == 1
@@ -2559,7 +2759,10 @@ def test_current_loop_cli_intent_review_confirmation_sequence_is_actionable(
     assert repeated["category"] == "confirmation_not_transmitted"
     assert repeated["details"]["protected_call_made"] is False
     assert repeated["details"]["identical_pending_review_reused"] is True
-    assert "--confirm-intent" in repeated["next_invocation"]["required_flags"]
+    assert (
+        "--checkpoint-input-stdin or --checkpoint-input-file"
+        in (repeated["next_invocation"]["required_flags"])
+    )
     _assert_actionable_checkpoint(repeated)
     assert len(transport.calls) == 1
 
@@ -2578,6 +2781,102 @@ def test_current_loop_cli_intent_review_confirmation_sequence_is_actionable(
     confirmed_intent_arguments = transport.calls[1][1]
     assert confirmed_intent_arguments["requested_confirmation_state"] == "confirmed"
     assert confirmed_intent_arguments["confirmation_assertion"] == {"user_reviewed": True}
+
+
+def test_current_loop_cli_checkpoint_input_approval_reuses_staged_values_only(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "cli-staged-authority"
+    workspace.mkdir()
+    transport = PublicBuilderTransport()
+    monkeypatch.setattr(
+        current_loop_coordinator_module,
+        "ContextBridgeTransport",
+        lambda **_values: transport,
+    )
+    assert (
+        cli_main(
+            [
+                "current-loop",
+                "--workspace",
+                str(workspace),
+                "activate",
+                "--request",
+                "Use qCoder for this build. Create one synthetic circuit.",
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+    assert (
+        cli_main(
+            [
+                "current-loop",
+                "--workspace",
+                str(workspace),
+                "activate",
+                "--approve",
+                "--posture",
+                "exploratory_first_pass",
+                "--approve-posture",
+                "--posture-provenance",
+                "user_confirmed_assistant_recommendation",
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+    exact = "Preserve `00` and `11`, quotes ' \" and Unicode Ω 😀."
+    input_file = tmp_path / "exact checkpoint input.json"
+    input_file.write_bytes(
+        _checkpoint_payload(
+            "prepare_generation",
+            "intent_review",
+            {
+                "profile_id": "generic_qiskit",
+                "proposed_interpretation": {"summary": exact},
+            },
+        )
+    )
+    assert (
+        cli_main(
+            [
+                "current-loop",
+                "--workspace",
+                str(workspace),
+                "stage-checkpoint-input",
+                "--operation",
+                "prepare_generation",
+                "--checkpoint-kind",
+                "intent_review",
+                "--checkpoint-input-file",
+                str(input_file),
+            ]
+        )
+        == 0
+    )
+    staged = json.loads(capsys.readouterr().out)
+    assert staged["details"]["complete_values_displayed"] is True
+    assert staged["details"]["protected_call_performed"] is False
+    approval_argv = [
+        "current-loop",
+        "--workspace",
+        str(workspace),
+        "approve-checkpoint-input",
+        "--base-url",
+        "https://example.invalid",
+        "--token-file",
+        str(tmp_path / "token.txt"),
+        "--approve",
+    ]
+    assert exact not in approval_argv
+    assert cli_main(approval_argv) == 0
+    approved = json.loads(capsys.readouterr().out)
+    assert approved["phase"] == "generation_ready"
+    assert approved["details"]["authority_only_promotion"] is True
+    assert transport.calls[0][1]["proposed_interpretation"]["summary"] == exact
 
 
 def test_current_loop_cli_distinguishes_transmitted_clarification(
@@ -2762,3 +3061,245 @@ def test_public_transport_confirmation_semantics_match_bounded_live_contract() -
         live_gate4_contract["confirmation_state"]
         == (response["algorithm_intent_card"]["confirmation_state"])
     )
+
+
+def test_lossless_checkpoint_input_stages_displays_and_promotes_exact_bytes(
+    tmp_path: Path,
+) -> None:
+    transport = PublicBuilderTransport()
+    coordinator, _workspace = _coordinator(tmp_path, transport)
+    _activate_exact(
+        coordinator,
+        original_request="Use qCoder for this build. Create one synthetic circuit.",
+        generation_posture="exploratory_first_pass",
+    )
+    exact = (
+        "Keep `00` and `11`; $(printf qcoder_transport_test); '${VARIABLE}'; "
+        '"quotes"; C:\\Proof Path\\α; /tmp/proof; tab\tline\nemoji 😀'
+    )
+    raw = _checkpoint_payload(
+        "prepare_generation",
+        "intent_review",
+        {
+            "profile_id": "generic_qiskit",
+            "proposed_interpretation": {
+                "summary": exact,
+                "provenance_role": "assistant_proposed",
+            },
+        },
+    )
+    staged = coordinator.stage_checkpoint_input(
+        operation="prepare_generation",
+        checkpoint_kind="intent_review",
+        payload=decode_checkpoint_input(raw),
+        transport="stdin",
+    )
+    assert staged["checkpoint_kind"] == "checkpoint_input_review"
+    assert staged["supported_next_action"] == "review_staged_checkpoint_input"
+    assert staged["details"]["protected_call_performed"] is False
+    displayed = {
+        item["field"]: item["value"] for item in staged["details"]["complete_staged_values"]
+    }
+    assert displayed["proposed_interpretation"]["summary"] == exact
+    assert transport.calls == []
+
+    status = coordinator.status()
+    assert status["supported_next_action"] == "review_staged_checkpoint_input"
+    assert status["next_invocation"]["subcommand"] == "approve-checkpoint-input"
+    approved = coordinator.approve_staged_checkpoint_input(explicit_authority=True)
+    assert approved["phase"] == "generation_ready"
+    assert approved["details"]["authority_only_promotion"] is True
+    assert approved["details"]["literal_free_text_in_argv"] is False
+    sent = transport.calls[0][1]["proposed_interpretation"]["summary"]
+    assert sent == exact
+    assert (
+        hashlib.sha256(sent.encode("utf-8")).hexdigest()
+        == hashlib.sha256(exact.encode("utf-8")).hexdigest()
+    )
+
+
+def test_checkpoint_input_correction_invalidates_prior_and_replay_fails_closed(
+    tmp_path: Path,
+) -> None:
+    coordinator, _workspace = _coordinator(tmp_path, PublicBuilderTransport())
+    _activate_exact(
+        coordinator,
+        original_request="Use qCoder for this build and preserve my exact correction.",
+        generation_posture="exploratory_first_pass",
+    )
+    first_raw = _checkpoint_payload(
+        "prepare_generation",
+        "intent_review",
+        {
+            "profile_id": "generic_qiskit",
+            "proposed_interpretation": {"summary": "First exact proposal."},
+        },
+    )
+    corrected_raw = _checkpoint_payload(
+        "prepare_generation",
+        "intent_review",
+        {
+            "profile_id": "generic_qiskit",
+            "proposed_interpretation": {"summary": "Corrected exact proposal 😀."},
+        },
+    )
+    first = coordinator.stage_checkpoint_input(
+        operation="prepare_generation",
+        checkpoint_kind="intent_review",
+        payload=decode_checkpoint_input(first_raw),
+        transport="file",
+    )
+    corrected = coordinator.stage_checkpoint_input(
+        operation="prepare_generation",
+        checkpoint_kind="intent_review",
+        payload=decode_checkpoint_input(corrected_raw),
+        transport="stdin",
+    )
+    assert first["details"]["content_digest"] != corrected["details"]["content_digest"]
+    state = coordinator.store.read()
+    history = state["coordinator"]["checkpoint_input_history"]
+    assert history[-1]["status"] == "invalidated"
+    assert history[-1]["content_digest"] == first["details"]["content_digest"]
+    approved = coordinator.approve_staged_checkpoint_input(explicit_authority=True)
+    assert approved["ok"] is True
+    replay = coordinator.stage_checkpoint_input(
+        operation="prepare_generation",
+        checkpoint_kind="intent_review",
+        payload=decode_checkpoint_input(corrected_raw),
+        transport="stdin",
+    )
+    assert replay["ok"] is False
+    assert replay["category"] == "checkpoint_input_replay"
+
+
+def test_checkpoint_input_rejects_approval_without_pending_and_content_controls(
+    tmp_path: Path,
+) -> None:
+    coordinator, _workspace = _coordinator(tmp_path, PublicBuilderTransport())
+    _activate_exact(
+        coordinator,
+        original_request="Use qCoder for one bounded exact-input test.",
+        generation_posture="exploratory_first_pass",
+    )
+    missing = coordinator.approve_staged_checkpoint_input(explicit_authority=True)
+    assert missing["ok"] is False
+    assert missing["category"] == "checkpoint_input_pending_required"
+    unsafe = _checkpoint_payload(
+        "prepare_generation",
+        "intent_review",
+        {
+            "profile_id": "generic_qiskit",
+            "proposed_interpretation": {"summary": "unsafe\u001bsequence"},
+        },
+    )
+    rejected = coordinator.stage_checkpoint_input(
+        operation="prepare_generation",
+        checkpoint_kind="intent_review",
+        payload=decode_checkpoint_input(unsafe),
+        transport="stdin",
+    )
+    assert rejected["ok"] is False
+    assert rejected["category"] == "checkpoint_input_text_control_invalid"
+
+
+def test_hosted_presented_clarification_values_stage_automatically(
+    tmp_path: Path,
+) -> None:
+    hosted_values = {
+        "normalized_goal": "Create the bounded Bell example.",
+        "problem_size_meaning": "Two logical qubits for this fixture only.",
+        "framework_requirement": "Qiskit-compatible Python.",
+        "measurement_plan": "Preserve `00` and `11` labels exactly.",
+        "execution_intent": 'Use a local simulator; retain "Unicode Ω".',
+        "desired_output": "Counts with `00` and `11`; emoji 😀 is preserved.",
+    }
+
+    class HostedClarifyingTransport(PublicBuilderTransport):
+        def _intent(self, supplied: Mapping[str, Any]) -> dict[str, Any]:
+            if all(
+                supplied.get("proposed_interpretation", {}).get(name) == value
+                for name, value in hosted_values.items()
+            ):
+                return super()._intent(supplied)
+            result = super()._intent(supplied)
+            card = deepcopy(result["algorithm_intent_card"])
+            card.pop("artifact_digest")
+            card.update(
+                {
+                    "confirmation_state": "needs_clarification",
+                    "unresolved_questions": list(hosted_values),
+                    **hosted_values,
+                }
+            )
+            return {"ok": True, "algorithm_intent_card": with_artifact_digest(card)}
+
+    transport = HostedClarifyingTransport()
+    coordinator, _workspace = _coordinator(tmp_path, transport)
+    _activate_exact(
+        coordinator,
+        original_request="Use qCoder for this build. Create and run a simple Bell circuit.",
+        generation_posture="exploratory_first_pass",
+    )
+    raw = _checkpoint_payload(
+        "prepare_generation",
+        "intent_review",
+        {
+            "profile_id": "generic_qiskit",
+            "proposed_interpretation": {
+                "summary": "Create and run the requested simple Bell fixture."
+            },
+        },
+    )
+    coordinator.stage_checkpoint_input(
+        operation="prepare_generation",
+        checkpoint_kind="intent_review",
+        payload=decode_checkpoint_input(raw),
+        transport="stdin",
+    )
+    clarification = coordinator.approve_staged_checkpoint_input(explicit_authority=True)
+    assert clarification["checkpoint_kind"] == "checkpoint_input_review"
+    assert clarification["details"]["hosted_call_preceded_staging"] is True
+    assert clarification["details"]["assistant_retransmission_required"] is False
+    displayed = {
+        item["field"]: item["value"] for item in clarification["details"]["complete_staged_values"]
+    }
+    assert displayed["reviewed_profile_answers"] == hosted_values
+    assert clarification["next_invocation"]["subcommand"] == "approve-checkpoint-input"
+    assert clarification["next_invocation"]["literal_free_text_in_argv"] is False
+
+    confirmed = coordinator.approve_staged_checkpoint_input(explicit_authority=True)
+    assert confirmed["phase"] == "generation_ready"
+    confirmed_arguments = transport.calls[-3][1]
+    for name, value in hosted_values.items():
+        assert confirmed_arguments["proposed_interpretation"][name] == value
+
+
+def test_checkpoint_input_stale_revision_fails_closed(tmp_path: Path) -> None:
+    coordinator, _workspace = _coordinator(tmp_path, PublicBuilderTransport())
+    _activate_exact(
+        coordinator,
+        original_request="Use qCoder for one bounded stale-input test.",
+        generation_posture="exploratory_first_pass",
+    )
+    raw = _checkpoint_payload(
+        "prepare_generation",
+        "intent_review",
+        {
+            "profile_id": "generic_qiskit",
+            "proposed_interpretation": {"summary": "Exact staged proposal."},
+        },
+    )
+    coordinator.stage_checkpoint_input(
+        operation="prepare_generation",
+        checkpoint_kind="intent_review",
+        payload=decode_checkpoint_input(raw),
+        transport="stdin",
+    )
+    state = coordinator.store.read()
+    coordinator.store.update(
+        lambda value: value,
+        expected_revision=state["state_revision"],
+    )
+    rejected = coordinator.approve_staged_checkpoint_input(explicit_authority=True)
+    assert rejected["ok"] is False
+    assert rejected["category"] == "checkpoint_input_state_revision_stale"

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0a2+wi0418.authoritytransport1
+
+- Add one bounded versioned UTF-8 checkpoint-input channel for authority-bearing
+  free text, with exact display, correction, approval-only promotion, and
+  replay/stale-state rejection.
+- Complete deterministic protocol coverage for every observable ready Current
+  Loop phase, including branch-closed `next_loop_ready` stop/start-next
+  semantics.
+- Preserve the accepted Request Baseline, Generation Context dual paths,
+  exact IDE-to-artifact handoff, and twelve-tool Connected Assistant binding.
+
 
 ## 0.6.0a2+wi0418.workstylerouting1
 

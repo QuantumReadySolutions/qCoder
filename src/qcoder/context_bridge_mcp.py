@@ -62,6 +62,7 @@ from qcoder.context_loop import (
     portable_current_build_context_error,
     share_safe_request_baseline,
 )
+from qcoder.current_loop_coordinator import coordinator_contract_snapshot
 from qcoder.current_loop import (
     CurrentLoopError,
     canonical_operation_request_sha256,
@@ -89,8 +90,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 1
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v1"
+CLIENT_BINDING_SCHEMA_VERSION = 2
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v2"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -161,6 +162,13 @@ user explicitly accepts. Preserve exact user-stated decision answers. Explorator
 not a full Generation Context Pack; Blueprint-guided generation stops at the decision_resolution
 checkpoint and uses the exact decision-disposition authority channel. A posture transition
 requires its separate explicit authority and must not rewrite the Working Blueprint.
+Never embed arbitrary user-approved free text in shell argv. When qCoder requests checkpoint
+input, use its versioned stdin or file staging channel, present every complete staged value, and
+then transmit approval only. Never reconstruct, quote, or reserialize a staged value from
+conversation. The customer never creates the machine input or types the command. A correction
+replaces the pending set and requires a new display and approval. Every active result's
+next_invocation is authoritative. At next_loop_ready the completed build's governing-change
+branch is closed: use only the qCoder-managed start-next route or stop with no further action.
 
 IDE WORK AND ARTIFACT HANDOFF
 After IDE write/run authority, perform only the user-authorized development work. Retain exact
@@ -200,7 +208,8 @@ path; they grant no general access outside the active workspace. Stop on authent
 entitlement, or hosted-service failure. Never manually sequence Context Bridge tools for an active
 build and never substitute a local or manual review fallback. Do not replace coordinator truth
 with a locally assembled review. Never reconstruct canonical artifacts, transfer raw artifacts,
-or inspect client configuration.
+inspect client configuration, search transcripts, or inspect source or package files to recover
+canonical values.
 """
 
 
@@ -229,7 +238,7 @@ def build_client_binding_descriptor(
 ) -> dict[str, Any]:
     contract_digest = hashlib.sha256(
         json.dumps(
-            context_loop_contract_snapshot(),
+            coordinator_contract_snapshot(),
             ensure_ascii=True,
             separators=(",", ":"),
             sort_keys=True,
@@ -242,6 +251,13 @@ def build_client_binding_descriptor(
             "contract_id": CLIENT_BINDING_CONTRACT_ID,
             "package_version": __version__,
             "coordinator_contract_digest": contract_digest,
+            "checkpoint_input_contract": {
+                "schema_id": "qcoder.current_loop.checkpoint_input.v1",
+                "schema_version": 1,
+                "transports": ["stdin", "file"],
+                "approval_only_promotion": True,
+                "literal_free_text_in_argv": False,
+            },
             "qcoder_domain_tool_count": len(EXPECTED_TOOLS),
             "supported_workstyles": [
                 "available_inactive",

@@ -1051,8 +1051,9 @@ def _cmd_current_loop(argv: list[str]) -> int:
         "--interpretation-summary",
         required=True,
         help=(
-            "Exact reviewed assistant-proposed summary. Reuse the coordinator-supplied "
-            "value on confirmation; do not reconstruct a canonical artifact."
+            "Compatibility/manual inline transport for an assistant-proposed summary. "
+            "Connected assistants must use staged checkpoint input and never reproduce "
+            "approved free text in shell argv."
         ),
     )
     prepare.add_argument(
@@ -1061,8 +1062,8 @@ def _cmd_current_loop(argv: list[str]) -> int:
         default=[],
         metavar="FIELD=VALUE",
         help=(
-            "One reviewed profile answer as FIELD=VALUE; repeat for each answer and "
-            "reuse the reviewed values exactly on confirmation."
+            "Compatibility/manual inline FIELD=VALUE transport. Connected assistants "
+            "use staged checkpoint input and approval-only promotion."
         ),
     )
     prepare.add_argument("--constraint", action="append", default=[])
@@ -1254,7 +1255,11 @@ def _cmd_current_loop(argv: list[str]) -> int:
     authorize.add_argument(
         "--provenance",
         required=True,
-        help="Bounded provenance for the explicit artifact-set action.",
+        choices=("direct_user_action",),
+        help=(
+            "Canonical provenance for the explicit artifact-set action. Connected "
+            "assistants never put a free-text authority explanation in argv."
+        ),
     )
     authorize.add_argument("--path", default=None)
     authorize.add_argument(
@@ -1293,8 +1298,8 @@ def _cmd_current_loop(argv: list[str]) -> int:
         "--statement",
         required=True,
         help=(
-            "Exact bounded user statement supporting Unchanged Continuation; do not "
-            "invent or paraphrase it as authority."
+            "Compatibility/manual inline statement. Connected assistants use staged "
+            "checkpoint input and never put approved free text in shell argv."
         ),
     )
     unchanged.add_argument(
@@ -1314,8 +1319,22 @@ def _cmd_current_loop(argv: list[str]) -> int:
     _add_current_loop_transport_arguments(propose, DEFAULT_BASE_URL, default_token_file())
     propose.add_argument("--decision-ref", required=True)
     propose.add_argument("--selected-action", required=True)
-    propose.add_argument("--proposed-value", required=True)
-    propose.add_argument("--control-treatment", required=True)
+    propose.add_argument(
+        "--proposed-value",
+        required=True,
+        help=(
+            "Compatibility/manual inline value. Connected assistants use staged "
+            "checkpoint input and approval-only promotion."
+        ),
+    )
+    propose.add_argument(
+        "--control-treatment",
+        required=True,
+        help=(
+            "Compatibility/manual inline treatment. Connected assistants use staged "
+            "checkpoint input and approval-only promotion."
+        ),
+    )
     propose.add_argument(
         "--approve-selection",
         action="store_true",
@@ -1335,8 +1354,8 @@ def _cmd_current_loop(argv: list[str]) -> int:
         "--confirmation",
         required=True,
         help=(
-            "Exact proposal-specific semantic confirmation from the user. The text is "
-            "not approval without --approve; never infer or manufacture either."
+            "Compatibility/manual inline proposal-specific confirmation. Connected "
+            "assistants use staged checkpoint input and approval-only promotion."
         ),
     )
     confirm.add_argument(
@@ -1359,7 +1378,84 @@ def _cmd_current_loop(argv: list[str]) -> int:
         required=True,
         choices=("exploratory_first_pass", "blueprint_guided"),
     )
-    start_next.add_argument("--seed-file", required=True)
+
+    stage_input = sub.add_parser(
+        "stage-checkpoint-input",
+        help=(
+            "Stage one bounded versioned UTF-8 checkpoint payload from stdin or file "
+            "for complete review; this grants no authority and makes no Protected call."
+        ),
+    )
+    stage_input.add_argument(
+        "--operation",
+        required=True,
+        choices=(
+            "prepare_generation",
+            "continue_unchanged",
+            "propose_change",
+            "confirm_change",
+        ),
+        help="Exact Current Loop operation to which the staged values are bound.",
+    )
+    stage_input.add_argument(
+        "--checkpoint-kind",
+        required=True,
+        choices=(
+            "intent_review",
+            "decision_resolution",
+            "posture",
+            "governing_change_confirmation",
+        ),
+        help="Exact current checkpoint kind; values cannot be replayed at another checkpoint.",
+    )
+    checkpoint_source = stage_input.add_mutually_exclusive_group(required=True)
+    checkpoint_source.add_argument(
+        "--checkpoint-input-stdin",
+        action="store_true",
+        help=(
+            "Read exact versioned UTF-8 machine input from non-interactive stdin. "
+            "A TTY is rejected rather than awaited."
+        ),
+    )
+    checkpoint_source.add_argument(
+        "--checkpoint-input-file",
+        help=(
+            "Read exact versioned UTF-8 machine input bytes from this bounded file. "
+            "No newline or text normalization is performed."
+        ),
+    )
+
+    approve_input = sub.add_parser(
+        "approve-checkpoint-input",
+        help="Promote the exact current staged values using authority only.",
+    )
+    _add_current_loop_transport_arguments(approve_input, DEFAULT_BASE_URL, default_token_file())
+    approve_input.add_argument(
+        "--approve",
+        action="store_true",
+        help=(
+            "Carry explicit user authority for the complete qCoder-displayed staged "
+            "values. Omission is not approval; no values are retransmitted."
+        ),
+    )
+
+    decline_input = sub.add_parser(
+        "decline-checkpoint-input",
+        help="Explicitly decline and invalidate the current staged values.",
+    )
+    decline_input.add_argument(
+        "--decline",
+        action="store_true",
+        help=(
+            "Carry explicit user authority to decline this exact staged set. "
+            "Omission is not a decline."
+        ),
+    )
+    start_next.add_argument(
+        "--seed-file",
+        default=None,
+        help="Compatibility/manual exact seed path; connected assistants use --use-current-seed.",
+    )
     start_next.add_argument(
         "--parent-file",
         action="append",
@@ -1373,6 +1469,14 @@ def _cmd_current_loop(argv: list[str]) -> int:
             "Carry explicit human authority to activate the next loop from the supplied "
             "seed and parents. Omission is not approval; supply only after the user "
             "approves, and never infer or manufacture it."
+        ),
+    )
+    start_next.add_argument(
+        "--use-current-seed",
+        action="store_true",
+        help=(
+            "Use the exact qCoder-managed seed and named parents from next_loop_ready. "
+            "No state discovery or path retransmission is required."
         ),
     )
 
@@ -1436,6 +1540,22 @@ def _cmd_current_loop(argv: list[str]) -> int:
         command = args.current_loop_command
         if command == "status":
             result = coordinator.status()
+        elif command == "stage-checkpoint-input":
+            payload, checkpoint_transport = _read_current_loop_checkpoint_input(args)
+            result = coordinator.stage_checkpoint_input(
+                operation=args.operation,
+                checkpoint_kind=args.checkpoint_kind,
+                payload=payload,
+                transport=checkpoint_transport,
+            )
+        elif command == "approve-checkpoint-input":
+            result = coordinator.approve_staged_checkpoint_input(
+                explicit_authority=args.approve,
+            )
+        elif command == "decline-checkpoint-input":
+            result = coordinator.decline_staged_checkpoint_input(
+                explicit_authority=args.decline,
+            )
         elif command == "activate":
             request, request_transport = _read_current_loop_request(args)
             result = coordinator.activate(
@@ -1542,6 +1662,7 @@ def _cmd_current_loop(argv: list[str]) -> int:
                 seed_file=args.seed_file,
                 parent_files=_parse_current_loop_key_values(args.parent_file),
                 explicit_authority=args.approve,
+                use_current_seed=args.use_current_seed,
             )
         elif command == "standalone-review":
             result = coordinator.standalone_review(
@@ -1616,6 +1737,44 @@ def _read_current_loop_request(
     if len(request) > _CURRENT_LOOP_REQUEST_MAX_CODEPOINTS:
         raise ValueError("request_baseline_original_request_too_large")
     return request, transport
+
+
+def _read_current_loop_checkpoint_input(
+    args: argparse.Namespace,
+) -> tuple[dict[str, object], str]:
+    from qcoder.current_loop import CurrentLoopError
+    from qcoder.current_loop_checkpoint_input import (
+        CHECKPOINT_INPUT_MAX_BYTES,
+        decode_checkpoint_input,
+    )
+
+    if args.checkpoint_input_file is not None:
+        input_path = Path(args.checkpoint_input_file).expanduser()
+        try:
+            if input_path.is_symlink() or not input_path.is_file():
+                raise ValueError("checkpoint_input_file_not_regular")
+            if input_path.stat().st_size > CHECKPOINT_INPUT_MAX_BYTES:
+                raise ValueError("checkpoint_input_too_large")
+            raw = input_path.read_bytes()
+        except OSError as exc:
+            raise ValueError("checkpoint_input_file_unreadable") from exc
+        transport = "file"
+    else:
+        if sys.stdin.isatty():
+            raise ValueError("checkpoint_input_stdin_requires_noninteractive_input")
+        stream = getattr(sys.stdin, "buffer", sys.stdin)
+        raw_or_text = stream.read(CHECKPOINT_INPUT_MAX_BYTES + 1)
+        if isinstance(raw_or_text, str):
+            raw = raw_or_text.encode("utf-8")
+        else:
+            raw = raw_or_text
+        if len(raw) > CHECKPOINT_INPUT_MAX_BYTES:
+            raise ValueError("checkpoint_input_too_large")
+        transport = "stdin"
+    try:
+        return decode_checkpoint_input(raw), transport
+    except CurrentLoopError as exc:
+        raise ValueError(exc.category) from exc
 
 
 def _parse_current_loop_key_values(values: list[str]) -> dict[str, str]:

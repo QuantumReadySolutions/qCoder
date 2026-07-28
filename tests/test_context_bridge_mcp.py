@@ -302,6 +302,10 @@ def test_initialize_binds_two_surfaces_and_three_workstyles_without_new_tool(
         "never invent a hosted-tool order",
         "does not prohibit legitimate direct use of one applicable MCP tool",
         "Do not call one of the twelve domain tools in place of local coordinator activation",
+        "Never embed arbitrary user-approved free text in shell argv",
+        "approval only",
+        "next_loop_ready",
+        "governing-change branch is closed",
     ):
         assert required in normalized
     assert len(tool_descriptors()) == 12
@@ -327,8 +331,15 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
     assert binding["contract_id"] == CLIENT_BINDING_CONTRACT_ID
     assert binding["package_version"] == __version__
     assert binding["coordinator_contract_digest"] == (
-        "6555c9be63e544202d5e23d18e54118827e0aba5a2b7dbfbf0662e317bd8b0cc"
+        "71ccc7985a88b5de0ce9b2ee53c1a0365ab3a35659c1a06de18bd2cfae8bb2d3"
     )
+    assert binding["checkpoint_input_contract"] == {
+        "schema_id": "qcoder.current_loop.checkpoint_input.v1",
+        "schema_version": 1,
+        "transports": ["stdin", "file"],
+        "approval_only_promotion": True,
+        "literal_free_text_in_argv": False,
+    }
     assert binding["qcoder_domain_tool_count"] == 12
     assert binding["supported_workstyles"] == [
         "available_inactive",
