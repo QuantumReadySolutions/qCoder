@@ -1044,12 +1044,12 @@ def _cmd_current_loop(argv: list[str]) -> int:
     _add_current_loop_transport_arguments(prepare, DEFAULT_BASE_URL, default_token_file())
     prepare.add_argument(
         "--profile",
-        required=True,
+        required=False,
         choices=("generic_qiskit", "grover_search", "qaoa"),
     )
     prepare.add_argument(
         "--interpretation-summary",
-        required=True,
+        required=False,
         help=(
             "Compatibility/manual inline transport for an assistant-proposed summary. "
             "Connected assistants must use staged checkpoint input and never reproduce "
@@ -1147,6 +1147,14 @@ def _cmd_current_loop(argv: list[str]) -> int:
         help=(
             "Attributable source of the posture transition. It carries no authority "
             "without --approve-posture-change."
+        ),
+    )
+    prepare.add_argument(
+        "--use-current-intent",
+        action="store_true",
+        help=(
+            "Use qCoder's current canonical intent only for a separately authorized "
+            "bounded posture transition; no intent text is retransmitted."
         ),
     )
 
@@ -1388,25 +1396,31 @@ def _cmd_current_loop(argv: list[str]) -> int:
     )
     stage_input.add_argument(
         "--operation",
-        required=True,
+        required=False,
         choices=(
             "prepare_generation",
             "continue_unchanged",
             "propose_change",
             "confirm_change",
         ),
-        help="Exact Current Loop operation to which the staged values are bound.",
+        help=(
+            "Compatibility/manual cross-check only. Connected assistants use the "
+            "qCoder-generated fixed payload binding and do not repeat this value."
+        ),
     )
     stage_input.add_argument(
         "--checkpoint-kind",
-        required=True,
+        required=False,
         choices=(
             "intent_review",
             "decision_resolution",
             "posture",
             "governing_change_confirmation",
         ),
-        help="Exact current checkpoint kind; values cannot be replayed at another checkpoint.",
+        help=(
+            "Compatibility/manual cross-check only. Connected assistants use the "
+            "qCoder-generated fixed payload binding and do not repeat this value."
+        ),
     )
     checkpoint_source = stage_input.add_mutually_exclusive_group(required=True)
     checkpoint_source.add_argument(
@@ -1579,12 +1593,19 @@ def _cmd_current_loop(argv: list[str]) -> int:
                 ),
             )
         elif command == "prepare-generation":
+            if not args.use_current_intent and (
+                args.profile is None or args.interpretation_summary is None
+            ):
+                parser.error(
+                    "prepare-generation requires --profile and "
+                    "--interpretation-summary unless --use-current-intent is used"
+                )
             answers = _parse_current_loop_key_values(args.profile_answer)
             dispositions = _parse_current_loop_decision_dispositions(args.decision_disposition)
             result = coordinator.prepare_generation(
-                profile_id=args.profile,
+                profile_id=args.profile or "",
                 proposed_interpretation={
-                    "summary": args.interpretation_summary,
+                    "summary": args.interpretation_summary or "",
                     "provenance_role": "assistant_proposed",
                 },
                 reviewed_profile_answers=answers,
@@ -1598,6 +1619,7 @@ def _cmd_current_loop(argv: list[str]) -> int:
                 explicit_posture_authority=args.approve_posture_change,
                 posture_change_reason=args.posture_reason,
                 posture_authority_provenance=args.posture_provenance,
+                posture_only=args.use_current_intent,
             )
         elif command == "record-ide-authority":
             result = coordinator.record_ide_authority(

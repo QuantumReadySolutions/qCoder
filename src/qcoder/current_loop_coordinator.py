@@ -58,27 +58,32 @@ from qcoder.current_loop import (
     update_selected_artifact_authorization,
 )
 from qcoder.current_loop_checkpoint_input import (
-    CHECKPOINT_INPUT_OPERATIONS,
+    CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_ID,
     CHECKPOINT_INPUT_SCHEMA_ID,
     CHECKPOINT_INPUT_SCHEMA_VERSION,
+    CheckpointInputStructuralError,
+    checkpoint_input_binding_values,
+    checkpoint_input_construction,
     checkpoint_input_contract_snapshot,
+    checkpoint_input_safe_structure,
     checkpoint_input_values,
     normalize_checkpoint_input,
 )
 from qcoder.context_loop import CONTEXT_LOOP_GATE
 
-COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v6"
-COORDINATOR_RESULT_SCHEMA_VERSION = 6
-COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v5"
-PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v4"
+COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v7"
+COORDINATOR_RESULT_SCHEMA_VERSION = 7
+COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v6"
+PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v5"
 OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
     {
+        "qcoder.current_loop.coordinator_state.v4",
         "qcoder.current_loop.coordinator_state.v1",
         "qcoder.current_loop.coordinator_state.v2",
         "qcoder.current_loop.coordinator_state.v3",
     }
 )
-COORDINATOR_STATE_SCHEMA_VERSION = 5
+COORDINATOR_STATE_SCHEMA_VERSION = 6
 CONSEQUENCE_PROJECTION_SCHEMA_ID = "qcoder.current_loop.consequence_projection.v1"
 PERFORMANCE_SCHEMA_ID = "qcoder.current_loop.private_performance.v1"
 INPUT_SOURCE_DISPOSITION_SCHEMA_ID = "qcoder.current_loop.permitted_input_source_disposition.v1"
@@ -903,6 +908,8 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "input_source_disposition": True,
             "bounded_input_semantics": True,
             "protocol_binding": True,
+            "checkpoint_input_construction": True,
+            "checkpoint_input_construction_alternatives": True,
             "prohibited_derivations": True,
             "no_action_reason": True,
             "no_action_disposition": True,
@@ -1256,19 +1263,15 @@ def _checkpoint_input_stage_invocation(
 ) -> dict[str, Any]:
     invocation = _invocation_template(
         "stage-checkpoint-input",
-        required_flags=(
-            "--operation",
-            "--checkpoint-kind",
-            "--checkpoint-input-stdin or --checkpoint-input-file",
-        ),
+        required_flags=("--checkpoint-input-stdin or --checkpoint-input-file",),
         new_inputs=("assistant_created_versioned_checkpoint_input",),
     )
     invocation.update(
         {
-            "argument_values": [
-                {"flag": "--operation", "value": operation},
-                {"flag": "--checkpoint-kind", "value": checkpoint_kind},
-            ],
+            "qcoder_owned_construction_source": "checkpoint_input_construction",
+            "operation": operation,
+            "checkpoint_kind": checkpoint_kind,
+            "operation_or_checkpoint_flags_required": False,
             "input_transports": ["stdin", "file"],
             "literal_free_text_in_argv": False,
             "customer_creates_input": False,
@@ -1327,10 +1330,6 @@ _ACTION_INPUT_SOURCE_CATEGORIES = {
     "stage_exact_intent_correction_for_review": ("checkpoint_input_transport",),
     "stage_exact_intent_interpretation_for_review": ("checkpoint_input_transport",),
     "stage_exact_decision_resolution_or_switch_posture": ("checkpoint_input_transport",),
-    "stage_exact_posture_transition_for_review": (
-        "bounded_enumerated_customer_choice",
-        "checkpoint_input_transport",
-    ),
     "stage_exact_continuation_choice": ("checkpoint_input_transport",),
     "stage_exact_proposal_confirmation_or_decline": ("checkpoint_input_transport",),
     "stage_exact_unchanged_continuation_for_review": ("checkpoint_input_transport",),
@@ -1595,8 +1594,8 @@ class CurrentLoopCoordinator:
     def stage_checkpoint_input(
         self,
         *,
-        operation: str,
-        checkpoint_kind: str,
+        operation: str | None,
+        checkpoint_kind: str | None,
         payload: Mapping[str, Any],
         transport: str,
     ) -> dict[str, Any]:
@@ -1604,8 +1603,25 @@ class CurrentLoopCoordinator:
 
         started = self.clock()
         try:
-            if operation not in CHECKPOINT_INPUT_OPERATIONS:
-                raise CurrentLoopError("checkpoint_input_operation_invalid")
+            supplied_operation, supplied_kind = checkpoint_input_binding_values(payload)
+            if operation is None:
+                operation = supplied_operation
+            if checkpoint_kind is None:
+                checkpoint_kind = supplied_kind
+            if operation != supplied_operation:
+                raise CheckpointInputStructuralError(
+                    "checkpoint_input_operation_mismatch",
+                    expected_operation=operation,
+                    expected_checkpoint_kind=checkpoint_kind,
+                    **checkpoint_input_safe_structure(payload),
+                )
+            if checkpoint_kind != supplied_kind:
+                raise CheckpointInputStructuralError(
+                    "checkpoint_input_checkpoint_mismatch",
+                    expected_operation=operation,
+                    expected_checkpoint_kind=checkpoint_kind,
+                    **checkpoint_input_safe_structure(payload),
+                )
             allowed_phases = {
                 "prepare_generation": {"intent_review", "generation_ready"},
                 "continue_unchanged": {"continuation_choice", "change_confirmation"},
@@ -1632,6 +1648,7 @@ class CurrentLoopCoordinator:
                 history.append(
                     {
                         "content_digest": prior.get("content_digest"),
+                        "transport_utf8_sha256": prior.get("transport_utf8_sha256"),
                         "operation": prior.get("operation"),
                         "status": "invalidated",
                     }
@@ -1644,12 +1661,19 @@ class CurrentLoopCoordinator:
                 loop_ref=str(state["loop_ref"]),
                 phase=str(coordinator["phase"]),
                 expected_state_revision=int(state["state_revision"]) + 2,
+                source_state_revision=int(state["state_revision"]),
                 captured_at=self.clock(),
                 transport=transport,
             )
             if any(
                 isinstance(item, Mapping)
-                and item.get("content_digest") == record["content_digest"]
+                and (
+                    item.get("content_digest") == record["content_digest"]
+                    or (
+                        record.get("transport_utf8_sha256") is not None
+                        and item.get("transport_utf8_sha256") == record.get("transport_utf8_sha256")
+                    )
+                )
                 and item.get("status") == "promoted"
                 for item in history
             ):
@@ -1733,6 +1757,7 @@ class CurrentLoopCoordinator:
             history.append(
                 {
                     "content_digest": digest,
+                    "transport_utf8_sha256": pending.get("transport_utf8_sha256"),
                     "operation": operation,
                     "status": "promoted",
                     "promoted_at": self.clock(),
@@ -2216,6 +2241,7 @@ class CurrentLoopCoordinator:
         explicit_posture_authority: bool = False,
         posture_change_reason: str | None = None,
         posture_authority_provenance: str | None = None,
+        posture_only: bool = False,
     ) -> dict[str, Any]:
         started = self.clock()
         try:
@@ -2237,10 +2263,8 @@ class CurrentLoopCoordinator:
                 raise CurrentLoopError("generation_posture_invalid")
             pending_resolution = coordinator.get("pending_decision_resolution")
             if requested_posture != current_posture:
-                if (
-                    explicit_posture_authority is not True
-                    or not isinstance(posture_change_reason, str)
-                    or not isinstance(posture_authority_provenance, str)
+                if explicit_posture_authority is not True or not isinstance(
+                    posture_authority_provenance, str
                 ):
                     return self._checkpoint_result(
                         operation="prepare_generation",
@@ -2265,7 +2289,11 @@ class CurrentLoopCoordinator:
                     coordinator,
                     source_posture=current_posture,
                     requested_posture=requested_posture,
-                    reason=posture_change_reason,
+                    reason=(
+                        posture_change_reason
+                        if isinstance(posture_change_reason, str)
+                        else "Explicit bounded customer posture choice."
+                    ),
                     provenance=posture_authority_provenance,
                 )
                 coordinator["customer_summary"] = (
@@ -2277,6 +2305,24 @@ class CurrentLoopCoordinator:
                 state = self.store.read()
                 coordinator = self._coordinator_state(state)
                 posture_transition_applied = True
+                if posture_only:
+                    return self._result(
+                        operation="prepare_generation",
+                        ok=True,
+                        state=state,
+                        summary=coordinator["customer_summary"],
+                        elapsed=self.clock() - started,
+                        category="generation_posture_transition_recorded",
+                        details={
+                            "source_posture": current_posture,
+                            "selected_posture": requested_posture,
+                            "bounded_enumerated_choice": True,
+                            "checkpoint_input_transport_used": False,
+                            "protected_call_performed": False,
+                        },
+                    )
+            elif posture_only:
+                raise CurrentLoopError("generation_posture_transition_not_requested")
 
             existing_records: list[Mapping[str, Any]] = []
             prior_dispositions: list[Mapping[str, Any]] = []
@@ -4634,19 +4680,26 @@ class CurrentLoopCoordinator:
         for field in fields:
             if field["name"] == "generation_posture":
                 field["name"] = "requested_generation_posture"
+        state = self.store.read()
+        coordinator = self._coordinator_state(state)
+        construction = checkpoint_input_construction(
+            operation="prepare_generation",
+            checkpoint_kind="intent_review",
+            workspace_binding=str(state["workspace_root"]),
+            loop_ref=str(state["loop_ref"]),
+            phase=str(coordinator["phase"]),
+            expected_state_revision=int(state["state_revision"]),
+        )
         payload: dict[str, Any] = {
-            "schema_id": CHECKPOINT_INPUT_SCHEMA_ID,
-            "schema_version": CHECKPOINT_INPUT_SCHEMA_VERSION,
-            "operation": "prepare_generation",
-            "checkpoint_kind": "intent_review",
+            **deepcopy(construction["fixed_payload"]),
             "fields": fields,
         }
         raw = canonical_bytes(payload)
         payload["_transport_utf8_sha256"] = sha256(raw).hexdigest()
         payload["_transport_size_bytes"] = len(raw)
         return self.stage_checkpoint_input(
-            operation="prepare_generation",
-            checkpoint_kind="intent_review",
+            operation=None,
+            checkpoint_kind=None,
             payload=payload,
             transport="qcoder_held",
         )
@@ -5672,22 +5725,31 @@ class CurrentLoopCoordinator:
             if category == "posture_transition_authority_required":
                 protocol.update(
                     {
-                        "supported_next_action": ("stage_exact_posture_transition_for_review"),
-                        "next_invocation": _checkpoint_input_stage_invocation(
-                            "prepare_generation", "posture"
-                        ),
-                        "required_authority_input": _authority_input(
-                            None,
-                            (
-                                "Stage the posture, exact reason, and provenance for "
-                                "review before transmitting authority only."
+                        "supported_next_action": ("obtain_separate_generation_posture_authority"),
+                        "next_invocation": _invocation_template(
+                            "prepare-generation",
+                            required_flags=(
+                                "--use-current-intent",
+                                "--posture",
+                                "--approve-posture-change",
+                                "--posture-provenance",
+                            ),
+                            reused_inputs=("qcoder_held_current_intent",),
+                            new_inputs=("explicit_bounded_generation_posture_choice",),
+                            argument_values=(
+                                {
+                                    "flag": "--posture",
+                                    "value_source": "explicit_bounded_customer_choice",
+                                    "allowed_values": list(GENERATION_POSTURES),
+                                },
                             ),
                         ),
-                        "awaiting_confirmation_fields": [
-                            "generation_posture_transition",
-                            "posture_change_reason",
-                            "posture_authority_provenance",
-                        ],
+                        "required_authority_input": _authority_input(
+                            "--approve-posture-change",
+                            "Transmit only the explicit bounded posture choice.",
+                            additional_flags=("--posture", "--posture-provenance"),
+                        ),
+                        "awaiting_confirmation_fields": ["generation_posture_transition"],
                         "confirmation_transmission_state": "not_supplied",
                         "permitted_input_source": (
                             "explicit_user_transition_or_explicitly_accepted_recommendation"
@@ -6012,6 +6074,63 @@ class CurrentLoopCoordinator:
             raise CurrentLoopError("confirmation_transmission_state_invalid")
         return protocol
 
+    def _attach_checkpoint_input_constructions(
+        self,
+        *,
+        state: Mapping[str, Any],
+        phase: str,
+        protocol: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        completed = deepcopy(dict(protocol))
+        disposition = completed.get("input_source_disposition")
+        categories = disposition.get("categories", []) if isinstance(disposition, Mapping) else []
+        if "checkpoint_input_transport" not in categories:
+            completed["checkpoint_input_construction"] = None
+            completed["checkpoint_input_construction_alternatives"] = []
+            return completed
+        action = completed.get("supported_next_action")
+        pairs: tuple[tuple[str, str], ...]
+        if action in {
+            "stage_exact_intent_checkpoint_input",
+            "stage_exact_intent_correction_for_review",
+            "stage_exact_intent_interpretation_for_review",
+        }:
+            pairs = (("prepare_generation", "intent_review"),)
+        elif action == "stage_exact_decision_resolution_or_switch_posture":
+            pairs = (("prepare_generation", "decision_resolution"),)
+        elif action == "stage_exact_unchanged_continuation_for_review":
+            pairs = (("continue_unchanged", "governing_change_confirmation"),)
+        elif action == "stage_exact_continuation_choice":
+            pairs = (
+                ("continue_unchanged", "governing_change_confirmation"),
+                ("propose_change", "governing_change_confirmation"),
+            )
+        elif action == "stage_exact_proposal_confirmation_or_decline":
+            pairs = (
+                ("confirm_change", "governing_change_confirmation"),
+                ("continue_unchanged", "governing_change_confirmation"),
+            )
+        else:
+            raise CurrentLoopError(f"checkpoint_input_construction_undefined_{action}")
+        constructions = [
+            checkpoint_input_construction(
+                operation=operation,
+                checkpoint_kind=checkpoint_kind,
+                workspace_binding=str(state["workspace_root"]),
+                loop_ref=str(state["loop_ref"]),
+                phase=phase,
+                expected_state_revision=int(state["state_revision"]),
+            )
+            for operation, checkpoint_kind in pairs
+        ]
+        completed["checkpoint_input_construction"] = (
+            deepcopy(constructions[0]) if len(constructions) == 1 else None
+        )
+        completed["checkpoint_input_construction_alternatives"] = deepcopy(
+            constructions if len(constructions) > 1 else []
+        )
+        return completed
+
     def _result(
         self,
         *,
@@ -6047,6 +6166,13 @@ class CurrentLoopCoordinator:
             state_status=coordinator["state_status"],
             checkpoint_kind=coordinator["checkpoint_kind"],
             coordinator=coordinator,
+            protocol=protocol,
+        )
+        protocol.setdefault("checkpoint_input_construction", None)
+        protocol.setdefault("checkpoint_input_construction_alternatives", [])
+        protocol = self._attach_checkpoint_input_constructions(
+            state=state,
+            phase=str(coordinator["phase"]),
             protocol=protocol,
         )
         self._validate_protocol_disposition(
@@ -6107,6 +6233,17 @@ class CurrentLoopCoordinator:
             state_status=state_status,
             checkpoint_kind=checkpoint_kind,
             coordinator=None,
+            protocol=protocol,
+        )
+        protocol.setdefault("checkpoint_input_construction", None)
+        protocol.setdefault("checkpoint_input_construction_alternatives", [])
+        protocol = self._attach_checkpoint_input_constructions(
+            state={
+                "workspace_root": str(self.workspace_root),
+                "loop_ref": "synthetic-protocol-matrix-loop",
+                "state_revision": 1,
+            },
+            phase=phase,
             protocol=protocol,
         )
         self._validate_protocol_disposition(
@@ -6314,8 +6451,45 @@ class CurrentLoopCoordinator:
             checkpoint_input_required = any(
                 "checkpoint-input" in str(flag) for flag in required_flags
             )
+            if (
+                checkpoint_kind == "posture"
+                and action
+                in {
+                    "obtain_separate_generation_posture_authority",
+                    "select_generation_posture_or_stop",
+                }
+                and "checkpoint_input_transport" in categories
+            ):
+                raise CurrentLoopError("coordinator_protocol_posture_transport_invalid")
             if checkpoint_input_required and "checkpoint_input_transport" not in categories:
                 raise CurrentLoopError("coordinator_protocol_checkpoint_input_source_mismatch")
+            if "checkpoint_input_transport" in categories:
+                construction = protocol.get("checkpoint_input_construction")
+                alternatives = protocol.get("checkpoint_input_construction_alternatives")
+                constructions = (
+                    [construction]
+                    if isinstance(construction, Mapping)
+                    else (alternatives if isinstance(alternatives, list) else [])
+                )
+                if not constructions or any(
+                    not isinstance(item, Mapping)
+                    or item.get("schema_id") != CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_ID
+                    or not isinstance(item.get("fixed_payload"), Mapping)
+                    or not isinstance(item.get("accepted_value_fields"), list)
+                    or not isinstance(item.get("construction_digest"), str)
+                    for item in constructions
+                ):
+                    raise CurrentLoopError(
+                        "coordinator_protocol_checkpoint_input_construction_missing"
+                    )
+                if any(
+                    "--operation" in item["stage_invocation"].get("required_flags", [])
+                    or "--checkpoint-kind" in item["stage_invocation"].get("required_flags", [])
+                    for item in constructions
+                ):
+                    raise CurrentLoopError(
+                        "coordinator_protocol_checkpoint_input_duplication_invalid"
+                    )
             if invocation.get("authority_only") is True:
                 if not {
                     "qcoder_held_staged_value",
@@ -6515,6 +6689,7 @@ class CurrentLoopCoordinator:
             category=category,
             phase=self._safe_phase(),
             elapsed=max(0.0, self.clock() - started),
+            details=(exc.safe_details if isinstance(exc, CheckpointInputStructuralError) else None),
         )
 
     def _safe_phase(self) -> str:

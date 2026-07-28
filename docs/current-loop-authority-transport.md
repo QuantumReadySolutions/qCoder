@@ -1,14 +1,14 @@
 # Current Loop free-text authority transport
 
 This inventory is normative for the connected-assistant runtime in
-`0.6.0a2+wi0418.authoritytransport2`.
+`0.6.0a2+wi0418.authoritytransport3`.
 
 Classification:
 
 - A — enumerated or canonical-reference input; ordinary argv is bounded.
 - B — already staged, displayed, and promoted using authority only.
 - C — arbitrary free text carried by
-  `qcoder.current_loop.checkpoint_input.v1`.
+  `qcoder.current_loop.checkpoint_input.v2`.
 - D — compatibility/manual inline transport that generated connected-assistant
   protocols never emit.
 
@@ -22,7 +22,7 @@ Classification:
 | `prepare-generation --constraint`, `--non-goal` | C, D | Stage exact lists; inline flags are compatibility/manual only. |
 | `prepare-generation --confirmation` | C, D | Stage exact confirmation when one is needed; approval never repeats it in argv. |
 | `prepare-generation --decision-disposition` selected value | C, D | Stage the full exact disposition set; decision IDs, actions, and provenance remain bounded fields. |
-| `prepare-generation --posture-reason` | C, D | Stage the exact reason at the posture checkpoint. |
+| `prepare-generation --posture-reason` | D | Compatibility/manual explanation only. The connected-assistant posture route transmits the bounded posture enum and authority, while qCoder reuses its current canonical intent. |
 | `authorize-artifacts --action`, provenance, role | A | Exact-set action and canonical provenance are bounded; paths remain exact retained paths. |
 | `authorize-artifacts --artifact-type` | D | Optional compatibility metadata; generated protocols do not emit a literal. |
 | `continue-unchanged --statement` | C, D | Stage the complete statement and promote it with authority only. |
@@ -30,12 +30,21 @@ Classification:
 | `confirm-change --confirmation` | C, D | Stage the proposal-specific confirmation; approval sends no repeated text. |
 | artifact, seed, parent, workspace, and canonical reference paths | A | Exact path/reference values only; no discovery or reconstruction. |
 
+Every checkpoint-input result includes
+`qcoder.current_loop.checkpoint_input_construction.v1`. qCoder owns its fixed
+schema, operation, checkpoint kind, phase, loop, workspace binding, expected
+revision, limits, transport, and digest semantics. The assistant copies
+`fixed_payload` unchanged and supplies only declared `fields`; it does not
+independently repeat operation or checkpoint kind in CLI flags and never
+computes a digest.
+
 The connected-assistant protocol uses:
 
-1. `stage-checkpoint-input` with explicit UTF-8 stdin or a bounded UTF-8 file;
-2. qCoder's complete exact display;
-3. `approve-checkpoint-input --approve` with no free-text values; or
-4. a replacement staged input for correction.
+1. the exact qCoder-generated construction artifact;
+2. `stage-checkpoint-input` with explicit UTF-8 stdin or a bounded UTF-8 file;
+3. qCoder's complete exact display;
+4. `approve-checkpoint-input --approve` with no free-text values; or
+5. a replacement staged input for correction.
 
 Supplying content never grants authority or calls Protected. Replay, stale
 revision, phase/operation/workspace mismatch, invalid UTF-8, NUL, unsafe
@@ -75,7 +84,7 @@ Combining categories never permits arbitrary free text in argv.
   both choices naturally and may transmit a user-accepted recommendation, but
   it may not infer a posture or silently select a default. This checkpoint does
   not use arbitrary checkpoint-input transport.
-- Intent, decision-resolution, posture-reason, continuation, and governing
+- Intent, decision-resolution, continuation, and governing
   proposal text use checkpoint-input staging whenever qCoder does not already
   hold the exact values.
 - Hosted-presented clarification values are staged automatically. Unchanged
@@ -120,3 +129,17 @@ Missing source dispositions, unsupported posture values, ambiguous authority,
 stale bindings, content-plus-approval bypass, replay, and contradictory
 cross-field combinations fail closed. No actionable checkpoint may serialize
 `permitted_input_source: null`.
+
+## Construction completeness and black-box consumption
+
+The construction artifact declares every accepted value field, whether it is
+required, its bounded type and provenance choices, UTF-8 limits, exact
+stdin/file semantics, and qCoder-owned digest rules. A structural rejection
+returns only safe enum, schema, revision, field-name, byte-length, and digest
+metadata; it emits no hosted action and never echoes arbitrary text.
+
+Operator-authored transport proof and connected-assistant binding proof are
+distinct. A binding consumer is conforming only when it can construct every
+checkpoint payload from the serialized initialization binding, serialized
+coordinator result, and new synthetic customer values—without source or
+package inspection, proof records, transcripts, or `.qcoder`.

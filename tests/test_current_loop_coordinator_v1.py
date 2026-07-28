@@ -31,7 +31,7 @@ from qcoder.context_loop import (
 from qcoder.current_loop import CurrentLoopStore, decision_inventory_binding
 from qcoder.current_loop import CurrentLoopError
 from qcoder.current_loop_checkpoint_input import (
-    CHECKPOINT_INPUT_SCHEMA_ID,
+    PREVIOUS_CHECKPOINT_INPUT_SCHEMA_ID as CHECKPOINT_INPUT_SCHEMA_ID,
     decode_checkpoint_input,
 )
 from qcoder.current_loop_coordinator import (
@@ -572,9 +572,9 @@ def _activate_and_prepare(
 
 def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
     snapshot = coordinator_contract_snapshot()
-    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v6"
-    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v5"
-    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 6
+    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v7"
+    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v6"
+    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 7
     assert all(snapshot["checkpoint_result_protocol"].values())
     assert snapshot["permitted_input_source_taxonomy"] == {
         "schema_id": INPUT_SOURCE_DISPOSITION_SCHEMA_ID,
@@ -617,7 +617,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("9296e2a3b7d244ca4739fb8d6d6edb098f5e2eeae36b791188bfd211413698b8")
+    assert contract_digest == ("07e293e2c304a9b5bb8402af7a506e3f7f5570a92975c62b2423284e5c1e3d7f")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
@@ -2256,10 +2256,12 @@ def test_decision_resolution_status_reemits_exact_guidance(tmp_path: Path) -> No
     assert status["details"]["decision_resolution"] == (blocked["details"]["decision_resolution"])
     assert status["supported_next_action"] == ("stage_exact_decision_resolution_or_switch_posture")
     assert status["next_invocation"]["required_flags"] == [
-        "--operation",
-        "--checkpoint-kind",
         "--checkpoint-input-stdin or --checkpoint-input-file",
     ]
+    assert (
+        status["checkpoint_input_construction"]["fixed_payload"]["binding"]["operation"]
+        == "prepare_generation"
+    )
     assert status["next_invocation"]["literal_free_text_in_argv"] is False
 
 
@@ -2569,8 +2571,8 @@ def test_every_checkpoint_result_is_deterministically_actionable(tmp_path: Path)
             summary="Synthetic checkpoint contract test.",
         )
         _assert_actionable_checkpoint(result)
-        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v6"
-        assert result["schema_version"] == 6
+        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v7"
+        assert result["schema_version"] == 7
 
 
 @pytest.mark.parametrize(

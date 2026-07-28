@@ -340,14 +340,18 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
     assert binding["contract_id"] == CLIENT_BINDING_CONTRACT_ID
     assert binding["package_version"] == __version__
     assert binding["coordinator_contract_digest"] == (
-        "28b0d5c266e1972c7ef86dc6387b1f427ed655c57f0dc33773507e8dd733897b"
+        "010e60c590d549bea827d0c3c98955c9f563c72a803537ef65f08dad2ccb9508"
     )
     assert binding["checkpoint_input_contract"] == {
-        "schema_id": "qcoder.current_loop.checkpoint_input.v1",
-        "schema_version": 1,
+        "schema_id": "qcoder.current_loop.checkpoint_input.v2",
+        "schema_version": 2,
+        "construction_schema_id": ("qcoder.current_loop.checkpoint_input_construction.v1"),
+        "construction_schema_version": 1,
         "transports": ["stdin", "file"],
         "approval_only_promotion": True,
         "literal_free_text_in_argv": False,
+        "qcoder_owns_fixed_construction_metadata": True,
+        "assistant_supplies_only_declared_new_values": True,
     }
     assert binding["qcoder_domain_tool_count"] == 12
     assert binding["supported_workstyles"] == [

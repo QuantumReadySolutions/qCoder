@@ -9,7 +9,9 @@ from typing import Any
 import pytest
 
 from qcoder.cli import main as cli_main
-from qcoder.current_loop_checkpoint_input import CHECKPOINT_INPUT_SCHEMA_ID
+from qcoder.current_loop_checkpoint_input import (
+    PREVIOUS_CHECKPOINT_INPUT_SCHEMA_ID as CHECKPOINT_INPUT_SCHEMA_ID,
+)
 
 
 class _BinaryStdin:

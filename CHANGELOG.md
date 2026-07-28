@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0a2+wi0418.authoritytransport3
+
+- Complete the connected-assistant checkpoint-input construction binding while
+  retaining the lossless authority transport and exhaustive protocol matrix.
+
 ## 0.6.0a2+wi0418.authoritytransport2
 
 - Complete the versioned permitted-input-source taxonomy for every actionable

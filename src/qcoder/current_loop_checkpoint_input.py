@@ -13,8 +13,12 @@ from typing import Any, Mapping, Sequence
 
 from qcoder.current_loop import CurrentLoopError, canonical_bytes
 
-CHECKPOINT_INPUT_SCHEMA_ID = "qcoder.current_loop.checkpoint_input.v1"
-CHECKPOINT_INPUT_SCHEMA_VERSION = 1
+CHECKPOINT_INPUT_SCHEMA_ID = "qcoder.current_loop.checkpoint_input.v2"
+CHECKPOINT_INPUT_SCHEMA_VERSION = 2
+PREVIOUS_CHECKPOINT_INPUT_SCHEMA_ID = "qcoder.current_loop.checkpoint_input.v1"
+PREVIOUS_CHECKPOINT_INPUT_SCHEMA_VERSION = 1
+CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_ID = "qcoder.current_loop.checkpoint_input_construction.v1"
+CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_VERSION = 1
 CHECKPOINT_INPUT_MAX_BYTES = 131_072
 CHECKPOINT_INPUT_MAX_FIELDS = 64
 CHECKPOINT_INPUT_MAX_FIELD_BYTES = 20_000
@@ -77,6 +81,205 @@ _REQUIRED_OPERATION_FIELDS = {
     ),
     "confirm_change": frozenset({"semantic_confirmation"}),
 }
+
+_CHECKPOINT_KINDS_BY_OPERATION = {
+    "prepare_generation": frozenset({"intent_review", "decision_resolution", "posture"}),
+    "continue_unchanged": frozenset({"governing_change_confirmation"}),
+    "propose_change": frozenset({"governing_change_confirmation"}),
+    "confirm_change": frozenset({"governing_change_confirmation"}),
+}
+
+
+class CheckpointInputStructuralError(CurrentLoopError):
+    """A fail-closed structural error with customer-safe diagnostic metadata."""
+
+    def __init__(self, category: str, **safe_details: object) -> None:
+        super().__init__(category)
+        self.safe_details = {
+            "structural_error": {
+                "error_code": category,
+                "assistant_should_stop": True,
+                "hosted_operation_permitted": False,
+                "fresh_customer_input_required": bool(
+                    safe_details.pop("fresh_customer_input_required", False)
+                ),
+                **safe_details,
+            }
+        }
+
+
+def checkpoint_input_safe_structure(payload: Mapping[str, Any]) -> dict[str, Any]:
+    fields = payload.get("fields")
+    field_records: list[dict[str, Any]] = []
+    if isinstance(fields, list):
+        for item in fields:
+            if not isinstance(item, Mapping):
+                continue
+            name = item.get("name")
+            value = item.get("value")
+            if not isinstance(name, str):
+                continue
+            try:
+                encoded = (
+                    value.encode("utf-8") if isinstance(value, str) else canonical_bytes(value)
+                )
+            except (TypeError, ValueError):
+                continue
+            field_records.append(
+                {
+                    "name": name,
+                    "size_bytes": len(encoded),
+                    "value_sha256": sha256(encoded).hexdigest(),
+                }
+            )
+    binding = payload.get("binding")
+    return {
+        "received_schema_id": payload.get("schema_id"),
+        "received_schema_version": payload.get("schema_version"),
+        "received_operation": (
+            binding.get("operation") if isinstance(binding, Mapping) else payload.get("operation")
+        ),
+        "received_checkpoint_kind": (
+            binding.get("checkpoint_kind")
+            if isinstance(binding, Mapping)
+            else payload.get("checkpoint_kind")
+        ),
+        "received_state_revision": (
+            binding.get("expected_state_revision") if isinstance(binding, Mapping) else None
+        ),
+        "content_fields": field_records,
+        "transport_size_bytes": payload.get("_transport_size_bytes"),
+        "transport_sha256": payload.get("_transport_utf8_sha256"),
+    }
+
+
+def _workspace_binding_digest(workspace_binding: str) -> str:
+    return f"sha256:{sha256(workspace_binding.encode('utf-8')).hexdigest()}"
+
+
+def checkpoint_input_construction(
+    *,
+    operation: str,
+    checkpoint_kind: str,
+    workspace_binding: str,
+    loop_ref: str,
+    phase: str,
+    expected_state_revision: int,
+) -> dict[str, Any]:
+    """Return the complete client-visible recipe for one exact staging action."""
+
+    if (
+        operation not in CHECKPOINT_INPUT_OPERATIONS
+        or checkpoint_kind not in _CHECKPOINT_KINDS_BY_OPERATION[operation]
+        or not workspace_binding
+        or not loop_ref
+        or not phase
+        or expected_state_revision < 1
+    ):
+        raise CurrentLoopError("checkpoint_input_construction_binding_invalid")
+    fixed_payload = {
+        "schema_id": CHECKPOINT_INPUT_SCHEMA_ID,
+        "schema_version": CHECKPOINT_INPUT_SCHEMA_VERSION,
+        "binding": {
+            "operation": operation,
+            "checkpoint_kind": checkpoint_kind,
+            "phase": phase,
+            "loop_ref": loop_ref,
+            "workspace_binding": _workspace_binding_digest(workspace_binding),
+            "expected_state_revision": expected_state_revision,
+        },
+    }
+    construction: dict[str, Any] = {
+        "schema_id": CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_ID,
+        "schema_version": CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_VERSION,
+        "construction_mode": "checkpoint_input_transport",
+        "fixed_payload": fixed_payload,
+        "assistant_supplied_property": "fields",
+        "accepted_value_fields": [
+            {
+                "name": name,
+                "required": name in _REQUIRED_OPERATION_FIELDS[operation],
+                "value_type": "bounded_json_value_with_exact_utf8_text",
+                "allowed_provenance": list(CHECKPOINT_INPUT_PROVENANCE),
+            }
+            for name in sorted(_OPERATION_FIELDS[operation])
+        ],
+        "field_item_contract": {
+            "required_properties": ["name", "value", "provenance"],
+            "additional_properties": False,
+            "duplicate_names_permitted": False,
+        },
+        "serialization": {
+            "media_type": "application/json",
+            "encoding": "UTF-8",
+            "newline_normalization": False,
+            "terminal_control_policy": "tab_cr_lf_only",
+            "maximum_transport_bytes": CHECKPOINT_INPUT_MAX_BYTES,
+            "maximum_fields": CHECKPOINT_INPUT_MAX_FIELDS,
+            "maximum_field_bytes": CHECKPOINT_INPUT_MAX_FIELD_BYTES,
+        },
+        "digest_semantics": {
+            "assistant_computes_digest": False,
+            "transport_digest": "qcoder_sha256_of_exact_received_utf8_bytes",
+            "content_digest": ("qcoder_sha256_of_canonical_validated_schema_binding_and_fields"),
+            "field_digest": "qcoder_sha256_of_exact_utf8_or_canonical_json_value",
+            "canonicalization_or_field_order_must_not_be_inferred": True,
+        },
+        "stage_invocation": {
+            "subcommand": "stage-checkpoint-input",
+            "required_flags": ["--checkpoint-input-stdin or --checkpoint-input-file"],
+            "operation_or_checkpoint_flags_required": False,
+            "input_transports": ["stdin", "file"],
+            "literal_free_text_in_argv": False,
+            "customer_types_command": False,
+        },
+        "approval": {
+            "separate_invocation_required": True,
+            "subcommand": "approve-checkpoint-input",
+            "required_flags": ["--approve"],
+            "staged_values_retransmitted": False,
+            "content_submission_grants_authority": False,
+        },
+        "prohibitions": [
+            "assistant_must_not_modify_fixed_payload",
+            "assistant_must_not_duplicate_fixed_values_in_cli_flags",
+            "assistant_must_not_compute_or_supply_digests",
+            "assistant_must_not_reconstruct_values_from_transcript",
+            "assistant_must_not_inspect_source_or_package",
+            "assistant_must_not_inspect_qcoder_local_state",
+        ],
+    }
+    construction["construction_digest"] = sha256(canonical_bytes(construction)).hexdigest()
+    return construction
+
+
+def checkpoint_input_binding_values(payload: Mapping[str, Any]) -> tuple[str, str]:
+    """Read the qCoder-emitted operation and kind without accepting guesswork."""
+
+    binding = payload.get("binding")
+    if not isinstance(binding, Mapping):
+        operation = payload.get("operation")
+        checkpoint_kind = payload.get("checkpoint_kind")
+    else:
+        operation = binding.get("operation")
+        checkpoint_kind = binding.get("checkpoint_kind")
+    if not isinstance(operation, str) or operation not in CHECKPOINT_INPUT_OPERATIONS:
+        raise CheckpointInputStructuralError(
+            "checkpoint_input_operation_invalid",
+            received_operation=operation if isinstance(operation, str) else None,
+        )
+    if (
+        not isinstance(checkpoint_kind, str)
+        or checkpoint_kind not in _CHECKPOINT_KINDS_BY_OPERATION[operation]
+    ):
+        raise CheckpointInputStructuralError(
+            "checkpoint_input_checkpoint_mismatch",
+            expected_checkpoint_kinds=sorted(_CHECKPOINT_KINDS_BY_OPERATION[operation]),
+            received_checkpoint_kind=(
+                checkpoint_kind if isinstance(checkpoint_kind, str) else None
+            ),
+        )
+    return operation, checkpoint_kind
 
 
 def _unsafe_text_control(value: str) -> bool:
@@ -146,39 +349,104 @@ def normalize_checkpoint_input(
     loop_ref: str,
     phase: str,
     expected_state_revision: int,
+    source_state_revision: int,
     captured_at: float,
     transport: str,
 ) -> dict[str, Any]:
     """Validate assistant-created input and bind it to one exact local checkpoint."""
 
-    if set(payload) - {
+    schema_id = payload.get("schema_id")
+    schema_version = payload.get("schema_version")
+    legacy = (
+        schema_id == PREVIOUS_CHECKPOINT_INPUT_SCHEMA_ID
+        and schema_version == PREVIOUS_CHECKPOINT_INPUT_SCHEMA_VERSION
+    )
+    permitted_payload_keys = {
         "schema_id",
         "schema_version",
-        "operation",
-        "checkpoint_kind",
+        "binding",
         "fields",
         "_transport_utf8_sha256",
         "_transport_size_bytes",
-    }:
+    }
+    if legacy:
+        permitted_payload_keys.update({"operation", "checkpoint_kind"})
+    if set(payload) - permitted_payload_keys:
         raise CurrentLoopError("checkpoint_input_schema_invalid")
-    if (
-        payload.get("schema_id") != CHECKPOINT_INPUT_SCHEMA_ID
-        or payload.get("schema_version") != CHECKPOINT_INPUT_SCHEMA_VERSION
+    if not legacy and (
+        schema_id != CHECKPOINT_INPUT_SCHEMA_ID or schema_version != CHECKPOINT_INPUT_SCHEMA_VERSION
     ):
-        raise CurrentLoopError("checkpoint_input_schema_invalid")
-    if operation not in CHECKPOINT_INPUT_OPERATIONS or payload.get("operation") != operation:
-        raise CurrentLoopError("checkpoint_input_operation_mismatch")
+        raise CheckpointInputStructuralError(
+            "checkpoint_input_schema_invalid",
+            expected_schema_id=CHECKPOINT_INPUT_SCHEMA_ID,
+            expected_schema_version=CHECKPOINT_INPUT_SCHEMA_VERSION,
+            **checkpoint_input_safe_structure(payload),
+        )
+    supplied_operation, supplied_kind = checkpoint_input_binding_values(payload)
+    if operation not in CHECKPOINT_INPUT_OPERATIONS or supplied_operation != operation:
+        raise CheckpointInputStructuralError(
+            "checkpoint_input_operation_mismatch",
+            expected_operation=operation,
+            received_operation=supplied_operation,
+            expected_checkpoint_kind=checkpoint_kind,
+            received_checkpoint_kind=supplied_kind,
+        )
     if (
         transport not in {"stdin", "file", "qcoder_held"}
         or not workspace_binding
         or not loop_ref
         or not phase
         or expected_state_revision < 1
+        or source_state_revision < 1
     ):
         raise CurrentLoopError("checkpoint_input_binding_invalid")
-    supplied_kind = payload.get("checkpoint_kind")
     if supplied_kind != checkpoint_kind:
-        raise CurrentLoopError("checkpoint_input_checkpoint_mismatch")
+        raise CheckpointInputStructuralError(
+            "checkpoint_input_checkpoint_mismatch",
+            expected_operation=operation,
+            received_operation=supplied_operation,
+            expected_checkpoint_kind=checkpoint_kind,
+            received_checkpoint_kind=supplied_kind,
+        )
+    if not legacy:
+        binding = payload.get("binding")
+        expected_binding = {
+            "operation": operation,
+            "checkpoint_kind": checkpoint_kind,
+            "phase": phase,
+            "loop_ref": loop_ref,
+            "workspace_binding": _workspace_binding_digest(workspace_binding),
+            "expected_state_revision": source_state_revision,
+        }
+        if not isinstance(binding, Mapping):
+            raise CheckpointInputStructuralError(
+                "checkpoint_input_binding_mismatch",
+                expected_operation=operation,
+                expected_checkpoint_kind=checkpoint_kind,
+                expected_state_revision=source_state_revision,
+            )
+        received_revision = binding.get("expected_state_revision")
+        if received_revision != source_state_revision:
+            raise CheckpointInputStructuralError(
+                "checkpoint_input_state_revision_stale",
+                expected_operation=operation,
+                received_operation=binding.get("operation"),
+                expected_checkpoint_kind=checkpoint_kind,
+                received_checkpoint_kind=binding.get("checkpoint_kind"),
+                expected_state_revision=source_state_revision,
+                received_state_revision=received_revision,
+                fresh_customer_input_required=False,
+            )
+        if dict(binding) != expected_binding:
+            raise CheckpointInputStructuralError(
+                "checkpoint_input_binding_mismatch",
+                expected_operation=operation,
+                received_operation=binding.get("operation"),
+                expected_checkpoint_kind=checkpoint_kind,
+                received_checkpoint_kind=binding.get("checkpoint_kind"),
+                expected_state_revision=source_state_revision,
+                received_state_revision=received_revision,
+            )
     supplied_fields = payload.get("fields")
     if not isinstance(supplied_fields, list) or not supplied_fields:
         raise CurrentLoopError("checkpoint_input_fields_invalid")
@@ -230,6 +498,14 @@ def normalize_checkpoint_input(
     content_projection = {
         "schema_id": CHECKPOINT_INPUT_SCHEMA_ID,
         "schema_version": CHECKPOINT_INPUT_SCHEMA_VERSION,
+        "binding": {
+            "operation": operation,
+            "checkpoint_kind": checkpoint_kind,
+            "phase": phase,
+            "loop_ref": loop_ref,
+            "workspace_binding": _workspace_binding_digest(workspace_binding),
+            "expected_state_revision": source_state_revision,
+        },
         "operation": operation,
         "checkpoint_kind": checkpoint_kind,
         "fields": canonical_fields,
@@ -258,22 +534,28 @@ def normalize_checkpoint_input(
 def checkpoint_input_values(record: Mapping[str, Any]) -> dict[str, Any]:
     """Return exact staged values after validating the record digest."""
 
-    if (
-        record.get("schema_id") != CHECKPOINT_INPUT_SCHEMA_ID
-        or record.get("schema_version") != CHECKPOINT_INPUT_SCHEMA_VERSION
-        or record.get("status") != "pending"
-    ):
+    current = (
+        record.get("schema_id") == CHECKPOINT_INPUT_SCHEMA_ID
+        and record.get("schema_version") == CHECKPOINT_INPUT_SCHEMA_VERSION
+    )
+    legacy = (
+        record.get("schema_id") == PREVIOUS_CHECKPOINT_INPUT_SCHEMA_ID
+        and record.get("schema_version") == PREVIOUS_CHECKPOINT_INPUT_SCHEMA_VERSION
+    )
+    if (not current and not legacy) or record.get("status") != "pending":
         raise CurrentLoopError("checkpoint_input_pending_required")
     fields = record.get("fields")
     if not isinstance(fields, list):
         raise CurrentLoopError("checkpoint_input_record_invalid")
-    projection = {
+    projection: dict[str, Any] = {
         "schema_id": record["schema_id"],
         "schema_version": record["schema_version"],
         "operation": record.get("operation"),
         "checkpoint_kind": record.get("checkpoint_kind"),
         "fields": fields,
     }
+    if current:
+        projection["binding"] = record.get("binding")
     if sha256(canonical_bytes(projection)).hexdigest() != record.get("content_digest"):
         raise CurrentLoopError("checkpoint_input_digest_mismatch")
     values: dict[str, Any] = {}
@@ -288,7 +570,18 @@ def checkpoint_input_contract_snapshot() -> dict[str, Any]:
     return {
         "schema_id": CHECKPOINT_INPUT_SCHEMA_ID,
         "schema_version": CHECKPOINT_INPUT_SCHEMA_VERSION,
+        "construction_schema_id": CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_ID,
+        "construction_schema_version": CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_VERSION,
+        "previous_compatibility_schema_id": PREVIOUS_CHECKPOINT_INPUT_SCHEMA_ID,
         "operations": list(CHECKPOINT_INPUT_OPERATIONS),
+        "operation_fields": {
+            operation: {
+                "accepted": sorted(_OPERATION_FIELDS[operation]),
+                "required": sorted(_REQUIRED_OPERATION_FIELDS[operation]),
+                "checkpoint_kinds": sorted(_CHECKPOINT_KINDS_BY_OPERATION[operation]),
+            }
+            for operation in CHECKPOINT_INPUT_OPERATIONS
+        },
         "transports": ["stdin", "file"],
         "maximum_transport_bytes": CHECKPOINT_INPUT_MAX_BYTES,
         "maximum_fields": CHECKPOINT_INPUT_MAX_FIELDS,

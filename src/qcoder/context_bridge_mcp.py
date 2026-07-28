@@ -63,6 +63,12 @@ from qcoder.context_loop import (
     share_safe_request_baseline,
 )
 from qcoder.current_loop_coordinator import coordinator_contract_snapshot
+from qcoder.current_loop_checkpoint_input import (
+    CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_ID,
+    CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_VERSION,
+    CHECKPOINT_INPUT_SCHEMA_ID,
+    CHECKPOINT_INPUT_SCHEMA_VERSION,
+)
 from qcoder.current_loop import (
     CurrentLoopError,
     canonical_operation_request_sha256,
@@ -166,10 +172,15 @@ Blueprint-guided generation stops at the decision_resolution checkpoint and uses
 decision-disposition authority channel. A posture transition requires its separate explicit
 authority and must not rewrite the Working Blueprint.
 Never embed arbitrary user-approved free text in shell argv. When qCoder requests checkpoint
-input, use its versioned stdin or file staging channel, present every complete staged value, and
-then transmit approval only. Never reconstruct, quote, or reserialize a staged value from
-conversation. The customer never creates the machine input or types the command. A correction
-replaces the pending set and requires a new display and approval. Every active result's
+input, consume the complete checkpoint_input_construction object in that exact coordinator
+result. Copy its fixed_payload unchanged and supply only the declared new value fields. Never
+invent or independently duplicate schema, operation, checkpoint kind, phase, loop, workspace,
+revision, digest, canonicalization, or transport metadata. Use the construction's exact stdin or
+file staging invocation, present every complete staged value, and then transmit approval only.
+Never reconstruct, quote, or reserialize a staged value from conversation. Never inspect package
+source, qcoder.__file__, proof records, transcripts, or .qcoder to derive construction values.
+The customer never creates the machine input or types the command. A correction replaces the
+pending set and requires a new display and approval. Every active result's
 next_invocation is authoritative. Every actionable result must provide a non-null
 permitted_input_source and bounded input semantics; if it does not, stop rather than infer,
 reconstruct, inspect source, inspect proof records, search transcripts, or inspect .qcoder. A
@@ -259,11 +270,15 @@ def build_client_binding_descriptor(
             "package_version": __version__,
             "coordinator_contract_digest": contract_digest,
             "checkpoint_input_contract": {
-                "schema_id": "qcoder.current_loop.checkpoint_input.v1",
-                "schema_version": 1,
+                "schema_id": CHECKPOINT_INPUT_SCHEMA_ID,
+                "schema_version": CHECKPOINT_INPUT_SCHEMA_VERSION,
+                "construction_schema_id": CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_ID,
+                "construction_schema_version": (CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_VERSION),
                 "transports": ["stdin", "file"],
                 "approval_only_promotion": True,
                 "literal_free_text_in_argv": False,
+                "qcoder_owns_fixed_construction_metadata": True,
+                "assistant_supplies_only_declared_new_values": True,
             },
             "qcoder_domain_tool_count": len(EXPECTED_TOOLS),
             "supported_workstyles": [
