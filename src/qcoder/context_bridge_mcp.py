@@ -88,7 +88,48 @@ EXPECTED_TOOLS = (
     "create_single_loop_evidence_diff",
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
-CLIENT_ACTIVATION_INSTRUCTIONS = """REQUEST FIDELITY
+CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
+CLIENT_BINDING_SCHEMA_VERSION = 1
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v1"
+CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
+qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
+capability and evidence surface for source review, circuit analysis, result review, Blueprint
+preparation, and the other supported bounded operations. qcoder current-loop is qCoder's separate
+supported local orchestration and continuity surface for an active build. Current Loop is
+intentionally not one of the twelve MCP tools; both surfaces belong to qCoder.
+
+WORKSTYLE ROUTING
+Available but inactive: when there is no explicit qCoder request, no accepted qCoder activation
+offer, and no explicit bounded qCoder capability request, perform no qCoder operation. Do not
+invoke the coordinator, call a qCoder MCP domain tool, or create qCoder state. A proactive offer
+is permitted but must not activate qCoder without acceptance.
+
+Single capability: for an explicit bounded qCoder capability request without active-build
+activation, use the applicable existing Context Bridge MCP tool. Do not invoke qcoder current-loop,
+activate a complete Context Loop, attach the bounded result to loop lineage, transform it into
+governing intent, or create continuity. Direct bounded use of one applicable MCP tool is legitimate
+in this workstyle.
+
+Active build: explicit wording equivalent to “Use qCoder for this build.” or explicit acceptance
+of a qCoder activation offer routes to the local coordinator first. Then follow
+coordinator-directed local and hosted actions. Generation posture is a later generation choice,
+not a workstyle route.
+
+ACTIVE-BUILD LOCAL EXECUTION
+Execute the supplied coordinator_prefix argv through the client's ordinary local command-execution
+capability. That capability may be displayed as terminal, shell, Bash, or another client-specific
+name; qCoder does not depend on its displayed name. Do not compare coordinator_prefix against the
+twelve-tool catalog: its absence from that catalog is intentional. Invoking the exact declared
+coordinator is the supported qCoder active-build route, not a local fallback, customer-authored
+CLI choreography, or an improvised review. The customer never types the command. Do not perform
+the requested IDE write or run before the coordinator reaches its separate authority checkpoint.
+
+Hosted operations during active build: the coordinator may invoke or direct existing Context
+Bridge operations. Follow those directions and never invent a hosted-tool order. Do not call one
+of the twelve domain tools in place of local coordinator activation. This restriction does not
+prohibit legitimate direct use of one applicable MCP tool in the single-capability workstyle.
+
+REQUEST FIDELITY
 Preserve the complete governing customer message verbatim as original_request. Do not summarize,
 abbreviate, paraphrase, reword, or omit activation wording, posture wording, constraints, choices,
 review preferences, continuation wording, or Blueprint boundaries. Extracting activation,
@@ -146,23 +187,20 @@ this IDE, optional passive Build Review, and Continue without visual review. Unc
 Continuation creates no Evolved Blueprint.
 
 PROHIBITED ACTIONS
-Use the supplied python_executable exactly and extend coordinator_prefix without replacing its
-executable. Pass transport_arguments exactly where supported. Never run `which` or `where`, inspect
-PATH or environment variables, traverse the filesystem for a runtime, inspect Cursor, Claude Code,
-or Codex configuration. Never inspect Cursor, Claude Code, or Codex configuration to rediscover the
-runtime. Never list, browse, or inspect the executable path's parent directories.
+Never activate silently. Never run `which` or `where`, inspect PATH or environment variables,
+or traverse the filesystem for a runtime. Never inspect Cursor, Claude Code, or Codex configuration
+to rediscover the runtime. Never list, browse, or inspect the executable path's parent directories.
 Never enumerate, list, search, open, read, copy, hash, parse, inspect, summarize, or
 reverse-engineer .qcoder or anything below it. Never search for canonical state, inspect parent or
 home-directory qCoder state, or inspect sibling repositories. Never use workspace discovery to
 construct a qCoder review set, turn a listing or search result into candidates, or infer
 neighboring artifacts. Never open, read, print, copy, hash, or validate the token-file contents.
 The declared paths authorize only invoking the declared qCoder runtime and passing its token-file
-path; they grant no general access outside the active workspace. First use coordinator_prefix
-with --help; stop if it does not expose qCoder current-loop. Stop on authentication, entitlement,
-or hosted-service failure. Never manually sequence Context Bridge tools and never substitute a
-local or manual review fallback. Do not replace coordinator truth with a locally assembled
-review. Never reconstruct canonical artifacts, transfer raw artifacts, or inspect client
-configuration.
+path; they grant no general access outside the active workspace. Stop on authentication,
+entitlement, or hosted-service failure. Never manually sequence Context Bridge tools for an active
+build and never substitute a local or manual review fallback. Do not replace coordinator truth
+with a locally assembled review. Never reconstruct canonical artifacts, transfer raw artifacts,
+or inspect client configuration.
 """
 
 
@@ -183,6 +221,69 @@ def _resolved_configuration_path(
     if style == "posix":
         return posixpath.abspath(str(value))
     raise ValueError("configured_runtime_path_style_invalid")
+
+
+def build_client_binding_descriptor(
+    *,
+    coordinator_prefix: list[str],
+) -> dict[str, Any]:
+    contract_digest = hashlib.sha256(
+        json.dumps(
+            context_loop_contract_snapshot(),
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    return {
+        "client_binding_contract": {
+            "schema_id": CLIENT_BINDING_SCHEMA_ID,
+            "schema_version": CLIENT_BINDING_SCHEMA_VERSION,
+            "contract_id": CLIENT_BINDING_CONTRACT_ID,
+            "package_version": __version__,
+            "coordinator_contract_digest": contract_digest,
+            "qcoder_domain_tool_count": len(EXPECTED_TOOLS),
+            "supported_workstyles": [
+                "available_inactive",
+                "single_capability",
+                "active_build",
+            ],
+            "active_build_activation_phrase_category": (
+                "explicit_use_qcoder_for_this_build_or_accepted_offer"
+            ),
+            "required_client_capability": "ordinary_local_command_execution",
+            "surfaces": {
+                "hosted_capability": {
+                    "transport": "mcp_tools",
+                    "tool_count": len(EXPECTED_TOOLS),
+                    "single_capability_supported": True,
+                },
+                "local_orchestration": {
+                    "transport": "local_command",
+                    "command_prefix": list(coordinator_prefix),
+                    "orchestration_surface_is_not_an_mcp_tool": True,
+                    "customer_never_types_command": True,
+                },
+            },
+            "workstyle_routes": {
+                "available_inactive": {
+                    "trigger": "no_explicit_qcoder_request",
+                    "action": "none",
+                },
+                "single_capability": {
+                    "trigger": "explicit_bounded_capability_request",
+                    "action": "use_applicable_mcp_tool",
+                    "activates_context_loop": False,
+                },
+                "active_build": {
+                    "trigger": "explicit_use_qcoder_for_this_build_or_accepted_offer",
+                    "action": "invoke_local_coordinator_first",
+                    "then": "follow_coordinator_directed_local_and_hosted_actions",
+                },
+            },
+            "manual_active_build_tool_sequencing_prohibited": True,
+        }
+    }
 
 
 def build_client_activation_instructions(
@@ -216,14 +317,24 @@ def build_client_activation_instructions(
             token_path,
         ],
     }
+    binding = build_client_binding_descriptor(
+        coordinator_prefix=runtime["coordinator_prefix"],
+    )
     runtime_block = json.dumps(runtime, indent=2, sort_keys=False)
+    binding_block = json.dumps(binding, indent=2, sort_keys=False)
     return (
         f"{CLIENT_ACTIVATION_INSTRUCTIONS}\n"
         "CONFIGURED RUNTIME\n"
+        "Use the supplied python_executable exactly and extend coordinator_prefix without replacing "
+        "its executable. Pass transport_arguments exactly where supported. As a positive setup "
+        "check, first execute coordinator_prefix with --help through the ordinary local "
+        "command-execution capability; stop if it does not expose qCoder current-loop.\n\n"
         "Configured qCoder runtime (JSON values are exact operational metadata; "
         "coordinator_prefix is an argv array):\n"
         f"{runtime_block}\n\n"
         "Use the coordinator_prefix argv array exactly as supplied.\n\n"
+        "Connected-assistant client binding (JSON values are the versioned routing descriptor):\n"
+        f"{binding_block}\n\n"
         f"{CLIENT_AUTHORITY_AND_PROHIBITED_INSTRUCTIONS}"
     )
 

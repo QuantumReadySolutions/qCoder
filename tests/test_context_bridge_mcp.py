@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -20,8 +21,12 @@ from qcoder.blueprint_decisions import (
     with_consistency_digest,
 )
 from qcoder.context_bridge_mcp import (
+    CLIENT_BINDING_CONTRACT_ID,
+    CLIENT_BINDING_SCHEMA_ID,
+    CLIENT_BINDING_SCHEMA_VERSION,
     EXPECTED_TOOLS,
     build_client_activation_instructions,
+    build_client_binding_descriptor,
     handle_jsonrpc_message,
     post_context_bridge,
     run_smoke,
@@ -76,6 +81,16 @@ def _activation_runtime(instructions: str) -> dict[str, object]:
     runtime, _ = json.JSONDecoder().raw_decode(serialized)
     assert isinstance(runtime, dict)
     return runtime
+
+
+def _client_binding_descriptor(instructions: str) -> dict[str, object]:
+    marker = (
+        "Connected-assistant client binding (JSON values are the versioned routing descriptor):\n"
+    )
+    serialized = instructions.split(marker, 1)[1]
+    descriptor, _ = json.JSONDecoder().raw_decode(serialized)
+    assert isinstance(descriptor, dict)
+    return descriptor
 
 
 def test_context_bridge_root_help_includes_command() -> None:
@@ -177,6 +192,7 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
     assert initialized is not None
     instructions = initialized["result"]["instructions"]
     runtime = _activation_runtime(instructions)
+    descriptor = _client_binding_descriptor(instructions)
     executable = str(Path(sys.executable).absolute())
     token_path = str(token_file.resolve())
     assert runtime == {
@@ -247,6 +263,172 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
     assert token_secret not in instructions
     for value in environment_secrets.values():
         assert value not in instructions
+    assert descriptor["client_binding_contract"]["package_version"] == __version__
+    serialized_descriptor = json.dumps(descriptor, sort_keys=True)
+    assert token_secret not in serialized_descriptor
+    for value in environment_secrets.values():
+        assert value not in serialized_descriptor
+
+
+def test_initialize_binds_two_surfaces_and_three_workstyles_without_new_tool(
+    tmp_path: Path,
+) -> None:
+    instructions = build_client_activation_instructions(
+        base_url="https://configured.example.invalid",
+        token_file=tmp_path / "token.txt",
+        python_executable=tmp_path / "runtime" / "python",
+    )
+    normalized = " ".join(instructions.split())
+    for required in (
+        "QCODER ASSISTANT SURFACES",
+        "exactly twelve Context Bridge MCP tools",
+        "bounded hosted capability and evidence surface",
+        "separate supported local orchestration and continuity surface",
+        "intentionally not one of the twelve MCP tools",
+        "WORKSTYLE ROUTING",
+        "Available but inactive",
+        "Single capability",
+        "Active build",
+        "ACTIVE-BUILD LOCAL EXECUTION",
+        "ordinary local command-execution capability",
+        "Do not compare coordinator_prefix against the twelve-tool catalog",
+        "absence from that catalog is intentional",
+        "supported qCoder active-build route",
+        "not a local fallback",
+        "customer-authored CLI choreography",
+        "The customer never types the command",
+        "explicit wording equivalent to “Use qCoder for this build.”",
+        "local coordinator first",
+        "never invent a hosted-tool order",
+        "does not prohibit legitimate direct use of one applicable MCP tool",
+        "Do not call one of the twelve domain tools in place of local coordinator activation",
+    ):
+        assert required in normalized
+    assert len(tool_descriptors()) == 12
+    assert "qcoder current-loop" not in [tool["name"] for tool in tool_descriptors()]
+
+
+def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> None:
+    prefix = ["/opt/qCoder Runtime/bin/python", "-m", "qcoder", "current-loop"]
+    first = build_client_binding_descriptor(coordinator_prefix=prefix)
+    second = build_client_binding_descriptor(coordinator_prefix=prefix)
+    assert first == second
+    serialized = json.dumps(first, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+    assert (
+        hashlib.sha256(serialized.encode()).hexdigest()
+        == hashlib.sha256(
+            json.dumps(second, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode()
+        ).hexdigest()
+    )
+
+    binding = first["client_binding_contract"]
+    assert binding["schema_id"] == CLIENT_BINDING_SCHEMA_ID
+    assert binding["schema_version"] == CLIENT_BINDING_SCHEMA_VERSION
+    assert binding["contract_id"] == CLIENT_BINDING_CONTRACT_ID
+    assert binding["package_version"] == __version__
+    assert binding["coordinator_contract_digest"] == (
+        "6555c9be63e544202d5e23d18e54118827e0aba5a2b7dbfbf0662e317bd8b0cc"
+    )
+    assert binding["qcoder_domain_tool_count"] == 12
+    assert binding["supported_workstyles"] == [
+        "available_inactive",
+        "single_capability",
+        "active_build",
+    ]
+    assert binding["required_client_capability"] == "ordinary_local_command_execution"
+    assert binding["surfaces"] == {
+        "hosted_capability": {
+            "transport": "mcp_tools",
+            "tool_count": 12,
+            "single_capability_supported": True,
+        },
+        "local_orchestration": {
+            "transport": "local_command",
+            "command_prefix": prefix,
+            "orchestration_surface_is_not_an_mcp_tool": True,
+            "customer_never_types_command": True,
+        },
+    }
+    assert binding["workstyle_routes"]["available_inactive"] == {
+        "trigger": "no_explicit_qcoder_request",
+        "action": "none",
+    }
+    assert binding["workstyle_routes"]["single_capability"] == {
+        "trigger": "explicit_bounded_capability_request",
+        "action": "use_applicable_mcp_tool",
+        "activates_context_loop": False,
+    }
+    assert binding["workstyle_routes"]["active_build"] == {
+        "trigger": "explicit_use_qcoder_for_this_build_or_accepted_offer",
+        "action": "invoke_local_coordinator_first",
+        "then": "follow_coordinator_directed_local_and_hosted_actions",
+    }
+    assert binding["manual_active_build_tool_sequencing_prohibited"] is True
+    for prohibited in (
+        "token",
+        "credential",
+        "account",
+        "customer_workspace",
+        "environment",
+    ):
+        assert prohibited not in serialized.lower()
+
+
+def test_client_binding_descriptor_supports_posix_windows_and_space_paths() -> None:
+    paths = (
+        "/opt/qCoder Runtime/bin/python",
+        r"C:\Program Files\qCoder Runtime\python.exe",
+    )
+    for executable in paths:
+        descriptor = build_client_binding_descriptor(
+            coordinator_prefix=[executable, "-m", "qcoder", "current-loop"],
+        )
+        prefix = descriptor["client_binding_contract"]["surfaces"]["local_orchestration"][
+            "command_prefix"
+        ]
+        assert prefix == [executable, "-m", "qcoder", "current-loop"]
+        round_tripped = json.loads(json.dumps(descriptor))
+        assert (
+            round_tripped["client_binding_contract"]["surfaces"]["local_orchestration"][
+                "command_prefix"
+            ]
+            == prefix
+        )
+
+
+def test_positive_local_execution_guidance_precedes_and_is_outside_prohibitions(
+    tmp_path: Path,
+) -> None:
+    instructions = build_client_activation_instructions(
+        base_url="https://configured.example.invalid",
+        token_file=tmp_path / "token.txt",
+    )
+    headings = [
+        "QCODER ASSISTANT SURFACES",
+        "WORKSTYLE ROUTING",
+        "ACTIVE-BUILD LOCAL EXECUTION",
+        "REQUEST FIDELITY",
+        "ACTIVATION PROTOCOL",
+        "CHECKPOINT PROTOCOL",
+        "IDE WORK AND ARTIFACT HANDOFF",
+        "CONFIGURED RUNTIME",
+        "AUTHORITY BOUNDARIES",
+        "PROHIBITED ACTIONS",
+    ]
+    assert [instructions.index(heading) for heading in headings] == sorted(
+        instructions.index(heading) for heading in headings
+    )
+    active_section = " ".join(
+        instructions.split("ACTIVE-BUILD LOCAL EXECUTION", 1)[1]
+        .split("REQUEST FIDELITY", 1)[0]
+        .split()
+    )
+    prohibited_section = instructions.split("PROHIBITED ACTIONS", 1)[1]
+    assert "ordinary local command-execution capability" in active_section
+    assert "customer never types the command" in active_section
+    assert "first execute coordinator_prefix with --help" in instructions
+    assert "first execute coordinator_prefix with --help" not in prohibited_section
+    assert "Use the supplied python_executable exactly" not in prohibited_section
 
 
 def test_activation_runtime_paths_with_spaces_are_unambiguous_for_posix_and_windows() -> None:
@@ -289,7 +471,7 @@ def test_activation_runtime_paths_with_spaces_are_unambiguous_for_posix_and_wind
     assert windows_runtime["token_file_path"] == windows_token
 
 
-def test_activation_instruction_leads_with_lossless_request_baseline_protocol(
+def test_activation_instruction_preserves_lossless_request_baseline_protocol(
     tmp_path: Path,
 ) -> None:
     instructions = build_client_activation_instructions(

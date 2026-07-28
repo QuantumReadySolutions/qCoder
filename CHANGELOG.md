@@ -1,6 +1,16 @@
 # Changelog
 
 
+## 0.6.0a2+wi0418.workstylerouting1
+
+- Bind supported connected assistants to qCoder's separate hosted-capability and local
+  active-build orchestration surfaces without adding an MCP tool.
+- Add a versioned, deterministic three-workstyle routing descriptor to MCP initialization
+  instructions.
+- Make ordinary local command execution the explicit supported route for `qcoder current-loop`
+  while preserving bounded single-capability MCP use and all authority boundaries.
+
+
 ## 0.6.0a2+wi0418.artifacthandoff1
 
 - Make the post-IDE-authority handoff deterministic with exact-path retention and
