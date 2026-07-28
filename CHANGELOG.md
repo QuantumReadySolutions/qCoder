@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0a2+wi0418.authoritytransport5
+
+- Bind every Current Loop action to a qCoder-owned operation-specific invocation.
+- Isolate local-only actions from hosted transport and remove assistant-routed transport.
+
 ## 0.6.0a2+wi0418.authoritytransport4
 
 - Complete the per-field semantic checkpoint-input contract and reject

@@ -63,6 +63,10 @@ from qcoder.context_loop import (
     share_safe_request_baseline,
 )
 from qcoder.current_loop_coordinator import coordinator_contract_snapshot
+from qcoder.current_loop_invocation import (
+    invocation_contract_snapshot,
+    operation_transport_inventory,
+)
 from qcoder.current_loop_checkpoint_input import (
     CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_ID,
     CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_VERSION,
@@ -98,8 +102,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 3
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v3"
+CLIENT_BINDING_SCHEMA_VERSION = 4
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v4"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -173,6 +177,13 @@ user-stated decision answers. Exploratory first pass is not a full Generation Co
 Blueprint-guided generation stops at the decision_resolution checkpoint and uses the exact
 decision-disposition authority channel. A posture transition requires its separate explicit
 authority and must not rewrite the Working Blueprint.
+Every actionable Current Loop result contains one versioned operation-specific invocation
+contract. Execute its structured argv or qCoder-supplied platform serialization unchanged.
+Never append, remove, select, move, reinterpret, or conditionally route transport arguments.
+Never inspect help, source, package files, transcripts, proof records, or .qcoder to determine
+transport applicability. Client permission to start or trust the configured runtime is a
+client_environment_permission and is never qCoder activation, posture, intent, IDE, artifact,
+or governing-change authority.
 Never embed arbitrary user-approved free text in shell argv. When qCoder requests checkpoint
 input, consume the complete checkpoint_input_construction object in that exact coordinator
 result. Copy its fixed_payload unchanged and supply only the declared new value fields. Never
@@ -276,6 +287,8 @@ def build_client_binding_descriptor(
             "contract_id": CLIENT_BINDING_CONTRACT_ID,
             "package_version": __version__,
             "coordinator_contract_digest": contract_digest,
+            "operation_invocation_contract": invocation_contract_snapshot(),
+            "operation_transport_inventory": operation_transport_inventory(),
             "checkpoint_input_contract": {
                 "schema_id": CHECKPOINT_INPUT_SCHEMA_ID,
                 "schema_version": CHECKPOINT_INPUT_SCHEMA_VERSION,
@@ -359,12 +372,13 @@ def build_client_activation_instructions(
         ],
         "base_url": str(base_url),
         "token_file_path": token_path,
-        "transport_arguments": [
-            "--base-url",
-            str(base_url),
-            "--token-file",
-            token_path,
-        ],
+        "hosted_runtime_configuration": {
+            "binding": "qcoder_owned_operation_specific_invocation_only",
+            "base_url": str(base_url),
+            "token_file_path": token_path,
+            "globally_composable_transport_arguments": False,
+            "assistant_routes_transport": False,
+        },
     }
     binding = build_client_binding_descriptor(
         coordinator_prefix=runtime["coordinator_prefix"],
@@ -375,7 +389,12 @@ def build_client_activation_instructions(
         f"{CLIENT_ACTIVATION_INSTRUCTIONS}\n"
         "CONFIGURED RUNTIME\n"
         "Use the supplied python_executable exactly and extend coordinator_prefix without replacing "
-        "its executable. Pass transport_arguments exactly where supported. As a positive setup "
+        "its executable. qCoder owns operation routing and invocation construction: execute each "
+        "operation_specific_invocation exactly as supplied, without appending, removing, moving, "
+        "quoting, or reinterpreting transport arguments. Local-only invocations deliberately contain "
+        "no hosted transport metadata. Hosted transport first appears in the exact invocation for an "
+        "authorized hosted-capable transition. The diagnostics-only operation inventory never delegates "
+        "command construction to the assistant. As a positive setup "
         "check, first execute coordinator_prefix with --help through the ordinary local "
         "command-execution capability; stop if it does not expose qCoder current-loop.\n\n"
         "Configured qCoder runtime (JSON values are exact operational metadata; "

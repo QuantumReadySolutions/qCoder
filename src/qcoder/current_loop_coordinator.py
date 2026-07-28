@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import sys
 import tempfile
 import time
 from typing import Any, Callable, Mapping, Protocol, Sequence
@@ -72,10 +73,18 @@ from qcoder.current_loop_checkpoint_input import (
     checkpoint_input_values,
     normalize_checkpoint_input,
 )
+from qcoder.current_loop_invocation import (
+    HOSTED_CAPABLE,
+    INVOCATION_CONTRACT_SCHEMA_ID,
+    LOCAL_ONLY,
+    build_operation_invocation,
+    invocation_contract_snapshot,
+    operation_transport_inventory,
+)
 from qcoder.context_loop import CONTEXT_LOOP_GATE
 
-COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v8"
-COORDINATOR_RESULT_SCHEMA_VERSION = 8
+COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v9"
+COORDINATOR_RESULT_SCHEMA_VERSION = 9
 COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v7"
 PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v6"
 OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
@@ -883,7 +892,10 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "performance": PERFORMANCE_SCHEMA_ID,
             "checkpoint_input": CHECKPOINT_INPUT_SCHEMA_ID,
             "checkpoint_input_semantic_contract": CHECKPOINT_INPUT_SEMANTIC_SCHEMA_ID,
+            "operation_invocation": INVOCATION_CONTRACT_SCHEMA_ID,
         },
+        "operation_invocation": invocation_contract_snapshot(),
+        "operation_transport_inventory": operation_transport_inventory(),
         "phases": list(PHASES),
         "ready_phase_protocol_dispositions": deepcopy(_READY_PHASE_PROTOCOL_DISPOSITIONS),
         "state_statuses": list(STATE_STATUSES),
@@ -1198,17 +1210,14 @@ def _invocation_template(
     new_inputs: Sequence[str] = (),
     argument_values: Sequence[Mapping[str, Any]] = (),
     alternatives: Sequence[str] = (),
-    uses_transport: bool = False,
+    uses_transport: bool | None = None,
 ) -> dict[str, Any]:
-    return {
+    result = {
         "coordinator_prefix_source": "configured_qcoder_runtime.coordinator_prefix",
         "workspace_argument": {
             "flag": "--workspace",
             "value_source": "active_workspace_root",
         },
-        "transport_argument_source": (
-            "configured_qcoder_runtime.transport_arguments" if uses_transport else None
-        ),
         "subcommand": subcommand,
         "required_flags": list(required_flags),
         "reused_canonical_inputs": list(reused_inputs),
@@ -1220,6 +1229,9 @@ def _invocation_template(
         "account_identifier_embedded": False,
         "canonical_artifact_reconstruction_required": False,
     }
+    if uses_transport is not None:
+        result["_qcoder_hosted_transport"] = uses_transport
+    return result
 
 
 def _artifact_handoff_invocation_template() -> dict[str, Any]:
@@ -1282,7 +1294,6 @@ def _checkpoint_input_approval_invocation() -> dict[str, Any]:
         required_flags=("--approve",),
         reused_inputs=("exact_current_staged_checkpoint_input",),
         new_inputs=("explicit_checkpoint_specific_authority",),
-        uses_transport=True,
     )
     invocation.update(
         {
@@ -1422,6 +1433,9 @@ class CurrentLoopCoordinator:
         workspace_root: str | Path,
         state_path: str | Path | None = None,
         transport: ProtectedTransport | None = None,
+        runtime_executable: str | Path | None = None,
+        hosted_base_url: str = "https://preview-api.qcoder.ai",
+        hosted_token_file: str | Path | None = None,
         clock: Callable[[], float] = time.monotonic,
     ):
         self.workspace_root = Path(workspace_root).expanduser().absolute()
@@ -1436,11 +1450,54 @@ class CurrentLoopCoordinator:
             explicit_external=state_path is not None,
         )
         self.transport = transport
+        self.runtime_executable = str(
+            Path(runtime_executable or sys.executable).expanduser().absolute()
+        )
+        self.hosted_base_url = (
+            str(getattr(transport, "base_url"))
+            if transport is not None and hasattr(transport, "base_url")
+            else hosted_base_url
+        )
+        self.hosted_token_file = str(
+            Path(
+                getattr(transport, "token_file")
+                if transport is not None and hasattr(transport, "token_file")
+                else (hosted_token_file or Path.home() / ".qcoder" / "context-bridge" / "token.txt")
+            )
+            .expanduser()
+            .absolute()
+        )
         self.clock = clock
 
     @property
     def artifact_directory(self) -> Path:
         return self.workspace_root / ".qcoder" / "current-loop" / "artifacts"
+
+    def validate_invocation_binding(
+        self,
+        *,
+        expected_revision: int | None,
+        expected_loop_ref: str | None,
+        expected_checkpoint: str | None,
+    ) -> None:
+        """Reject stale or cross-loop generated invocations before dispatch."""
+
+        if expected_revision is None and expected_loop_ref is None and expected_checkpoint is None:
+            return
+        if expected_revision is None or expected_loop_ref is None or expected_checkpoint is None:
+            raise CurrentLoopError("operation_invocation_binding_incomplete")
+        state = self.store.read()
+        if int(state["state_revision"]) != expected_revision:
+            raise CurrentLoopError("operation_invocation_revision_mismatch")
+        state_loop_ref = str(state.get("loop_ref") or "pending-activation")
+        if state_loop_ref != expected_loop_ref:
+            raise CurrentLoopError("operation_invocation_loop_mismatch")
+        if state.get("state_kind") == "pending_activation":
+            checkpoint = "activation_request_baseline_review"
+        else:
+            checkpoint = str(self._coordinator_state(state)["checkpoint_kind"])
+        if checkpoint != expected_checkpoint:
+            raise CurrentLoopError("operation_invocation_checkpoint_mismatch")
 
     def _pending_activation_result(
         self,
@@ -1471,6 +1528,7 @@ class CurrentLoopCoordinator:
             state_status="checkpoint_required",
             checkpoint_kind="activation_request_baseline_review",
             category=category,
+            invocation_binding_state=state,
             summary=(
                 "Review the complete displayed customer message. Approval will activate "
                 "qCoder for this build and preserve these exact bytes as the canonical "
@@ -5817,7 +5875,7 @@ class CurrentLoopCoordinator:
                         if already_activated
                         else _invocation_template(
                             "activate",
-                            required_flags=("--request",),
+                            required_flags=("--request-stdin",),
                             new_inputs=("complete_governing_customer_message",),
                         )
                     ),
@@ -6262,6 +6320,12 @@ class CurrentLoopCoordinator:
             phase=str(coordinator["phase"]),
             protocol=protocol,
         )
+        protocol = self._attach_operation_specific_invocations(
+            state=state,
+            checkpoint_kind=str(coordinator["checkpoint_kind"]),
+            coordinator=coordinator,
+            protocol=protocol,
+        )
         self._validate_protocol_disposition(
             phase=coordinator["phase"],
             state_status=coordinator["state_status"],
@@ -6305,6 +6369,7 @@ class CurrentLoopCoordinator:
         category: str | None = None,
         details: Mapping[str, Any] | None = None,
         checkpoint_protocol: Mapping[str, Any] | None = None,
+        invocation_binding_state: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         protocol = self._checkpoint_protocol(
             operation=operation,
@@ -6333,6 +6398,19 @@ class CurrentLoopCoordinator:
             phase=phase,
             protocol=protocol,
         )
+        protocol = self._attach_operation_specific_invocations(
+            state=(
+                invocation_binding_state
+                or {
+                    "workspace_root": str(self.workspace_root),
+                    "loop_ref": "synthetic-protocol-matrix-loop",
+                    "state_revision": 1,
+                }
+            ),
+            checkpoint_kind=checkpoint_kind,
+            coordinator=None,
+            protocol=protocol,
+        )
         self._validate_protocol_disposition(
             phase=phase,
             state_status=state_status,
@@ -6359,6 +6437,46 @@ class CurrentLoopCoordinator:
             "assistant_reconstruction_performed": False,
             **protocol,
         }
+
+    def _attach_operation_specific_invocations(
+        self,
+        *,
+        state: Mapping[str, Any],
+        checkpoint_kind: str,
+        coordinator: Mapping[str, Any] | None,
+        protocol: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Bind every actionable template to qCoder-owned runtime routing."""
+
+        completed = deepcopy(dict(protocol))
+        invocation = completed.get("next_invocation")
+        if not isinstance(invocation, Mapping):
+            return completed
+        pending = (
+            coordinator.get("pending_checkpoint_input")
+            if isinstance(coordinator, Mapping)
+            else None
+        )
+        staged_operation = (
+            str(pending.get("operation"))
+            if isinstance(pending, Mapping) and isinstance(pending.get("operation"), str)
+            else None
+        )
+        try:
+            completed["next_invocation"] = build_operation_invocation(
+                invocation,
+                executable=self.runtime_executable,
+                workspace=str(state["workspace_root"]),
+                base_url=self.hosted_base_url,
+                token_file=self.hosted_token_file,
+                state_revision=int(state["state_revision"]),
+                loop_ref=str(state.get("loop_ref") or "pending-activation"),
+                checkpoint=checkpoint_kind,
+                staged_operation=staged_operation,
+            )
+        except ValueError as exc:
+            raise CurrentLoopError(str(exc)) from exc
+        return completed
 
     @staticmethod
     def _complete_protocol_disposition(
@@ -6490,6 +6608,28 @@ class CurrentLoopCoordinator:
                 raise CurrentLoopError("coordinator_protocol_incomplete")
             if reason is not None:
                 raise CurrentLoopError("coordinator_protocol_contradictory")
+            operation_invocation = invocation.get("operation_specific_invocation")
+            if (
+                not isinstance(operation_invocation, Mapping)
+                or operation_invocation.get("schema_id") != INVOCATION_CONTRACT_SCHEMA_ID
+                or not isinstance(operation_invocation.get("contract_digest"), str)
+            ):
+                raise CurrentLoopError("coordinator_operation_invocation_contract_missing")
+            classification = operation_invocation.get("transport_classification")
+            argv = operation_invocation.get("qcoder_owned_argv_prefix")
+            structured_argv = operation_invocation.get("structured_argv")
+            if not isinstance(argv, list) or not isinstance(structured_argv, list):
+                raise CurrentLoopError("coordinator_operation_invocation_argv_missing")
+            hosted_names = {"--base-url", "--token-file"}
+            present_hosted_names = hosted_names.intersection(
+                str(item) for item in [*argv, *structured_argv]
+            )
+            if classification == LOCAL_ONLY and present_hosted_names:
+                raise CurrentLoopError("coordinator_local_invocation_transport_leak")
+            if classification == HOSTED_CAPABLE and present_hosted_names != hosted_names:
+                raise CurrentLoopError("coordinator_hosted_invocation_transport_incomplete")
+            if invocation.get("assistant_constructs_transport_routing") is not False:
+                raise CurrentLoopError("coordinator_assistant_transport_routing_prohibited")
             source = protocol.get("permitted_input_source")
             disposition = protocol.get("input_source_disposition")
             semantics = protocol.get("bounded_input_semantics")

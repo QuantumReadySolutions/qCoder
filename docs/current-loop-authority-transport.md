@@ -1,7 +1,31 @@
 # Current Loop free-text authority transport
 
 This inventory is normative for the connected-assistant runtime in
-`0.6.0a2+wi0418.authoritytransport4`.
+`0.6.0a2+wi0418.authoritytransport5`.
+
+## Operation-specific invocation routing
+
+qCoder owns both operation routing and invocation construction. Every actionable
+coordinator result carries a versioned
+`qcoder.current_loop.operation_invocation.v1` object. Its structured argv is
+canonical; its POSIX and Windows serializations are qCoder-produced views.
+Connected assistants execute the supplied invocation and do not append, remove,
+move, quote, reinterpret, or conditionally apply transport arguments.
+
+The diagnostics-only
+`qcoder.current_loop.operation_transport_inventory.v1` distinguishes
+local-only, hosted-capable, and staged-operation-scoped actions. It is not a
+command-construction surface. Local-only invocations contain no base URL,
+token-file argument, credential value, or globally composable transport array.
+Hosted transport first appears in the exact operation-specific invocation for
+an authorized hosted-capable transition. A client's permission to start or
+trust the configured runtime is client-environment permission, separate from
+qCoder activation, posture, intent, IDE, artifact-review, and governing-change
+authority.
+
+Mechanism proof, fixed-metadata binding proof, semantic-field binding proof,
+invocation-routing proof, and named-client proof remain separate evidence
+layers.
 
 Classification:
 

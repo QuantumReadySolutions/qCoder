@@ -885,6 +885,7 @@ def _cmd_current_loop(argv: list[str]) -> int:
         ContextBridgeTransport,
         CurrentLoopCoordinator,
     )
+    from qcoder.current_loop import CurrentLoopError
 
     parser = argparse.ArgumentParser(
         prog="qcoder current-loop",
@@ -902,6 +903,38 @@ def _cmd_current_loop(argv: list[str]) -> int:
         "--state-file",
         default=None,
         help="Explicit external local-state file; never selected automatically.",
+    )
+    parser.add_argument(
+        "--expected-revision",
+        type=int,
+        default=None,
+        help=(
+            "qCoder-generated invocation binding. Connected assistants use the supplied "
+            "value unchanged and never derive it from local state."
+        ),
+    )
+    parser.add_argument(
+        "--expected-loop-ref",
+        default=None,
+        help="qCoder-generated current-loop binding; not a customer-authored value.",
+    )
+    parser.add_argument(
+        "--expected-checkpoint",
+        choices=(
+            "activation_request_baseline_review",
+            "activation",
+            "posture",
+            "intent_review",
+            "decision_resolution",
+            "ide_write_or_run",
+            "artifact_review",
+            "checkpoint_input_review",
+            "governing_change_confirmation",
+            "privacy_or_trust",
+            "none",
+        ),
+        default=None,
+        help="qCoder-generated checkpoint binding; not a customer-authored value.",
     )
     sub = parser.add_subparsers(dest="current_loop_command")
 
@@ -1549,9 +1582,44 @@ def _cmd_current_loop(argv: list[str]) -> int:
         workspace_root=args.workspace,
         state_path=args.state_file,
         transport=transport,
+        runtime_executable=sys.executable,
+        hosted_base_url=getattr(args, "base_url", DEFAULT_BASE_URL),
+        hosted_token_file=getattr(args, "token_file", default_token_file()),
     )
     try:
         command = args.current_loop_command
+        try:
+            coordinator.validate_invocation_binding(
+                expected_revision=args.expected_revision,
+                expected_loop_ref=args.expected_loop_ref,
+                expected_checkpoint=args.expected_checkpoint,
+            )
+        except CurrentLoopError as exc:
+            print(
+                json.dumps(
+                    {
+                        "schema_id": "qcoder.current_loop.invocation_rejection.v1",
+                        "schema_version": 1,
+                        "ok": False,
+                        "category": exc.category,
+                        "received_operation": command,
+                        "received_argument_categories": [
+                            "expected_revision",
+                            "expected_loop_ref",
+                            "expected_checkpoint",
+                        ],
+                        "expected_transport_classification": "fresh_coordinator_result_required",
+                        "assistant_should_stop": True,
+                        "hosted_operation_permitted": False,
+                        "fresh_coordinator_output_required": True,
+                        "token_contents_included": False,
+                        "arbitrary_customer_content_included": False,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 2
         if command == "status":
             result = coordinator.status()
         elif command == "stage-checkpoint-input":

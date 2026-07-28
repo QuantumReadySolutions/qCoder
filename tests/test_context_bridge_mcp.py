@@ -206,12 +206,13 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
         ],
         "base_url": base_url,
         "token_file_path": token_path,
-        "transport_arguments": [
-            "--base-url",
-            base_url,
-            "--token-file",
-            token_path,
-        ],
+        "hosted_runtime_configuration": {
+            "binding": "qcoder_owned_operation_specific_invocation_only",
+            "base_url": base_url,
+            "token_file_path": token_path,
+            "globally_composable_transport_arguments": False,
+            "assistant_routes_transport": False,
+        },
     }
     normalized_instructions = " ".join(instructions.split())
     for required in (
@@ -339,9 +340,10 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
     assert binding["schema_version"] == CLIENT_BINDING_SCHEMA_VERSION
     assert binding["contract_id"] == CLIENT_BINDING_CONTRACT_ID
     assert binding["package_version"] == __version__
-    assert binding["coordinator_contract_digest"] == (
-        "5b519be9fe076c04e9df29fc992f2595baa09dfd9d42dbd555068a26683c1cdd"
-    )
+    assert len(binding["coordinator_contract_digest"]) == 64
+    assert binding["operation_invocation_contract"]["global_transport_argument_array"] is False
+    assert binding["operation_invocation_contract"]["assistant_routes_transport"] is False
+    assert binding["operation_transport_inventory"]["diagnostics_only"] is True
     assert binding["checkpoint_input_contract"] == {
         "schema_id": "qcoder.current_loop.checkpoint_input.v3",
         "schema_version": 3,

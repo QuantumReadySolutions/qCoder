@@ -208,7 +208,15 @@ def test_posture_checkpoint_is_bounded_enumerated_and_status_reemits_it(
     assert status["permitted_input_source"] == posture["permitted_input_source"]
     assert status["input_source_disposition"] == posture["input_source_disposition"]
     assert status["bounded_input_semantics"] == posture["bounded_input_semantics"]
-    assert status["next_invocation"] == posture["next_invocation"]
+    assert status["next_invocation"]["subcommand"] == posture["next_invocation"]["subcommand"]
+    assert (
+        status["next_invocation"]["operation_specific_invocation"]["state_binding"]["revision"]
+        > posture["next_invocation"]["operation_specific_invocation"]["state_binding"]["revision"]
+    )
+    assert (
+        status["next_invocation"]["operation_specific_invocation"]["transport_classification"]
+        == "local_only"
+    )
 
     selection_argv = [
         "current-loop",
