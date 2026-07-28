@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0a2+wi0418.authoritytransport4
+
+- Complete the per-field semantic checkpoint-input contract and reject
+  promotion-incompatible field types and bounded values before staging.
+
 ## 0.6.0a2+wi0418.authoritytransport3
 
 - Complete the connected-assistant checkpoint-input construction binding while

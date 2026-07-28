@@ -66,6 +66,8 @@ from qcoder.current_loop_coordinator import coordinator_contract_snapshot
 from qcoder.current_loop_checkpoint_input import (
     CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_ID,
     CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_VERSION,
+    CHECKPOINT_INPUT_SEMANTIC_SCHEMA_ID,
+    CHECKPOINT_INPUT_SEMANTIC_SCHEMA_VERSION,
     CHECKPOINT_INPUT_SCHEMA_ID,
     CHECKPOINT_INPUT_SCHEMA_VERSION,
 )
@@ -96,8 +98,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 2
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v2"
+CLIENT_BINDING_SCHEMA_VERSION = 3
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v3"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -177,6 +179,11 @@ result. Copy its fixed_payload unchanged and supply only the declared new value 
 invent or independently duplicate schema, operation, checkpoint kind, phase, loop, workspace,
 revision, digest, canonicalization, or transport metadata. Use the construction's exact stdin or
 file staging invocation, present every complete staged value, and then transmit approval only.
+Use each field's delivered semantic schema as the complete internal value contract. Select bounded
+identifiers only from its emitted domain, construct mappings and collections only from its emitted
+shape, and stop rather than guess a value known from prior examples. Successful staging means
+qCoder has already verified field type and bounded domain against the same semantic-contract
+digest used for later promotion; staging still grants no authority.
 Never reconstruct, quote, or reserialize a staged value from conversation. Never inspect package
 source, qcoder.__file__, proof records, transcripts, or .qcoder to derive construction values.
 The customer never creates the machine input or types the command. A correction replaces the
@@ -274,11 +281,15 @@ def build_client_binding_descriptor(
                 "schema_version": CHECKPOINT_INPUT_SCHEMA_VERSION,
                 "construction_schema_id": CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_ID,
                 "construction_schema_version": (CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_VERSION),
+                "semantic_field_schema_id": CHECKPOINT_INPUT_SEMANTIC_SCHEMA_ID,
+                "semantic_field_schema_version": CHECKPOINT_INPUT_SEMANTIC_SCHEMA_VERSION,
                 "transports": ["stdin", "file"],
                 "approval_only_promotion": True,
                 "literal_free_text_in_argv": False,
                 "qcoder_owns_fixed_construction_metadata": True,
                 "assistant_supplies_only_declared_new_values": True,
+                "field_shapes_and_bounded_domains_client_visible": True,
+                "successful_staging_guarantees_semantic_promotion_compatibility": True,
             },
             "qcoder_domain_tool_count": len(EXPECTED_TOOLS),
             "supported_workstyles": [

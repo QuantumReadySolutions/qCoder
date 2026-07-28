@@ -59,8 +59,11 @@ from qcoder.current_loop import (
 )
 from qcoder.current_loop_checkpoint_input import (
     CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_ID,
+    CHECKPOINT_INPUT_SEMANTIC_SCHEMA_ID,
     CHECKPOINT_INPUT_SCHEMA_ID,
     CHECKPOINT_INPUT_SCHEMA_VERSION,
+    DECISION_AUTHORITY_PROVENANCE,
+    POSTURE_AUTHORITY_PROVENANCE,
     CheckpointInputStructuralError,
     checkpoint_input_binding_values,
     checkpoint_input_construction,
@@ -71,12 +74,13 @@ from qcoder.current_loop_checkpoint_input import (
 )
 from qcoder.context_loop import CONTEXT_LOOP_GATE
 
-COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v7"
-COORDINATOR_RESULT_SCHEMA_VERSION = 7
-COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v6"
-PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v5"
+COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v8"
+COORDINATOR_RESULT_SCHEMA_VERSION = 8
+COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v7"
+PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v6"
 OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
     {
+        "qcoder.current_loop.coordinator_state.v5",
         "qcoder.current_loop.coordinator_state.v4",
         "qcoder.current_loop.coordinator_state.v1",
         "qcoder.current_loop.coordinator_state.v2",
@@ -238,18 +242,7 @@ REQUEST_LABEL_PROVENANCE = (
     "user_confirmed_assistant_interpretation",
 )
 
-DECISION_AUTHORITY_PROVENANCE = (
-    "user_provided",
-    "user_confirmed_assistant_interpretation",
-    "inherited_confirmed_lineage",
-    "assistant_recommendation_pending_confirmation",
-)
 AUTHORIZED_DECISION_PROVENANCE = frozenset(DECISION_AUTHORITY_PROVENANCE[:3])
-POSTURE_AUTHORITY_PROVENANCE = (
-    "user_provided",
-    "user_confirmed_assistant_recommendation",
-    "inherited_confirmed_lineage",
-)
 ARTIFACT_CANDIDATE_PROVENANCE = (
     "assistant_created",
     "assistant_modified",
@@ -889,6 +882,7 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "consequence_projection": CONSEQUENCE_PROJECTION_SCHEMA_ID,
             "performance": PERFORMANCE_SCHEMA_ID,
             "checkpoint_input": CHECKPOINT_INPUT_SCHEMA_ID,
+            "checkpoint_input_semantic_contract": CHECKPOINT_INPUT_SEMANTIC_SCHEMA_ID,
         },
         "phases": list(PHASES),
         "ready_phase_protocol_dispositions": deepcopy(_READY_PHASE_PROTOCOL_DISPOSITIONS),
@@ -1664,6 +1658,18 @@ class CurrentLoopCoordinator:
                 source_state_revision=int(state["state_revision"]),
                 captured_at=self.clock(),
                 transport=transport,
+                semantic_contract=checkpoint_input_construction(
+                    operation=operation,
+                    checkpoint_kind=checkpoint_kind,
+                    workspace_binding=str(state["workspace_root"]),
+                    loop_ref=str(state["loop_ref"]),
+                    phase=str(coordinator["phase"]),
+                    expected_state_revision=int(state["state_revision"]),
+                    bounded_domains=self._checkpoint_input_bounded_domains(
+                        operation=operation,
+                        state=state,
+                    ),
+                )["semantic_field_contract"],
             )
             if any(
                 isinstance(item, Mapping)
@@ -1783,8 +1789,14 @@ class CurrentLoopCoordinator:
                     {
                         "checkpoint_input_schema_id": CHECKPOINT_INPUT_SCHEMA_ID,
                         "checkpoint_input_schema_version": CHECKPOINT_INPUT_SCHEMA_VERSION,
+                        "semantic_contract_schema_id": pending.get("semantic_contract_schema_id"),
+                        "semantic_contract_schema_version": pending.get(
+                            "semantic_contract_schema_version"
+                        ),
+                        "semantic_contract_digest": pending.get("semantic_contract_digest"),
                         "staged_content_digest": digest,
                         "promoted_content_digest": digest,
+                        "stage_to_promotion_semantic_compatibility_verified": True,
                         "authority_only_promotion": True,
                         "literal_free_text_in_argv": False,
                         "replay_permitted": False,
@@ -1927,6 +1939,9 @@ class CurrentLoopCoordinator:
             ),
             "checkpoint_input_schema_id": record.get("schema_id"),
             "checkpoint_input_schema_version": record.get("schema_version"),
+            "semantic_contract_schema_id": record.get("semantic_contract_schema_id"),
+            "semantic_contract_schema_version": record.get("semantic_contract_schema_version"),
+            "semantic_contract_digest": record.get("semantic_contract_digest"),
             "operation": record.get("operation"),
             "checkpoint_kind": record.get("checkpoint_kind"),
             "phase": record.get("phase"),
@@ -4689,6 +4704,10 @@ class CurrentLoopCoordinator:
             loop_ref=str(state["loop_ref"]),
             phase=str(coordinator["phase"]),
             expected_state_revision=int(state["state_revision"]),
+            bounded_domains=self._checkpoint_input_bounded_domains(
+                operation="prepare_generation",
+                state=state,
+            ),
         )
         payload: dict[str, Any] = {
             **deepcopy(construction["fixed_payload"]),
@@ -6120,6 +6139,10 @@ class CurrentLoopCoordinator:
                 loop_ref=str(state["loop_ref"]),
                 phase=phase,
                 expected_state_revision=int(state["state_revision"]),
+                bounded_domains=self._checkpoint_input_bounded_domains(
+                    operation=operation,
+                    state=state,
+                ),
             )
             for operation, checkpoint_kind in pairs
         ]
@@ -6130,6 +6153,70 @@ class CurrentLoopCoordinator:
             constructions if len(constructions) > 1 else []
         )
         return completed
+
+    def _checkpoint_input_bounded_domains(
+        self,
+        *,
+        operation: str,
+        state: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Return exact qCoder-owned domains visible at this state revision."""
+
+        if operation == "prepare_generation":
+            coordinator = self._coordinator_state(state)
+            posture = coordinator.get("effective_generation_posture") or state.get(
+                "generation_posture"
+            )
+            return (
+                {"current_generation_posture": str(posture)}
+                if posture in GENERATION_POSTURES
+                else {}
+            )
+        if operation == "propose_change":
+            try:
+                blueprint = self._saved_artifact(state, "working_blueprint")
+                records = self._decision_records(blueprint)
+                current = self._saved_artifact(state, "current_build_context")
+            except CurrentLoopError:
+                return {}
+            actions = current.get("applicable_actions")
+            treatments: list[str] = []
+            values: dict[str, list[Any]] = {}
+            for record in records:
+                decision_ref = record.get("decision_ref")
+                if not isinstance(decision_ref, str):
+                    continue
+                alternatives = record.get("allowed_profile_alternatives")
+                values[decision_ref] = (
+                    deepcopy(alternatives) if isinstance(alternatives, list) else []
+                )
+                available = record.get("available_control_treatments")
+                if isinstance(available, list):
+                    for treatment in available:
+                        if isinstance(treatment, str) and treatment not in treatments:
+                            treatments.append(treatment)
+            return {
+                "decision_ref": [
+                    str(record["decision_ref"])
+                    for record in records
+                    if isinstance(record.get("decision_ref"), str)
+                ],
+                "selected_action": (
+                    [str(item) for item in actions if isinstance(item, str)]
+                    if isinstance(actions, list)
+                    else []
+                ),
+                "control_treatment": treatments,
+                "proposed_value_by_decision": values,
+            }
+        if operation == "confirm_change":
+            try:
+                proposal = self._saved_artifact(state, "carry_forward_proposal")
+            except CurrentLoopError:
+                return {}
+            proposal_ref = proposal.get("proposal_ref")
+            return {"proposal_ref": proposal_ref} if isinstance(proposal_ref, str) else {}
+        return {}
 
     def _result(
         self,
@@ -6476,6 +6563,10 @@ class CurrentLoopCoordinator:
                     or item.get("schema_id") != CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_ID
                     or not isinstance(item.get("fixed_payload"), Mapping)
                     or not isinstance(item.get("accepted_value_fields"), list)
+                    or not isinstance(item.get("semantic_field_contract"), Mapping)
+                    or item["semantic_field_contract"].get("schema_id")
+                    != CHECKPOINT_INPUT_SEMANTIC_SCHEMA_ID
+                    or not isinstance(item["semantic_field_contract"].get("contract_digest"), str)
                     or not isinstance(item.get("construction_digest"), str)
                     for item in constructions
                 ):

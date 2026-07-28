@@ -340,18 +340,24 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
     assert binding["contract_id"] == CLIENT_BINDING_CONTRACT_ID
     assert binding["package_version"] == __version__
     assert binding["coordinator_contract_digest"] == (
-        "010e60c590d549bea827d0c3c98955c9f563c72a803537ef65f08dad2ccb9508"
+        "5b519be9fe076c04e9df29fc992f2595baa09dfd9d42dbd555068a26683c1cdd"
     )
     assert binding["checkpoint_input_contract"] == {
-        "schema_id": "qcoder.current_loop.checkpoint_input.v2",
-        "schema_version": 2,
-        "construction_schema_id": ("qcoder.current_loop.checkpoint_input_construction.v1"),
-        "construction_schema_version": 1,
+        "schema_id": "qcoder.current_loop.checkpoint_input.v3",
+        "schema_version": 3,
+        "construction_schema_id": ("qcoder.current_loop.checkpoint_input_construction.v2"),
+        "construction_schema_version": 2,
+        "semantic_field_schema_id": (
+            "qcoder.current_loop.checkpoint_input_semantic_field_contract.v1"
+        ),
+        "semantic_field_schema_version": 1,
         "transports": ["stdin", "file"],
         "approval_only_promotion": True,
         "literal_free_text_in_argv": False,
         "qcoder_owns_fixed_construction_metadata": True,
         "assistant_supplies_only_declared_new_values": True,
+        "field_shapes_and_bounded_domains_client_visible": True,
+        "successful_staging_guarantees_semantic_promotion_compatibility": True,
     }
     assert binding["qcoder_domain_tool_count"] == 12
     assert binding["supported_workstyles"] == [

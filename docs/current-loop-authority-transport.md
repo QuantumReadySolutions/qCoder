@@ -1,14 +1,14 @@
 # Current Loop free-text authority transport
 
 This inventory is normative for the connected-assistant runtime in
-`0.6.0a2+wi0418.authoritytransport3`.
+`0.6.0a2+wi0418.authoritytransport4`.
 
 Classification:
 
 - A — enumerated or canonical-reference input; ordinary argv is bounded.
 - B — already staged, displayed, and promoted using authority only.
 - C — arbitrary free text carried by
-  `qcoder.current_loop.checkpoint_input.v2`.
+  `qcoder.current_loop.checkpoint_input.v3`.
 - D — compatibility/manual inline transport that generated connected-assistant
   protocols never emit.
 
@@ -31,12 +31,29 @@ Classification:
 | artifact, seed, parent, workspace, and canonical reference paths | A | Exact path/reference values only; no discovery or reconstruction. |
 
 Every checkpoint-input result includes
-`qcoder.current_loop.checkpoint_input_construction.v1`. qCoder owns its fixed
+`qcoder.current_loop.checkpoint_input_construction.v2`. qCoder owns its fixed
 schema, operation, checkpoint kind, phase, loop, workspace binding, expected
 revision, limits, transport, and digest semantics. The assistant copies
 `fixed_payload` unchanged and supplies only declared `fields`; it does not
 independently repeat operation or checkpoint kind in CLI flags and never
 computes a digest.
+
+Every construction also carries
+`qcoder.current_loop.checkpoint_input_semantic_field_contract.v1`. This is an
+internal runtime-contract object, not a customer artifact or capability. It is
+derived from the same canonical field registry used by stage validation and
+promotion. It declares each field's exact JSON type, nullability, required
+status, UTF-8 and collection limits, provenance, nested shape, and bounded
+domain. `profile_id`, decision identifiers, proposal actions, control
+treatments, and proposal-specific confirmation references therefore come only
+from qCoder's emitted domain. `proposed_interpretation` is explicitly an
+object; a string, array, number, boolean, or null is rejected before staging.
+
+The semantic-contract identity and digest are bound to the exact loop,
+workspace, checkpoint, operation, phase, and state revision. Successful
+staging guarantees that unchanged staged values remain semantically compatible
+with approval-only promotion. A stale or modified semantic contract fails
+closed rather than reinterpreting customer-approved bytes.
 
 The connected-assistant protocol uses:
 
@@ -133,13 +150,19 @@ cross-field combinations fail closed. No actionable checkpoint may serialize
 ## Construction completeness and black-box consumption
 
 The construction artifact declares every accepted value field, whether it is
-required, its bounded type and provenance choices, UTF-8 limits, exact
+required, its exact semantic schema and provenance choices, UTF-8 limits, exact
 stdin/file semantics, and qCoder-owned digest rules. A structural rejection
 returns only safe enum, schema, revision, field-name, byte-length, and digest
-metadata; it emits no hosted action and never echoes arbitrary text.
+metadata; it emits no hosted action and never echoes arbitrary text. Semantic
+rejections additionally identify the field, expected and received JSON type,
+safe bounded enum domain when applicable, semantic-contract identity, and
+state revision. Invalid semantic values are never staged.
 
 Operator-authored transport proof and connected-assistant binding proof are
-distinct. A binding consumer is conforming only when it can construct every
-checkpoint payload from the serialized initialization binding, serialized
-coordinator result, and new synthetic customer values—without source or
-package inspection, proof records, transcripts, or `.qcoder`.
+distinct, as are mechanical and semantic binding proof. A binding consumer is
+conforming only when it can construct every checkpoint payload and select or
+generate every supplied value from the serialized initialization binding,
+serialized coordinator result, and emitted semantic field contract—without
+source or package inspection, hidden fixtures, proof records, transcripts, or
+`.qcoder`. It must then prove complete stage, display, authority-only approval,
+and promotion compatibility.
