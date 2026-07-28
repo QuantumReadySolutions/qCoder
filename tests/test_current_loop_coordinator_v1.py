@@ -37,6 +37,8 @@ from qcoder.current_loop_checkpoint_input import (
 from qcoder.current_loop_coordinator import (
     CHECKPOINT_KINDS,
     CLIENT_NAMES,
+    INPUT_SOURCE_DISPOSITION_SCHEMA_ID,
+    PERMITTED_INPUT_SOURCE_CATEGORIES,
     PHASES,
     STATE_STATUSES,
     CurrentLoopCoordinator,
@@ -570,10 +572,19 @@ def _activate_and_prepare(
 
 def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
     snapshot = coordinator_contract_snapshot()
-    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v5"
+    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v6"
     assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v5"
-    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 5
+    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 6
     assert all(snapshot["checkpoint_result_protocol"].values())
+    assert snapshot["permitted_input_source_taxonomy"] == {
+        "schema_id": INPUT_SOURCE_DISPOSITION_SCHEMA_ID,
+        "schema_version": 1,
+        "categories": list(PERMITTED_INPUT_SOURCE_CATEGORIES),
+        "actionable_source_never_null": True,
+        "arbitrary_free_text_in_argv": False,
+        "customer_types_coordinator_command": False,
+        "assistant_infers_authority": False,
+    }
     assert snapshot["request_baseline_transfer"] == {
         "complete_governing_message_preserved_verbatim": True,
         "transports": ["inline", "file", "stdin"],
@@ -606,7 +617,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("8681207a3bb0acea0493e9106a3551ca6d417370488ec6f2579d5269a4da542a")
+    assert contract_digest == ("9296e2a3b7d244ca4739fb8d6d6edb098f5e2eeae36b791188bfd211413698b8")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
@@ -2531,6 +2542,15 @@ def _assert_actionable_checkpoint(result: Mapping[str, Any]) -> None:
         "declined",
     }
     assert result["identical_repeat_prohibited"] is True
+    assert result["permitted_input_source"]
+    assert (
+        result["input_source_disposition"]["permitted_source"] == (result["permitted_input_source"])
+    )
+    assert result["input_source_disposition"]["categories"]
+    assert result["bounded_input_semantics"]["arbitrary_free_text_in_argv_permitted"] is False
+    assert result["bounded_input_semantics"]["assistant_may_infer_input_or_authority"] is False
+    assert result["required_authority_disposition"]["content_submission_grants_authority"] is False
+    assert result["protocol_binding"]["current_local_state_is_canonical"] is True
     assert result["next_invocation"]["token_contents_embedded"] is False
     assert result["next_invocation"]["private_workspace_path_embedded"] is False
     assert result["next_invocation"]["canonical_artifact_reconstruction_required"] is False
@@ -2549,8 +2569,8 @@ def test_every_checkpoint_result_is_deterministically_actionable(tmp_path: Path)
             summary="Synthetic checkpoint contract test.",
         )
         _assert_actionable_checkpoint(result)
-        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v5"
-        assert result["schema_version"] == 5
+        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v6"
+        assert result["schema_version"] == 6
 
 
 @pytest.mark.parametrize(
@@ -2610,6 +2630,9 @@ def test_complete_ready_phase_protocol_matrix_has_no_unexplained_null(
             assert result["supported_next_action"]
             assert result["next_invocation"] is not None
             assert result["no_action_reason"] is None
+            assert result["permitted_input_source"]
+            assert result["input_source_disposition"]["categories"]
+            assert result["bounded_input_semantics"]["input_required"] is True
 
 
 @pytest.mark.parametrize("state_status", ("stale", "blocked", "conflict", "corrupt"))

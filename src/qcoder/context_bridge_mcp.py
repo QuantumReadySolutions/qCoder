@@ -158,17 +158,24 @@ chat history. Never repeat an identical invocation after an unchanged checkpoint
 authority or corrected input. If the same checkpoint remains after authority was transmitted,
 report awaiting_confirmation_fields and stop instead of searching for state. Workspace freshness
 is not intent. Ground posture in explicit wording, lineage, or an assistant recommendation the
-user explicitly accepts. Preserve exact user-stated decision answers. Exploratory first pass is
-not a full Generation Context Pack; Blueprint-guided generation stops at the decision_resolution
-checkpoint and uses the exact decision-disposition authority channel. A posture transition
-requires its separate explicit authority and must not rewrite the Working Blueprint.
+user explicitly accepts. Posture is a bounded enumerated authority decision: present only qCoder's
+supported values naturally, never infer a default, and transmit only the selected enum through the
+generated invocation. It does not use arbitrary checkpoint-input transport. Preserve exact
+user-stated decision answers. Exploratory first pass is not a full Generation Context Pack;
+Blueprint-guided generation stops at the decision_resolution checkpoint and uses the exact
+decision-disposition authority channel. A posture transition requires its separate explicit
+authority and must not rewrite the Working Blueprint.
 Never embed arbitrary user-approved free text in shell argv. When qCoder requests checkpoint
 input, use its versioned stdin or file staging channel, present every complete staged value, and
 then transmit approval only. Never reconstruct, quote, or reserialize a staged value from
 conversation. The customer never creates the machine input or types the command. A correction
 replaces the pending set and requires a new display and approval. Every active result's
-next_invocation is authoritative. At next_loop_ready the completed build's governing-change
-branch is closed: use only the qCoder-managed start-next route or stop with no further action.
+next_invocation is authoritative. Every actionable result must provide a non-null
+permitted_input_source and bounded input semantics; if it does not, stop rather than infer,
+reconstruct, inspect source, inspect proof records, search transcripts, or inspect .qcoder. A
+machine-readable no_action_disposition means no invocation is currently permitted. At
+next_loop_ready the completed build's governing-change branch is closed: use only the
+qCoder-managed start-next route or stop with no further action.
 
 IDE WORK AND ARTIFACT HANDOFF
 After IDE write/run authority, perform only the user-authorized development work. Retain exact

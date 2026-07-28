@@ -255,6 +255,12 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
         "exact decision-disposition authority channel",
         "posture transition requires its separate explicit authority",
         "must not rewrite the Working Blueprint",
+        "Posture is a bounded enumerated authority decision",
+        "never infer a default",
+        "does not use arbitrary checkpoint-input transport",
+        "non-null permitted_input_source",
+        "machine-readable no_action_disposition",
+        "inspect proof records",
         "qCoder activation, IDE write/run permission, exact artifact-review permission",
         "does not grant IDE permission to write or run",
         "does not authorize artifact review",
@@ -306,6 +312,9 @@ def test_initialize_binds_two_surfaces_and_three_workstyles_without_new_tool(
         "approval only",
         "next_loop_ready",
         "governing-change branch is closed",
+        "non-null permitted_input_source",
+        "bounded input semantics",
+        "machine-readable no_action_disposition",
     ):
         assert required in normalized
     assert len(tool_descriptors()) == 12
@@ -331,7 +340,7 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
     assert binding["contract_id"] == CLIENT_BINDING_CONTRACT_ID
     assert binding["package_version"] == __version__
     assert binding["coordinator_contract_digest"] == (
-        "71ccc7985a88b5de0ce9b2ee53c1a0365ab3a35659c1a06de18bd2cfae8bb2d3"
+        "28b0d5c266e1972c7ef86dc6387b1f427ed655c57f0dc33773507e8dd733897b"
     )
     assert binding["checkpoint_input_contract"] == {
         "schema_id": "qcoder.current_loop.checkpoint_input.v1",

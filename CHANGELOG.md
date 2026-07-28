@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0a2+wi0418.authoritytransport2
+
+- Complete the versioned permitted-input-source taxonomy for every actionable
+  Current Loop checkpoint and ready state.
+- Make generation posture an explicit bounded enum with a non-null source
+  disposition and fail-closed cross-field protocol validation.
+- Add exhaustive active, checkpoint, recovery, terminal, and branch-closed
+  matrix coverage without changing Protected operations or the twelve-tool
+  surface.
+
+
 ## 0.6.0a2+wi0418.authoritytransport1
 
 - Add one bounded versioned UTF-8 checkpoint-input channel for authority-bearing

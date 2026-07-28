@@ -37,6 +37,7 @@ from qcoder.blueprint_decisions import (
 )
 from qcoder.current_loop import (
     AUTHORIZED_ARTIFACT_ROLES,
+    GENERATION_POSTURES,
     CurrentLoopConflict,
     CurrentLoopError,
     CurrentLoopStore,
@@ -66,8 +67,8 @@ from qcoder.current_loop_checkpoint_input import (
 )
 from qcoder.context_loop import CONTEXT_LOOP_GATE
 
-COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v5"
-COORDINATOR_RESULT_SCHEMA_VERSION = 5
+COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v6"
+COORDINATOR_RESULT_SCHEMA_VERSION = 6
 COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v5"
 PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v4"
 OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
@@ -80,6 +81,19 @@ OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
 COORDINATOR_STATE_SCHEMA_VERSION = 5
 CONSEQUENCE_PROJECTION_SCHEMA_ID = "qcoder.current_loop.consequence_projection.v1"
 PERFORMANCE_SCHEMA_ID = "qcoder.current_loop.private_performance.v1"
+INPUT_SOURCE_DISPOSITION_SCHEMA_ID = "qcoder.current_loop.permitted_input_source_disposition.v1"
+INPUT_SOURCE_DISPOSITION_SCHEMA_VERSION = 1
+PERMITTED_INPUT_SOURCE_CATEGORIES = (
+    "bounded_enumerated_customer_choice",
+    "checkpoint_input_transport",
+    "qcoder_held_staged_value",
+    "exact_artifact_lineage",
+    "authority_only_approval",
+    "qcoder_managed_canonical_reference",
+    "exact_customer_selected_workspace",
+    "exact_request_capture_transport",
+    "no_input_permitted_or_required",
+)
 
 PHASES = (
     "activated",
@@ -881,13 +895,27 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "supported_next_action": True,
             "next_invocation": True,
             "required_authority_input": True,
+            "required_authority_disposition": True,
             "awaiting_confirmation_fields": True,
             "confirmation_transmission_state": True,
             "identical_repeat_prohibited": True,
             "permitted_input_source": True,
+            "input_source_disposition": True,
+            "bounded_input_semantics": True,
+            "protocol_binding": True,
             "prohibited_derivations": True,
             "no_action_reason": True,
+            "no_action_disposition": True,
             "terminal": True,
+        },
+        "permitted_input_source_taxonomy": {
+            "schema_id": INPUT_SOURCE_DISPOSITION_SCHEMA_ID,
+            "schema_version": INPUT_SOURCE_DISPOSITION_SCHEMA_VERSION,
+            "categories": list(PERMITTED_INPUT_SOURCE_CATEGORIES),
+            "actionable_source_never_null": True,
+            "arbitrary_free_text_in_argv": False,
+            "customer_types_coordinator_command": False,
+            "assistant_infers_authority": False,
         },
         "checkpoint_input": checkpoint_input_contract_snapshot(),
         "request_baseline_transfer": {
@@ -1283,6 +1311,113 @@ def _authority_input(
         "supply_only_after_explicit_user_action": True,
         "assistant_may_infer_or_manufacture": False,
     }
+
+
+_ACTION_INPUT_SOURCE_CATEGORIES = {
+    "select_generation_posture_or_stop": (
+        "bounded_enumerated_customer_choice",
+        "authority_only_approval",
+    ),
+    "obtain_separate_generation_posture_authority": (
+        "bounded_enumerated_customer_choice",
+        "authority_only_approval",
+    ),
+    "stage_exact_request_before_activation": ("exact_request_capture_transport",),
+    "stage_exact_intent_checkpoint_input": ("checkpoint_input_transport",),
+    "stage_exact_intent_correction_for_review": ("checkpoint_input_transport",),
+    "stage_exact_intent_interpretation_for_review": ("checkpoint_input_transport",),
+    "stage_exact_decision_resolution_or_switch_posture": ("checkpoint_input_transport",),
+    "stage_exact_posture_transition_for_review": (
+        "bounded_enumerated_customer_choice",
+        "checkpoint_input_transport",
+    ),
+    "stage_exact_continuation_choice": ("checkpoint_input_transport",),
+    "stage_exact_proposal_confirmation_or_decline": ("checkpoint_input_transport",),
+    "stage_exact_unchanged_continuation_for_review": ("checkpoint_input_transport",),
+    "review_staged_checkpoint_input": (
+        "qcoder_held_staged_value",
+        "authority_only_approval",
+    ),
+    "present_exact_request_baseline_and_obtain_activation_approval": (
+        "qcoder_held_staged_value",
+        "authority_only_approval",
+    ),
+    "obtain_explicit_qcoder_activation": (
+        "qcoder_held_staged_value",
+        "authority_only_approval",
+    ),
+    "obtain_separate_ide_write_or_run_authority": ("authority_only_approval",),
+    "perform_authorized_ide_work_and_register_exact_paths": ("exact_artifact_lineage",),
+    "obtain_exact_artifact_set_authorization": (
+        "qcoder_held_staged_value",
+        "bounded_enumerated_customer_choice",
+        "authority_only_approval",
+    ),
+    "process_exact_authorized_artifacts": ("qcoder_managed_canonical_reference",),
+    "review_current_build": ("qcoder_managed_canonical_reference",),
+    "start_next_or_stop": (
+        "qcoder_managed_canonical_reference",
+        "exact_customer_selected_workspace",
+        "bounded_enumerated_customer_choice",
+        "authority_only_approval",
+    ),
+    "stop_and_present_checkpoint": ("authority_only_approval",),
+}
+
+
+def _default_permitted_input_source(action: str) -> str:
+    defaults = {
+        "select_generation_posture_or_stop": (
+            "explicit_customer_bounded_posture_choice_or_explicitly_accepted_"
+            "supported_recommendation"
+        ),
+        "obtain_separate_generation_posture_authority": (
+            "explicit_customer_bounded_posture_choice_or_explicitly_accepted_"
+            "supported_recommendation"
+        ),
+        "stage_exact_request_before_activation": (
+            "complete_customer_message_via_exact_request_capture_transport"
+        ),
+        "obtain_explicit_qcoder_activation": (
+            "explicit_user_authority_only_for_qcoder_held_activation_request"
+        ),
+        "obtain_separate_ide_write_or_run_authority": ("explicit_user_authority_only"),
+        "obtain_exact_artifact_set_authorization": (
+            "explicit_user_bounded_exact_set_action_on_qcoder_displayed_candidates"
+        ),
+        "stop_and_present_checkpoint": "explicit_user_checkpoint_authority",
+    }
+    source = defaults.get(action)
+    if source is None:
+        raise CurrentLoopError(f"coordinator_protocol_input_source_undefined_{action}")
+    return source
+
+
+def _bounded_values_for_action(action: str) -> dict[str, list[str]]:
+    if action in {
+        "select_generation_posture_or_stop",
+        "obtain_separate_generation_posture_authority",
+        "stage_exact_posture_transition_for_review",
+    }:
+        return {
+            "generation_posture": list(GENERATION_POSTURES),
+            "posture_authority_provenance": list(POSTURE_AUTHORITY_PROVENANCE),
+        }
+    if action == "obtain_exact_artifact_set_authorization":
+        return {
+            "artifact_review_action": [
+                "approve_all",
+                "remove_one",
+                "add_one_explicitly",
+                "decline",
+            ]
+        }
+    if action == "start_next_or_stop":
+        return {
+            "generation_posture": list(GENERATION_POSTURES),
+            "next_loop_action": ["start_next", "stop"],
+        }
+    return {}
 
 
 class CurrentLoopCoordinator:
@@ -5229,6 +5364,10 @@ class CurrentLoopCoordinator:
             "confirmation_transmission_state": "not_applicable",
             "identical_repeat_prohibited": False,
             "permitted_input_source": None,
+            "input_source_disposition": None,
+            "bounded_input_semantics": None,
+            "required_authority_disposition": None,
+            "protocol_binding": None,
             "prohibited_derivations": [
                 "conversation_reconstruction",
                 "transcript_search",
@@ -5236,6 +5375,7 @@ class CurrentLoopCoordinator:
                 "qcoder_local_state_inspection",
             ],
             "no_action_reason": None,
+            "no_action_disposition": None,
             "terminal": phase in {"completed", "abandoned"},
         }
         if operation == "standalone_review" and state_status == "ready":
@@ -5258,13 +5398,21 @@ class CurrentLoopCoordinator:
                         ),
                         reused_inputs=("canonical_request_baseline",),
                         new_inputs=("explicit_generation_posture_authority",),
+                        argument_values=(
+                            {
+                                "flag": "--posture",
+                                "value_source": "explicit_bounded_customer_choice",
+                                "allowed_values": list(GENERATION_POSTURES),
+                            },
+                        ),
                     ),
                     "required_authority_input": _authority_input(
                         "--approve-posture",
                         "Transmit only an explicit attributed generation-posture decision.",
                     ),
                     "permitted_input_source": (
-                        "explicit_user_request_or_explicitly_accepted_assistant_recommendation"
+                        "explicit_customer_bounded_posture_choice_or_explicitly_accepted_"
+                        "supported_recommendation"
                     ),
                 }
             )
@@ -5385,7 +5533,10 @@ class CurrentLoopCoordinator:
                     ),
                     "awaiting_confirmation_fields": ["next_loop_activation"],
                     "confirmation_transmission_state": "not_supplied",
-                    "permitted_input_source": "qcoder_supplied_canonical_references",
+                    "permitted_input_source": (
+                        "qcoder_supplied_canonical_references_plus_explicit_next_"
+                        "workspace_bounded_posture_and_authority"
+                    ),
                     "stop_option": {
                         "supported": True,
                         "requires_invocation": False,
@@ -5574,6 +5725,13 @@ class CurrentLoopCoordinator:
                                 "explicit_posture_authority",
                                 "posture_authority_provenance",
                             ),
+                            argument_values=(
+                                {
+                                    "flag": "--posture",
+                                    "value_source": "explicit_bounded_customer_choice",
+                                    "allowed_values": list(GENERATION_POSTURES),
+                                },
+                            ),
                         )
                         if already_activated
                         else _invocation_template(
@@ -5603,6 +5761,12 @@ class CurrentLoopCoordinator:
                         else ["exact_request_baseline_capture"]
                     ),
                     "confirmation_transmission_state": "not_supplied",
+                    "permitted_input_source": (
+                        "explicit_customer_bounded_posture_choice_or_explicitly_accepted_"
+                        "supported_recommendation"
+                        if already_activated
+                        else "complete_customer_message_via_exact_request_capture_transport"
+                    ),
                 }
             )
         elif checkpoint_kind == "decision_resolution":
@@ -5657,6 +5821,9 @@ class CurrentLoopCoordinator:
                     ),
                     "awaiting_confirmation_fields": ["qcoder_activation"],
                     "confirmation_transmission_state": "not_supplied",
+                    "permitted_input_source": (
+                        "explicit_user_authority_only_for_qcoder_held_activation_request"
+                    ),
                 }
             )
         elif checkpoint_kind == "intent_review":
@@ -5724,6 +5891,7 @@ class CurrentLoopCoordinator:
                     ),
                     "awaiting_confirmation_fields": ["ide_write_or_run_authority"],
                     "confirmation_transmission_state": "not_supplied",
+                    "permitted_input_source": "explicit_user_authority_only",
                 }
             )
         elif checkpoint_kind == "artifact_review":
@@ -5760,6 +5928,9 @@ class CurrentLoopCoordinator:
                     ),
                     "awaiting_confirmation_fields": ["exact_artifact_review_action"],
                     "confirmation_transmission_state": "not_supplied",
+                    "permitted_input_source": (
+                        "explicit_user_bounded_exact_set_action_on_qcoder_displayed_candidates"
+                    ),
                 }
             )
         elif checkpoint_kind == "governing_change_confirmation":
@@ -5830,6 +6001,7 @@ class CurrentLoopCoordinator:
                     ),
                     "awaiting_confirmation_fields": [checkpoint_kind],
                     "confirmation_transmission_state": "not_supplied",
+                    "permitted_input_source": "explicit_user_checkpoint_authority",
                 }
             )
         if override:
@@ -5870,9 +6042,17 @@ class CurrentLoopCoordinator:
             coordinator=coordinator,
             override=checkpoint_protocol,
         )
+        protocol = self._complete_protocol_disposition(
+            phase=coordinator["phase"],
+            state_status=coordinator["state_status"],
+            checkpoint_kind=coordinator["checkpoint_kind"],
+            coordinator=coordinator,
+            protocol=protocol,
+        )
         self._validate_protocol_disposition(
             phase=coordinator["phase"],
             state_status=coordinator["state_status"],
+            checkpoint_kind=coordinator["checkpoint_kind"],
             protocol=protocol,
         )
         result_details = deepcopy(dict(details or {}))
@@ -5922,9 +6102,17 @@ class CurrentLoopCoordinator:
             coordinator=None,
             override=checkpoint_protocol,
         )
+        protocol = self._complete_protocol_disposition(
+            phase=phase,
+            state_status=state_status,
+            checkpoint_kind=checkpoint_kind,
+            coordinator=None,
+            protocol=protocol,
+        )
         self._validate_protocol_disposition(
             phase=phase,
             state_status=state_status,
+            checkpoint_kind=checkpoint_kind,
             protocol=protocol,
         )
         return {
@@ -5949,10 +6137,125 @@ class CurrentLoopCoordinator:
         }
 
     @staticmethod
+    def _complete_protocol_disposition(
+        *,
+        phase: str,
+        state_status: str,
+        checkpoint_kind: str,
+        coordinator: Mapping[str, Any] | None,
+        protocol: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        completed = deepcopy(dict(protocol))
+        action = completed.get("supported_next_action")
+        reason = completed.get("no_action_reason")
+        if action is None:
+            completed["permitted_input_source"] = "no_input_permitted_or_required"
+            completed["input_source_disposition"] = {
+                "schema_id": INPUT_SOURCE_DISPOSITION_SCHEMA_ID,
+                "schema_version": INPUT_SOURCE_DISPOSITION_SCHEMA_VERSION,
+                "categories": ["no_input_permitted_or_required"],
+                "permitted_source": "no_input_permitted_or_required",
+            }
+            completed["bounded_input_semantics"] = {
+                "input_required": False,
+                "content_transport": "none",
+                "accepted_values": {},
+                "arbitrary_free_text_in_argv_permitted": False,
+                "customer_types_coordinator_command": False,
+                "assistant_may_infer_input_or_authority": False,
+                "qcoder_held_values_retransmitted": False,
+            }
+            completed["required_authority_disposition"] = {
+                "required_for_next_invocation": False,
+                "authority_only": False,
+                "content_submission_grants_authority": False,
+            }
+            completed["protocol_binding"] = {
+                "phase": phase,
+                "checkpoint_kind": checkpoint_kind,
+                "current_local_state_is_canonical": True,
+                "resolved_from_current_state_revision": True,
+            }
+            completed["no_action_disposition"] = {
+                "reason": reason,
+                "assistant_should_stop": True,
+                "current_build_complete": phase == "completed",
+                "new_loop_may_be_started": False,
+                "prior_branch_closed": phase in {"completed", "abandoned"},
+            }
+            return completed
+
+        if not isinstance(action, str):
+            raise CurrentLoopError("coordinator_protocol_action_invalid")
+        categories = _ACTION_INPUT_SOURCE_CATEGORIES.get(action)
+        if categories is None:
+            raise CurrentLoopError(f"coordinator_protocol_source_category_undefined_{action}")
+        source = completed.get("permitted_input_source")
+        if not isinstance(source, str) or not source:
+            source = _default_permitted_input_source(action)
+            completed["permitted_input_source"] = source
+        invocation = completed.get("next_invocation")
+        subcommand = invocation.get("subcommand") if isinstance(invocation, Mapping) else None
+        checkpoint_transport = "checkpoint_input_transport" in categories
+        request_transport = "exact_request_capture_transport" in categories
+        authority_only = (
+            "authority_only_approval" in categories
+            and not checkpoint_transport
+            and not request_transport
+        )
+        completed["input_source_disposition"] = {
+            "schema_id": INPUT_SOURCE_DISPOSITION_SCHEMA_ID,
+            "schema_version": INPUT_SOURCE_DISPOSITION_SCHEMA_VERSION,
+            "categories": list(categories),
+            "permitted_source": source,
+        }
+        completed["bounded_input_semantics"] = {
+            "input_required": True,
+            "content_transport": (
+                "checkpoint_input_stdin_or_file"
+                if checkpoint_transport
+                else ("request_inline_or_explicit_stdin_or_file" if request_transport else "none")
+            ),
+            "accepted_values": _bounded_values_for_action(action),
+            "arbitrary_free_text_in_argv_permitted": False,
+            "customer_types_coordinator_command": False,
+            "assistant_may_infer_input_or_authority": False,
+            "qcoder_held_values_retransmitted": False,
+        }
+        stage_only = subcommand == "stage-checkpoint-input"
+        completed["required_authority_disposition"] = {
+            "required_for_next_invocation": (
+                isinstance(completed.get("required_authority_input"), Mapping) and not stage_only
+            ),
+            "authority_only": authority_only,
+            "content_submission_grants_authority": False,
+        }
+        pending = (
+            coordinator.get("pending_checkpoint_input")
+            if isinstance(coordinator, Mapping)
+            else None
+        )
+        completed["protocol_binding"] = {
+            "phase": phase,
+            "checkpoint_kind": checkpoint_kind,
+            "current_local_state_is_canonical": True,
+            "resolved_from_current_state_revision": True,
+            "pending_checkpoint_reference_source": (
+                "qcoder_current_local_state" if isinstance(pending, Mapping) else None
+            ),
+            "expected_state_revision": (
+                pending.get("expected_state_revision") if isinstance(pending, Mapping) else None
+            ),
+        }
+        completed["no_action_disposition"] = None
+        return completed
+
+    @staticmethod
     def _validate_protocol_disposition(
         *,
         phase: str,
         state_status: str,
+        checkpoint_kind: str,
         protocol: Mapping[str, Any],
     ) -> None:
         action = protocol.get("supported_next_action")
@@ -5963,9 +6266,105 @@ class CurrentLoopCoordinator:
                 raise CurrentLoopError("coordinator_protocol_incomplete")
             if reason is not None:
                 raise CurrentLoopError("coordinator_protocol_contradictory")
+            source = protocol.get("permitted_input_source")
+            disposition = protocol.get("input_source_disposition")
+            semantics = protocol.get("bounded_input_semantics")
+            binding = protocol.get("protocol_binding")
+            authority = protocol.get("required_authority_disposition")
+            if not isinstance(source, str) or not source:
+                raise CurrentLoopError("coordinator_protocol_permitted_input_source_missing")
+            if (
+                not isinstance(disposition, Mapping)
+                or disposition.get("permitted_source") != source
+            ):
+                raise CurrentLoopError("coordinator_protocol_input_source_disposition_invalid")
+            categories = disposition.get("categories")
+            if (
+                not isinstance(categories, list)
+                or not categories
+                or any(item not in PERMITTED_INPUT_SOURCE_CATEGORIES for item in categories)
+                or "no_input_permitted_or_required" in categories
+            ):
+                raise CurrentLoopError("coordinator_protocol_input_source_category_invalid")
+            if not isinstance(semantics, Mapping) or not isinstance(binding, Mapping):
+                raise CurrentLoopError("coordinator_protocol_bounded_input_semantics_missing")
+            if semantics.get("arbitrary_free_text_in_argv_permitted") is not False:
+                raise CurrentLoopError("coordinator_protocol_literal_free_text_prohibited")
+            if semantics.get("assistant_may_infer_input_or_authority") is not False:
+                raise CurrentLoopError("coordinator_protocol_inference_prohibited")
+            if (
+                not isinstance(authority, Mapping)
+                or authority.get("content_submission_grants_authority") is not False
+            ):
+                raise CurrentLoopError("coordinator_protocol_authority_disposition_invalid")
+            authority_input_supplied = isinstance(protocol.get("required_authority_input"), Mapping)
+            authority_required_now = authority.get("required_for_next_invocation")
+            if authority_required_now is True and not authority_input_supplied:
+                raise CurrentLoopError("coordinator_protocol_required_authority_missing")
+            if (
+                authority_required_now is False
+                and authority_input_supplied
+                and invocation.get("subcommand") != "stage-checkpoint-input"
+                and not invocation.get("allowed_subcommand_alternatives")
+            ):
+                raise CurrentLoopError("coordinator_protocol_required_authority_contradictory")
+            if "authority_only_approval" in categories and authority_required_now is not True:
+                raise CurrentLoopError("coordinator_protocol_authority_source_mismatch")
+            required_flags = invocation.get("required_flags", [])
+            checkpoint_input_required = any(
+                "checkpoint-input" in str(flag) for flag in required_flags
+            )
+            if checkpoint_input_required and "checkpoint_input_transport" not in categories:
+                raise CurrentLoopError("coordinator_protocol_checkpoint_input_source_mismatch")
+            if invocation.get("authority_only") is True:
+                if not {
+                    "qcoder_held_staged_value",
+                    "authority_only_approval",
+                }.issubset(categories):
+                    raise CurrentLoopError("coordinator_protocol_approval_source_mismatch")
+                if invocation.get("staged_values_retransmitted") is not False:
+                    raise CurrentLoopError("coordinator_protocol_content_retransmission_invalid")
+            if (
+                "bounded_enumerated_customer_choice" in categories
+                and "checkpoint_input_transport" not in categories
+                and not semantics.get("accepted_values")
+            ):
+                raise CurrentLoopError("coordinator_protocol_bounded_values_missing")
+            if phase == "next_loop_ready":
+                if action != "start_next_or_stop":
+                    raise CurrentLoopError("coordinator_protocol_closed_branch_action_invalid")
+                alternatives = invocation.get("allowed_subcommand_alternatives", [])
+                serialized = json.dumps(
+                    [invocation, alternatives],
+                    ensure_ascii=True,
+                    sort_keys=True,
+                )
+                if "propose_change" in serialized:
+                    raise CurrentLoopError("coordinator_protocol_closed_branch_reopened")
+            if checkpoint_kind == "posture" and action in {
+                "obtain_separate_generation_posture_authority",
+                "select_generation_posture_or_stop",
+            }:
+                accepted = semantics.get("accepted_values", {})
+                if accepted.get("generation_posture") != list(GENERATION_POSTURES):
+                    raise CurrentLoopError("coordinator_protocol_posture_values_invalid")
+                if "checkpoint_input_transport" in categories:
+                    raise CurrentLoopError("coordinator_protocol_posture_transport_invalid")
             return
         if not isinstance(reason, str) or not reason:
             raise CurrentLoopError(f"coordinator_protocol_incomplete_{phase}_{state_status}")
+        if invocation is not None:
+            raise CurrentLoopError("coordinator_protocol_no_action_invocation_invalid")
+        disposition = protocol.get("input_source_disposition")
+        no_action = protocol.get("no_action_disposition")
+        if (
+            protocol.get("permitted_input_source") != "no_input_permitted_or_required"
+            or not isinstance(disposition, Mapping)
+            or disposition.get("categories") != ["no_input_permitted_or_required"]
+            or not isinstance(no_action, Mapping)
+            or no_action.get("reason") != reason
+        ):
+            raise CurrentLoopError("coordinator_protocol_no_action_disposition_invalid")
 
     def _checkpoint_result(
         self,
