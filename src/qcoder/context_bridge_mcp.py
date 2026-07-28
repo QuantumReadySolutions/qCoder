@@ -120,6 +120,19 @@ user explicitly accepts. Preserve exact user-stated decision answers. Explorator
 not a full Generation Context Pack; Blueprint-guided generation stops at the decision_resolution
 checkpoint and uses the exact decision-disposition authority channel. A posture transition
 requires its separate explicit authority and must not rewrite the Working Blueprint.
+
+IDE WORK AND ARTIFACT HANDOFF
+After IDE write/run authority, perform only the user-authorized development work. Retain exact
+paths returned by your own write or modify operations; no directory orientation is needed before
+creating a new file. Register only those retained exact paths or paths the user explicitly
+selected, with truthful assistant_created, assistant_modified, or user_selected provenance.
+Never inspect .qcoder, and exclude .qcoder from every ordinary project inspection. Do not use a
+glob, find, directory listing, Git status, repository map, or search result as the qCoder review
+set. The Quick Demo requires no workspace discovery: retain the exact source and QASM paths
+returned by the two IDE write operations. Ordinary inspection of relevant non-qCoder project
+files may occur only under the user's development request and the IDE/client permission model;
+that inspection does not register a file or authorize qCoder review. After registration, present
+the exact visible candidate set for separate artifact-review authorization.
 """
 
 CLIENT_AUTHORITY_AND_PROHIBITED_INSTRUCTIONS = """AUTHORITY BOUNDARIES
@@ -138,15 +151,17 @@ executable. Pass transport_arguments exactly where supported. Never run `which` 
 PATH or environment variables, traverse the filesystem for a runtime, inspect Cursor, Claude Code,
 or Codex configuration. Never inspect Cursor, Claude Code, or Codex configuration to rediscover the
 runtime. Never list, browse, or inspect the executable path's parent directories.
-Never inspect .qcoder state files, recursively search even inside the workspace, inspect parent or
-home-directory qCoder state, or inspect sibling repositories. Never open, read, print, copy, hash,
-or validate the token-file contents. The declared paths authorize only invoking the declared
-qCoder runtime and passing its token-file path; they grant no general access outside the active
-workspace. First use coordinator_prefix with --help; stop if it does not expose qCoder
-current-loop. Stop on authentication, entitlement, or hosted-service failure. Never manually
-sequence Context Bridge tools and never substitute a local or manual review fallback. Do not
-replace coordinator truth with a locally assembled review. Never reconstruct canonical artifacts,
-scan the repository, infer neighboring files, transfer raw artifacts, or inspect client
+Never enumerate, list, search, open, read, copy, hash, parse, inspect, summarize, or
+reverse-engineer .qcoder or anything below it. Never search for canonical state, inspect parent or
+home-directory qCoder state, or inspect sibling repositories. Never use workspace discovery to
+construct a qCoder review set, turn a listing or search result into candidates, or infer
+neighboring artifacts. Never open, read, print, copy, hash, or validate the token-file contents.
+The declared paths authorize only invoking the declared qCoder runtime and passing its token-file
+path; they grant no general access outside the active workspace. First use coordinator_prefix
+with --help; stop if it does not expose qCoder current-loop. Stop on authentication, entitlement,
+or hosted-service failure. Never manually sequence Context Bridge tools and never substitute a
+local or manual review fallback. Do not replace coordinator truth with a locally assembled
+review. Never reconstruct canonical artifacts, transfer raw artifacts, or inspect client
 configuration.
 """
 

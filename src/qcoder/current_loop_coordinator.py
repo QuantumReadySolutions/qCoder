@@ -60,10 +60,11 @@ from qcoder.context_loop import CONTEXT_LOOP_GATE
 
 COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v4"
 COORDINATOR_RESULT_SCHEMA_VERSION = 4
-COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v3"
-PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v2"
+COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v4"
+PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v3"
+OLDER_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v2"
 LEGACY_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v1"
-COORDINATOR_STATE_SCHEMA_VERSION = 3
+COORDINATOR_STATE_SCHEMA_VERSION = 4
 CONSEQUENCE_PROJECTION_SCHEMA_ID = "qcoder.current_loop.consequence_projection.v1"
 PERFORMANCE_SCHEMA_ID = "qcoder.current_loop.private_performance.v1"
 
@@ -198,6 +199,12 @@ POSTURE_AUTHORITY_PROVENANCE = (
     "user_confirmed_assistant_recommendation",
     "inherited_confirmed_lineage",
 )
+ARTIFACT_CANDIDATE_PROVENANCE = (
+    "assistant_created",
+    "assistant_modified",
+    "user_selected",
+)
+LEGACY_ARTIFACT_CANDIDATE_PROVENANCE = "user_supplied"
 EXPLORATORY_FIXED_CONSTRAINTS = (
     "Keep this attempt bounded to the explicitly authorized active workspace and current build.",
 )
@@ -253,6 +260,42 @@ _RECOVERY = {
     "request_baseline_label_without_value": (
         "Label provenance was supplied without a label value.",
         "Omit label provenance or supply the exact attributable label.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "qcoder_local_state_artifact_prohibited": (
+        "qCoder local state cannot be selected as a review artifact.",
+        "Use only an exact non-qCoder path retained from an authorized IDE operation "
+        "or explicitly selected by the user. Do not inspect qCoder local state.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "artifact_candidate_discovery_expression_invalid": (
+        "A discovery expression cannot be registered as an exact review artifact.",
+        "Use the exact file path returned by an authorized IDE operation or explicitly "
+        "selected by the user. Do not glob, list, find, or search for candidates.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "artifact_candidate_file_required": (
+        "The exact registered artifact must exist and be a regular file.",
+        "Use the exact file path returned by the authorized IDE operation or explicit "
+        "user selection. Do not search for a replacement.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "artifact_candidate_provenance_conflict": (
+        "The same exact artifact path was supplied with conflicting provenance.",
+        "Correct the provenance from the known IDE operation or explicit user selection; "
+        "do not guess or rediscover the path.",
         True,
         False,
         True,
@@ -824,6 +867,17 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
         ],
         "decision_authority_provenance": list(DECISION_AUTHORITY_PROVENANCE),
         "posture_authority_provenance": list(POSTURE_AUTHORITY_PROVENANCE),
+        "artifact_candidate_provenance": list(ARTIFACT_CANDIDATE_PROVENANCE),
+        "artifact_handoff": {
+            "awaiting_local_artifacts_actionable": True,
+            "exact_ide_operation_paths_only": True,
+            "explicit_user_selected_paths_only": True,
+            "incremental_registration_additive": True,
+            "incremental_registration_idempotent": True,
+            "qcoder_local_state_access_by_assistant": False,
+            "discovery_derived_candidates": False,
+            "registration_authorizes_review": False,
+        },
         "workspace_state_is_intent": False,
         "recovery_categories": sorted(_RECOVERY),
         "high_level_operations": [
@@ -1095,6 +1149,35 @@ def _invocation_template(
         "account_identifier_embedded": False,
         "canonical_artifact_reconstruction_required": False,
     }
+
+
+def _artifact_handoff_invocation_template() -> dict[str, Any]:
+    invocation = _invocation_template(
+        "register-artifacts",
+        required_flags=("--provenance",),
+        new_inputs=(
+            "exact_artifact_path_from_ide_operation_or_user_selection",
+            "exact_artifact_role",
+            "truthful_artifact_provenance",
+        ),
+    )
+    invocation.update(
+        {
+            "artifact_path_flags": {
+                "source": "--source",
+                "circuit_qasm": "--qasm",
+                "results": "--results",
+            },
+            "path_source": ("exact_ide_create_or_modify_operation_result_or_exact_user_selection"),
+            "accepted_provenance": list(ARTIFACT_CANDIDATE_PROVENANCE),
+            "separate_invocations_for_mixed_provenance": True,
+            "incremental_registration": "additive_and_idempotent",
+            "discovery_permitted": False,
+            "qcoder_local_state_access_permitted": False,
+            "guessed_artifact_path_embedded": False,
+        }
+    )
+    return invocation
 
 
 def _authority_input(
@@ -2139,6 +2222,8 @@ class CurrentLoopCoordinator:
                     "checkpoint_kind": "none",
                     "customer_summary": (
                         "The IDE host recorded its separate write or run authority. "
+                        "Perform only the authorized IDE work, retain exact paths returned "
+                        "by write or modify operations, and register those exact paths. "
                         "qCoder artifact review is still not authorized."
                     ),
                 }
@@ -2151,7 +2236,16 @@ class CurrentLoopCoordinator:
                 state=self.store.read(),
                 summary=coordinator["customer_summary"],
                 elapsed=self.clock() - started,
-                details={"artifact_review_authorized": False},
+                details={
+                    "artifact_review_authorized": False,
+                    "ide_authority_recorded": True,
+                    "artifact_path_source": (
+                        "exact_ide_operation_result_or_explicit_user_selection"
+                    ),
+                    "directory_orientation_required": False,
+                    "candidate_discovery_permitted": False,
+                    "qcoder_local_state_access_permitted": False,
+                },
             )
         except (CurrentLoopError, CurrentLoopConflict) as exc:
             return self._exception_result("record_ide_authority", exc, started)
@@ -2172,7 +2266,46 @@ class CurrentLoopCoordinator:
                     "evidence_processing",
                 },
             )
+            coordinator = self._coordinator_state(state)
             normalized = self._normalize_candidates(candidates)
+            merged, added_count = self._merge_artifact_candidates(
+                coordinator.get("artifact_candidates", []),
+                normalized,
+            )
+            current_authorization = state.get("artifact_authorization")
+            if (
+                added_count == 0
+                and coordinator["phase"] == "artifact_authorization"
+                and isinstance(current_authorization, Mapping)
+                and current_authorization.get("state") == "proposed"
+            ):
+                visible = self._visible_candidate_set(merged)
+                return self._result(
+                    operation="register_artifacts",
+                    ok=True,
+                    state=state,
+                    summary=coordinator["customer_summary"],
+                    elapsed=self.clock() - started,
+                    details={
+                        "proposed_set": visible,
+                        "visible_candidate_set": visible,
+                        "candidate_actions": [
+                            "approve_all",
+                            "remove_one",
+                            "add_one_explicitly",
+                            "decline",
+                        ],
+                        "registered_candidate_count": len(merged),
+                        "new_candidate_count": 0,
+                        "idempotent_registration": True,
+                        "review_authorized": False,
+                        "registration_authorizes_review": False,
+                        "directory_scanned": False,
+                        "candidate_discovery_performed": False,
+                        "qcoder_local_state_accessed": False,
+                        "raw_file_contents_included": False,
+                    },
+                )
             authorization = propose_selected_artifact_authorization(
                 loop_ref=state["loop_ref"],
                 proposed_artifacts=[
@@ -2181,7 +2314,7 @@ class CurrentLoopCoordinator:
                         "artifact_type": item["artifact_type"],
                         "local_path": item["path"],
                     }
-                    for item in normalized
+                    for item in merged
                 ],
             )
             state = set_artifact_authorization(
@@ -2199,7 +2332,8 @@ class CurrentLoopCoordinator:
                         "Review these current-build artifacts locally? Writing or "
                         "running code is separate from letting qCoder inspect them."
                     ),
-                    "artifact_candidates": normalized,
+                    "artifact_candidates": merged,
+                    "evidence_processing_complete": False,
                 }
             )
             self._replace_coordinator(coordinator)
@@ -2210,17 +2344,23 @@ class CurrentLoopCoordinator:
                 summary=coordinator["customer_summary"],
                 elapsed=self.clock() - started,
                 details={
-                    "proposed_set": [
-                        {
-                            "role": item["role"],
-                            "display_path": item["display_path"],
-                            "external": item["external"],
-                            "provenance": item["provenance"],
-                        }
-                        for item in normalized
+                    "proposed_set": self._visible_candidate_set(merged),
+                    "visible_candidate_set": self._visible_candidate_set(merged),
+                    "candidate_actions": [
+                        "approve_all",
+                        "remove_one",
+                        "add_one_explicitly",
+                        "decline",
                     ],
+                    "registered_candidate_count": len(merged),
+                    "new_candidate_count": added_count,
+                    "idempotent_registration": added_count == 0,
                     "review_authorized": False,
+                    "registration_authorizes_review": False,
                     "directory_scanned": False,
+                    "candidate_discovery_performed": False,
+                    "qcoder_local_state_accessed": False,
+                    "raw_file_contents_included": False,
                 },
             )
         except (CurrentLoopError, CurrentLoopConflict, ValueError) as exc:
@@ -2241,6 +2381,28 @@ class CurrentLoopCoordinator:
             authorization = state.get("artifact_authorization")
             if not isinstance(authorization, Mapping):
                 raise CurrentLoopError("selected_artifact_authorization_missing")
+            coordinator = self._coordinator_state(state)
+            candidates = [
+                deepcopy(dict(item))
+                for item in coordinator.get("artifact_candidates", [])
+                if isinstance(item, Mapping)
+            ]
+            normalized_added: dict[str, Any] | None = None
+            if action == "add_one_explicitly":
+                if selected_path is None or artifact_role is None:
+                    raise CurrentLoopError("selected_artifact_add_invalid")
+                normalized_added = self._normalize_candidates(
+                    [
+                        {
+                            "path": selected_path,
+                            "role": artifact_role,
+                            "artifact_type": artifact_type or artifact_role,
+                            "provenance": "user_selected",
+                            "explicit_external": False,
+                        }
+                    ]
+                )[0]
+                selected_path = normalized_added["path"]
             updated_authorization = update_selected_artifact_authorization(
                 authorization,
                 action=action,
@@ -2255,6 +2417,18 @@ class CurrentLoopCoordinator:
                 expected_revision=state["state_revision"],
             )
             coordinator = self._coordinator_state(state)
+            authorized_paths = {
+                str(item["local_path"])
+                for item in updated_authorization["items"]
+                if isinstance(item, Mapping)
+            }
+            if normalized_added is not None:
+                candidates, _ = self._merge_artifact_candidates(
+                    candidates,
+                    [normalized_added],
+                )
+            candidates = [item for item in candidates if str(item.get("path")) in authorized_paths]
+            coordinator["artifact_candidates"] = candidates
             if updated_authorization["state"] == "approved":
                 coordinator.update(
                     {
@@ -2265,6 +2439,7 @@ class CurrentLoopCoordinator:
                             "The exact visible artifact set is approved for local "
                             "qCoder inspection."
                         ),
+                        "evidence_processing_complete": False,
                     }
                 )
                 category = None
@@ -2277,8 +2452,10 @@ class CurrentLoopCoordinator:
                         "customer_summary": (
                             "Artifact review was declined. qCoder did not inspect the files."
                         ),
+                        "evidence_processing_complete": False,
                     }
                 )
+                coordinator["artifact_candidates"] = []
                 category = "authorization_declined"
             else:
                 coordinator.update(
@@ -2289,6 +2466,7 @@ class CurrentLoopCoordinator:
                         "customer_summary": (
                             "The changed artifact set still needs explicit approval."
                         ),
+                        "evidence_processing_complete": False,
                     }
                 )
                 category = "authorization_partial"
@@ -2304,6 +2482,10 @@ class CurrentLoopCoordinator:
                 details={
                     "authorization_state": updated_authorization["state"],
                     "share_safe_projection": projection,
+                    "visible_candidate_set": self._visible_candidate_set(
+                        coordinator["artifact_candidates"]
+                    ),
+                    "registration_authorizes_review": False,
                     "paths_transmitted": False,
                     "ide_write_or_run_implied": False,
                 },
@@ -2475,6 +2657,7 @@ class CurrentLoopCoordinator:
                         "Authorized local artifacts were processed and exact bounded "
                         "evidence was saved. Raw artifacts remained local."
                     ),
+                    "evidence_processing_complete": True,
                 }
             )
             coordinator["performance"]["local_extraction_seconds"] += max(
@@ -3174,7 +3357,7 @@ class CurrentLoopCoordinator:
         *,
         role: str,
         path: str | Path,
-        provenance: str = "user_supplied",
+        provenance: str = "user_selected",
     ) -> dict[str, Any]:
         return self.register_artifacts(
             candidates=[
@@ -4016,17 +4199,33 @@ class CurrentLoopCoordinator:
             path_value = candidate.get("path")
             if not isinstance(path_value, (str, Path)):
                 raise CurrentLoopError("selected_artifact_path_invalid")
+            path_text = str(path_value)
+            if self._is_discovery_expression(path_text):
+                raise CurrentLoopError("artifact_candidate_discovery_expression_invalid")
+            if self._contains_qcoder_component(path_text):
+                raise CurrentLoopError("qcoder_local_state_artifact_prohibited")
             path = Path(path_value).expanduser()
             if not path.is_absolute() or ".." in path.parts:
                 raise CurrentLoopError("selected_artifact_path_invalid")
+            path = path.absolute()
+            try:
+                resolved = path.resolve(strict=True)
+            except (OSError, RuntimeError) as exc:
+                raise CurrentLoopError("artifact_candidate_file_required") from exc
+            if self._contains_qcoder_component(str(resolved)):
+                raise CurrentLoopError("qcoder_local_state_artifact_prohibited")
+            if not path.is_file():
+                raise CurrentLoopError("artifact_candidate_file_required")
             exact = str(path)
             if exact in seen:
                 raise CurrentLoopError("selected_artifact_duplicate_path")
             seen.add(exact)
             provenance = candidate.get("provenance")
-            if provenance not in {"assistant_created", "user_supplied"}:
+            if provenance == LEGACY_ARTIFACT_CANDIDATE_PROVENANCE:
+                provenance = "user_selected"
+            if provenance not in ARTIFACT_CANDIDATE_PROVENANCE:
                 raise CurrentLoopError("artifact_candidate_provenance_invalid")
-            external = not self._is_within_workspace(path)
+            external = not self._is_within_workspace(resolved)
             if external and candidate.get("explicit_external") is not True:
                 raise CurrentLoopError("external_artifact_selection_required")
             display = (
@@ -4047,9 +4246,71 @@ class CurrentLoopCoordinator:
             )
         return normalized
 
+    def _merge_artifact_candidates(
+        self,
+        existing: object,
+        supplied: Sequence[Mapping[str, Any]],
+    ) -> tuple[list[dict[str, Any]], int]:
+        merged: list[dict[str, Any]] = []
+        by_path: dict[str, dict[str, Any]] = {}
+        if isinstance(existing, Sequence) and not isinstance(existing, (str, bytes)):
+            for item in existing:
+                if not isinstance(item, Mapping):
+                    raise CurrentLoopError("selected_artifact_set_invalid")
+                value = deepcopy(dict(item))
+                if value.get("provenance") == LEGACY_ARTIFACT_CANDIDATE_PROVENANCE:
+                    value["provenance"] = "user_selected"
+                path = str(value.get("path") or "")
+                if not path:
+                    raise CurrentLoopError("selected_artifact_path_invalid")
+                by_path[path] = value
+                merged.append(value)
+        added_count = 0
+        for item in supplied:
+            value = deepcopy(dict(item))
+            path = str(value["path"])
+            previous = by_path.get(path)
+            if previous is None:
+                by_path[path] = value
+                merged.append(value)
+                added_count += 1
+                continue
+            if previous.get("provenance") != value.get("provenance"):
+                raise CurrentLoopError("artifact_candidate_provenance_conflict")
+            comparable_keys = (
+                "role",
+                "artifact_type",
+                "external",
+                "related_circuit_ref",
+            )
+            if any(previous.get(key) != value.get(key) for key in comparable_keys):
+                raise CurrentLoopError("selected_artifact_duplicate_path")
+        return merged, added_count
+
+    @staticmethod
+    def _visible_candidate_set(candidates: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            {
+                "role": item["role"],
+                "display_path": item["display_path"],
+                "external": item["external"],
+                "provenance": item["provenance"],
+            }
+            for item in candidates
+        ]
+
+    @staticmethod
+    def _contains_qcoder_component(path_value: str) -> bool:
+        normalized = path_value.replace("\\", "/")
+        return any(part.casefold() == ".qcoder" for part in normalized.split("/"))
+
+    @staticmethod
+    def _is_discovery_expression(path_value: str) -> bool:
+        return any(marker in path_value for marker in ("*", "?", "[", "]"))
+
     def _is_within_workspace(self, path: Path) -> bool:
         try:
-            path.absolute().relative_to(self.workspace_root)
+            path.resolve(strict=False).relative_to(self.workspace_root.resolve(strict=False))
         except ValueError:
             return False
         return True
@@ -4139,6 +4400,7 @@ class CurrentLoopCoordinator:
             "checkpoint_kind": checkpoint_kind,
             "customer_summary": summary,
             "artifact_candidates": [],
+            "evidence_processing_complete": False,
             "consequence_projection": None,
             "authority_separation": {
                 "qcoder_activation": "explicit_user_authority",
@@ -4184,11 +4446,18 @@ class CurrentLoopCoordinator:
             )
         result = deepcopy(dict(coordinator))
         if (
-            result.get("schema_id") == LEGACY_COORDINATOR_STATE_SCHEMA_ID
-            and result.get("schema_version") == 1
-        ) or (
-            result.get("schema_id") == PREVIOUS_COORDINATOR_STATE_SCHEMA_ID
-            and result.get("schema_version") == 2
+            (
+                result.get("schema_id") == LEGACY_COORDINATOR_STATE_SCHEMA_ID
+                and result.get("schema_version") == 1
+            )
+            or (
+                result.get("schema_id") == OLDER_COORDINATOR_STATE_SCHEMA_ID
+                and result.get("schema_version") == 2
+            )
+            or (
+                result.get("schema_id") == PREVIOUS_COORDINATOR_STATE_SCHEMA_ID
+                and result.get("schema_version") == 3
+            )
         ):
             result["schema_id"] = COORDINATOR_STATE_SCHEMA_ID
             result["schema_version"] = COORDINATOR_STATE_SCHEMA_VERSION
@@ -4198,12 +4467,20 @@ class CurrentLoopCoordinator:
             result.setdefault("generation_context_outcome", None)
             result.setdefault("active_generation_artifacts", {})
             result.setdefault("generation_parent_history", [])
+            result.setdefault("evidence_processing_complete", False)
+            for candidate in result.get("artifact_candidates", []):
+                if (
+                    isinstance(candidate, dict)
+                    and candidate.get("provenance") == LEGACY_ARTIFACT_CANDIDATE_PROVENANCE
+                ):
+                    candidate["provenance"] = "user_selected"
         result.setdefault("effective_generation_posture", state.get("generation_posture"))
         result.setdefault("posture_transition_history", [])
         result.setdefault("pending_decision_resolution", None)
         result.setdefault("generation_context_outcome", None)
         result.setdefault("active_generation_artifacts", {})
         result.setdefault("generation_parent_history", [])
+        result.setdefault("evidence_processing_complete", False)
         if (
             result.get("schema_id") != COORDINATOR_STATE_SCHEMA_ID
             or result.get("schema_version") != COORDINATOR_STATE_SCHEMA_VERSION
@@ -4219,6 +4496,8 @@ class CurrentLoopCoordinator:
         }:
             raise CurrentLoopError("current_loop_state_corrupt")
         if not isinstance(result.get("posture_transition_history"), list):
+            raise CurrentLoopError("current_loop_state_corrupt")
+        if not isinstance(result.get("evidence_processing_complete"), bool):
             raise CurrentLoopError("current_loop_state_corrupt")
         return result
 
@@ -4303,6 +4582,87 @@ class CurrentLoopCoordinator:
             "confirmation_transmission_state": "not_applicable",
             "identical_repeat_prohibited": False,
         }
+        if phase == "awaiting_local_artifacts" and state_status == "ready":
+            protocol.update(
+                {
+                    "supported_next_action": (
+                        "perform_authorized_ide_work_and_register_exact_paths"
+                    ),
+                    "next_invocation": _artifact_handoff_invocation_template(),
+                    "required_authority_input": None,
+                    "awaiting_confirmation_fields": [],
+                    "confirmation_transmission_state": "confirmed",
+                    "identical_repeat_prohibited": False,
+                }
+            )
+            return protocol
+        if phase == "evidence_processing" and state_status == "ready":
+            processing_complete = (
+                isinstance(coordinator, Mapping)
+                and coordinator.get("evidence_processing_complete") is True
+            )
+            protocol.update(
+                {
+                    "supported_next_action": (
+                        "review_current_build"
+                        if processing_complete
+                        else "process_exact_authorized_artifacts"
+                    ),
+                    "next_invocation": _invocation_template(
+                        ("review-build" if processing_complete else "process-authorized-artifacts"),
+                        reused_inputs=(
+                            (
+                                "exact_saved_current_build_evidence"
+                                if processing_complete
+                                else "exact_approved_artifact_set"
+                            ),
+                        ),
+                        uses_transport=True,
+                    ),
+                }
+            )
+            return protocol
+        if phase == "current_build_review" and state_status == "ready":
+            protocol.update(
+                {
+                    "supported_next_action": "review_current_build",
+                    "next_invocation": _invocation_template(
+                        "review-build",
+                        reused_inputs=("exact_saved_current_build_evidence",),
+                        uses_transport=True,
+                    ),
+                }
+            )
+            return protocol
+        if phase == "next_loop_ready" and state_status == "ready":
+            protocol.update(
+                {
+                    "supported_next_action": "start_next_loop_with_explicit_authority_or_stop",
+                    "next_invocation": _invocation_template(
+                        "start-next",
+                        required_flags=(
+                            "--next-workspace",
+                            "--posture",
+                            "--seed-file",
+                            "--parent-file",
+                            "--approve",
+                        ),
+                        reused_inputs=("exact_next_loop_seed", "exact_named_parent_artifacts"),
+                        new_inputs=(
+                            "next_workspace",
+                            "generation_posture",
+                            "explicit_next_loop_activation",
+                        ),
+                    ),
+                    "required_authority_input": _authority_input(
+                        "--approve",
+                        "Explicitly activate only the selected next loop.",
+                    ),
+                    "awaiting_confirmation_fields": ["next_loop_activation"],
+                    "confirmation_transmission_state": "not_supplied",
+                }
+            )
+            return protocol
         if state_status != "checkpoint_required":
             return protocol
 
@@ -4651,15 +5011,33 @@ class CurrentLoopCoordinator:
                 }
             )
         elif checkpoint_kind == "artifact_review":
+            candidates = (
+                [
+                    deepcopy(dict(item))
+                    for item in coordinator.get("artifact_candidates", [])
+                    if isinstance(item, Mapping)
+                ]
+                if isinstance(coordinator, Mapping)
+                else []
+            )
+            next_invocation = _invocation_template(
+                "authorize-artifacts",
+                required_flags=("--action", "--provenance"),
+                reused_inputs=("exact_visible_artifact_candidates",),
+                new_inputs=("exact_artifact_review_action",),
+                alternatives=(
+                    "approve_all",
+                    "remove_one",
+                    "add_one_explicitly",
+                    "decline",
+                ),
+            )
+            next_invocation["visible_candidate_set"] = self._visible_candidate_set(candidates)
+            next_invocation["hidden_candidates_permitted"] = False
             protocol.update(
                 {
                     "supported_next_action": "obtain_exact_artifact_set_authorization",
-                    "next_invocation": _invocation_template(
-                        "authorize-artifacts",
-                        required_flags=("--action", "--provenance"),
-                        reused_inputs=("exact_visible_artifact_candidates",),
-                        new_inputs=("exact_artifact_review_action",),
-                    ),
+                    "next_invocation": next_invocation,
                     "required_authority_input": _authority_input(
                         "--action",
                         "Approve, adjust, or decline the exact visible artifact set.",

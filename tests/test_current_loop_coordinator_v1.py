@@ -542,7 +542,7 @@ def _activate_and_prepare(
 def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
     snapshot = coordinator_contract_snapshot()
     assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v4"
-    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v3"
+    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v4"
     assert snapshot["checkpoint_result_protocol"]["schema_version"] == 4
     assert all(snapshot["checkpoint_result_protocol"].values())
     assert snapshot["request_baseline_transfer"] == {
@@ -554,6 +554,21 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "protected_call_before_activation": False,
         "posture_authority_separate": True,
     }
+    assert snapshot["artifact_candidate_provenance"] == [
+        "assistant_created",
+        "assistant_modified",
+        "user_selected",
+    ]
+    assert snapshot["artifact_handoff"] == {
+        "awaiting_local_artifacts_actionable": True,
+        "exact_ide_operation_paths_only": True,
+        "explicit_user_selected_paths_only": True,
+        "incremental_registration_additive": True,
+        "incremental_registration_idempotent": True,
+        "qcoder_local_state_access_by_assistant": False,
+        "discovery_derived_candidates": False,
+        "registration_authorizes_review": False,
+    }
     contract_digest = hashlib.sha256(
         json.dumps(
             context_loop_contract_snapshot(),
@@ -562,12 +577,15 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("cbf9974b168c0c5771721f2a6329a321d8bb9e9a8e6c691aee8b4d59897a3897")
+    assert contract_digest == ("6555c9be63e544202d5e23d18e54118827e0aba5a2b7dbfbf0662e317bd8b0cc")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
     assert snapshot["recovery_categories"] == [
         "activation_capture_required",
+        "artifact_candidate_discovery_expression_invalid",
+        "artifact_candidate_file_required",
+        "artifact_candidate_provenance_conflict",
         "authorization_declined",
         "authorization_partial",
         "canonical_artifact_modified",
@@ -581,6 +599,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "protected_operation_rejected",
         "protected_service_unavailable",
         "protected_truth_insufficient",
+        "qcoder_local_state_artifact_prohibited",
         "reconstruction_attempt_refused",
         "request_baseline_choice_not_verbatim",
         "request_baseline_constraint_not_verbatim",
@@ -738,6 +757,414 @@ def _write_local_artifacts(workspace: Path) -> list[dict[str, Any]]:
             "provenance": "assistant_created",
         },
     ]
+
+
+def test_awaiting_local_artifacts_protocol_is_actionable_and_restarts(
+    tmp_path: Path,
+) -> None:
+    transport = PublicBuilderTransport()
+    coordinator, workspace = _coordinator(tmp_path, transport)
+    _activate_and_prepare(coordinator)
+
+    authority = coordinator.record_ide_authority(
+        allowed=True,
+        explicit_user_action=True,
+    )
+
+    assert authority["phase"] == "awaiting_local_artifacts"
+    assert authority["state_status"] == "ready"
+    assert authority["checkpoint_kind"] == "none"
+    assert authority["supported_next_action"] == (
+        "perform_authorized_ide_work_and_register_exact_paths"
+    )
+    invocation = authority["next_invocation"]
+    assert invocation["subcommand"] == "register-artifacts"
+    assert invocation["path_source"] == (
+        "exact_ide_create_or_modify_operation_result_or_exact_user_selection"
+    )
+    assert invocation["accepted_provenance"] == [
+        "assistant_created",
+        "assistant_modified",
+        "user_selected",
+    ]
+    assert invocation["discovery_permitted"] is False
+    assert invocation["qcoder_local_state_access_permitted"] is False
+    assert invocation["guessed_artifact_path_embedded"] is False
+    assert authority["required_authority_input"] is None
+    assert authority["details"]["artifact_review_authorized"] is False
+    assert authority["details"]["directory_orientation_required"] is False
+
+    restarted = CurrentLoopCoordinator(
+        workspace_root=workspace,
+        transport=transport,
+    )
+    status = restarted.status()
+    assert status["supported_next_action"] == authority["supported_next_action"]
+    assert status["next_invocation"] == authority["next_invocation"]
+
+
+def test_incremental_exact_registration_is_additive_idempotent_and_unapproved(
+    tmp_path: Path,
+) -> None:
+    coordinator, workspace = _coordinator(tmp_path, PublicBuilderTransport())
+    _activate_and_prepare(coordinator)
+    coordinator.record_ide_authority(allowed=True, explicit_user_action=True)
+    source = workspace / "optimizer.py"
+    source.write_text("def objective(value):\n    return value * value\n", encoding="utf-8")
+    qasm = workspace / "optimizer.qasm"
+    qasm.write_text("OPENQASM 2.0;\nqreg q[1];\n", encoding="utf-8")
+
+    first = coordinator.register_artifacts(
+        candidates=[
+            {
+                "role": "source",
+                "path": str(source),
+                "provenance": "assistant_created",
+            }
+        ]
+    )
+    first_authorization_ref = CurrentLoopStore.for_workspace(workspace).read()[
+        "artifact_authorization"
+    ]["authorization_ref"]
+    second = coordinator.register_artifacts(
+        candidates=[
+            {
+                "role": "circuit_qasm",
+                "path": str(qasm),
+                "provenance": "assistant_created",
+            }
+        ]
+    )
+    repeated = coordinator.register_artifacts(
+        candidates=[
+            {
+                "role": "circuit_qasm",
+                "path": str(qasm),
+                "provenance": "assistant_created",
+            }
+        ]
+    )
+    state = CurrentLoopStore.for_workspace(workspace).read()
+
+    assert first["details"]["visible_candidate_set"] == [
+        {
+            "role": "source",
+            "display_path": "optimizer.py",
+            "external": False,
+            "provenance": "assistant_created",
+        }
+    ]
+    assert first["details"]["review_authorized"] is False
+    assert second["details"]["registered_candidate_count"] == 2
+    assert second["details"]["new_candidate_count"] == 1
+    assert repeated["details"]["idempotent_registration"] is True
+    assert repeated["details"]["new_candidate_count"] == 0
+    assert state["artifact_authorization"]["state"] == "proposed"
+    assert state["artifact_authorization"]["authorization_ref"] != first_authorization_ref
+    assert repeated["details"]["visible_candidate_set"] == [
+        {
+            "role": "source",
+            "display_path": "optimizer.py",
+            "external": False,
+            "provenance": "assistant_created",
+        },
+        {
+            "role": "circuit_qasm",
+            "display_path": "optimizer.qasm",
+            "external": False,
+            "provenance": "assistant_created",
+        },
+    ]
+    assert repeated["supported_next_action"] == ("obtain_exact_artifact_set_authorization")
+    assert repeated["next_invocation"]["hidden_candidates_permitted"] is False
+
+
+def test_mixed_exact_provenance_accumulates_without_inspected_files(
+    tmp_path: Path,
+) -> None:
+    coordinator, workspace = _coordinator(tmp_path, PublicBuilderTransport())
+    _activate_and_prepare(coordinator)
+    coordinator.record_ide_authority(allowed=True, explicit_user_action=True)
+    created = workspace / "created.py"
+    created.write_text("CREATED = True\n", encoding="utf-8")
+    modified = workspace / "existing.py"
+    modified.write_text("BEFORE = True\n", encoding="utf-8")
+    modified.write_text("AFTER = True\n", encoding="utf-8")
+    selected = workspace / "selected.qasm"
+    selected.write_text("OPENQASM 2.0;\nqreg q[1];\n", encoding="utf-8")
+    inspected_only = workspace / "inspected-only.txt"
+    inspected_only.write_text("ordinary IDE context\n", encoding="utf-8")
+    assert inspected_only.read_text(encoding="utf-8") == "ordinary IDE context\n"
+
+    for path, role, provenance in (
+        (created, "source", "assistant_created"),
+        (modified, "source", "assistant_modified"),
+        (selected, "circuit_qasm", "user_selected"),
+    ):
+        result = coordinator.register_artifacts(
+            candidates=[
+                {
+                    "role": role,
+                    "path": str(path),
+                    "provenance": provenance,
+                }
+            ]
+        )
+
+    assert result["details"]["visible_candidate_set"] == [
+        {
+            "role": "source",
+            "display_path": "created.py",
+            "external": False,
+            "provenance": "assistant_created",
+        },
+        {
+            "role": "source",
+            "display_path": "existing.py",
+            "external": False,
+            "provenance": "assistant_modified",
+        },
+        {
+            "role": "circuit_qasm",
+            "display_path": "selected.qasm",
+            "external": False,
+            "provenance": "user_selected",
+        },
+    ]
+    assert "inspected-only.txt" not in json.dumps(result, sort_keys=True)
+    assert result["details"]["registration_authorizes_review"] is False
+
+
+def test_legacy_user_supplied_is_accepted_only_as_user_selected_alias(
+    tmp_path: Path,
+) -> None:
+    coordinator, workspace = _coordinator(tmp_path, PublicBuilderTransport())
+    _activate_and_prepare(coordinator)
+    selected = workspace / "selected.py"
+    selected.write_text("SELECTED = True\n", encoding="utf-8")
+
+    result = coordinator.register_artifacts(
+        candidates=[
+            {
+                "role": "source",
+                "path": str(selected),
+                "provenance": "user_supplied",
+            }
+        ]
+    )
+
+    assert result["details"]["visible_candidate_set"][0]["provenance"] == ("user_selected")
+    assert "user_supplied" not in json.dumps(result["details"], sort_keys=True)
+
+
+def test_conflicting_provenance_for_one_exact_path_fails_closed(
+    tmp_path: Path,
+) -> None:
+    coordinator, workspace = _coordinator(tmp_path, PublicBuilderTransport())
+    _activate_and_prepare(coordinator)
+    coordinator.record_ide_authority(allowed=True, explicit_user_action=True)
+    source = workspace / "existing.py"
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+    coordinator.register_artifacts(
+        candidates=[
+            {
+                "role": "source",
+                "path": str(source),
+                "provenance": "assistant_modified",
+            }
+        ]
+    )
+
+    conflict = coordinator.register_artifacts(
+        candidates=[
+            {
+                "role": "source",
+                "path": str(source),
+                "provenance": "assistant_created",
+            }
+        ]
+    )
+
+    assert conflict["ok"] is False
+    assert conflict["category"] == "artifact_candidate_provenance_conflict"
+    assert "do not guess" in conflict["details"]["supported_next_action"].lower()
+
+
+@pytest.mark.parametrize(
+    "path_value",
+    (
+        ".qcoder/current-loop/state.json",
+        "nested/.qcoder/artifacts/value.json",
+        ".QCODER\\current-loop\\state.json",
+        "nested\\.qcoder\\artifacts\\value.json",
+    ),
+)
+def test_qcoder_local_state_paths_fail_closed_before_discovery(
+    tmp_path: Path,
+    path_value: str,
+) -> None:
+    coordinator, _workspace = _coordinator(tmp_path, PublicBuilderTransport())
+    _activate_and_prepare(coordinator)
+
+    result = coordinator.register_artifacts(
+        candidates=[
+            {
+                "role": "source",
+                "path": path_value,
+                "provenance": "user_selected",
+            }
+        ]
+    )
+
+    assert result["ok"] is False
+    assert result["category"] == "qcoder_local_state_artifact_prohibited"
+    assert result["customer_summary"] == (
+        "qCoder local state cannot be selected as a review artifact."
+    )
+    assert ".qcoder/current-loop" not in result["customer_summary"]
+
+
+def test_absolute_and_symlinked_qcoder_state_paths_are_rejected(
+    tmp_path: Path,
+) -> None:
+    coordinator, workspace = _coordinator(tmp_path, PublicBuilderTransport())
+    _activate_and_prepare(coordinator)
+    state_path = workspace / ".qcoder" / "current-loop" / "state.json"
+    direct = coordinator.register_artifacts(
+        candidates=[
+            {
+                "role": "source",
+                "path": str(state_path),
+                "provenance": "user_selected",
+            }
+        ]
+    )
+    assert direct["category"] == "qcoder_local_state_artifact_prohibited"
+
+    state_link = workspace / "state-link.json"
+    state_link.symlink_to(state_path)
+    linked = coordinator.register_artifacts(
+        candidates=[
+            {
+                "role": "source",
+                "path": str(state_link),
+                "provenance": "user_selected",
+            }
+        ]
+    )
+    assert linked["category"] == "qcoder_local_state_artifact_prohibited"
+
+
+@pytest.mark.parametrize("name", ("*.py", "result?.json", "source[0].py"))
+def test_discovery_expressions_are_not_exact_artifacts(
+    tmp_path: Path,
+    name: str,
+) -> None:
+    coordinator, workspace = _coordinator(tmp_path, PublicBuilderTransport())
+    _activate_and_prepare(coordinator)
+
+    result = coordinator.register_artifacts(
+        candidates=[
+            {
+                "role": "source",
+                "path": str(workspace / name),
+                "provenance": "user_selected",
+            }
+        ]
+    )
+
+    assert result["category"] == "artifact_candidate_discovery_expression_invalid"
+
+
+def test_directory_missing_and_unapproved_external_candidates_are_rejected(
+    tmp_path: Path,
+) -> None:
+    coordinator, workspace = _coordinator(tmp_path, PublicBuilderTransport())
+    _activate_and_prepare(coordinator)
+    directory = workspace / "src"
+    directory.mkdir()
+    missing = workspace / "missing.py"
+    external = tmp_path / "external.py"
+    external.write_text("EXTERNAL = True\n", encoding="utf-8")
+
+    for path in (directory, missing):
+        result = coordinator.register_artifacts(
+            candidates=[
+                {
+                    "role": "source",
+                    "path": str(path),
+                    "provenance": "user_selected",
+                }
+            ]
+        )
+        assert result["category"] == "artifact_candidate_file_required"
+    rejected_external = coordinator.register_artifacts(
+        candidates=[
+            {
+                "role": "source",
+                "path": str(external),
+                "provenance": "user_selected",
+            }
+        ]
+    )
+    assert rejected_external["ok"] is False
+
+
+def test_current_loop_cli_exact_handoff_is_additive_and_stops_before_review(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    coordinator, workspace = _coordinator(tmp_path, PublicBuilderTransport())
+    _activate_and_prepare(coordinator)
+
+    def invoke(*arguments: str) -> dict[str, Any]:
+        assert (
+            cli_main(
+                [
+                    "current-loop",
+                    "--workspace",
+                    str(workspace),
+                    *arguments,
+                ]
+            )
+            == 0
+        )
+        return json.loads(capsys.readouterr().out)
+
+    authority = invoke("record-ide-authority", "--allow", "--explicit")
+    assert authority["supported_next_action"] == (
+        "perform_authorized_ide_work_and_register_exact_paths"
+    )
+    source = workspace / "search_oracle.py"
+    source.write_text("def oracle(value):\n    return value == 3\n", encoding="utf-8")
+    qasm = workspace / "search_oracle.qasm"
+    qasm.write_text("OPENQASM 2.0;\nqreg q[2];\n", encoding="utf-8")
+    first = invoke(
+        "register-artifacts",
+        "--source",
+        str(source),
+        "--provenance",
+        "assistant_created",
+    )
+    second = invoke(
+        "register-artifacts",
+        "--qasm",
+        str(qasm),
+        "--provenance",
+        "assistant_created",
+    )
+    status = invoke("status")
+
+    assert first["details"]["registered_candidate_count"] == 1
+    assert second["details"]["registered_candidate_count"] == 2
+    assert second["checkpoint_kind"] == "artifact_review"
+    assert second["details"]["review_authorized"] is False
+    assert status["phase"] == "artifact_authorization"
+    assert status["supported_next_action"] == ("obtain_exact_artifact_set_authorization")
+    assert (
+        status["next_invocation"]["visible_candidate_set"]
+        == (second["details"]["visible_candidate_set"])
+    )
 
 
 def _through_current_build(
@@ -2029,6 +2456,39 @@ def test_every_checkpoint_result_is_deterministically_actionable(tmp_path: Path)
         assert result["schema_version"] == 4
 
 
+@pytest.mark.parametrize(
+    ("phase", "expected_action"),
+    (
+        (
+            "awaiting_local_artifacts",
+            "perform_authorized_ide_work_and_register_exact_paths",
+        ),
+        ("evidence_processing", "process_exact_authorized_artifacts"),
+        ("current_build_review", "review_current_build"),
+        ("next_loop_ready", "start_next_loop_with_explicit_authority_or_stop"),
+    ),
+)
+def test_every_ready_nonterminal_phase_has_a_deterministic_action(
+    tmp_path: Path,
+    phase: str,
+    expected_action: str,
+) -> None:
+    coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
+    result = coordinator._result_without_state(
+        operation="ready_contract_test",
+        ok=True,
+        phase=phase,
+        state_status="ready",
+        checkpoint_kind="none",
+        summary="Synthetic ready-state contract test.",
+    )
+    assert result["supported_next_action"] == expected_action
+    assert isinstance(result["next_invocation"], dict)
+    assert result["next_invocation"]["subcommand"]
+    assert result["next_invocation"]["token_contents_embedded"] is False
+    assert result["next_invocation"]["private_workspace_path_embedded"] is False
+
+
 def test_current_loop_cli_intent_review_confirmation_sequence_is_actionable(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -2241,7 +2701,17 @@ def test_current_loop_cli_distinguishes_transmitted_clarification(
             ),
         ),
         ("record-ide-authority", ("--allow", "--explicit")),
-        ("register-artifacts", ("--allow-external",)),
+        (
+            "register-artifacts",
+            (
+                "--source",
+                "--qasm",
+                "--results",
+                "--provenance",
+                "--related-circuit-ref",
+                "--allow-external",
+            ),
+        ),
         ("authorize-artifacts", ("--action",)),
         ("continue-unchanged", ("--approve", "--decline-proposal")),
         ("propose-change", ("--approve-selection",)),

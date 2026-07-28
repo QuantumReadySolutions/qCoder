@@ -1,6 +1,18 @@
 # Changelog
 
 
+## 0.6.0a2+wi0418.artifacthandoff1
+
+- Make the post-IDE-authority handoff deterministic with exact-path retention and
+  additive, idempotent artifact registration.
+- Distinguish assistant-created, assistant-modified, and user-selected artifact
+  provenance while accepting the legacy user-supplied value as an input alias.
+- Exclude qCoder local state, discovery expressions, directories, and missing files
+  from artifact registration.
+- Clarify that authorized ordinary IDE inspection of relevant non-qCoder project
+  files never creates or authorizes a qCoder review candidate.
+
+
 ## 0.6.0a2+wi0418.requestbaseline1
 
 - Stage the complete governing customer message locally for exact Request Baseline review before

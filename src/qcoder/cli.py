@@ -1175,22 +1175,65 @@ def _cmd_current_loop(argv: list[str]) -> int:
         "register-artifacts",
         help="Register only exact candidate paths; no scan or discovery.",
     )
-    register.add_argument("--source", action="append", default=[])
-    register.add_argument("--qasm", action="append", default=[])
-    register.add_argument("--results", action="append", default=[])
+    register.add_argument(
+        "--source",
+        action="append",
+        default=[],
+        help=(
+            "Exact source-file path retained from an authorized IDE operation or exact "
+            "user selection. Globs and discovery are prohibited."
+        ),
+    )
+    register.add_argument(
+        "--qasm",
+        action="append",
+        default=[],
+        help=(
+            "Exact circuit/QASM path retained from an authorized IDE operation or exact "
+            "user selection. Do not search a directory for it."
+        ),
+    )
+    register.add_argument(
+        "--results",
+        action="append",
+        default=[],
+        help=(
+            "Exact result-evidence path retained from an authorized IDE operation or "
+            "exact user selection. Do not infer neighboring result files."
+        ),
+    )
     register.add_argument(
         "--provenance",
-        choices=("assistant_created", "user_supplied"),
+        choices=(
+            "assistant_created",
+            "assistant_modified",
+            "user_selected",
+            "user_supplied",
+        ),
         required=True,
+        help=(
+            "Truthful origin for every path in this invocation: assistant_created, "
+            "assistant_modified, or user_selected. Legacy user_supplied is accepted as "
+            "user_selected. Omission is invalid; use only after the corresponding IDE "
+            "operation or explicit user selection, and never infer or manufacture it."
+        ),
     )
-    register.add_argument("--related-circuit-ref", default=None)
+    register.add_argument(
+        "--related-circuit-ref",
+        default=None,
+        help=(
+            "Existing canonical circuit reference for exact related artifacts. It does "
+            "not authorize discovery or review."
+        ),
+    )
     register.add_argument(
         "--allow-external",
         action="store_true",
         help=(
             "Carry explicit selection authority for a named artifact outside the active "
             "workspace. Omission is not approval; supply only after the user selects "
-            "that exact path, and never infer or manufacture approval."
+            "that exact path, and never infer or manufacture approval. It authorizes no "
+            "directory discovery and never permits qCoder local state."
         ),
     )
 
@@ -1354,8 +1397,13 @@ def _cmd_current_loop(argv: list[str]) -> int:
     attach.add_argument("--path", required=True)
     attach.add_argument(
         "--provenance",
-        choices=("assistant_created", "user_supplied"),
-        default="user_supplied",
+        choices=(
+            "assistant_created",
+            "assistant_modified",
+            "user_selected",
+            "user_supplied",
+        ),
+        default="user_selected",
     )
 
     abandon = sub.add_parser("abandon", help="Explicitly abandon the active local loop.")
