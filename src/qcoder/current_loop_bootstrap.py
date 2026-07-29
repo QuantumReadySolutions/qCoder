@@ -169,7 +169,7 @@ def build_fresh_active_build_bootstrap(*, executable: str) -> dict[str, Any]:
             "protected_call_permitted": False,
         },
         next_expected_result={
-            "schema_id": "qcoder.current_loop.coordinator_result.v9",
+            "schema_id": "qcoder.current_loop.coordinator_result.v10",
             "category": None,
             "checkpoint_kind": "none",
             "complete_exact_request_displayed": True,
@@ -210,7 +210,7 @@ def build_current_loop_status_bootstrap(*, executable: str) -> dict[str, Any]:
             "protected_call_permitted": False,
         },
         next_expected_result={
-            "schema_id": "qcoder.current_loop.coordinator_result.v9",
+            "schema_id": "qcoder.current_loop.coordinator_result.v10",
             "category": "current_status_or_machine_readable_recovery",
             "missing_state_disposition": "explicit_machine_readable_no_action",
             "complete_operation_specific_next_invocation_when_actionable": True,

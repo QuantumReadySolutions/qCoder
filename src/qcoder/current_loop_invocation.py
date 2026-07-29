@@ -20,10 +20,10 @@ from qcoder.current_loop_bounded_control import (
     BOUNDED_CONTROL_INPUT_SCHEMA_VERSION,
 )
 
-INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v2"
-INVOCATION_CONTRACT_SCHEMA_VERSION = 2
-OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v1"
-OPERATION_INVENTORY_SCHEMA_VERSION = 1
+INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v3"
+INVOCATION_CONTRACT_SCHEMA_VERSION = 3
+OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v2"
+OPERATION_INVENTORY_SCHEMA_VERSION = 2
 
 LOCAL_ONLY = "local_only"
 HOSTED_CAPABLE = "hosted_capable"
@@ -131,6 +131,17 @@ _OPERATION_ROWS: tuple[dict[str, Any], ...] = (
     {"operation": "evidence_exclude", "subcommand": "evidence-exclude", "transport": LOCAL_ONLY},
     {"operation": "evidence_restore", "subcommand": "evidence-restore", "transport": LOCAL_ONLY},
     {"operation": "evidence_delete", "subcommand": "evidence-delete", "transport": LOCAL_ONLY},
+    {
+        "operation": "open_contract_editor",
+        "subcommand": "open-contract-editor",
+        "transport": LOCAL_ONLY,
+    },
+    {"operation": "evidence_view", "subcommand": "evidence-view", "transport": LOCAL_ONLY},
+    {
+        "operation": "decline_build_review",
+        "subcommand": "decline-build-review",
+        "transport": LOCAL_ONLY,
+    },
 )
 
 _BY_SUBCOMMAND = {str(row["subcommand"]): row for row in _OPERATION_ROWS}

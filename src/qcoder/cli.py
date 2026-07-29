@@ -62,6 +62,7 @@ from qcoder.current_loop_event_receipts import (
     SUPPORTED_OPERATION_CATEGORIES,
     SUPPORTED_OUTPUT_ROLES,
 )
+from qcoder.current_loop_run_summary import EVIDENCE_VIEW_IDS
 
 EXPLORER_BETA_DOCS_URL = "https://qcoder.ai/manual/student-beta/"
 OSS_DOCS_URL = "https://qcoder.ai/manual/oss/"
@@ -1132,6 +1133,16 @@ def _cmd_current_loop(argv: list[str]) -> int:
     evidence_delete.add_argument("--artifact-reference", required=True)
     evidence_delete.add_argument("--expected-contract-revision", type=int, required=True)
     evidence_delete.add_argument("--approve", action="store_true")
+    sub.add_parser(
+        "open-contract-editor",
+        help="Open the optional loop-bound local Current Loop Contract editor.",
+    )
+    evidence_view = sub.add_parser(
+        "evidence-view",
+        help="Return one bounded view from exact registered current-loop evidence.",
+    )
+    evidence_view.add_argument("--view", choices=EVIDENCE_VIEW_IDS, required=True)
+    evidence_view.add_argument("--run-reference", default=None)
 
     prepare = sub.add_parser(
         "prepare-generation",
@@ -1410,6 +1421,11 @@ def _cmd_current_loop(argv: list[str]) -> int:
         help="Create current-build review from exact saved artifacts.",
     )
     _add_current_loop_transport_arguments(review, DEFAULT_BASE_URL, default_token_file())
+    decline_review = sub.add_parser(
+        "decline-build-review",
+        help="Explicitly decline the optional passive Build Review.",
+    )
+    decline_review.add_argument("--approve", action="store_true")
 
     unchanged = sub.add_parser(
         "continue-unchanged",
@@ -1786,6 +1802,13 @@ def _cmd_current_loop(argv: list[str]) -> int:
                 expected_contract_revision=args.expected_contract_revision,
                 explicit_authority=args.approve,
             )
+        elif command == "open-contract-editor":
+            result = coordinator.open_contract_editor()
+        elif command == "evidence-view":
+            result = coordinator.evidence_view(
+                view_id=args.view,
+                selected_run_reference=args.run_reference,
+            )
         elif command == "prepare-generation":
             if not args.use_current_intent and (
                 args.profile is None or args.interpretation_summary is None
@@ -1857,6 +1880,8 @@ def _cmd_current_loop(argv: list[str]) -> int:
             result = coordinator.process_authorized_artifacts()
         elif command == "review-build":
             result = coordinator.review_build()
+        elif command == "decline-build-review":
+            result = coordinator.decline_build_review(explicit_authority=args.approve)
         elif command == "continue-unchanged":
             result = coordinator.continue_unchanged(
                 explicit_user_action=args.approve,

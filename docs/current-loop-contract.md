@@ -6,7 +6,7 @@ not contain the Working Blueprint or evidence payloads, grant IDE authority, or 
 exposure, application, execution, external services, or hardware.
 
 The contract is the `qcoder.current_loop.contract.v1` section of
-`qcoder.current_loop.local_state.v3`. Canonical state is JSON. YAML is neither parsed nor
+`qcoder.current_loop.local_state.v4`. Canonical state is JSON. YAML is neither parsed nor
 authoritative. The section inherits the Current Loop store's atomic write, lock, private
 permissions, workspace binding, compare-and-swap revision, size bounds, and symlink rejection.
 
@@ -98,3 +98,44 @@ Start-next and later explicit activation compile fresh Assist defaults: revision
 deletions, recommendations, and settings do not carry forward. There is no Account Center
 synchronization, automatic reopening, project history, hosted contract storage, or cross-loop
 intelligence.
+
+## Optional local contract editor
+
+`qcoder.current_loop.contract_sidecar.v1` is an optional loop-bound browser surface titled
+“How qCoder should help with this build.” It consumes the exact bounded-control graph used by
+the IDE and delegates every policy decision and mutation to the same coordinator service layer.
+It never accepts a replacement policy document.
+
+The sidecar binds only to `127.0.0.1` on a random port. Each opening mints a high-entropy,
+short-lived loop/session capability delivered in the URL fragment and sent back only in a
+dedicated header. Host, same-origin request metadata, session, loop, workspace, and contract
+revision are validated. Mutations use the canonical store lock and compare-and-swap behavior;
+stale writers refresh rather than merge.
+
+No hosted transport, token, credential environment, Protected endpoint, project edit, execution,
+file discovery, account login, remote access, third-party asset, telemetry, cookie, or browser
+storage is present. The process ends on loop close or idle expiry. Normal IDE controls remain
+fully supported without opening the browser.
+
+## Run Summary and evidence views
+
+`qcoder.current_loop.run_summary.v1` is standalone execution evidence. It binds exact registered
+result, circuit, source, and operation-receipt lineage when available. Missing backend, runtime,
+shots, seed, bond dimension, noise, mitigation, or timing fields remain explicitly missing.
+Counts use a bounded top-outcome projection and retain the exact registered result reference;
+the raw result artifact and unbounded counts are not embedded.
+
+The bounded `qcoder.current_loop.evidence_view.v1` domain answers current-build questions about
+top results, gate count, width, depth, backend, shots, observed bond dimension, evidence
+limitations, concise loop summary, and Full Run Summary. It reads canonical summaries and
+registered manifestations only. It never scans project files or infers an unrecorded run.
+Multiple ambiguous runs require selection from qCoder-owned references. Exclusion and deletion
+make dependent views stale or incomplete; restoration revalidates exact digest and lineage.
+
+Circuit structure reports multi-qubit or entangling-operation structure only. It does not claim
+that the output state is entangled. Run Summary is not a Blueprint, and the concise loop summary
+is neither project history nor proof of correctness.
+
+Build Review remains the existing optional passive hosted comparison. qCoder may recommend it
+under Assist, but the customer can decline and continue unchanged or request it later. The local
+sidecar can display an already available share-safe projection but cannot invoke Protected.

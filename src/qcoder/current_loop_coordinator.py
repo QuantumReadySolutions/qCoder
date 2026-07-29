@@ -52,7 +52,10 @@ from qcoder.current_loop import (
     decision_inventory_binding,
     migrate_current_loop_state,
     propose_selected_artifact_authorization,
+    read_run_summaries,
+    replace_run_summary,
     save_exact_canonical_artifact,
+    save_run_summary,
     select_current_loop_generation_posture,
     set_artifact_authorization,
     share_safe_artifact_authorization_projection,
@@ -114,14 +117,26 @@ from qcoder.current_loop_event_receipts import (
     issue_operation_receipt,
     validate_operation_receipt,
 )
+from qcoder.current_loop_run_summary import (
+    EVIDENCE_VIEW_IDS,
+    RunSummaryError,
+    build_evidence_view,
+    build_run_summary,
+    evidence_view_contract_snapshot,
+    mark_run_summary_stale,
+    mark_run_summary_fresh,
+    run_summary_contract_snapshot,
+    share_safe_run_summary_projection,
+)
 from qcoder.context_loop import CONTEXT_LOOP_GATE
 
-COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v9"
-COORDINATOR_RESULT_SCHEMA_VERSION = 9
-COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v7"
-PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v6"
+COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v10"
+COORDINATOR_RESULT_SCHEMA_VERSION = 10
+COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v8"
+PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v7"
 OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
     {
+        "qcoder.current_loop.coordinator_state.v6",
         "qcoder.current_loop.coordinator_state.v5",
         "qcoder.current_loop.coordinator_state.v4",
         "qcoder.current_loop.coordinator_state.v1",
@@ -129,7 +144,7 @@ OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
         "qcoder.current_loop.coordinator_state.v3",
     }
 )
-COORDINATOR_STATE_SCHEMA_VERSION = 6
+COORDINATOR_STATE_SCHEMA_VERSION = 8
 RECOVERY_SCHEMA_ID = "qcoder.current_loop.recovery.v1"
 RECOVERY_SCHEMA_VERSION = 1
 CONSEQUENCE_PROJECTION_SCHEMA_ID = "qcoder.current_loop.consequence_projection.v1"
@@ -226,10 +241,12 @@ _PHASE_TRANSITIONS = {
     "evidence_processing": (
         "artifact_authorization",
         "current_build_review",
+        "continuation_choice",
         "abandoned",
     ),
     "current_build_review": ("continuation_choice", "abandoned"),
     "continuation_choice": (
+        "current_build_review",
         "change_confirmation",
         "next_loop_ready",
         "completed",
@@ -1039,6 +1056,8 @@ def normalize_decision_dispositions(
 
 
 def coordinator_contract_snapshot() -> dict[str, Any]:
+    from qcoder.current_loop_contract_sidecar import sidecar_contract_snapshot
+
     return {
         "schemas": {
             "result": COORDINATOR_RESULT_SCHEMA_ID,
@@ -1055,6 +1074,9 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "current_loop_contract": contract_snapshot()["schema_id"],
             "operation_receipt": event_receipt_snapshot()["schema_id"],
             "recovery": RECOVERY_SCHEMA_ID,
+            "contract_sidecar": sidecar_contract_snapshot()["schema_id"],
+            "run_summary": run_summary_contract_snapshot()["schema_id"],
+            "evidence_view": evidence_view_contract_snapshot()["schema_id"],
         },
         "operation_invocation": invocation_contract_snapshot(),
         "bounded_control_input": bounded_control_contract_snapshot(),
@@ -1076,6 +1098,9 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             ],
             "recoverable_next_invocation_required": True,
         },
+        "contract_sidecar": sidecar_contract_snapshot(),
+        "run_summary": run_summary_contract_snapshot(),
+        "evidence_view": evidence_view_contract_snapshot(),
         "phases": list(PHASES),
         "ready_phase_protocol_dispositions": deepcopy(_READY_PHASE_PROTOCOL_DISPOSITIONS),
         "state_statuses": list(STATE_STATUSES),
@@ -1167,6 +1192,9 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "evidence_exclude",
             "evidence_restore",
             "evidence_delete",
+            "open_contract_editor",
+            "evidence_view",
+            "decline_build_review",
         ],
         "connected_clients": list(CLIENT_NAMES),
         "safe_local_failure_categories": sorted(SAFE_LOCAL_FAILURE_CATEGORIES),
@@ -1627,6 +1655,7 @@ class CurrentLoopCoordinator:
         runtime_executable: str | Path | None = None,
         hosted_base_url: str = "https://preview-api.qcoder.ai",
         hosted_token_file: str | Path | None = None,
+        local_only_surface: bool = False,
         clock: Callable[[], float] = time.monotonic,
     ):
         self.workspace_root = Path(workspace_root).expanduser().absolute()
@@ -1640,23 +1669,35 @@ class CurrentLoopCoordinator:
             workspace_root=self.workspace_root,
             explicit_external=state_path is not None,
         )
-        self.transport = transport
+        self.local_only_surface = local_only_surface
+        self.transport = None if local_only_surface else transport
         self.runtime_executable = str(
             Path(runtime_executable or sys.executable).expanduser().absolute()
         )
         self.hosted_base_url = (
-            str(getattr(transport, "base_url"))
-            if transport is not None and hasattr(transport, "base_url")
-            else hosted_base_url
-        )
-        self.hosted_token_file = str(
-            Path(
-                getattr(transport, "token_file")
-                if transport is not None and hasattr(transport, "token_file")
-                else (hosted_token_file or Path.home() / ".qcoder" / "context-bridge" / "token.txt")
+            ""
+            if local_only_surface
+            else (
+                str(getattr(transport, "base_url"))
+                if transport is not None and hasattr(transport, "base_url")
+                else hosted_base_url
             )
-            .expanduser()
-            .absolute()
+        )
+        self.hosted_token_file = (
+            ""
+            if local_only_surface
+            else str(
+                Path(
+                    getattr(transport, "token_file")
+                    if transport is not None and hasattr(transport, "token_file")
+                    else (
+                        hosted_token_file
+                        or Path.home() / ".qcoder" / "context-bridge" / "token.txt"
+                    )
+                )
+                .expanduser()
+                .absolute()
+            )
         )
         self.clock = clock
         try:
@@ -1665,7 +1706,10 @@ class CurrentLoopCoordinator:
             if exc.category != "current_loop_not_active":
                 raise
         else:
-            if existing.get("schema_id") == "qcoder.current_loop.local_state.v2":
+            if existing.get("schema_id") in {
+                "qcoder.current_loop.local_state.v2",
+                "qcoder.current_loop.local_state.v3",
+            }:
                 migrate_current_loop_state(self.store)
 
     @property
@@ -3304,6 +3348,198 @@ class CurrentLoopCoordinator:
         except (CurrentLoopError, CurrentLoopContractError) as exc:
             return self._exception_result("contract_status", exc, started)
 
+    def open_contract_editor(self) -> dict[str, Any]:
+        started = self.clock()
+        try:
+            state = self.store.read()
+            if state.get("activation_state") != "active":
+                raise CurrentLoopError("contract_editor_requires_active_loop")
+            from qcoder.current_loop_contract_sidecar import (
+                launch_sidecar_process,
+                sidecar_contract_snapshot,
+            )
+
+            launched = launch_sidecar_process(
+                workspace=self.workspace_root,
+                runtime_executable=self.runtime_executable,
+            )
+            return self._result(
+                operation="open_contract_editor",
+                ok=True,
+                state=state,
+                summary=(
+                    "The optional loop-bound local contract editor is ready. "
+                    "Ordinary work can continue entirely in the IDE."
+                ),
+                elapsed=self.clock() - started,
+                details={
+                    "sidecar_contract": sidecar_contract_snapshot(),
+                    "sidecar_session": launched,
+                    "current_contract_revision": state["current_loop_contract"][
+                        "contract_revision"
+                    ],
+                    "local_only": True,
+                    "hosted_operation_permitted": False,
+                    "credential_values_included": False,
+                    "browser_optional": True,
+                    "automatic_browser_opened": False,
+                },
+            )
+        except (CurrentLoopError, CurrentLoopConflict, RuntimeError, OSError) as exc:
+            return self._exception_result("open_contract_editor", exc, started)
+
+    def _prepare_run_summary_on_request(self, state: Mapping[str, Any]) -> dict[str, Any]:
+        """Prepare from one exact registered result path; never discover a file."""
+
+        if state.get("run_summary_index"):
+            return deepcopy(dict(state))
+        if "result_manifestation" not in state.get("saved_artifacts", {}):
+            return deepcopy(dict(state))
+        if not contract_permits(
+            state["current_loop_contract"],
+            category="result_manifestation",
+            dimension="derive",
+        ):
+            raise CurrentLoopError("current_loop_contract_derivation_prohibited")
+        authorization = state.get("artifact_authorization")
+        if not isinstance(authorization, Mapping) or authorization.get("state") != "approved":
+            return deepcopy(dict(state))
+        result_item = next(
+            (
+                item
+                for item in authorization.get("items", [])
+                if isinstance(item, Mapping) and item.get("artifact_role") == "results"
+            ),
+            None,
+        )
+        if not isinstance(result_item, Mapping):
+            return deepcopy(dict(state))
+        path = Path(str(result_item.get("local_path") or "")).absolute()
+        if not path.is_file() or path.is_symlink():
+            raise CurrentLoopError("selected_file_missing")
+        raw = path.read_bytes()
+        if sha256(raw).hexdigest() != result_item.get("content_digest"):
+            raise CurrentLoopError("selected_file_changed")
+        payload = _load_json_file(path)
+        payload = payload if "counts" in payload else {"counts": payload}
+        summary = build_run_summary(
+            loop_ref=str(state["loop_ref"]),
+            workspace_binding=str(state["workspace_root"]),
+            state_revision=int(state["state_revision"]),
+            contract_revision=int(state["current_loop_contract"]["contract_revision"]),
+            result_payload=payload,
+            result_manifestation=self._saved_artifact(state, "result_manifestation"),
+            circuit_manifestation=(
+                self._saved_artifact(state, "circuit_manifestation")
+                if "circuit_manifestation" in state["saved_artifacts"]
+                else None
+            ),
+            source_manifestation=(
+                self._saved_artifact(state, "python_manifestation")
+                if "python_manifestation" in state["saved_artifacts"]
+                else None
+            ),
+            operation_lineage={
+                "status": (
+                    "recorded"
+                    if result_item.get("operation_receipt_id") is not None
+                    else "exact_artifact_authorization_fallback"
+                ),
+                "operation_receipt_id": result_item.get("operation_receipt_id"),
+                "activity_digest": None,
+            },
+        )
+        save_run_summary(
+            store=self.store,
+            summary=summary,
+            destination=self.artifact_directory / f"{summary['artifact_ref']}.json",
+            expected_revision=int(state["state_revision"]),
+        )
+        return self.store.read()
+
+    def evidence_view(
+        self,
+        *,
+        view_id: str,
+        selected_run_reference: str | None = None,
+        destination: str = "connected_assistant",
+    ) -> dict[str, Any]:
+        started = self.clock()
+        try:
+            if view_id not in EVIDENCE_VIEW_IDS:
+                return self._bounded_control_rejection(
+                    operation="evidence_view",
+                    category="evidence_view_invalid",
+                    field_name="view_id",
+                    received=view_id,
+                    started=started,
+                )
+            state = self.store.read()
+            state = self._prepare_run_summary_on_request(state)
+            summaries = read_run_summaries(state)
+            exclusions = set(state["current_loop_contract"]["evidence_exclusions"])
+            eligible = [
+                summary
+                for summary in summaries
+                if summary["artifact_ref"] not in exclusions
+                and summary["result_evidence_reference"] not in exclusions
+            ]
+            limitations: list[str] = []
+            if state["current_loop_contract"].get("dependent_views_stale"):
+                limitations.append(
+                    "One or more evidence changes make dependent views stale or incomplete."
+                )
+            if exclusions:
+                limitations.append(
+                    "Excluded evidence is unavailable to future summaries and views."
+                )
+            circuit = (
+                self._saved_artifact(state, "circuit_manifestation")
+                if "circuit_manifestation" in state["saved_artifacts"]
+                and state["saved_artifacts"]["circuit_manifestation"]["artifact_reference"]
+                not in exclusions
+                else None
+            )
+            baseline_reference = (
+                state["saved_artifacts"]["request_baseline"]["artifact_reference"]
+                if "request_baseline" in state["saved_artifacts"]
+                else None
+            )
+            view = build_evidence_view(
+                view_id=view_id,
+                contract=state["current_loop_contract"],
+                run_summaries=eligible,
+                circuit_manifestation=circuit,
+                baseline_reference=baseline_reference,
+                evidence_limitations=limitations,
+                selected_run_reference=selected_run_reference,
+                destination=destination,
+            )
+            return self._result(
+                operation="evidence_view",
+                ok=True,
+                state=state,
+                summary="The bounded current-loop evidence view is ready.",
+                elapsed=self.clock() - started,
+                details={
+                    "evidence_view": view,
+                    "view_contract": evidence_view_contract_snapshot(),
+                    "run_summary_contract": run_summary_contract_snapshot(),
+                    "eligible_run_references": [summary["artifact_ref"] for summary in eligible],
+                    "arbitrary_query_text_accepted": False,
+                    "project_file_discovery_performed": False,
+                },
+            )
+        except (
+            CurrentLoopError,
+            CurrentLoopConflict,
+            CurrentLoopContractError,
+            RunSummaryError,
+            OSError,
+            ValueError,
+        ) as exc:
+            return self._exception_result("evidence_view", exc, started)
+
     def _bounded_control_rejection(
         self,
         *,
@@ -3522,7 +3758,68 @@ class CurrentLoopCoordinator:
                 and descriptor.get("artifact_reference") == reference
             ):
                 return str(role), deepcopy(dict(descriptor))
+        summary = state.get("run_summary_index", {}).get(reference)
+        if isinstance(summary, Mapping):
+            return "run_summary", deepcopy(dict(summary))
         raise CurrentLoopError("contract_evidence_reference_unknown")
+
+    def _mark_dependent_run_summaries_stale(
+        self, *, source_reference: str, reason: str
+    ) -> dict[str, Any]:
+        state = self.store.read()
+        for summary in read_run_summaries(state):
+            bindings = summary.get("evidence_bindings", [])
+            if source_reference != summary.get("artifact_ref") and not any(
+                isinstance(binding, Mapping)
+                and binding.get("artifact_reference") == source_reference
+                for binding in bindings
+            ):
+                continue
+            stale = mark_run_summary_stale(summary, reasons=[reason])
+            replace_run_summary(
+                store=self.store,
+                summary=stale,
+                expected_revision=int(state["state_revision"]),
+            )
+            state = self.store.read()
+        return state
+
+    def _refresh_dependent_run_summaries(self, *, restored_reference: str) -> dict[str, Any]:
+        state = self.store.read()
+        saved_by_reference = {
+            str(descriptor["artifact_reference"]): descriptor
+            for descriptor in state.get("saved_artifacts", {}).values()
+            if isinstance(descriptor, Mapping)
+            and isinstance(descriptor.get("artifact_reference"), str)
+        }
+        for summary in read_run_summaries(state):
+            related = restored_reference == summary.get("artifact_ref") or any(
+                isinstance(binding, Mapping)
+                and binding.get("artifact_reference") == restored_reference
+                for binding in summary.get("evidence_bindings", [])
+            )
+            if not related:
+                continue
+            bindings_valid = all(
+                isinstance(binding, Mapping)
+                and isinstance(
+                    saved_by_reference.get(str(binding.get("artifact_reference"))),
+                    Mapping,
+                )
+                and saved_by_reference[str(binding["artifact_reference"])].get("artifact_digest")
+                == binding.get("artifact_digest")
+                for binding in summary.get("evidence_bindings", [])
+            )
+            if not bindings_valid:
+                continue
+            refreshed = mark_run_summary_fresh(summary)
+            replace_run_summary(
+                store=self.store,
+                summary=refreshed,
+                expected_revision=int(state["state_revision"]),
+            )
+            state = self.store.read()
+        return state
 
     def evidence_exclude(
         self,
@@ -3543,6 +3840,10 @@ class CurrentLoopCoordinator:
                 expected_contract_revision=expected_contract_revision,
             )
             updated = self._replace_contract(contract)
+            updated = self._mark_dependent_run_summaries_stale(
+                source_reference=artifact_reference,
+                reason="source_evidence_excluded",
+            )
             return self._result(
                 operation="evidence_exclude",
                 ok=True,
@@ -3588,6 +3889,7 @@ class CurrentLoopCoordinator:
                 expected_contract_revision=expected_contract_revision,
             )
             updated = self._replace_contract(contract)
+            updated = self._refresh_dependent_run_summaries(restored_reference=artifact_reference)
             return self._result(
                 operation="evidence_restore",
                 ok=True,
@@ -3639,10 +3941,20 @@ class CurrentLoopCoordinator:
 
             def mutator(value: dict[str, Any]) -> Mapping[str, Any]:
                 value["current_loop_contract"] = contract
-                value["saved_artifacts"].pop(role, None)
+                if role == "run_summary":
+                    value["run_summary_index"].pop(artifact_reference, None)
+                    if value.get("latest_run_summary_reference") == artifact_reference:
+                        value["latest_run_summary_reference"] = None
+                else:
+                    value["saved_artifacts"].pop(role, None)
                 return value
 
             updated = self.store.update(mutator, expected_revision=state["state_revision"])
+            if role != "run_summary":
+                updated = self._mark_dependent_run_summaries_stale(
+                    source_reference=artifact_reference,
+                    reason="source_evidence_deleted",
+                )
             return self._result(
                 operation="evidence_delete",
                 ok=True,
@@ -4080,6 +4392,8 @@ class CurrentLoopCoordinator:
                     elapsed=self.clock() - started,
                 )
             extracted_roles: list[str] = []
+            run_summary_payload: dict[str, Any] | None = None
+            run_summary_lineage: dict[str, Any] | None = None
             for item in authorization["items"]:
                 path = Path(item["local_path"])
                 role = item["artifact_role"]
@@ -4148,6 +4462,32 @@ class CurrentLoopCoordinator:
                                 else None
                             ),
                         )
+                        run_summary_payload = (
+                            deepcopy(result_input)
+                            if "counts" in result_input
+                            else {"counts": deepcopy(result_input)}
+                        )
+                        activity = next(
+                            (
+                                receipt
+                                for receipt in state.get("activity_receipts", [])
+                                if isinstance(receipt, Mapping)
+                                and any(
+                                    isinstance(registered, Mapping)
+                                    and registered.get("role") == "results"
+                                    and registered.get("content_digest")
+                                    == item.get("content_digest")
+                                    for registered in receipt.get("registered_artifacts", [])
+                                )
+                            ),
+                            None,
+                        )
+                        if isinstance(activity, Mapping):
+                            run_summary_lineage = {
+                                "status": "recorded",
+                                "operation_receipt_id": activity.get("operation_receipt_id"),
+                                "activity_digest": activity.get("activity_digest"),
+                            }
                     self._save_artifact(
                         "result_manifestation",
                         result,
@@ -4157,6 +4497,43 @@ class CurrentLoopCoordinator:
                 else:
                     raise CurrentLoopError("unsupported_authorized_artifact_type")
             state = self.store.read()
+            if (
+                run_summary_payload is not None
+                and "result_manifestation" in state["saved_artifacts"]
+                and contract_permits(
+                    state["current_loop_contract"],
+                    category="result_manifestation",
+                    dimension="prepare",
+                )
+            ):
+                summary = build_run_summary(
+                    loop_ref=str(state["loop_ref"]),
+                    workspace_binding=str(state["workspace_root"]),
+                    state_revision=int(state["state_revision"]),
+                    contract_revision=int(state["current_loop_contract"]["contract_revision"]),
+                    result_payload=run_summary_payload,
+                    result_manifestation=self._saved_artifact(state, "result_manifestation"),
+                    circuit_manifestation=(
+                        self._saved_artifact(state, "circuit_manifestation")
+                        if "circuit_manifestation" in state["saved_artifacts"]
+                        else None
+                    ),
+                    source_manifestation=(
+                        self._saved_artifact(state, "python_manifestation")
+                        if "python_manifestation" in state["saved_artifacts"]
+                        else None
+                    ),
+                    operation_lineage=run_summary_lineage,
+                )
+                summary_reference = str(summary["artifact_ref"])
+                save_run_summary(
+                    store=self.store,
+                    summary=summary,
+                    destination=(self.artifact_directory / f"{summary_reference}.json"),
+                    expected_revision=int(state["state_revision"]),
+                )
+                extracted_roles.append("run_summary")
+                state = self.store.read()
             if "result_manifestation" in state["saved_artifacts"]:
                 if self.transport is None:
                     return self._recovery_result(
@@ -4251,6 +4628,16 @@ class CurrentLoopCoordinator:
                 elapsed=self.clock() - started,
                 details={
                     "extracted_roles": extracted_roles,
+                    "run_summary": {
+                        "schema": run_summary_contract_snapshot(),
+                        "automatic_preparation": "run_summary" in extracted_roles,
+                        "latest_reference": self.store.read().get("latest_run_summary_reference"),
+                    },
+                    "build_review": {
+                        "optional": True,
+                        "decline_blocks_completion": False,
+                        "may_request_later": True,
+                    },
                     "raw_source_sent": False,
                     "raw_qasm_sent": False,
                     "raw_results_sent": False,
@@ -4261,11 +4648,66 @@ class CurrentLoopCoordinator:
         except (CurrentLoopError, CurrentLoopConflict, ValueError, OSError) as exc:
             return self._exception_result("process_authorized_artifacts", exc, started)
 
+    def decline_build_review(self, *, explicit_authority: bool) -> dict[str, Any]:
+        """Decline the optional passive review without changing the Blueprint."""
+
+        started = self.clock()
+        try:
+            state = self._require_phase(
+                "decline_build_review", {"evidence_processing", "current_build_review"}
+            )
+            if explicit_authority is not True:
+                return self._checkpoint_result(
+                    operation="decline_build_review",
+                    phase=self._coordinator_state(state)["phase"],
+                    checkpoint_kind="none",
+                    summary="Declining the optional Build Review requires an explicit choice.",
+                    elapsed=self.clock() - started,
+                )
+            coordinator = self._coordinator_state(state)
+            coordinator.update(
+                {
+                    "phase": "continuation_choice",
+                    "state_status": "checkpoint_required",
+                    "checkpoint_kind": "none",
+                    "customer_summary": (
+                        "Build Review was declined. The governing Blueprint is unchanged; "
+                        "continue or request the review later."
+                    ),
+                    "build_review": {
+                        "status": "declined",
+                        "optional": True,
+                        "may_request_later": True,
+                        "blueprint_mutated": False,
+                        "evolved_blueprint_created": False,
+                    },
+                }
+            )
+            self._replace_coordinator(coordinator)
+            return self._result(
+                operation="decline_build_review",
+                ok=True,
+                state=self.store.read(),
+                summary=coordinator["customer_summary"],
+                elapsed=self.clock() - started,
+                details={
+                    "build_review_declined": True,
+                    "continuation_unblocked": True,
+                    "working_blueprint_unchanged": True,
+                    "evolved_blueprint_created": False,
+                    "hosted_operation_invoked": False,
+                    "may_request_later": True,
+                },
+            )
+        except (CurrentLoopError, CurrentLoopConflict) as exc:
+            return self._exception_result("decline_build_review", exc, started)
+
     def review_build(self) -> dict[str, Any]:
         started = self.clock()
         try:
             state = self._require_phase(
-                "review_build", {"evidence_processing", "current_build_review"}
+                "review_build",
+                {"evidence_processing", "current_build_review", "continuation_choice"},
             )
             self._require_contract_permission(
                 state,
@@ -4368,6 +4810,18 @@ class CurrentLoopCoordinator:
                 "artifact_references": [],
                 "evidence_parent_artifacts": [],
             }
+            summaries = read_run_summaries(state)
+            fresh_summaries = [
+                summary
+                for summary in summaries
+                if summary.get("freshness", {}).get("status") == "fresh"
+            ]
+            if fresh_summaries:
+                arguments["selected_share_safe_summaries"] = {
+                    "run_summary": share_safe_run_summary_projection(
+                        fresh_summaries[-1], full=False
+                    )
+                }
             role_to_argument = {
                 "generation_context_pack": "generation_context",
                 "exploratory_generation_context": "generation_context",
@@ -4435,6 +4889,12 @@ class CurrentLoopCoordinator:
                     ],
                     "expanded_truth_preserved": True,
                     "readiness_calculated_locally": False,
+                    "run_summary_reference": (
+                        fresh_summaries[-1]["artifact_ref"] if fresh_summaries else None
+                    ),
+                    "run_summary_missing_limitation": not bool(fresh_summaries),
+                    "blueprint_mutated": False,
+                    "evolved_blueprint_created": False,
                 },
             )
         except (CurrentLoopError, CurrentLoopConflict, ValueError) as exc:
@@ -5400,6 +5860,8 @@ class CurrentLoopCoordinator:
         )
 
     def _protected_call(self, tool_name: str, arguments: Mapping[str, Any]) -> dict[str, Any]:
+        if self.local_only_surface:
+            raise CurrentLoopError("local_sidecar_hosted_operation_prohibited")
         if self.transport is None:
             raise CurrentLoopError("protected_service_unavailable")
         started = self.clock()
@@ -6196,7 +6658,7 @@ class CurrentLoopCoordinator:
         if result.get("schema_id") in {
             PREVIOUS_COORDINATOR_STATE_SCHEMA_ID,
             *OLDER_COORDINATOR_STATE_SCHEMA_IDS,
-        } and result.get("schema_version") in {1, 2, 3, 4}:
+        } and result.get("schema_version") in {1, 2, 3, 4, 5, 6, 7}:
             result["schema_id"] = COORDINATOR_STATE_SCHEMA_ID
             result["schema_version"] = COORDINATOR_STATE_SCHEMA_VERSION
             result.setdefault("effective_generation_posture", state.get("generation_posture"))
@@ -6488,6 +6950,14 @@ class CurrentLoopCoordinator:
                     ),
                     "next_invocation": _invocation_template(
                         ("review-build" if processing_complete else "process-authorized-artifacts"),
+                        alternatives=(
+                            (
+                                "decline-build-review",
+                                "evidence-view",
+                            )
+                            if processing_complete
+                            else ()
+                        ),
                         reused_inputs=(
                             (
                                 "exact_saved_current_build_evidence"
@@ -6500,6 +6970,9 @@ class CurrentLoopCoordinator:
                 }
             )
             protocol["permitted_input_source"] = "exact_authorized_local_artifact_set"
+            if processing_complete:
+                protocol["build_review_optional"] = True
+                protocol["decline_blocks_loop_completion"] = False
             return protocol
         if phase == "current_build_review" and state_status == "ready":
             protocol.update(
@@ -7304,6 +7777,17 @@ class CurrentLoopCoordinator:
                 required_flags=("--approve",),
                 new_inputs=("explicit_stop_loop_authority",),
             ),
+            "open_editor": _invocation_template("open-contract-editor"),
+            "evidence_view": _invocation_template(
+                "evidence-view",
+                required_flags=("--view",),
+                new_inputs=("bounded_evidence_view",),
+            ),
+            "decline_build_review": _invocation_template(
+                "decline-build-review",
+                required_flags=("--approve",),
+                new_inputs=("explicit_build_review_decline",),
+            ),
         }
         contract_operations = {
             "inspect": "contract_status",
@@ -7314,10 +7798,73 @@ class CurrentLoopCoordinator:
             "restore": "evidence_restore",
             "delete": "evidence_delete",
             "stop_loop": "stop_loop",
+            "open_editor": "open_contract_editor",
+            "evidence_view": "evidence_view",
+            "decline_build_review": "decline_build_review",
         }
         result: dict[str, Any] = {}
         for name, template in rows.items():
-            bounded_contract = contracts[contract_operations[name]]
+            if name == "open_editor":
+                bounded_contract = {
+                    "schema_id": "qcoder.current_loop.contract_sidecar.v1",
+                    "schema_version": 1,
+                    "operation": "open_contract_editor",
+                    "fields": [],
+                    "browser_optional": True,
+                    "hosted_operation_permitted": False,
+                }
+            elif name == "evidence_view":
+                view_contract = evidence_view_contract_snapshot()
+                bounded_contract = {
+                    "schema_id": view_contract["schema_id"],
+                    "schema_version": view_contract["schema_version"],
+                    "operation": "evidence_view",
+                    "fields": [
+                        {
+                            "name": "view_id",
+                            "flag": "--view",
+                            "ownership": "customer_selected_from_qcoder_domain",
+                            "required": True,
+                            "json_type": "string",
+                            "accepted_values": deepcopy(view_contract["views"]),
+                        },
+                        {
+                            "name": "selected_run_reference",
+                            "flag": "--run-reference",
+                            "ownership": "qcoder_owned_reference_selection",
+                            "required": False,
+                            "json_type": ["string", "null"],
+                            "accepted_values": [
+                                {
+                                    "value": reference,
+                                    "customer_meaning": f"Recorded run {reference[-8:]}",
+                                }
+                                for reference in sorted(state.get("run_summary_index", {}))
+                            ],
+                        },
+                    ],
+                    "arbitrary_query_text": False,
+                }
+            elif name == "decline_build_review":
+                bounded_contract = {
+                    "schema_id": "qcoder.current_loop.build_review_choice.v1",
+                    "schema_version": 1,
+                    "operation": "decline_build_review",
+                    "fields": [
+                        {
+                            "name": "approve",
+                            "flag": "--approve",
+                            "ownership": "explicit_customer_authority",
+                            "required": True,
+                            "json_type": "boolean",
+                            "authority_only": True,
+                        }
+                    ],
+                    "blueprint_mutated": False,
+                    "may_request_later": True,
+                }
+            else:
+                bounded_contract = contracts[contract_operations[name]]
             template["bounded_control_input_contract"] = bounded_contract
             template["argument_values"] = dynamic_argument_contracts(bounded_contract)
             if "--expected-contract-revision" in template.get("required_flags", []):

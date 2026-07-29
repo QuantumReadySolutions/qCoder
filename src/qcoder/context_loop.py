@@ -39,6 +39,10 @@ from qcoder.development_evidence import (
 )
 from qcoder.current_loop import current_loop_contract_snapshot
 from qcoder.engines.feature_extraction.qasm2_regex_parser import parse_qasm2_text
+from qcoder.engines.feature_extraction.reps.depth import compute_depth_stats
+from qcoder.engines.feature_extraction.reps.entangling_layers import (
+    compute_entangling_layer_stats,
+)
 from qcoder.engines.review.counts_v0 import normalize_counts_v0
 
 
@@ -554,6 +558,17 @@ def build_circuit_manifestation(
     if ir.qasm_format != "qasm2":
         raise ValueError("circuit_format_unsupported")
     counts = Counter(operation.name for operation in ir.operations)
+    depth_stats = compute_depth_stats(ir)
+    entangling_stats = compute_entangling_layer_stats(ir)
+    gate_operations = [
+        operation
+        for operation in ir.operations
+        if not (operation.is_measure or operation.is_barrier or operation.is_reset)
+        and operation.qubits
+    ]
+    multi_qubit_operations = [
+        operation for operation in gate_operations if len(operation.qubits) >= 2
+    ]
     ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
     maximum_categories = CIRCUIT_DISCLOSURE_CEILING["maximum_operation_categories"]
     inventory = [
@@ -619,6 +634,20 @@ def build_circuit_manifestation(
         "controlled_operation_summaries": controlled,
         "parameter_names": parameter_names,
         "measurement_mapping": mappings,
+        "structural_metrics": {
+            "width": ir.n_qubits,
+            "classical_width": ir.n_cbits,
+            "gate_count": len(gate_operations),
+            "operation_count": len(ir.operations),
+            "depth": depth_stats.real_depth,
+            "sequential_gate_count": depth_stats.estimated_depth,
+            "multi_qubit_gate_count": len(multi_qubit_operations),
+            "entangling_operation_count": len(multi_qubit_operations),
+            "entangling_depth": entangling_stats.entangling_depth,
+            "measurement_count": sum(1 for operation in ir.operations if operation.is_measure),
+        },
+        "entangling_operation_structure_observed": bool(multi_qubit_operations),
+        "output_state_entanglement_proven": False,
         "repeated_region_facts": [],
         "parser_limitations": [
             "Static QASM2 syntax only; custom or unsupported statements may be summarized as custom.",

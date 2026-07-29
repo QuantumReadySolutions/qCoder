@@ -161,6 +161,9 @@ def test_exact_message_activation_creates_assist_receipt_and_defers_posture(
         "restore",
         "delete",
         "stop_loop",
+        "open_editor",
+        "evidence_view",
+        "decline_build_review",
     }
     assert all(item["transport_classification"] == "local_only" for item in controls.values())
     assert all("--base-url" not in item["structured_argv"] for item in controls.values())
@@ -208,6 +211,33 @@ def test_v2_active_state_migrates_atomically_without_inheritance(tmp_path: Path)
     assert migrated["current_loop_contract"]["change_history"] == []
     assert migrated["current_loop_contract"]["evidence_exclusions"] == {}
     assert contract_error(migrated["current_loop_contract"]) is None
+
+
+def test_v3_state_migrates_to_v4_without_contract_or_summary_inheritance(
+    tmp_path: Path,
+) -> None:
+    activated = activate_current_loop(
+        workspace_root=tmp_path,
+        generation_posture=None,
+        explicit_authority=True,
+        request_baseline_digest="e" * 64,
+    )
+    store = CurrentLoopStore.for_workspace(tmp_path)
+    current = activated["state"]
+    previous = deepcopy(current)
+    previous["schema_id"] = "qcoder.current_loop.local_state.v3"
+    previous["schema_version"] = 3
+    previous.pop("run_summary_index")
+    previous.pop("latest_run_summary_reference")
+    from qcoder.current_loop import _state_digest
+
+    previous["state_digest"] = _state_digest(previous)
+    store.replace(previous, expected_revision=current["state_revision"])
+    migrated = migrate_current_loop_state(store)
+    assert migrated["schema_id"] == "qcoder.current_loop.local_state.v4"
+    assert migrated["current_loop_contract"] == previous["current_loop_contract"]
+    assert migrated["run_summary_index"] == {}
+    assert migrated["latest_run_summary_reference"] is None
 
 
 def test_contract_enforcement_blocks_excluded_reference() -> None:

@@ -337,6 +337,17 @@ def _saved_reference_options(state: Mapping[str, Any]) -> list[dict[str, Any]]:
                 "qcoder_owned_reference": True,
             }
         )
+    for reference, descriptor in sorted(state.get("run_summary_index", {}).items()):
+        if not isinstance(descriptor, Mapping) or not isinstance(reference, str):
+            continue
+        options.append(
+            {
+                "value": reference,
+                "customer_meaning": f"Run Summary {reference[-8:]}.",
+                "artifact_role": "run_summary",
+                "qcoder_owned_reference": True,
+            }
+        )
     return options
 
 
@@ -365,6 +376,9 @@ def _locally_controlled_reference_options(
             ),
             None,
         )
+        if descriptor is None:
+            candidate = state.get("run_summary_index", {}).get(item["value"])
+            descriptor = candidate if isinstance(candidate, Mapping) else None
         if not isinstance(descriptor, Mapping):
             continue
         path = Path(str(descriptor.get("local_path", ""))).absolute()

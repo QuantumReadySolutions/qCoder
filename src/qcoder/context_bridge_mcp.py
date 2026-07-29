@@ -68,6 +68,11 @@ from qcoder.current_loop_invocation import (
     operation_transport_inventory,
 )
 from qcoder.current_loop_bounded_control import bounded_control_contract_snapshot
+from qcoder.current_loop_contract_sidecar import sidecar_contract_snapshot
+from qcoder.current_loop_run_summary import (
+    evidence_view_contract_snapshot,
+    run_summary_contract_snapshot,
+)
 from qcoder.current_loop_bootstrap import (
     bootstrap_contract_snapshot,
     invocation_lifecycle_snapshot,
@@ -108,8 +113,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 7
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v7"
+CLIENT_BINDING_SCHEMA_VERSION = 8
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v8"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -133,6 +138,22 @@ Active build: explicit wording equivalent to “Use qCoder for this build.” or
 of a qCoder activation offer routes to the local coordinator first. Then follow
 coordinator-directed local and hosted actions. Generation posture is a later generation choice,
 not a workstyle route.
+
+OPTIONAL LOCAL CONTRACT EDITOR
+The customer may manage the same canonical one-loop contract in the IDE or through qCoder's
+optional loopback editor. Open it only through the complete local invocation supplied by qCoder.
+The assistant never edits policy JSON or reconstructs the policy. Browser and IDE controls use
+the same qCoder-owned bounded domains and compare-and-swap revisions. Narrowing is immediate;
+broadening remains a proposal followed by separate explicit confirmation. The browser is not an
+IDE, cannot execute code, cannot invoke Protected, and is never required for ordinary IDE use.
+
+RUN EVIDENCE AND BUILD REVIEW
+Use only qCoder's bounded evidence-view domain for natural questions about top results, circuit
+width/depth/gates, backend, shots, observed bond dimension, limitations, concise loop summary,
+or Full Run Summary. Never inspect result files or local state to answer them. Run Summary is
+execution evidence, not a Blueprint. Build Review is an optional passive comparison: it may be
+declined without blocking unchanged continuation and requested later. Neither a Run Summary nor
+Build Review changes the Blueprint or grants review or governing authority.
 
 ACTIVE-BUILD LOCAL EXECUTION
 For an exact single-message exploratory active build, execute the exact
@@ -342,6 +363,9 @@ def build_client_binding_descriptor(
             ),
             "operation_transport_inventory": operation_transport_inventory(),
             "bounded_control_input_contract": bounded_control_contract_snapshot(),
+            "contract_sidecar": sidecar_contract_snapshot(),
+            "run_summary_contract": run_summary_contract_snapshot(),
+            "evidence_view_contract": evidence_view_contract_snapshot(),
             "checkpoint_input_contract": {
                 "schema_id": CHECKPOINT_INPUT_SCHEMA_ID,
                 "schema_version": CHECKPOINT_INPUT_SCHEMA_VERSION,
@@ -399,6 +423,11 @@ def build_client_binding_descriptor(
                 },
             },
             "manual_active_build_tool_sequencing_prohibited": True,
+            "browser_editor_optional": True,
+            "browser_and_ide_share_canonical_contract": True,
+            "browser_invokes_protected": False,
+            "run_summary_is_blueprint": False,
+            "build_review_optional": True,
         }
     }
 

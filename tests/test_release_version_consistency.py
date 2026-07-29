@@ -13,7 +13,7 @@ from qcoder import __version__
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts/verify-release-version.py"
-EXPECTED_VERSION = "0.6.0a2+wi0419.explorercontract1binding1"
+EXPECTED_VERSION = "0.6.0a2+wi0419.explorercontract2"
 
 
 def _load_verifier():

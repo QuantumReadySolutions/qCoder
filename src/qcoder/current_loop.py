@@ -44,9 +44,10 @@ NEXT_LOOP_SEED_SCHEMA_ID = "qcoder.next_loop_seed.v1"
 UNCHANGED_CONTINUATION_SCHEMA_ID = "qcoder.unchanged_continuation.v1"
 SELECTED_ARTIFACT_AUTHORIZATION_SCHEMA_ID = "qcoder.selected_artifact_authorization.v1"
 LEGACY_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v1"
-PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v2"
-CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v3"
-CURRENT_LOOP_STATE_SCHEMA_VERSION = 3
+OLDER_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v2"
+PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v3"
+CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v4"
+CURRENT_LOOP_STATE_SCHEMA_VERSION = 4
 
 LOOP_INSTANCE_RECORD_MAX_BYTES = 65_536
 NEXT_LOOP_SEED_MAX_BYTES = 65_536
@@ -1396,7 +1397,12 @@ def _state_digest(value: Mapping[str, Any]) -> str:
 
 
 def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
-    """Atomically migrate one active v2 state into v3 with fresh Assist policy."""
+    """Atomically migrate one active v2/v3 state into v4.
+
+    Version 4 adds only qCoder-owned Run Summary references.  A v3 contract is
+    preserved byte-for-byte; a v2 state receives the same fresh Assist contract
+    used by the historical v2-to-v3 migration.
+    """
 
     state = store.read()
     if (
@@ -1404,29 +1410,34 @@ def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
         and state.get("schema_version") == CURRENT_LOOP_STATE_SCHEMA_VERSION
     ):
         return state
-    if (
-        state.get("schema_id") != PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID
-        or state.get("schema_version") != 2
-    ):
+    schema_id = state.get("schema_id")
+    schema_version = state.get("schema_version")
+    if (schema_id, schema_version) not in {
+        (OLDER_CURRENT_LOOP_STATE_SCHEMA_ID, 2),
+        (PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID, 3),
+    }:
         raise CurrentLoopError("current_loop_state_migration_unsupported")
     if state.get("state_kind") != "active_loop":
         raise CurrentLoopError("current_loop_state_migration_pending_capture_unsupported")
-    baseline = state.get("saved_artifacts", {}).get("request_baseline")
-    baseline_digest = (
-        str(baseline.get("artifact_digest"))
-        if isinstance(baseline, Mapping) and isinstance(baseline.get("artifact_digest"), str)
-        else str(state["state_digest"])
-    )
     migrated = deepcopy(state)
     migrated["schema_id"] = CURRENT_LOOP_STATE_SCHEMA_ID
     migrated["schema_version"] = CURRENT_LOOP_STATE_SCHEMA_VERSION
-    migrated["current_loop_contract"] = new_contract(
-        baseline_digest=baseline_digest,
-        capture_provenance="migrated_local_state_v2",
-        activation_revision=int(state["state_revision"]) + 1,
-    )
-    migrated["operation_receipts"] = {}
-    migrated["activity_receipts"] = []
+    if schema_id == OLDER_CURRENT_LOOP_STATE_SCHEMA_ID:
+        baseline = state.get("saved_artifacts", {}).get("request_baseline")
+        baseline_digest = (
+            str(baseline.get("artifact_digest"))
+            if isinstance(baseline, Mapping) and isinstance(baseline.get("artifact_digest"), str)
+            else str(state["state_digest"])
+        )
+        migrated["current_loop_contract"] = new_contract(
+            baseline_digest=baseline_digest,
+            capture_provenance="migrated_local_state_v2",
+            activation_revision=int(state["state_revision"]) + 1,
+        )
+        migrated["operation_receipts"] = {}
+        migrated["activity_receipts"] = []
+    migrated["run_summary_index"] = {}
+    migrated["latest_run_summary_reference"] = None
     return store.replace(migrated, expected_revision=int(state["state_revision"]))
 
 
@@ -1434,11 +1445,18 @@ def current_loop_state_error(value: object) -> str | None:
     if not isinstance(value, Mapping):
         return "current_loop_state_invalid"
     legacy = (
-        value.get("schema_id") == LEGACY_CURRENT_LOOP_STATE_SCHEMA_ID
-        and value.get("schema_version") == 1
-    ) or (
-        value.get("schema_id") == PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID
-        and value.get("schema_version") == 2
+        (
+            value.get("schema_id") == LEGACY_CURRENT_LOOP_STATE_SCHEMA_ID
+            and value.get("schema_version") == 1
+        )
+        or (
+            value.get("schema_id") == OLDER_CURRENT_LOOP_STATE_SCHEMA_ID
+            and value.get("schema_version") == 2
+        )
+        or (
+            value.get("schema_id") == PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID
+            and value.get("schema_version") == 3
+        )
     )
     current = (
         value.get("schema_id") == CURRENT_LOOP_STATE_SCHEMA_ID
@@ -1492,6 +1510,10 @@ def current_loop_state_error(value: object) -> str | None:
                 current
                 or (
                     value.get("schema_id") == PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID
+                    and value.get("schema_version") == 3
+                )
+                or (
+                    value.get("schema_id") == OLDER_CURRENT_LOOP_STATE_SCHEMA_ID
                     and value.get("schema_version") == 2
                 )
             )
@@ -1510,6 +1532,23 @@ def current_loop_state_error(value: object) -> str | None:
             return "current_loop_operation_receipts_invalid"
         if not isinstance(value.get("activity_receipts"), list):
             return "current_loop_activity_receipts_invalid"
+        summaries = value.get("run_summary_index")
+        if not isinstance(summaries, Mapping):
+            return "current_loop_run_summary_index_invalid"
+        for reference, descriptor in summaries.items():
+            if not isinstance(reference, str) or not reference.startswith("run-summary-"):
+                return "current_loop_run_summary_reference_invalid"
+            if not isinstance(descriptor, Mapping):
+                return "current_loop_run_summary_descriptor_invalid"
+            if descriptor.get("artifact_reference") != reference:
+                return "current_loop_run_summary_descriptor_invalid"
+            if descriptor.get("status") not in {"fresh", "stale", "incomplete"}:
+                return "current_loop_run_summary_status_invalid"
+            if not isinstance(descriptor.get("artifact_digest"), str):
+                return "current_loop_run_summary_descriptor_invalid"
+        latest = value.get("latest_run_summary_reference")
+        if latest is not None and latest not in summaries:
+            return "current_loop_latest_run_summary_reference_invalid"
     if not isinstance(value.get("saved_artifacts"), Mapping):
         return "current_loop_saved_artifacts_invalid"
     if not isinstance(value.get("stage_freshness"), Mapping):
@@ -1676,6 +1715,8 @@ def activate_current_loop(
         ),
         "operation_receipts": {},
         "activity_receipts": [],
+        "run_summary_index": {},
+        "latest_run_summary_reference": None,
         "directory_scan_performed": False,
         "watcher_active": False,
         "upload_performed": False,
@@ -1873,6 +1914,151 @@ def _read_saved_artifact(descriptor: Mapping[str, Any]) -> dict[str, Any]:
     ) != descriptor.get("file_digest"):
         raise CurrentLoopError("canonical_artifact_modified")
     return value
+
+
+def save_run_summary(
+    *,
+    store: CurrentLoopStore,
+    summary: Mapping[str, Any],
+    destination: str | Path,
+    expected_revision: int,
+) -> dict[str, Any]:
+    """Save one immutable Run Summary and bind its descriptor into local state."""
+
+    from qcoder.current_loop_run_summary import run_summary_error
+
+    summary_value = deepcopy(dict(summary))
+    error = run_summary_error(summary_value)
+    if error:
+        raise CurrentLoopError(error)
+    reference = str(summary_value["artifact_ref"])
+    path = Path(destination).expanduser().absolute()
+    if not _path_within(path, store.workspace_root):
+        raise CurrentLoopError("run_summary_path_escape")
+    if _symlink_component(path.parent) is not None or path.is_symlink():
+        raise CurrentLoopError("run_summary_symlink_rejected")
+    payload = canonical_bytes(summary_value)
+    if path.exists():
+        raise CurrentLoopError("run_summary_overwrite_conflict")
+    _atomic_write_bytes(path, payload, maximum_bytes=MAX_LOCAL_FILE_BYTES)
+    raw = path.read_bytes()
+    try:
+        reloaded = json.loads(raw.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise CurrentLoopError("run_summary_save_verification_failed") from exc
+    if reloaded != summary_value or run_summary_error(reloaded):
+        raise CurrentLoopError("run_summary_save_verification_failed")
+    descriptor = {
+        "artifact_reference": reference,
+        "artifact_digest": str(summary_value["artifact_digest"]),
+        "file_digest": sha256_bytes(raw),
+        "local_path": str(path),
+        "result_evidence_reference": str(summary_value["result_evidence_reference"]),
+        "creation_revision": int(summary_value["creation_revision"]),
+        "status": str(summary_value["freshness"]["status"]),
+    }
+
+    def mutator(state: dict[str, Any]) -> Mapping[str, Any]:
+        if state["loop_ref"] != summary_value["loop_ref"]:
+            raise CurrentLoopError("run_summary_loop_mismatch")
+        if state["workspace_root"] != summary_value["workspace_binding"]:
+            raise CurrentLoopError("run_summary_workspace_mismatch")
+        if reference in state["run_summary_index"]:
+            raise CurrentLoopError("run_summary_reference_replay")
+        state["run_summary_index"][reference] = descriptor
+        state["latest_run_summary_reference"] = reference
+        return state
+
+    updated = store.update(mutator, expected_revision=expected_revision)
+    return {
+        "saved": True,
+        "artifact_reference": reference,
+        "artifact_digest": descriptor["artifact_digest"],
+        "file_digest": descriptor["file_digest"],
+        "path": str(path),
+        "state_revision": updated["state_revision"],
+    }
+
+
+def read_run_summary(descriptor: Mapping[str, Any]) -> dict[str, Any]:
+    """Read exactly one qCoder-owned Run Summary descriptor without discovery."""
+
+    from qcoder.current_loop_run_summary import run_summary_error
+
+    path = Path(str(descriptor.get("local_path") or ""))
+    value = _load_exact_json_file(
+        path,
+        maximum_bytes=MAX_LOCAL_FILE_BYTES,
+        missing_category="run_summary_missing",
+        invalid_category="run_summary_invalid",
+    )
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise CurrentLoopError("run_summary_missing") from exc
+    if (
+        run_summary_error(value)
+        or value.get("artifact_ref") != descriptor.get("artifact_reference")
+        or value.get("artifact_digest") != descriptor.get("artifact_digest")
+        or sha256_bytes(raw) != descriptor.get("file_digest")
+    ):
+        raise CurrentLoopError("run_summary_modified")
+    return value
+
+
+def read_run_summaries(state: Mapping[str, Any]) -> list[dict[str, Any]]:
+    return [
+        read_run_summary(descriptor)
+        for _reference, descriptor in sorted(state.get("run_summary_index", {}).items())
+    ]
+
+
+def replace_run_summary(
+    *,
+    store: CurrentLoopStore,
+    summary: Mapping[str, Any],
+    expected_revision: int,
+) -> dict[str, Any]:
+    """Replace one qCoder-owned summary only after exact descriptor validation."""
+
+    from qcoder.current_loop_run_summary import run_summary_error
+
+    summary_value = deepcopy(dict(summary))
+    error = run_summary_error(summary_value)
+    if error:
+        raise CurrentLoopError(error)
+    reference = str(summary_value["artifact_ref"])
+    state = store.read()
+    if state["state_revision"] != expected_revision:
+        raise CurrentLoopConflict("concurrent_state_update")
+    descriptor = state.get("run_summary_index", {}).get(reference)
+    if not isinstance(descriptor, Mapping):
+        raise CurrentLoopError("run_summary_reference_unknown")
+    read_run_summary(descriptor)
+    path = Path(str(descriptor["local_path"]))
+    payload = canonical_bytes(summary_value)
+    _atomic_write_bytes(path, payload, maximum_bytes=MAX_LOCAL_FILE_BYTES)
+    next_descriptor = {
+        **dict(descriptor),
+        "artifact_digest": str(summary_value["artifact_digest"]),
+        "file_digest": sha256_bytes(payload),
+        "status": str(summary_value["freshness"]["status"]),
+    }
+
+    def mutator(value: dict[str, Any]) -> Mapping[str, Any]:
+        current = value["run_summary_index"].get(reference)
+        if current != dict(descriptor):
+            raise CurrentLoopConflict("concurrent_state_update")
+        value["run_summary_index"][reference] = next_descriptor
+        return value
+
+    updated = store.update(mutator, expected_revision=expected_revision)
+    return {
+        "replaced": True,
+        "artifact_reference": reference,
+        "state_revision": updated["state_revision"],
+        "status": next_descriptor["status"],
+    }
 
 
 def refresh_loop_instance_record(
@@ -2345,6 +2531,7 @@ def current_loop_contract_snapshot() -> dict[str, Any]:
             "selected_artifact_authorization": (SELECTED_ARTIFACT_AUTHORIZATION_SCHEMA_ID),
             "local_state": CURRENT_LOOP_STATE_SCHEMA_ID,
             "previous_local_state": PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID,
+            "older_local_state": OLDER_CURRENT_LOOP_STATE_SCHEMA_ID,
             "legacy_local_state": LEGACY_CURRENT_LOOP_STATE_SCHEMA_ID,
             "current_loop_contract": CONTRACT_SCHEMA_ID,
         },

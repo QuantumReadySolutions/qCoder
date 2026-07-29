@@ -1,8 +1,8 @@
 # Current Loop bounded-control input contract
 
 `qcoder.current_loop.bounded_control_input.v1` is the internal client-visible contract for every
-WI-0419 local control. It is embedded in `qcoder.current_loop.operation_invocation.v2` and the
-`qcoder.connected_assistant.client_binding.v7` descriptor. Customers interact in natural
+WI-0419 local control. It is embedded in `qcoder.current_loop.operation_invocation.v3` and the
+`qcoder.connected_assistant.client_binding.v8` descriptor. Customers interact in natural
 language; they do not see or edit the machine contract.
 
 The contract derives its domains from the same Python constants used by parser choices and
@@ -25,6 +25,9 @@ assistant never inspects help, source, package files, proof records, transcripts
 | `record-ide-authority` | bounded IDE operation category/output roles plus authority | loop/workspace/revision and receipt construction | Issues a single-use operation receipt; grants no review authority. |
 | `register-artifacts` | exact literal output path, truthful provenance, role, and optionally one eligible receipt | receipt/loop/workspace/revision bindings | Registers exact paths only; performs no discovery. |
 | bounded recovery (`status`) | none for refresh; customer may naturally choose a displayed alternative | recovery category, state/contract revision, exact next invocation | Preserves prior valid contract and evidence. |
+| `open-contract-editor` | none | sidecar schema, loop/workspace/session binding | Opens the optional loopback editor; no hosted access. |
+| `evidence-view` | one advertised view and, when ambiguous, one eligible run reference | state, contract, evidence, and run-summary references | Returns only a contract-permitted bounded view. |
+| `decline-build-review` | approval only | current loop/state binding | Declines the optional passive review without changing the Blueprint. |
 
 ## Presets and Off
 
@@ -54,4 +57,3 @@ Unsupported preset, category, dimension, value, reason, or reference input retur
 a hash rather than arbitrary raw input, `hosted_operation_permitted: false`, and a complete local
 recovery invocation with refreshed domains. Rejection does not alter prior valid contract state or
 evidence.
-

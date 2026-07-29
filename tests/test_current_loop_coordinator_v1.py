@@ -572,9 +572,9 @@ def _activate_and_prepare(
 
 def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
     snapshot = coordinator_contract_snapshot()
-    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v9"
-    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v7"
-    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 9
+    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v10"
+    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v8"
+    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 10
     assert all(snapshot["checkpoint_result_protocol"].values())
     assert snapshot["permitted_input_source_taxonomy"] == {
         "schema_id": INPUT_SOURCE_DISPOSITION_SCHEMA_ID,
@@ -619,7 +619,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("61a5a481da8651f926dad07a14a34c49d40ea7031edf0777aec3a1c0d60cdc75")
+    assert contract_digest == ("561e3aa32b69f3614f994bc5dfab07247bfce010aa57c8dbf93f63d0c9ba005c")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
@@ -1375,6 +1375,16 @@ def test_authorization_add_one_and_decline_are_exact_local_actions(
             },
             True,
         ),
+        (
+            ("source", "circuit_qasm", "results"),
+            {
+                "source_evidence",
+                "python_manifestation",
+                "circuit_manifestation",
+                "result_manifestation",
+            },
+            False,
+        ),
     ],
 )
 def test_coordinated_partial_and_failed_run_paths(
@@ -1419,8 +1429,25 @@ def test_coordinated_partial_and_failed_run_paths(
         )
         assert result["stage_availability"] == "not_run"
         assert result["raw_error_included"] is False
+        assert state["run_summary_index"] == {}
+    elif "results" in selected_roles:
+        assert processed["details"]["run_summary"]["automatic_preparation"] is True
+        assert state["latest_run_summary_reference"] in state["run_summary_index"]
     review = coordinator.review_build()
     assert review["ok"] is True
+    if "results" in selected_roles and not failed_run:
+        current_call = next(
+            arguments
+            for tool, arguments in reversed(transport.calls)
+            if tool == "create_context_session_card"
+        )
+        assert (
+            current_call["selected_share_safe_summaries"]["run_summary"][
+                "raw_result_artifact_included"
+            ]
+            is False
+        )
+        assert review["details"]["run_summary_reference"] == state["latest_run_summary_reference"]
     current = json.loads(
         Path(
             CurrentLoopStore.for_workspace(workspace).read()["saved_artifacts"][
@@ -2604,8 +2631,8 @@ def test_every_checkpoint_result_is_deterministically_actionable(tmp_path: Path)
             summary="Synthetic checkpoint contract test.",
         )
         _assert_actionable_checkpoint(result)
-        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v9"
-        assert result["schema_version"] == 9
+        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v10"
+        assert result["schema_version"] == 10
 
 
 @pytest.mark.parametrize(
