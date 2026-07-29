@@ -82,7 +82,7 @@ def test_pre_result_inventory_is_complete_and_does_not_create_synthetic_entries(
     }
 
 
-def test_fresh_active_build_bootstrap_is_exact_local_and_non_authoritative() -> None:
+def test_fresh_active_build_bootstrap_is_exact_local_assist_activation() -> None:
     executable = "/opt/qCoder Runtime/bin/python"
     bootstrap = build_fresh_active_build_bootstrap(executable=executable)
     assert bootstrap["schema_id"] == BOOTSTRAP_INVOCATION_SCHEMA_ID
@@ -94,6 +94,9 @@ def test_fresh_active_build_bootstrap_is_exact_local_and_non_authoritative() -> 
         "current-loop",
         "activate",
         "--request-stdin",
+        "--capture-mode",
+        "exact_current_customer_message",
+        "--approve",
     ]
     assert bootstrap["input_channel"] == {
         "type": "exact_utf8_stdin",
@@ -116,7 +119,7 @@ def test_fresh_active_build_bootstrap_is_exact_local_and_non_authoritative() -> 
     assert "--token-file" not in serialized
     assert "bearer" not in serialized.casefold()
     assert bootstrap["authority_effect"]["stages_content"] is True
-    assert bootstrap["authority_effect"]["grants_qcoder_activation"] is False
+    assert bootstrap["authority_effect"]["grants_qcoder_activation"] is True
     assert bootstrap["authority_effect"]["protected_call_permitted"] is False
     assert bootstrap["state_binding"]["revision"] is None
     assert bootstrap["state_binding"]["absence_reason"]
@@ -139,10 +142,10 @@ def test_bootstrap_owns_platform_serialization_and_cwd_semantics() -> None:
     assert workspace["later_invocations_bound_to_exact_recorded_workspace"] is True
 
 
-def test_binding_v5_delivers_bootstrap_and_complete_lifecycle() -> None:
+def test_binding_v6_delivers_bootstrap_and_complete_lifecycle() -> None:
     binding = _descriptor("/runtime/python")
-    assert binding["schema_version"] == 5
-    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v5"
+    assert binding["schema_version"] == 6
+    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v6"
     bootstrap = binding["bootstrap_invocation_contract"]
     assert bootstrap["schema_id"] == BOOTSTRAP_INVOCATION_SCHEMA_ID
     assert bootstrap["supported_entrypoints"][FRESH_ACTIVE_BUILD_ENTRYPOINT][
@@ -154,6 +157,9 @@ def test_binding_v5_delivers_bootstrap_and_complete_lifecycle() -> None:
         "current-loop",
         "activate",
         "--request-stdin",
+        "--capture-mode",
+        "exact_current_customer_message",
+        "--approve",
     ]
     surface = binding["surfaces"]["local_orchestration"]
     assert surface["command_prefix_diagnostics_only"] is True
@@ -209,7 +215,7 @@ def test_binding_prohibits_help_and_prefix_command_construction(tmp_path: Path) 
         assert required in lowered
 
 
-def test_black_box_bootstrap_stages_exact_request_and_returns_approval_invocation(
+def test_black_box_bootstrap_activates_assist_with_exact_receipt(
     tmp_path: Path,
 ) -> None:
     workspace = tmp_path / "Bell workspace Ω"
@@ -229,53 +235,27 @@ def test_black_box_bootstrap_stages_exact_request_and_returns_approval_invocatio
     exact = request.decode("utf-8")
     assert display["original_request"] == exact
     assert display["original_request_utf8_sha256"] == hashlib.sha256(request).hexdigest()
-    assert display["activation_performed"] is False
-    assert display["canonical_request_baseline_created"] is False
-    assert display["protected_call_performed"] is False
-    approval = result["next_invocation"]["operation_specific_invocation"]
-    assert approval["operation"] == "activate"
-    assert approval["transport_classification"] == "local_only"
-    assert approval["input_channel"] == "bounded_declared_arguments"
-    assert "--approve" in approval["structured_argv"]
-    assert "--request-stdin" not in approval["structured_argv"]
-    assert exact not in json.dumps(approval, ensure_ascii=False)
-
-    approved = subprocess.run(
-        [str(item) for item in approval["structured_argv"]],
-        cwd=workspace,
-        capture_output=True,
-        check=False,
-        env={
-            **os.environ,
-            "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
-        },
-    )
-    assert approved.returncode == 0, approved.stderr.decode()
-    activated = json.loads(approved.stdout)
-    assert activated["details"]["original_request"] == exact
-    assert activated["details"]["activation_authority_transmitted"] is True
-    assert activated["details"]["request_baseline_saved"] is True
-    assert activated["details"]["ide_write_or_run_authorized"] is False
-    assert activated["next_invocation"]["operation_specific_invocation"]["operation"] == "activate"
+    assert display["assist_ready"] is True
+    assert display["request_baseline_saved"] is True
+    assert display["posture_deferred"] is True
+    assert display["activation_receipt"]["preset"] == "assist"
+    assert result["next_invocation"]["operation_specific_invocation"]["operation"] == "activate"
 
 
-def test_duplicate_bootstrap_replaces_pending_capture_without_activation(tmp_path: Path) -> None:
+def test_duplicate_exact_message_bootstrap_fails_without_duplicate_activation(
+    tmp_path: Path,
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     bootstrap = build_fresh_active_build_bootstrap(executable=sys.executable)
     request = b"Use qCoder for this build. Create a Bell circuit."
     first = json.loads(_run_bootstrap(bootstrap, workspace=workspace, request=request).stdout)
     second = json.loads(_run_bootstrap(bootstrap, workspace=workspace, request=request).stdout)
-    assert first["details"]["activation_performed"] is False
-    assert second["details"]["activation_performed"] is False
-    assert (
-        first["details"]["original_request_utf8_sha256"]
-        == second["details"]["original_request_utf8_sha256"]
-    )
-    first_binding = first["next_invocation"]["operation_specific_invocation"]["state_binding"]
-    second_binding = second["next_invocation"]["operation_specific_invocation"]["state_binding"]
-    assert second_binding["revision"] == first_binding["revision"] + 1
-    assert second_binding["checkpoint"] == "activation_request_baseline_review"
+    assert first["ok"] is True
+    assert first["details"]["assist_ready"] is True
+    assert second["ok"] is False
+    assert second["category"] == "loop_already_active"
+    assert second["details"]["recovery_contract"]["hosted_operation_permitted"] is False
 
 
 def test_invalid_utf8_bootstrap_fails_with_safe_machine_result(tmp_path: Path) -> None:

@@ -223,8 +223,11 @@ def test_structural_mismatch_is_sanitized_and_emits_no_hosted_action(
     assert diagnostic["error_code"] == category
     assert diagnostic["assistant_should_stop"] is True
     assert diagnostic["hosted_operation_permitted"] is False
-    assert rejected["supported_next_action"] is None
-    assert rejected["next_invocation"] is None
+    assert rejected["supported_next_action"] == "refresh_bounded_recovery"
+    invocation = rejected["next_invocation"]["operation_specific_invocation"]
+    assert invocation["operation"] == "status"
+    assert invocation["transport_classification"] == "local_only"
+    assert invocation["hosted_access_permitted"] is False
     assert "summary" not in json.dumps(diagnostic)
 
 

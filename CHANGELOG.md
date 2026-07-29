@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0a2+wi0419.explorercontract1
+
+- Add the canonical one-loop Current Loop Contract, Assist activation receipts,
+  exact IDE operation receipts, bounded local contract controls, and deterministic
+  recovery contracts while preserving the twelve-tool and Protected boundaries.
+
 ## 0.6.0a2+wi0418.authoritytransport6
 
 - Supply complete local-only bootstrap invocations before the first Current

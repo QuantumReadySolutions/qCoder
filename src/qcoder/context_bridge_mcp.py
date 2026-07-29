@@ -107,8 +107,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 5
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v5"
+CLIENT_BINDING_SCHEMA_VERSION = 6
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v6"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -134,7 +134,8 @@ coordinator-directed local and hosted actions. Generation posture is a later gen
 not a workstyle route.
 
 ACTIVE-BUILD LOCAL EXECUTION
-For a fresh active build, execute the exact fresh_active_build_request_baseline_staging bootstrap
+For an exact single-message exploratory active build, execute the exact
+fresh_active_build_request_baseline_staging bootstrap
 invocation supplied in the versioned client binding through the client's ordinary local
 command-execution capability. That capability may be displayed as terminal, shell, Bash, or
 another client-specific name; qCoder does not depend on its displayed name. Use the exact active
@@ -143,8 +144,10 @@ customer message as exact UTF-8 stdin. Do not inspect help, construct a command 
 coordinator_prefix, or construct a command from the diagnostics-only entry or operation
 inventories. The customer never types the command. The bootstrap is the supported qCoder
 active-build route, not a local fallback, customer-authored CLI choreography, or an improvised
-review. Do not perform the requested IDE write or run before the coordinator reaches its separate
-authority checkpoint.
+review. This exact-message bootstrap activates Assist and returns an activation receipt without a
+redundant baseline-approval ceremony. Use review_required capture for combined, changed,
+materially ambiguous, Blueprint-guided, or explicitly strict input. Do not perform the requested
+IDE write or run before the coordinator reaches its separate authority checkpoint.
 
 Hosted operations during active build: the coordinator may invoke or direct existing Context
 Bridge operations. Follow those directions and never invent a hosted-tool order. Do not call one
@@ -162,14 +165,19 @@ completed.
 ACTIVATION PROTOCOL
 qCoder Current Loop is opt-in: do nothing unless the user explicitly asks to use qCoder for the
 current build or explicitly accepts an activation offer. Never activate silently. For a task
+The complete exact customer message is the Request Baseline.
 received before activation, use the binding's exact fresh-active-build bootstrap invocation to
 stage the complete message through its declared exact UTF-8 stdin channel. Do not derive the
 activate subcommand or any flag from this prose. Never ask the customer to create a request file.
-Use qCoder's returned complete capture when asking: “Use qCoder for this build and preserve the
-following exact Request Baseline?” Do not ask the user to repeat the task, and never use a later
-one-word “Yes” as original_request. After approval, execute the exact authority-only invocation
-returned by qCoder; let qCoder reuse the pending capture. Do not resend or reconstruct the request.
-Posture remains separate unless explicitly supplied with its own attributable authority.
+Exact-message capture preserves that one complete message, activates qCoder under Assist, and
+returns a receipt. It grants no posture, IDE, raw-exposure, artifact-review, governing-change,
+external-service, or execution authority. For review_required capture, use qCoder's returned
+complete capture and later authority-only invocation without resending content. Never use a later
+one-word “Yes” as original_request. Posture remains unset until generation becomes relevant.
+In every mode, never use a later one-word “Yes” as original_request.
+Do not ask the user to repeat the task. In review_required mode, execute the exact authority-only
+invocation returned by qCoder. Do not resend or reconstruct the request. Posture remains separate
+from activation authority.
 
 CHECKPOINT PROTOCOL
 Conversational approval and canonical confirmation are distinct. After the user approves a
@@ -220,6 +228,9 @@ After IDE write/run authority, perform only the user-authorized development work
 paths returned by your own write or modify operations; no directory orientation is needed before
 creating a new file. Register only those retained exact paths or paths the user explicitly
 selected, with truthful assistant_created, assistant_modified, or user_selected provenance.
+When qCoder supplies a single-use operation receipt, return its ID with only exact literal outputs
+of that IDE action. Never invent receipt metadata. Unknown, unsupported, secret-bearing, or
+potentially sensitive outputs require exact customer selection, exclusion, or rejection.
 Never inspect .qcoder, and exclude .qcoder from every ordinary project inspection. Do not use a
 glob, find, directory listing, Git status, repository map, or search result as the qCoder review
 set. The Quick Demo requires no workspace discovery: retain the exact source and QASM paths
@@ -227,6 +238,21 @@ returned by the two IDE write operations. Ordinary inspection of relevant non-qC
 files may occur only under the user's development request and the IDE/client permission model;
 that inspection does not register a file or authorize qCoder review. After registration, present
 the exact visible candidate set for separate artifact-review authorization.
+
+CURRENT LOOP CONTRACT
+Assist is the default one-loop participation preset after exact-message activation. Evidence only
+narrows standing recommendation, preparation, and assistant exposure. Custom is a fully compiled
+bounded policy. Off means no active loop. Use only qCoder-supplied contract status, preset,
+bounded-adjustment, broadening-confirmation, exclusion, restoration, and deletion invocations.
+Never edit JSON or YAML, reconstruct policy, or decide whether a change broadens authority.
+Narrowing applies immediately; broadening requires a qCoder proposal and separate authority-only
+confirmation.
+
+RECOVERY
+Recoverable results preserve prior valid authority and evidence and include a versioned recovery
+contract with a complete next invocation. Follow qCoder-owned correction, restaging, revision
+refresh, bounded alternatives, or operation-receipt rebinding. Do not turn a recoverable transport
+or classification issue into loop abandonment.
 """
 
 CLIENT_AUTHORITY_AND_PROHIBITED_INSTRUCTIONS = """AUTHORITY BOUNDARIES

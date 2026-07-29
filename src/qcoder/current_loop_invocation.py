@@ -112,6 +112,21 @@ _OPERATION_ROWS: tuple[dict[str, Any], ...] = (
         "transport": LOCAL_ONLY,
     },
     {"operation": "abandon", "subcommand": "abandon", "transport": LOCAL_ONLY},
+    {"operation": "contract_status", "subcommand": "contract-status", "transport": LOCAL_ONLY},
+    {
+        "operation": "contract_set_preset",
+        "subcommand": "contract-set-preset",
+        "transport": LOCAL_ONLY,
+    },
+    {"operation": "contract_adjust", "subcommand": "contract-adjust", "transport": LOCAL_ONLY},
+    {
+        "operation": "contract_confirm_broadening",
+        "subcommand": "contract-confirm-broadening",
+        "transport": LOCAL_ONLY,
+    },
+    {"operation": "evidence_exclude", "subcommand": "evidence-exclude", "transport": LOCAL_ONLY},
+    {"operation": "evidence_restore", "subcommand": "evidence-restore", "transport": LOCAL_ONLY},
+    {"operation": "evidence_delete", "subcommand": "evidence-delete", "transport": LOCAL_ONLY},
 )
 
 _BY_SUBCOMMAND = {str(row["subcommand"]): row for row in _OPERATION_ROWS}
@@ -234,6 +249,10 @@ def build_operation_invocation(
         prefix.extend(["--base-url", base_url, "--token-file", token_file])
     argument_values = result.get("argument_values")
     dynamic_arguments = deepcopy(argument_values) if isinstance(argument_values, list) else []
+    fixed_argument_values = result.get("fixed_argument_values")
+    fixed_arguments = (
+        deepcopy(dict(fixed_argument_values)) if isinstance(fixed_argument_values, Mapping) else {}
+    )
     required_flags = result.get("required_flags")
     if not isinstance(required_flags, list):
         required_flags = []
@@ -244,6 +263,9 @@ def build_operation_invocation(
             continue
         if flag in _BOOLEAN_FLAGS:
             structured_argv.append(flag)
+            continue
+        if flag in fixed_arguments:
+            structured_argv.extend([flag, str(fixed_arguments[flag])])
             continue
         value_contract = next(
             (
@@ -295,6 +317,7 @@ def build_operation_invocation(
         "assistant_appends_qcoder_owned_flags": False,
         "sanitized_argv_structure": fixed_redacted,
         "dynamic_argument_contract": dynamic_arguments,
+        "fixed_argument_values": fixed_arguments,
         "required_flag_contract": deepcopy(required_flags),
         "input_channel": input_channel,
         "authority_requirements": {

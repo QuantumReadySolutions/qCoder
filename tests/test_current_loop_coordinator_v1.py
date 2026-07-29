@@ -588,9 +588,9 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
     assert snapshot["request_baseline_transfer"] == {
         "complete_governing_message_preserved_verbatim": True,
         "transports": ["inline", "file", "stdin"],
-        "nonactivating_capture_required": True,
+        "nonactivating_capture_required": "review_required_mode_only",
         "approval_reuses_pending_capture": True,
-        "new_request_with_approval_activates": False,
+        "new_request_with_approval_activates": ("exact_current_customer_message_mode_only"),
         "protected_call_before_activation": False,
         "posture_authority_separate": True,
     }
@@ -608,6 +608,8 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "qcoder_local_state_access_by_assistant": False,
         "discovery_derived_candidates": False,
         "registration_authorizes_review": False,
+        "operation_receipt_supported": True,
+        "operation_receipt_single_use": True,
     }
     contract_digest = hashlib.sha256(
         json.dumps(
@@ -617,7 +619,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("6bb3aa54ba96f0177f32a99cd37963ab707a9352ffd676525bd01789dbd27dc4")
+    assert contract_digest == ("56630702a3bcf0fe2bd843022be2627059a2ccad7095b3de243f6082bb053214")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
@@ -630,10 +632,15 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "authorization_partial",
         "canonical_artifact_modified",
         "client_state_conflict",
+        "contract_broadening_proposal_stale",
+        "contract_revision_stale",
+        "current_loop_contract_policy_prohibited",
         "ide_write_or_run_denied",
         "local_state_corrupt",
         "loop_already_active",
         "loop_not_activated",
+        "operation_receipt_missing",
+        "operation_receipt_stale",
         "parent_digest_mismatch",
         "posture_required",
         "protected_operation_rejected",
@@ -1689,7 +1696,16 @@ def test_current_build_review_fails_closed_without_portable(
     assert review["category"] == "protected_truth_insufficient"
     state = CurrentLoopStore.for_workspace(workspace).read()
     assert "pre_proposal_portable_current_build_context" not in state["saved_artifacts"]
-    assert coordinator.status()["state_status"] == "blocked"
+    status = coordinator.status()
+    assert status["state_status"] == "ready"
+    assert status["supported_next_action"] == "review_current_build"
+    assert status["details"]["recovery_refresh"]["previous_error_category"] == (
+        "protected_truth_insufficient"
+    )
+    assert (
+        status["next_invocation"]["operation_specific_invocation"]["transport_classification"]
+        == "hosted_capable"
+    )
 
 
 def test_proposal_fails_closed_without_proposal_bearing_portable(

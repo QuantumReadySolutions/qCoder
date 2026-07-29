@@ -1048,6 +1048,15 @@ def _cmd_current_loop(argv: list[str]) -> int:
         ),
     )
     activate.add_argument(
+        "--capture-mode",
+        choices=("review_required", "exact_current_customer_message"),
+        default="review_required",
+        help=(
+            "qCoder-supplied capture contract. Exact-current-message mode may activate "
+            "Assist in one invocation only for one verbatim, unambiguous exploratory request."
+        ),
+    )
+    activate.add_argument(
         "--label",
         default=None,
         help=(
@@ -1063,6 +1072,70 @@ def _cmd_current_loop(argv: list[str]) -> int:
             "closed; the assistant may not invent customer label authority."
         ),
     )
+
+    sub.add_parser("contract-status", help="Inspect the canonical effective one-loop contract.")
+    contract_preset = sub.add_parser(
+        "contract-set-preset", help="Select one bounded Current Loop Contract preset."
+    )
+    contract_preset.add_argument("--preset", choices=("evidence_only", "assist"), required=True)
+    contract_preset.add_argument("--expected-contract-revision", type=int, required=True)
+    contract_adjust = sub.add_parser(
+        "contract-adjust", help="Adjust one bounded contract category and dimension."
+    )
+    contract_adjust.add_argument(
+        "--category",
+        choices=(
+            "request_baseline",
+            "working_blueprint",
+            "generation_context",
+            "python_manifestation",
+            "circuit_manifestation",
+            "result_manifestation",
+            "lineage",
+            "derived_metrics",
+        ),
+        required=True,
+    )
+    contract_adjust.add_argument(
+        "--dimension",
+        choices=(
+            "collect",
+            "derive",
+            "recommend",
+            "prepare",
+            "request_application_or_execution",
+            "assistant_derived_exposure",
+            "assistant_raw_exposure",
+        ),
+        required=True,
+    )
+    contract_adjust.add_argument(
+        "--value",
+        choices=("enabled", "disabled", "bounded_non_material", "on_request", "standing"),
+        required=True,
+    )
+    contract_adjust.add_argument("--expected-contract-revision", type=int, required=True)
+    contract_confirm = sub.add_parser(
+        "contract-confirm-broadening",
+        help="Carry authority only for the current exact broadening proposal.",
+    )
+    contract_confirm.add_argument("--expected-contract-revision", type=int, required=True)
+    contract_confirm.add_argument("--approve", action="store_true")
+    evidence_exclude = sub.add_parser("evidence-exclude")
+    evidence_exclude.add_argument("--artifact-reference", required=True)
+    evidence_exclude.add_argument(
+        "--reason",
+        choices=("customer_excluded", "privacy_narrowing", "not_relevant"),
+        required=True,
+    )
+    evidence_exclude.add_argument("--expected-contract-revision", type=int, required=True)
+    evidence_restore = sub.add_parser("evidence-restore")
+    evidence_restore.add_argument("--artifact-reference", required=True)
+    evidence_restore.add_argument("--expected-contract-revision", type=int, required=True)
+    evidence_delete = sub.add_parser("evidence-delete")
+    evidence_delete.add_argument("--artifact-reference", required=True)
+    evidence_delete.add_argument("--expected-contract-revision", type=int, required=True)
+    evidence_delete.add_argument("--approve", action="store_true")
 
     prepare = sub.add_parser(
         "prepare-generation",
@@ -1216,6 +1289,17 @@ def _cmd_current_loop(argv: list[str]) -> int:
             "approval; supply only after that action, and never infer or manufacture it."
         ),
     )
+    authority.add_argument(
+        "--operation-category",
+        choices=("ide_write", "ide_modify", "ide_execute"),
+        default="ide_write",
+    )
+    authority.add_argument(
+        "--output-role",
+        action="append",
+        choices=("source", "circuit_qasm", "results"),
+        default=[],
+    )
 
     register = sub.add_parser(
         "register-artifacts",
@@ -1281,6 +1365,11 @@ def _cmd_current_loop(argv: list[str]) -> int:
             "that exact path, and never infer or manufacture approval. It authorizes no "
             "directory discovery and never permits qCoder local state."
         ),
+    )
+    register.add_argument(
+        "--operation-receipt-id",
+        default=None,
+        help="Exact qCoder-issued single-use operation receipt; never assistant-authored.",
     )
 
     authorize = sub.add_parser(
@@ -1663,6 +1752,43 @@ def _cmd_current_loop(argv: list[str]) -> int:
                     if args.assistant_interpretation is not None
                     else None
                 ),
+                capture_mode=args.capture_mode,
+            )
+        elif command == "contract-status":
+            result = coordinator.contract_status()
+        elif command == "contract-set-preset":
+            result = coordinator.contract_set_preset(
+                preset=args.preset,
+                expected_contract_revision=args.expected_contract_revision,
+            )
+        elif command == "contract-adjust":
+            result = coordinator.contract_adjust(
+                category=args.category,
+                dimension=args.dimension,
+                value=args.value,
+                expected_contract_revision=args.expected_contract_revision,
+            )
+        elif command == "contract-confirm-broadening":
+            result = coordinator.contract_confirm_broadening(
+                expected_contract_revision=args.expected_contract_revision,
+                explicit_authority=args.approve,
+            )
+        elif command == "evidence-exclude":
+            result = coordinator.evidence_exclude(
+                artifact_reference=args.artifact_reference,
+                reason=args.reason,
+                expected_contract_revision=args.expected_contract_revision,
+            )
+        elif command == "evidence-restore":
+            result = coordinator.evidence_restore(
+                artifact_reference=args.artifact_reference,
+                expected_contract_revision=args.expected_contract_revision,
+            )
+        elif command == "evidence-delete":
+            result = coordinator.evidence_delete(
+                artifact_reference=args.artifact_reference,
+                expected_contract_revision=args.expected_contract_revision,
+                explicit_authority=args.approve,
             )
         elif command == "prepare-generation":
             if not args.use_current_intent and (
@@ -1697,6 +1823,8 @@ def _cmd_current_loop(argv: list[str]) -> int:
             result = coordinator.record_ide_authority(
                 allowed=args.allow,
                 explicit_user_action=args.explicit,
+                operation_category=args.operation_category,
+                output_role_ceiling=args.output_role or ("source", "circuit_qasm", "results"),
             )
         elif command == "register-artifacts":
             candidates = []
@@ -1717,7 +1845,10 @@ def _cmd_current_loop(argv: list[str]) -> int:
                     }
                     for value in values
                 )
-            result = coordinator.register_artifacts(candidates=candidates)
+            result = coordinator.register_artifacts(
+                candidates=candidates,
+                operation_receipt_id=args.operation_receipt_id,
+            )
         elif command == "authorize-artifacts":
             result = coordinator.authorize_artifacts(
                 action=args.action,

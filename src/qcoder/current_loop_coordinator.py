@@ -50,6 +50,7 @@ from qcoder.current_loop import (
     check_current_loop_freshness,
     complete_current_loop,
     decision_inventory_binding,
+    migrate_current_loop_state,
     propose_selected_artifact_authorization,
     save_exact_canonical_artifact,
     select_current_loop_generation_posture,
@@ -86,6 +87,25 @@ from qcoder.current_loop_bootstrap import (
     INVOCATION_LIFECYCLE_SCHEMA_ID,
     PRE_RESULT_ENTRY_INVENTORY_SCHEMA_ID,
 )
+from qcoder.current_loop_contract import (
+    CurrentLoopContractError,
+    adjust as adjust_contract,
+    confirm_broadening,
+    contract_snapshot,
+    exclude_evidence as contract_exclude_evidence,
+    permits as contract_permits,
+    record_deletion as contract_record_deletion,
+    restore_evidence as contract_restore_evidence,
+    set_preset as set_contract_preset,
+    validate_contract,
+)
+from qcoder.current_loop_event_receipts import (
+    EventReceiptError,
+    consume_operation_receipt,
+    event_receipt_snapshot,
+    issue_operation_receipt,
+    validate_operation_receipt,
+)
 from qcoder.context_loop import CONTEXT_LOOP_GATE
 
 COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v9"
@@ -102,6 +122,8 @@ OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
     }
 )
 COORDINATOR_STATE_SCHEMA_VERSION = 6
+RECOVERY_SCHEMA_ID = "qcoder.current_loop.recovery.v1"
+RECOVERY_SCHEMA_VERSION = 1
 CONSEQUENCE_PROJECTION_SCHEMA_ID = "qcoder.current_loop.consequence_projection.v1"
 PERFORMANCE_SCHEMA_ID = "qcoder.current_loop.private_performance.v1"
 INPUT_SOURCE_DISPOSITION_SCHEMA_ID = "qcoder.current_loop.permitted_input_source_disposition.v1"
@@ -174,7 +196,12 @@ SAFE_LOCAL_FAILURE_CATEGORIES = frozenset(
 )
 
 _PHASE_TRANSITIONS = {
-    "activated": ("intent_review", "abandoned"),
+    "activated": (
+        "intent_review",
+        "awaiting_local_artifacts",
+        "artifact_authorization",
+        "abandoned",
+    ),
     "intent_review": ("generation_ready", "abandoned"),
     "generation_ready": (
         "intent_review",
@@ -320,6 +347,49 @@ _RECOVERY = {
         "Omit label provenance or supply the exact attributable label.",
         True,
         False,
+        True,
+        False,
+    ),
+    "current_loop_contract_policy_prohibited": (
+        "The effective Current Loop Contract does not permit this participation step.",
+        "Keep the existing evidence and authority intact. Skip this step, or ask qCoder "
+        "for a bounded contract change; any broadening still requires separate approval.",
+        True,
+        True,
+        True,
+        False,
+    ),
+    "contract_revision_stale": (
+        "The contract revision changed before this bounded control was applied.",
+        "Refresh the current qCoder result and use its newly bound local invocation.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "contract_broadening_proposal_stale": (
+        "The pending contract broadening no longer matches the current contract revision.",
+        "Refresh the current contract, then request a new bounded proposal if still wanted.",
+        True,
+        True,
+        True,
+        False,
+    ),
+    "operation_receipt_missing": (
+        "The exact qCoder operation receipt is not available for this registration.",
+        "Keep the literal output paths unchanged and obtain a fresh bounded IDE event receipt, "
+        "or use the existing exact-artifact selection fallback.",
+        True,
+        True,
+        True,
+        False,
+    ),
+    "operation_receipt_stale": (
+        "The operation receipt is stale for the current local state revision.",
+        "Keep the literal output paths unchanged and obtain a fresh bounded IDE event receipt, "
+        "or use the existing exact-artifact selection fallback.",
+        True,
+        True,
         True,
         False,
     ),
@@ -901,9 +971,29 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "pre_result_entry_inventory": PRE_RESULT_ENTRY_INVENTORY_SCHEMA_ID,
             "operation_invocation": INVOCATION_CONTRACT_SCHEMA_ID,
             "invocation_lifecycle": INVOCATION_LIFECYCLE_SCHEMA_ID,
+            "current_loop_contract": contract_snapshot()["schema_id"],
+            "operation_receipt": event_receipt_snapshot()["schema_id"],
+            "recovery": RECOVERY_SCHEMA_ID,
         },
         "operation_invocation": invocation_contract_snapshot(),
         "operation_transport_inventory": operation_transport_inventory(),
+        "current_loop_contract": contract_snapshot(),
+        "operation_receipt": event_receipt_snapshot(),
+        "recovery_contract": {
+            "schema_id": RECOVERY_SCHEMA_ID,
+            "schema_version": RECOVERY_SCHEMA_VERSION,
+            "strategies": [
+                "qcoder_corrects",
+                "restage_with_construction",
+                "refresh_revision",
+                "bounded_alternative",
+                "rebind_event_receipt",
+                "skip",
+                "abandon_step",
+                "stop_loop",
+            ],
+            "recoverable_next_invocation_required": True,
+        },
         "phases": list(PHASES),
         "ready_phase_protocol_dispositions": deepcopy(_READY_PHASE_PROTOCOL_DISPOSITIONS),
         "state_statuses": list(STATE_STATUSES),
@@ -942,9 +1032,9 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
         "request_baseline_transfer": {
             "complete_governing_message_preserved_verbatim": True,
             "transports": list(REQUEST_TRANSPORTS),
-            "nonactivating_capture_required": True,
+            "nonactivating_capture_required": "review_required_mode_only",
             "approval_reuses_pending_capture": True,
-            "new_request_with_approval_activates": False,
+            "new_request_with_approval_activates": ("exact_current_customer_message_mode_only"),
             "protected_call_before_activation": False,
             "posture_authority_separate": True,
         },
@@ -965,6 +1055,8 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "qcoder_local_state_access_by_assistant": False,
             "discovery_derived_candidates": False,
             "registration_authorizes_review": False,
+            "operation_receipt_supported": True,
+            "operation_receipt_single_use": True,
         },
         "workspace_state_is_intent": False,
         "recovery_categories": sorted(_RECOVERY),
@@ -986,6 +1078,13 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "standalone_review",
             "attach_to_loop",
             "abandon",
+            "contract_status",
+            "contract_set_preset",
+            "contract_adjust",
+            "contract_confirm_broadening",
+            "evidence_exclude",
+            "evidence_restore",
+            "evidence_delete",
         ],
         "connected_clients": list(CLIENT_NAMES),
         "safe_local_failure_categories": sorted(SAFE_LOCAL_FAILURE_CATEGORIES),
@@ -1374,6 +1473,7 @@ _ACTION_INPUT_SOURCE_CATEGORIES = {
         "authority_only_approval",
     ),
     "stop_and_present_checkpoint": ("authority_only_approval",),
+    "refresh_bounded_recovery": ("qcoder_managed_canonical_reference",),
 }
 
 
@@ -1398,6 +1498,7 @@ def _default_permitted_input_source(action: str) -> str:
             "explicit_user_bounded_exact_set_action_on_qcoder_displayed_candidates"
         ),
         "stop_and_present_checkpoint": "explicit_user_checkpoint_authority",
+        "refresh_bounded_recovery": "fresh_qcoder_coordinator_result",
     }
     source = defaults.get(action)
     if source is None:
@@ -1476,6 +1577,14 @@ class CurrentLoopCoordinator:
             .absolute()
         )
         self.clock = clock
+        try:
+            existing = self.store.read()
+        except CurrentLoopError as exc:
+            if exc.category != "current_loop_not_active":
+                raise
+        else:
+            if existing.get("schema_id") == "qcoder.current_loop.local_state.v2":
+                migrate_current_loop_state(self.store)
 
     @property
     def artifact_directory(self) -> Path:
@@ -1624,9 +1733,30 @@ class CurrentLoopCoordinator:
         if state.get("state_kind") == "pending_activation":
             return self._pending_activation_result(operation="status", state=state)
         coordinator = self._coordinator_state(state)
+        active_recovery = coordinator.get("active_recovery")
+        if isinstance(active_recovery, Mapping):
+            refreshed = deepcopy(coordinator)
+            refreshed.pop("active_recovery", None)
+            refreshed["state_status"] = "ready"
+            refreshed["checkpoint_kind"] = "none"
+            refreshed["customer_summary"] = (
+                "qCoder refreshed the current local revision after the bounded recovery. "
+                "Use the newly generated next invocation; prior valid authority and evidence "
+                "remain intact."
+            )
+            self._replace_coordinator(refreshed)
+            state = self.store.read()
+            coordinator = self._coordinator_state(state)
         status_details: dict[str, Any] = {
             "generation_context_outcome": deepcopy(coordinator.get("generation_context_outcome"))
         }
+        if isinstance(active_recovery, Mapping):
+            status_details["recovery_refresh"] = {
+                "previous_error_category": active_recovery.get("category"),
+                "strategy": active_recovery.get("strategy"),
+                "prior_valid_authority_preserved": True,
+                "prior_valid_evidence_preserved": True,
+            }
         pending_resolution = coordinator.get("pending_decision_resolution")
         if isinstance(pending_resolution, Mapping):
             status_details.update(
@@ -2081,9 +2211,81 @@ class CurrentLoopCoordinator:
         label_provenance: str | None = None,
         parent_loop_ref: str | None = None,
         assistant_interpretation: Mapping[str, Any] | None = None,
+        capture_mode: str = "review_required",
     ) -> dict[str, Any]:
         started = self.clock()
         try:
+            if capture_mode not in {"review_required", "exact_current_customer_message"}:
+                raise CurrentLoopError("activation_capture_mode_invalid")
+            if original_request is not None and capture_mode == "exact_current_customer_message":
+                if (
+                    explicit_authority is not True
+                    or generation_posture is not None
+                    or explicit_posture_authority
+                    or explicit_constraints
+                    or explicit_choices
+                    or assistant_interpretation is not None
+                    or "qcoder" not in original_request.casefold()
+                ):
+                    raise CurrentLoopError("activation_exact_message_mode_ineligible")
+                baseline = build_request_baseline(original_request=original_request)
+                baseline_digest = sha256(original_request.encode("utf-8")).hexdigest()
+                activated = activate_current_loop(
+                    workspace_root=self.workspace_root,
+                    generation_posture=None,
+                    explicit_authority=True,
+                    label=label,
+                    external_state_path=(
+                        self.state_path
+                        if self.state_path
+                        != self.workspace_root / ".qcoder" / "current-loop" / "state.json"
+                        else None
+                    ),
+                    request_baseline_digest=baseline_digest,
+                    activation_capture_provenance="exact_current_customer_message",
+                )
+                self._save_artifact("request_baseline", baseline, "request-baseline.json")
+                state = self.store.read()
+                contract = state["current_loop_contract"]
+                coordinator = self._initial_coordinator_state(
+                    phase="activated",
+                    state_status="ready",
+                    checkpoint_kind="none",
+                    summary=(
+                        "qCoder is active under Assist. The exact current customer message "
+                        "is preserved as the Request Baseline. Generation posture remains unset "
+                        "until generation becomes relevant."
+                    ),
+                )
+                coordinator["activation"] = {
+                    "explicit": True,
+                    "capture_mode": "exact_current_customer_message",
+                    "original_request_preserved": True,
+                    "redundant_baseline_approval_required": False,
+                    "generation_posture_explicit": False,
+                }
+                coordinator["assist_ready"] = True
+                coordinator["request_baseline_reference"] = _artifact_reference(baseline)
+                self._replace_coordinator(coordinator)
+                return self._result(
+                    operation="activate",
+                    ok=True,
+                    state=self.store.read(),
+                    summary=coordinator["customer_summary"],
+                    elapsed=self.clock() - started,
+                    details={
+                        "loop_ref": activated["state"]["loop_ref"],
+                        "request_baseline_saved": True,
+                        "original_request": original_request,
+                        "original_request_utf8_sha256": baseline_digest,
+                        "activation_receipt": deepcopy(contract["activation_receipt"]),
+                        "effective_preset": "assist",
+                        "assist_ready": True,
+                        "posture_deferred": True,
+                        "ide_write_or_run_authorized": False,
+                        "artifact_review_authorized": False,
+                    },
+                )
             if original_request is not None:
                 capture = build_pending_activation_capture(
                     original_request=original_request,
@@ -2217,19 +2419,6 @@ class CurrentLoopCoordinator:
             label_record = capture.get("label")
             if not isinstance(label_record, Mapping):
                 raise CurrentLoopError("pending_activation_label_invalid")
-            activated = activate_current_loop(
-                workspace_root=self.workspace_root,
-                generation_posture=generation_posture,
-                explicit_authority=True,
-                parent_loop_ref=parent_loop_ref,
-                label=str(label_record["value"]),
-                external_state_path=(
-                    self.state_path
-                    if self.state_path
-                    != self.workspace_root / ".qcoder" / "current-loop" / "state.json"
-                    else None
-                ),
-            )
             baseline = build_request_baseline(
                 original_request=str(capture["original_request"]),
                 explicit_constraints=[
@@ -2245,6 +2434,23 @@ class CurrentLoopCoordinator:
                 assistant_interpretation=(
                     capture.get("assistant_interpretation")
                     if isinstance(capture.get("assistant_interpretation"), Mapping)
+                    else None
+                ),
+            )
+            activated = activate_current_loop(
+                workspace_root=self.workspace_root,
+                generation_posture=generation_posture,
+                explicit_authority=True,
+                parent_loop_ref=parent_loop_ref,
+                label=str(label_record["value"]),
+                request_baseline_digest=sha256(
+                    str(capture["original_request"]).encode("utf-8")
+                ).hexdigest(),
+                activation_capture_provenance="reviewed_exact_request_baseline",
+                external_state_path=(
+                    self.state_path
+                    if self.state_path
+                    != self.workspace_root / ".qcoder" / "current-loop" / "state.json"
                     else None
                 ),
             )
@@ -2326,7 +2532,19 @@ class CurrentLoopCoordinator:
     ) -> dict[str, Any]:
         started = self.clock()
         try:
+            if not profile_id:
+                profile_id = "generic_qiskit"
             state = self._require_phase("prepare_generation", {"intent_review", "generation_ready"})
+            self._require_contract_permission(
+                state,
+                category="generation_context",
+                dimension="derive",
+            )
+            self._require_contract_permission(
+                state,
+                category="generation_context",
+                dimension="assistant_derived_exposure",
+            )
             if self.transport is None:
                 return self._recovery_result(
                     operation="prepare_generation",
@@ -2937,17 +3155,317 @@ class CurrentLoopCoordinator:
         except (CurrentLoopError, CurrentLoopConflict, ValueError) as exc:
             return self._exception_result("prepare_generation", exc, started)
 
+    def _replace_contract(
+        self,
+        contract: Mapping[str, Any],
+        *,
+        cancel_pending_for_narrowing: bool = False,
+    ) -> dict[str, Any]:
+        validate_contract(contract)
+        state = self.store.read()
+
+        def mutator(value: dict[str, Any]) -> Mapping[str, Any]:
+            value["current_loop_contract"] = deepcopy(dict(contract))
+            if cancel_pending_for_narrowing:
+                issued = [
+                    receipt_id
+                    for receipt_id, receipt in value.get("operation_receipts", {}).items()
+                    if isinstance(receipt, Mapping) and receipt.get("status") == "issued"
+                ]
+                for receipt_id in issued:
+                    value["operation_receipts"].pop(receipt_id, None)
+                coordinator = value.get("coordinator")
+                staged_cancelled = False
+                if isinstance(coordinator, dict):
+                    pending = coordinator.get("pending_checkpoint_input")
+                    staged_cancelled = (
+                        isinstance(pending, Mapping) and pending.get("status") == "pending"
+                    )
+                    if staged_cancelled:
+                        coordinator["pending_checkpoint_input"] = None
+                        coordinator["state_status"] = "ready"
+                        coordinator["checkpoint_kind"] = "none"
+                        coordinator["customer_summary"] = (
+                            "The narrower Current Loop Contract is effective. Pending work "
+                            "was cancelled and must be reissued under the new ceiling."
+                        )
+                value["contract_narrowing_cancellation"] = {
+                    "schema_id": "qcoder.current_loop.contract_narrowing_receipt.v1",
+                    "schema_version": 1,
+                    "contract_revision": contract["contract_revision"],
+                    "pending_checkpoint_input_cancelled": staged_cancelled,
+                    "issued_operation_receipts_cancelled": len(issued),
+                    "prior_evidence_rewritten": False,
+                    "future_use_follows_new_contract": True,
+                }
+            return value
+
+        return self.store.update(mutator, expected_revision=int(state["state_revision"]))
+
+    def contract_status(self) -> dict[str, Any]:
+        started = self.clock()
+        try:
+            state = self.store.read()
+            validate_contract(state["current_loop_contract"])
+            return self._result(
+                operation="contract_status",
+                ok=True,
+                state=state,
+                summary="The effective one-loop participation contract is shown.",
+                elapsed=self.clock() - started,
+                details={
+                    "current_loop_contract": deepcopy(state["current_loop_contract"]),
+                    "raw_policy_editing_permitted": False,
+                    "yaml_authoritative": False,
+                },
+            )
+        except (CurrentLoopError, CurrentLoopContractError) as exc:
+            return self._exception_result("contract_status", exc, started)
+
+    def contract_set_preset(
+        self, *, preset: str, expected_contract_revision: int
+    ) -> dict[str, Any]:
+        started = self.clock()
+        try:
+            state = self.store.read()
+            outcome = set_contract_preset(
+                state["current_loop_contract"],
+                preset=preset,
+                expected_contract_revision=expected_contract_revision,
+                provenance=(
+                    "customer_requested_narrowing"
+                    if preset == "evidence_only"
+                    else "explicit_customer_selection"
+                ),
+            )
+            updated = self._replace_contract(
+                outcome["contract"],
+                cancel_pending_for_narrowing=outcome["disposition"] == "narrowing",
+            )
+            broadening = outcome["disposition"] == "broadening"
+            return self._result(
+                operation="contract_set_preset",
+                ok=True,
+                state=updated,
+                summary=(
+                    "The broader contract is proposed and requires explicit approval."
+                    if broadening
+                    else "The narrower contract is effective immediately."
+                ),
+                elapsed=self.clock() - started,
+                category="contract_broadening_proposed" if broadening else None,
+                details={
+                    "disposition": outcome["disposition"],
+                    "pending_proposal": deepcopy(outcome["proposal"]),
+                    "current_loop_contract": deepcopy(outcome["contract"]),
+                    "previously_exposed_information_recallable": False,
+                },
+            )
+        except (CurrentLoopError, CurrentLoopConflict, CurrentLoopContractError) as exc:
+            return self._exception_result("contract_set_preset", exc, started)
+
+    def contract_adjust(
+        self,
+        *,
+        category: str,
+        dimension: str,
+        value: str,
+        expected_contract_revision: int,
+    ) -> dict[str, Any]:
+        started = self.clock()
+        try:
+            state = self.store.read()
+            outcome = adjust_contract(
+                state["current_loop_contract"],
+                category=category,
+                dimension=dimension,
+                value=value,
+                expected_contract_revision=expected_contract_revision,
+                provenance="explicit_customer_selection",
+            )
+            updated = self._replace_contract(
+                outcome["contract"],
+                cancel_pending_for_narrowing=outcome["disposition"] == "narrowing",
+            )
+            broadening = outcome["disposition"] == "broadening"
+            return self._result(
+                operation="contract_adjust",
+                ok=True,
+                state=updated,
+                summary=(
+                    "The broader bounded change awaits explicit approval."
+                    if broadening
+                    else "The bounded narrowing is effective immediately."
+                ),
+                elapsed=self.clock() - started,
+                category="contract_broadening_proposed" if broadening else None,
+                details={
+                    "disposition": outcome["disposition"],
+                    "pending_proposal": deepcopy(outcome["proposal"]),
+                    "current_loop_contract": deepcopy(outcome["contract"]),
+                },
+            )
+        except (CurrentLoopError, CurrentLoopConflict, CurrentLoopContractError) as exc:
+            return self._exception_result("contract_adjust", exc, started)
+
+    def contract_confirm_broadening(
+        self, *, expected_contract_revision: int, explicit_authority: bool
+    ) -> dict[str, Any]:
+        started = self.clock()
+        try:
+            state = self.store.read()
+            contract = confirm_broadening(
+                state["current_loop_contract"],
+                expected_contract_revision=expected_contract_revision,
+                explicit_authority=explicit_authority,
+            )
+            updated = self._replace_contract(contract)
+            return self._result(
+                operation="contract_confirm_broadening",
+                ok=True,
+                state=updated,
+                summary="The explicitly approved broader contract is effective.",
+                elapsed=self.clock() - started,
+                details={
+                    "current_loop_contract": deepcopy(contract),
+                    "authority_only": True,
+                    "raw_policy_retransmitted": False,
+                },
+            )
+        except (CurrentLoopError, CurrentLoopConflict, CurrentLoopContractError) as exc:
+            return self._exception_result("contract_confirm_broadening", exc, started)
+
+    def _evidence_descriptor(
+        self, state: Mapping[str, Any], reference: str
+    ) -> tuple[str, dict[str, Any]]:
+        for role, descriptor in state.get("saved_artifacts", {}).items():
+            if (
+                isinstance(descriptor, Mapping)
+                and descriptor.get("artifact_reference") == reference
+            ):
+                return str(role), deepcopy(dict(descriptor))
+        raise CurrentLoopError("contract_evidence_reference_unknown")
+
+    def evidence_exclude(
+        self,
+        *,
+        artifact_reference: str,
+        reason: str,
+        expected_contract_revision: int,
+    ) -> dict[str, Any]:
+        started = self.clock()
+        try:
+            state = self.store.read()
+            _role, descriptor = self._evidence_descriptor(state, artifact_reference)
+            contract = contract_exclude_evidence(
+                state["current_loop_contract"],
+                artifact_reference=artifact_reference,
+                artifact_digest=str(descriptor["artifact_digest"]),
+                reason=reason,
+                expected_contract_revision=expected_contract_revision,
+            )
+            updated = self._replace_contract(contract)
+            return self._result(
+                operation="evidence_exclude",
+                ok=True,
+                state=updated,
+                summary="The selected qCoder evidence is excluded from future use.",
+                elapsed=self.clock() - started,
+                details={"artifact_reference": artifact_reference, "dependent_views_stale": True},
+            )
+        except (CurrentLoopError, CurrentLoopConflict, CurrentLoopContractError) as exc:
+            return self._exception_result("evidence_exclude", exc, started)
+
+    def evidence_restore(
+        self, *, artifact_reference: str, expected_contract_revision: int
+    ) -> dict[str, Any]:
+        started = self.clock()
+        try:
+            state = self.store.read()
+            _role, descriptor = self._evidence_descriptor(state, artifact_reference)
+            contract = contract_restore_evidence(
+                state["current_loop_contract"],
+                artifact_reference=artifact_reference,
+                artifact_digest=str(descriptor["artifact_digest"]),
+                expected_contract_revision=expected_contract_revision,
+            )
+            updated = self._replace_contract(contract)
+            return self._result(
+                operation="evidence_restore",
+                ok=True,
+                state=updated,
+                summary="The exact still-valid qCoder evidence is restored.",
+                elapsed=self.clock() - started,
+                details={"artifact_reference": artifact_reference, "explicit_restore": True},
+            )
+        except (CurrentLoopError, CurrentLoopConflict, CurrentLoopContractError) as exc:
+            return self._exception_result("evidence_restore", exc, started)
+
+    def evidence_delete(
+        self,
+        *,
+        artifact_reference: str,
+        expected_contract_revision: int,
+        explicit_authority: bool,
+    ) -> dict[str, Any]:
+        started = self.clock()
+        try:
+            if explicit_authority is not True:
+                raise CurrentLoopError("contract_evidence_delete_authority_required")
+            state = self.store.read()
+            role, descriptor = self._evidence_descriptor(state, artifact_reference)
+            path = Path(str(descriptor.get("local_path", ""))).absolute()
+            if not path.is_file() or not path.is_relative_to(self.artifact_directory):
+                raise CurrentLoopError("contract_evidence_not_locally_controlled")
+            path.unlink()
+            contract = contract_record_deletion(
+                state["current_loop_contract"],
+                artifact_reference=artifact_reference,
+                artifact_digest=str(descriptor["artifact_digest"]),
+                artifact_role=role,
+                expected_contract_revision=expected_contract_revision,
+            )
+            state = self.store.read()
+
+            def mutator(value: dict[str, Any]) -> Mapping[str, Any]:
+                value["current_loop_contract"] = contract
+                value["saved_artifacts"].pop(role, None)
+                return value
+
+            updated = self.store.update(mutator, expected_revision=state["state_revision"])
+            return self._result(
+                operation="evidence_delete",
+                ok=True,
+                state=updated,
+                summary="The locally controlled qCoder evidence was deleted.",
+                elapsed=self.clock() - started,
+                details={
+                    "artifact_reference": artifact_reference,
+                    "project_file_deleted": False,
+                    "raw_content_retained_in_tombstone": False,
+                },
+            )
+        except (
+            CurrentLoopError,
+            CurrentLoopConflict,
+            CurrentLoopContractError,
+            OSError,
+        ) as exc:
+            return self._exception_result("evidence_delete", exc, started)
+
     def record_ide_authority(
         self,
         *,
         allowed: bool,
         explicit_user_action: bool,
+        operation_category: str = "ide_write",
+        output_role_ceiling: Sequence[str] = ("source", "circuit_qasm", "results"),
     ) -> dict[str, Any]:
         started = self.clock()
         try:
             state = self._require_phase(
                 "record_ide_authority",
-                {"generation_ready", "awaiting_local_artifacts"},
+                {"activated", "generation_ready", "awaiting_local_artifacts"},
             )
             if not explicit_user_action or not allowed:
                 return self._recovery_result(
@@ -2956,6 +3474,23 @@ class CurrentLoopCoordinator:
                     phase=self._coordinator_state(state)["phase"],
                     elapsed=self.clock() - started,
                 )
+            coordinator = self._coordinator_state(state)
+            receipt = issue_operation_receipt(
+                loop_ref=str(state["loop_ref"]),
+                workspace_binding=str(state["workspace_root"]),
+                state_revision=int(state["state_revision"]),
+                operation_category=operation_category,
+                output_role_ceiling=output_role_ceiling,
+            )
+
+            def receipt_mutator(value: dict[str, Any]) -> Mapping[str, Any]:
+                value["operation_receipts"][receipt["receipt_id"]] = receipt
+                return value
+
+            state = self.store.update(
+                receipt_mutator,
+                expected_revision=int(state["state_revision"]),
+            )
             coordinator = self._coordinator_state(state)
             coordinator.update(
                 {
@@ -2987,21 +3522,24 @@ class CurrentLoopCoordinator:
                     "directory_orientation_required": False,
                     "candidate_discovery_permitted": False,
                     "qcoder_local_state_access_permitted": False,
+                    "operation_receipt": deepcopy(receipt),
                 },
             )
-        except (CurrentLoopError, CurrentLoopConflict) as exc:
+        except (CurrentLoopError, CurrentLoopConflict, EventReceiptError) as exc:
             return self._exception_result("record_ide_authority", exc, started)
 
     def register_artifacts(
         self,
         *,
         candidates: Sequence[Mapping[str, Any]],
+        operation_receipt_id: str | None = None,
     ) -> dict[str, Any]:
         started = self.clock()
         try:
             state = self._require_phase(
                 "register_artifacts",
                 {
+                    "activated",
                     "generation_ready",
                     "awaiting_local_artifacts",
                     "artifact_authorization",
@@ -3010,6 +3548,62 @@ class CurrentLoopCoordinator:
             )
             coordinator = self._coordinator_state(state)
             normalized = self._normalize_candidates(candidates)
+            activity_receipt = None
+            category_by_role = {
+                "source": "python_manifestation",
+                "circuit_qasm": "circuit_manifestation",
+                "results": "result_manifestation",
+            }
+            for item in normalized:
+                self._require_contract_permission(
+                    state,
+                    category=category_by_role[str(item["role"])],
+                    dimension="collect",
+                )
+            if operation_receipt_id is not None:
+                receipt = state.get("operation_receipts", {}).get(operation_receipt_id)
+                if not isinstance(receipt, Mapping):
+                    raise CurrentLoopError("operation_receipt_missing")
+                for item in normalized:
+                    validate_operation_receipt(
+                        receipt,
+                        loop_ref=str(state["loop_ref"]),
+                        workspace_binding=str(state["workspace_root"]),
+                        current_state_revision=int(state["state_revision"]),
+                        role=str(item["role"]),
+                    )
+                    if not contract_permits(
+                        state["current_loop_contract"],
+                        category=category_by_role[str(item["role"])],
+                        dimension="collect",
+                    ):
+                        raise CurrentLoopError("current_loop_contract_collection_prohibited")
+                    name = Path(str(item["path"])).name.casefold()
+                    if any(marker in name for marker in (".env", "secret", "credential", "token")):
+                        raise CurrentLoopError(
+                            "operation_receipt_sensitive_output_requires_selection"
+                        )
+                    raw = Path(str(item["path"])).read_bytes()
+                    if len(raw) > 8 * 1024 * 1024:
+                        raise CurrentLoopError("artifact_candidate_file_too_large")
+                    item["content_digest"] = sha256(raw).hexdigest()
+                    item["operation_receipt_id"] = operation_receipt_id
+                consumed, activity_receipt = consume_operation_receipt(
+                    receipt,
+                    registered_artifacts=normalized,
+                    consumed_state_revision=int(state["state_revision"]) + 1,
+                )
+
+                def consume_mutator(value: dict[str, Any]) -> Mapping[str, Any]:
+                    value["operation_receipts"][operation_receipt_id] = consumed
+                    value["activity_receipts"].append(activity_receipt)
+                    return value
+
+                state = self.store.update(
+                    consume_mutator,
+                    expected_revision=int(state["state_revision"]),
+                )
+                coordinator = self._coordinator_state(state)
             merged, added_count = self._merge_artifact_candidates(
                 coordinator.get("artifact_candidates", []),
                 normalized,
@@ -3103,9 +3697,17 @@ class CurrentLoopCoordinator:
                     "candidate_discovery_performed": False,
                     "qcoder_local_state_accessed": False,
                     "raw_file_contents_included": False,
+                    "operation_receipt_consumed": operation_receipt_id is not None,
+                    "activity_receipt": deepcopy(activity_receipt),
                 },
             )
-        except (CurrentLoopError, CurrentLoopConflict, ValueError) as exc:
+        except (
+            CurrentLoopError,
+            CurrentLoopConflict,
+            CurrentLoopContractError,
+            EventReceiptError,
+            ValueError,
+        ) as exc:
             return self._exception_result("register_artifacts", exc, started)
 
     def authorize_artifacts(
@@ -3259,6 +3861,19 @@ class CurrentLoopCoordinator:
             for item in authorization["items"]:
                 path = Path(item["local_path"])
                 role = item["artifact_role"]
+                category_by_role = {
+                    "source": "python_manifestation",
+                    "circuit_qasm": "circuit_manifestation",
+                    "results": "result_manifestation",
+                }
+                category = category_by_role.get(str(role))
+                if category is None:
+                    raise CurrentLoopError("unsupported_authorized_artifact_type")
+                self._require_contract_permission(
+                    state,
+                    category=category,
+                    dimension="derive",
+                )
                 if role == "source":
                     source = extract_selected_python_file_evidence(
                         path,
@@ -3429,6 +4044,16 @@ class CurrentLoopCoordinator:
         try:
             state = self._require_phase(
                 "review_build", {"evidence_processing", "current_build_review"}
+            )
+            self._require_contract_permission(
+                state,
+                category="derived_metrics",
+                dimension="derive",
+            )
+            self._require_contract_permission(
+                state,
+                category="derived_metrics",
+                dimension="assistant_derived_exposure",
             )
             freshness = check_current_loop_freshness(
                 store=self.store, expected_revision=state["state_revision"]
@@ -3749,6 +4374,11 @@ class CurrentLoopCoordinator:
         started = self.clock()
         try:
             state = self._require_phase("propose_change", {"continuation_choice"})
+            self._require_contract_permission(
+                state,
+                category="working_blueprint",
+                dimension="recommend",
+            )
             if not explicit_user_selection:
                 return self._checkpoint_result(
                     operation="propose_change",
@@ -5088,6 +5718,8 @@ class CurrentLoopCoordinator:
                 raise CurrentLoopError("artifact_candidate_file_required") from exc
             if self._contains_qcoder_component(str(resolved)):
                 raise CurrentLoopError("qcoder_local_state_artifact_prohibited")
+            if path.is_symlink():
+                raise CurrentLoopError("selected_artifact_symlink_prohibited")
             if not path.is_file():
                 raise CurrentLoopError("artifact_candidate_file_required")
             exact = str(path)
@@ -5257,6 +5889,23 @@ class CurrentLoopCoordinator:
         if coordinator["phase"] not in allowed:
             raise CurrentLoopError(f"{operation}_phase_invalid")
         return state
+
+    @staticmethod
+    def _require_contract_permission(
+        state: Mapping[str, Any],
+        *,
+        category: str,
+        dimension: str,
+        artifact_reference: str | None = None,
+    ) -> None:
+        contract = state.get("current_loop_contract")
+        if not isinstance(contract, Mapping) or not contract_permits(
+            contract,
+            category=category,
+            dimension=dimension,
+            artifact_reference=artifact_reference,
+        ):
+            raise CurrentLoopContractError("current_loop_contract_policy_prohibited")
 
     def _initial_coordinator_state(
         self,
@@ -6362,8 +7011,86 @@ class CurrentLoopCoordinator:
             "token_contents_included": False,
             "local_paths_transmitted": False,
             "assistant_reconstruction_performed": False,
+            "bounded_contract_controls": self._contract_control_invocations(
+                state=state,
+                checkpoint_kind=str(coordinator["checkpoint_kind"]),
+            ),
             **protocol,
         }
+
+    def _contract_control_invocations(
+        self, *, state: Mapping[str, Any], checkpoint_kind: str
+    ) -> dict[str, Any]:
+        contract = state.get("current_loop_contract")
+        if not isinstance(contract, Mapping):
+            return {}
+        contract_revision = int(contract["contract_revision"])
+        rows = {
+            "inspect": _invocation_template("contract-status"),
+            "set_preset": _invocation_template(
+                "contract-set-preset",
+                required_flags=("--preset", "--expected-contract-revision"),
+                new_inputs=("bounded_preset",),
+            ),
+            "adjust": _invocation_template(
+                "contract-adjust",
+                required_flags=(
+                    "--category",
+                    "--dimension",
+                    "--value",
+                    "--expected-contract-revision",
+                ),
+                new_inputs=("bounded_category_dimension_value",),
+            ),
+            "confirm_broadening": _invocation_template(
+                "contract-confirm-broadening",
+                required_flags=("--expected-contract-revision", "--approve"),
+                reused_inputs=("current_qcoder_owned_pending_broadening",),
+            ),
+            "exclude": _invocation_template(
+                "evidence-exclude",
+                required_flags=(
+                    "--artifact-reference",
+                    "--reason",
+                    "--expected-contract-revision",
+                ),
+                reused_inputs=("qcoder_displayed_artifact_reference",),
+            ),
+            "restore": _invocation_template(
+                "evidence-restore",
+                required_flags=(
+                    "--artifact-reference",
+                    "--expected-contract-revision",
+                ),
+                reused_inputs=("qcoder_displayed_artifact_reference",),
+            ),
+            "delete": _invocation_template(
+                "evidence-delete",
+                required_flags=(
+                    "--artifact-reference",
+                    "--expected-contract-revision",
+                    "--approve",
+                ),
+                reused_inputs=("qcoder_displayed_locally_controlled_artifact_reference",),
+            ),
+        }
+        result: dict[str, Any] = {}
+        for name, template in rows.items():
+            if "--expected-contract-revision" in template.get("required_flags", []):
+                template["fixed_argument_values"] = {
+                    "--expected-contract-revision": contract_revision
+                }
+            result[name] = build_operation_invocation(
+                template,
+                executable=self.runtime_executable,
+                workspace=str(state["workspace_root"]),
+                base_url=self.hosted_base_url,
+                token_file=self.hosted_token_file,
+                state_revision=int(state["state_revision"]),
+                loop_ref=str(state["loop_ref"]),
+                checkpoint=checkpoint_kind,
+            )["operation_specific_invocation"]
+        return result
 
     def _result_without_state(
         self,
@@ -6856,6 +7583,13 @@ class CurrentLoopCoordinator:
             }
             else "blocked"
         )
+        recoverable = recovery[2] is True and normalized not in {
+            "loop_not_activated",
+            "local_state_corrupt",
+            "reconstruction_attempt_refused",
+        }
+        if recoverable:
+            status = "checkpoint_required"
         payload = {
             "message": recovery[0],
             "supported_next_action": recovery[1],
@@ -6865,6 +7599,61 @@ class CurrentLoopCoordinator:
             "certification_fallback_available": recovery[5],
             **deepcopy(dict(details or {})),
         }
+        strategy = (
+            "qcoder_corrects"
+            if normalized
+            in {
+                "checkpoint_input_required_field_missing",
+                "profile_id_missing",
+                "classification_missing",
+            }
+            else "refresh_revision"
+            if normalized == "client_state_conflict"
+            else "rebind_event_receipt"
+            if "operation_receipt" in normalized
+            else "bounded_alternative"
+            if (
+                "unsupported" in normalized
+                or "invalid" in normalized
+                or normalized == "current_loop_contract_policy_prohibited"
+            )
+            else "restage_with_construction"
+        )
+        payload["recovery_contract"] = {
+            "schema_id": RECOVERY_SCHEMA_ID,
+            "schema_version": RECOVERY_SCHEMA_VERSION,
+            "strategy": strategy,
+            "safe_error_category": normalized,
+            "prior_valid_authority_preserved": recovery[4],
+            "prior_valid_evidence_preserved": recovery[4],
+            "permitted_input_source": (
+                "qcoder_owned_prebound_value"
+                if strategy == "qcoder_corrects"
+                else "fresh_coordinator_result"
+            ),
+            "customer_review_required": recovery[3],
+            "hosted_operation_permitted": False,
+            "alternatives": ["skip", "abandon_step", "stop_loop"],
+            "state_and_contract_binding_required": True,
+            "complete_next_invocation_required": True,
+        }
+        recovery_protocol = (
+            {
+                "supported_next_action": "refresh_bounded_recovery",
+                "next_invocation": _invocation_template(
+                    "status",
+                    reused_inputs=("current_qcoder_owned_local_state",),
+                ),
+                "required_authority_input": None,
+                "awaiting_confirmation_fields": [],
+                "confirmation_transmission_state": "not_applicable",
+                "identical_repeat_prohibited": False,
+                "permitted_input_source": "fresh_qcoder_coordinator_result",
+                "no_action_reason": None,
+            }
+            if recoverable
+            else None
+        )
         try:
             state = self.store.read()
         except CurrentLoopError:
@@ -6880,6 +7669,7 @@ class CurrentLoopCoordinator:
                 ),
                 summary=recovery[0],
                 details=payload,
+                checkpoint_protocol=recovery_protocol,
             )
         coordinator = self._coordinator_state(state)
         coordinator.update(
@@ -6892,6 +7682,13 @@ class CurrentLoopCoordinator:
                 "customer_summary": recovery[0],
             }
         )
+        if recoverable:
+            coordinator["active_recovery"] = {
+                "schema_id": RECOVERY_SCHEMA_ID,
+                "schema_version": RECOVERY_SCHEMA_VERSION,
+                "category": normalized,
+                "strategy": strategy,
+            }
         self._replace_coordinator(coordinator)
         return self._result(
             operation=operation,
@@ -6901,11 +7698,14 @@ class CurrentLoopCoordinator:
             summary=recovery[0],
             elapsed=elapsed,
             details=payload,
+            checkpoint_protocol=recovery_protocol,
         )
 
     def _exception_result(self, operation: str, exc: Exception, started: float) -> dict[str, Any]:
         category = (
-            exc.category if isinstance(exc, CurrentLoopError) else "protected_operation_rejected"
+            str(getattr(exc, "category"))
+            if isinstance(getattr(exc, "category", None), str)
+            else "protected_operation_rejected"
         )
         category = _ERROR_ALIASES.get(category, category)
         if category not in _RECOVERY:

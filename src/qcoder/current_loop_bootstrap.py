@@ -17,8 +17,8 @@ import subprocess
 from typing import Any, Mapping, Sequence
 
 
-BOOTSTRAP_INVOCATION_SCHEMA_ID = "qcoder.current_loop.bootstrap_invocation.v1"
-BOOTSTRAP_INVOCATION_SCHEMA_VERSION = 1
+BOOTSTRAP_INVOCATION_SCHEMA_ID = "qcoder.current_loop.bootstrap_invocation.v2"
+BOOTSTRAP_INVOCATION_SCHEMA_VERSION = 2
 PRE_RESULT_ENTRY_INVENTORY_SCHEMA_ID = "qcoder.current_loop.pre_result_entry_inventory.v1"
 PRE_RESULT_ENTRY_INVENTORY_SCHEMA_VERSION = 1
 INVOCATION_LIFECYCLE_SCHEMA_ID = "qcoder.current_loop.invocation_lifecycle.v1"
@@ -131,14 +131,19 @@ def _bootstrap_invocation(
 
 
 def build_fresh_active_build_bootstrap(*, executable: str) -> dict[str, Any]:
-    """Return the complete non-authoritative Request Baseline staging invocation."""
+    """Return exact-message Assist activation; strict review is a separate capture mode."""
 
     return _bootstrap_invocation(
         executable=executable,
         entrypoint_id=FRESH_ACTIVE_BUILD_ENTRYPOINT,
         operation="activate",
         subcommand="activate",
-        fixed_arguments=("--request-stdin",),
+        fixed_arguments=(
+            "--request-stdin",
+            "--capture-mode",
+            "exact_current_customer_message",
+            "--approve",
+        ),
         input_channel={
             "type": "exact_utf8_stdin",
             "customer_value_source": "complete_explicit_active_build_customer_message",
@@ -154,8 +159,9 @@ def build_fresh_active_build_bootstrap(*, executable: str) -> dict[str, Any]:
         },
         authority_effect={
             "stages_content": True,
-            "grants_qcoder_activation": False,
-            "grants_request_baseline_approval": False,
+            "grants_qcoder_activation": True,
+            "grants_request_baseline_approval": True,
+            "activation_scope": "exact_current_customer_message_and_assist_only",
             "grants_posture_authority": False,
             "grants_ide_authority": False,
             "grants_artifact_review_authority": False,
@@ -164,11 +170,13 @@ def build_fresh_active_build_bootstrap(*, executable: str) -> dict[str, Any]:
         },
         next_expected_result={
             "schema_id": "qcoder.current_loop.coordinator_result.v9",
-            "category": "activation_request_baseline_review_required",
-            "checkpoint_kind": "activation_request_baseline_review",
+            "category": None,
+            "checkpoint_kind": "none",
             "complete_exact_request_displayed": True,
-            "next_invocation": "authority_only_activation_and_exact_baseline_approval",
+            "next_invocation": "assist_ready_or_generation_posture_when_relevant",
             "request_content_retransmitted_on_approval": False,
+            "activation_receipt_returned": True,
+            "generation_posture_deferred": True,
         },
         failure_semantics={
             "assistant_should_stop": True,
@@ -176,7 +184,7 @@ def build_fresh_active_build_bootstrap(*, executable: str) -> dict[str, Any]:
             "state_created_only_after_valid_exact_input": True,
             "fresh_customer_input_required_for_invalid_or_empty_input": True,
             "fresh_bootstrap_contract_required": False,
-            "retry_permitted_only_when_no_pending_capture_was_created": True,
+            "retry_permitted_only_when_no_active_loop_was_created": True,
         },
     )
 
@@ -315,7 +323,19 @@ def bootstrap_contract_snapshot(*, executable: str) -> dict[str, Any]:
         "assistant_runs_help_for_construction": False,
         "coordinator_prefix_is_command_construction_primitive": False,
         "local_entry_excludes_hosted_transport": True,
-        "request_baseline_staging_is_authority": False,
+        "request_baseline_staging_is_authority": "review_required_mode_false",
+        "activation_capture_modes": {
+            "exact_current_customer_message": {
+                "single_exact_message_required": True,
+                "assist_activation_in_same_invocation": True,
+                "redundant_baseline_review_required": False,
+            },
+            "review_required": {
+                "combined_or_changed_or_ambiguous_or_blueprint_guided": True,
+                "staging_is_authority": False,
+                "separate_approval_required": True,
+            },
+        },
     }
     snapshot["contract_digest"] = _digest(snapshot)
     return snapshot

@@ -116,6 +116,19 @@ def _record(
     )
 
 
+def test_missing_internal_profile_is_prebound_before_staging() -> None:
+    record = _record(
+        operation="prepare_generation",
+        checkpoint_kind="intent_review",
+        phase="intent_review",
+        values={"proposed_interpretation": {"summary": "Create a bounded circuit interpretation."}},
+    )
+    values = checkpoint_input_values(record)
+    assert values["profile_id"] == "generic_qiskit"
+    profile = next(item for item in record["fields"] if item["name"] == "profile_id")
+    assert profile["provenance"] == "qcoder_owned_classification"
+
+
 @pytest.mark.parametrize(("operation", "checkpoint_kind", "phase"), ROWS)
 def test_semantic_matrix_stages_and_promotes_every_construction_row(
     operation: str,

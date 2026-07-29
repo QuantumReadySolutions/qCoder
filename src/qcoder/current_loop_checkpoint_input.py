@@ -50,6 +50,7 @@ CHECKPOINT_INPUT_PROVENANCE = (
     "user_confirmed_assistant_interpretation",
     "user_confirmed_assistant_recommendation",
     "inherited_confirmed_lineage",
+    "qcoder_owned_classification",
 )
 
 DECISION_AUTHORITY_PROVENANCE = (
@@ -100,7 +101,7 @@ _OPERATION_FIELDS = {
 }
 
 _REQUIRED_OPERATION_FIELDS = {
-    "prepare_generation": frozenset({"profile_id", "proposed_interpretation"}),
+    "prepare_generation": frozenset({"proposed_interpretation"}),
     "continue_unchanged": frozenset({"user_statement"}),
     "propose_change": frozenset(
         {"decision_ref", "selected_action", "proposed_value", "control_treatment"}
@@ -452,6 +453,11 @@ def checkpoint_input_semantic_contract(
                 "operation": operation,
                 "checkpoint_kind": checkpoint_kind,
                 "qcoder_may_prebind": True,
+                "qcoder_prebound_value": (
+                    "generic_qiskit"
+                    if operation == "prepare_generation" and name == "profile_id"
+                    else None
+                ),
             }
         )
     contract: dict[str, Any] = {
@@ -1296,6 +1302,16 @@ def normalize_checkpoint_input(
                 raise CurrentLoopError("checkpoint_input_contradictory_duplicate")
             raise CurrentLoopError("checkpoint_input_duplicate")
         by_name[name] = normalized
+
+    if operation == "prepare_generation" and "profile_id" not in by_name:
+        value = "generic_qiskit"
+        by_name["profile_id"] = {
+            "name": "profile_id",
+            "value": value,
+            "provenance": "qcoder_owned_classification",
+            "value_utf8_sha256": sha256(value.encode("utf-8")).hexdigest(),
+            "size_bytes": len(value.encode("utf-8")),
+        }
 
     validate_checkpoint_semantic_fields(
         fields_by_name=by_name,

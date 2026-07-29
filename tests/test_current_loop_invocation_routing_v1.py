@@ -68,6 +68,13 @@ def test_inventory_is_complete_deterministic_and_diagnostics_only() -> None:
         "standalone-review",
         "attach-to-loop",
         "abandon",
+        "contract-status",
+        "contract-set-preset",
+        "contract-adjust",
+        "contract-confirm-broadening",
+        "evidence-exclude",
+        "evidence-restore",
+        "evidence-delete",
     }
 
 
@@ -194,7 +201,7 @@ def test_revision_loop_and_checkpoint_replay_fail_closed(tmp_path: Path) -> None
         raise AssertionError("stale invocation unexpectedly accepted")
 
 
-def test_binding_v5_has_no_global_transport_routing_or_ambiguous_instruction(
+def test_binding_v6_has_no_global_transport_routing_or_ambiguous_instruction(
     tmp_path: Path,
 ) -> None:
     instructions = build_client_activation_instructions(
@@ -211,8 +218,8 @@ def test_binding_v5_has_no_global_transport_routing_or_ambiguous_instruction(
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v5"
-    assert descriptor["schema_version"] == 5
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v6"
+    assert descriptor["schema_version"] == 6
     assert descriptor["operation_invocation_contract"]["global_transport_argument_array"] is False
     assert descriptor["operation_transport_inventory"]["diagnostics_only"] is True
     assert (

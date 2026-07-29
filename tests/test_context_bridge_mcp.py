@@ -349,7 +349,7 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
     assert binding["operation_invocation_contract"]["assistant_routes_transport"] is False
     assert binding["operation_transport_inventory"]["diagnostics_only"] is True
     assert binding["bootstrap_invocation_contract"]["schema_id"] == (
-        "qcoder.current_loop.bootstrap_invocation.v1"
+        "qcoder.current_loop.bootstrap_invocation.v2"
     )
     assert binding["pre_result_entry_inventory"]["schema_id"] == (
         "qcoder.current_loop.pre_result_entry_inventory.v1"
