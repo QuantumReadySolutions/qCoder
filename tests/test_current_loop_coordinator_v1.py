@@ -572,9 +572,9 @@ def _activate_and_prepare(
 
 def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
     snapshot = coordinator_contract_snapshot()
-    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v10"
-    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v8"
-    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 10
+    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v11"
+    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v9"
+    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 11
     assert all(snapshot["checkpoint_result_protocol"].values())
     assert snapshot["permitted_input_source_taxonomy"] == {
         "schema_id": INPUT_SOURCE_DISPOSITION_SCHEMA_ID,
@@ -619,7 +619,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("561e3aa32b69f3614f994bc5dfab07247bfce010aa57c8dbf93f63d0c9ba005c")
+    assert contract_digest == ("5ebd65ec32b3223eccdeeb7e0939af0d794324aa2820d78b6ff38be1f3ed2ffc")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
@@ -628,9 +628,11 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "artifact_candidate_discovery_expression_invalid",
         "artifact_candidate_file_required",
         "artifact_candidate_provenance_conflict",
+        "artifact_format_unsupported",
         "authorization_declined",
         "authorization_partial",
         "canonical_artifact_modified",
+        "circuit_format_unsupported",
         "client_state_conflict",
         "contract_adjustment_value_invalid",
         "contract_broadening_proposal_stale",
@@ -665,6 +667,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "seed_incomplete",
         "selected_file_missing",
         "selected_file_stale",
+        "unknown_local_internal",
         "unsupported_schema",
     ]
     assert snapshot["connected_clients"] == list(CLIENT_NAMES)
@@ -1264,6 +1267,11 @@ def _through_current_build(
         "python_manifestation",
         "circuit_manifestation",
         "result_manifestation",
+    }
+    assert processed["details"]["local_processing"]["protected_calls_attempted"] == 0
+    enriched = coordinator.enrich_authorized_evidence()
+    assert enriched["ok"] is True, enriched
+    assert set(enriched["details"]["enriched_roles"]) >= {
         "source_blueprint_alignment",
         "result_review_context_card",
     }
@@ -1733,14 +1741,14 @@ def test_current_build_review_fails_closed_without_portable(
     state = CurrentLoopStore.for_workspace(workspace).read()
     assert "pre_proposal_portable_current_build_context" not in state["saved_artifacts"]
     status = coordinator.status()
-    assert status["state_status"] == "ready"
-    assert status["supported_next_action"] == "review_current_build"
+    assert status["state_status"] == "checkpoint_required"
+    assert status["supported_next_action"] == "refresh_bounded_recovery"
     assert status["details"]["recovery_refresh"]["previous_error_category"] == (
         "protected_truth_insufficient"
     )
     assert (
         status["next_invocation"]["operation_specific_invocation"]["transport_classification"]
-        == "hosted_capable"
+        == "local_only"
     )
 
 
@@ -2631,8 +2639,8 @@ def test_every_checkpoint_result_is_deterministically_actionable(tmp_path: Path)
             summary="Synthetic checkpoint contract test.",
         )
         _assert_actionable_checkpoint(result)
-        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v10"
-        assert result["schema_version"] == 10
+        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v11"
+        assert result["schema_version"] == 11
 
 
 @pytest.mark.parametrize(

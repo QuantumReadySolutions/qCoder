@@ -139,3 +139,24 @@ is neither project history nor proof of correctness.
 Build Review remains the existing optional passive hosted comparison. qCoder may recommend it
 under Assist, but the customer can decline and continue unchanged or request it later. The local
 sidecar can display an already available share-safe projection but cannot invoke Protected.
+
+## Artifact formats, local processing, and recovery
+
+`qcoder.current_loop.artifact_format_contract.v1` publishes the exact automatic-registration
+and local-derivation formats for each artifact role. Circuit structural analysis currently
+accepts OpenQASM 2. OpenQASM 3 is identified from the exact declared artifact and retained only
+through the bounded exact-artifact path where applicable; it is not structurally parsed,
+silently converted, or treated as OpenQASM 2.
+
+Authorized evidence is processed per artifact through a local-only stage. Successful source,
+circuit, result, and Run Summary derivations persist independently, so one unsupported artifact
+does not roll back unrelated trustworthy evidence. Optional hosted enrichment is a separate,
+hosted-capable operation after local evidence and views are available. It can be declined,
+skipped after a failure, or retried later without discarding local manifestations or closing the
+loop.
+
+Failures carry a bounded origin and category. `protected_operation_rejected` is reserved for an
+actual non-success response to a Protected call; local validation and derivation failures never
+use that category. Recovery refresh only returns current bounded choices. Every advertised
+choice has its own qCoder-generated, revision-bound invocation, and selecting a recovery action
+uses that invocation rather than refresh or conversation reconstruction.

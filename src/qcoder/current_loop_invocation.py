@@ -20,10 +20,10 @@ from qcoder.current_loop_bounded_control import (
     BOUNDED_CONTROL_INPUT_SCHEMA_VERSION,
 )
 
-INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v3"
-INVOCATION_CONTRACT_SCHEMA_VERSION = 3
-OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v2"
-OPERATION_INVENTORY_SCHEMA_VERSION = 2
+INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v4"
+INVOCATION_CONTRACT_SCHEMA_VERSION = 4
+OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v3"
+OPERATION_INVENTORY_SCHEMA_VERSION = 3
 
 LOCAL_ONLY = "local_only"
 HOSTED_CAPABLE = "hosted_capable"
@@ -56,8 +56,20 @@ _OPERATION_ROWS: tuple[dict[str, Any], ...] = (
     {
         "operation": "process_authorized_artifacts",
         "subcommand": "process-authorized-artifacts",
+        "transport": LOCAL_ONLY,
+        "protected_calls_permitted": False,
+        "per_item_isolation": True,
+    },
+    {
+        "operation": "enrich_authorized_evidence",
+        "subcommand": "enrich-authorized-evidence",
         "transport": HOSTED_CAPABLE,
-        "hosted_condition": "authorized_evidence_requires_existing_hosted_review",
+        "optional": True,
+    },
+    {
+        "operation": "execute_recovery_action",
+        "subcommand": "execute-recovery-action",
+        "transport": LOCAL_ONLY,
     },
     {
         "operation": "review_build",

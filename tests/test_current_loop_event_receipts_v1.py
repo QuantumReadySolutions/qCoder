@@ -136,6 +136,44 @@ def test_sensitive_output_requires_existing_exact_selection_fallback(tmp_path: P
     }
 
 
+def test_operation_receipt_registration_isolates_qasm3_from_valid_source(
+    tmp_path: Path,
+) -> None:
+    coordinator = _active(tmp_path)
+    authority = coordinator.record_ide_authority(
+        allowed=True,
+        explicit_user_action=True,
+        output_role_ceiling=["source", "circuit_qasm"],
+    )
+    source = tmp_path / "program.py"
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+    qasm = tmp_path / "circuit.qasm"
+    qasm.write_text("OPENQASM 3.0;\nqubit q;\n", encoding="utf-8")
+    result = coordinator.register_artifacts(
+        candidates=[
+            {
+                "role": "source",
+                "path": str(source),
+                "provenance": "assistant_created",
+                "explicit_external": False,
+            },
+            {
+                "role": "circuit_qasm",
+                "path": str(qasm),
+                "provenance": "assistant_created",
+                "explicit_external": False,
+            },
+        ],
+        operation_receipt_id=authority["details"]["operation_receipt"]["receipt_id"],
+    )
+    assert result["ok"] is True
+    outcomes = {item["role"]: item for item in result["details"]["registration_outcomes"]}
+    assert outcomes["source"]["registration_disposition"] == "eligible"
+    assert outcomes["circuit_qasm"]["detected_format"] == "openqasm_3"
+    assert outcomes["circuit_qasm"]["registration_disposition"] == "unsupported_format"
+    assert result["details"]["registered_candidate_count"] == 1
+
+
 def test_operation_receipt_rejects_symlink_without_reading_target(tmp_path: Path) -> None:
     coordinator = _active(tmp_path)
     authority = coordinator.record_ide_authority(

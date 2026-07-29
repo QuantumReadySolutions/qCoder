@@ -1,3 +1,3 @@
 __all__ = []
-__version__ = "0.6.0a2+wi0419.explorercontract2"
+__version__ = "0.6.0a2+wi0419.explorercontract2processing1"
 file = __file__

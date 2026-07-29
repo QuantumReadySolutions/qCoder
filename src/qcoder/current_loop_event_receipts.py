@@ -8,10 +8,11 @@ import json
 import secrets
 from typing import Any, Mapping, Sequence
 
+from qcoder.current_loop_evidence_processing import artifact_format_contract_snapshot
 
-EVENT_RECEIPT_SCHEMA_ID = "qcoder.current_loop.operation_receipt.v1"
-EVENT_RECEIPT_SCHEMA_VERSION = 1
-ACTIVITY_RECEIPT_SCHEMA_ID = "qcoder.current_loop.activity_receipt.v1"
+EVENT_RECEIPT_SCHEMA_ID = "qcoder.current_loop.operation_receipt.v2"
+EVENT_RECEIPT_SCHEMA_VERSION = 2
+ACTIVITY_RECEIPT_SCHEMA_ID = "qcoder.current_loop.activity_receipt.v2"
 SUPPORTED_OPERATION_CATEGORIES = ("ide_write", "ide_modify", "ide_execute")
 SUPPORTED_OUTPUT_ROLES = ("source", "circuit_qasm", "results")
 
@@ -50,6 +51,11 @@ def issue_operation_receipt(
         "issued_state_revision": state_revision,
         "operation_category": operation_category,
         "authorized_output_role_ceiling": roles,
+        "authorized_output_format_ceiling": {
+            row["role"]: deepcopy(row["accepted_automatic_registration_formats"])
+            for row in artifact_format_contract_snapshot()["roles"]
+            if row["role"] in roles
+        },
         "status": "issued",
         "single_use": True,
         "replay_permitted": False,
@@ -71,6 +77,7 @@ def validate_operation_receipt(
     workspace_binding: str,
     current_state_revision: int,
     role: str,
+    detected_format: str | None = None,
 ) -> None:
     if (
         receipt.get("schema_id") != EVENT_RECEIPT_SCHEMA_ID
@@ -94,6 +101,9 @@ def validate_operation_receipt(
         raise EventReceiptError("operation_receipt_stale")
     if role not in receipt.get("authorized_output_role_ceiling", []):
         raise EventReceiptError("operation_receipt_role_not_authorized")
+    allowed_formats = receipt.get("authorized_output_format_ceiling", {}).get(role, [])
+    if detected_format is not None and detected_format not in allowed_formats:
+        raise EventReceiptError("operation_receipt_format_not_authorized")
 
 
 def consume_operation_receipt(
@@ -113,7 +123,7 @@ def consume_operation_receipt(
     )
     activity = {
         "schema_id": ACTIVITY_RECEIPT_SCHEMA_ID,
-        "schema_version": 1,
+        "schema_version": 2,
         "operation_receipt_id": updated["receipt_id"],
         "operation_category": updated["operation_category"],
         "registered_artifacts": [
@@ -122,6 +132,7 @@ def consume_operation_receipt(
                 "path_digest": _digest({"path": item["path"]}),
                 "content_digest": item.get("content_digest"),
                 "provenance": item.get("provenance"),
+                "detected_format": item.get("detected_format"),
             }
             for item in registered_artifacts
         ],
@@ -142,6 +153,10 @@ def event_receipt_snapshot() -> dict[str, Any]:
         "activity_receipt_schema_id": ACTIVITY_RECEIPT_SCHEMA_ID,
         "operation_categories": list(SUPPORTED_OPERATION_CATEGORIES),
         "output_roles": list(SUPPORTED_OUTPUT_ROLES),
+        "output_format_ceiling": {
+            row["role"]: deepcopy(row["accepted_automatic_registration_formats"])
+            for row in artifact_format_contract_snapshot()["roles"]
+        },
         "single_use": True,
         "exact_literal_paths_only": True,
         "directory_scan_performed": False,

@@ -73,6 +73,11 @@ from qcoder.current_loop_run_summary import (
     evidence_view_contract_snapshot,
     run_summary_contract_snapshot,
 )
+from qcoder.current_loop_evidence_processing import (
+    artifact_format_contract_snapshot,
+    evidence_processing_contract_snapshot,
+    recovery_action_contract_snapshot,
+)
 from qcoder.current_loop_bootstrap import (
     bootstrap_contract_snapshot,
     invocation_lifecycle_snapshot,
@@ -113,8 +118,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 8
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v8"
+CLIENT_BINDING_SCHEMA_VERSION = 9
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v9"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -253,6 +258,15 @@ selected, with truthful assistant_created, assistant_modified, or user_selected 
 When qCoder supplies a single-use operation receipt, return its ID with only exact literal outputs
 of that IDE action. Never invent receipt metadata. Unknown, unsupported, secret-bearing, or
 potentially sensitive outputs require exact customer selection, exclusion, or rejection.
+Before producing an artifact, use the binding's artifact-format contract for its role. Circuit
+structural analysis currently accepts OpenQASM 2, so an assistant-created circuit-QASM output
+must use the advertised OpenQASM 2 producer contract. OpenQASM 3 is identified honestly but is
+not structurally parsed in this binding. Never convert it automatically. Local evidence
+derivation is per artifact and local-only; one unsupported artifact does not discard unrelated
+source, result, or Run Summary evidence. Optional hosted enrichment is a later, separately
+generated hosted invocation and may be skipped without closing the evidence branch or loop.
+Every recovery alternative is executable through its own qCoder-generated invocation. Status
+refresh only refreshes recovery state and never executes a selected recovery action.
 Never inspect .qcoder, and exclude .qcoder from every ordinary project inspection. Do not use a
 glob, find, directory listing, Git status, repository map, or search result as the qCoder review
 set. The Quick Demo requires no workspace discovery: retain the exact source and QASM paths
@@ -363,6 +377,9 @@ def build_client_binding_descriptor(
             ),
             "operation_transport_inventory": operation_transport_inventory(),
             "bounded_control_input_contract": bounded_control_contract_snapshot(),
+            "artifact_format_contract": artifact_format_contract_snapshot(),
+            "evidence_processing_contract": evidence_processing_contract_snapshot(),
+            "recovery_action_contract": recovery_action_contract_snapshot(),
             "contract_sidecar": sidecar_contract_snapshot(),
             "run_summary_contract": run_summary_contract_snapshot(),
             "evidence_view_contract": evidence_view_contract_snapshot(),

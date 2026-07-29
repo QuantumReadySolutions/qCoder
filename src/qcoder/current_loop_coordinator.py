@@ -117,6 +117,23 @@ from qcoder.current_loop_event_receipts import (
     issue_operation_receipt,
     validate_operation_receipt,
 )
+from qcoder.current_loop_evidence_processing import (
+    ARTIFACT_FORMAT_CONTRACT_SCHEMA_ID,
+    FAILURE_PROVENANCE_SCHEMA_ID,
+    HOSTED_ENRICHMENT_SCHEMA_ID,
+    PROCESSING_OUTCOME_SCHEMA_ID,
+    RECOVERY_ACTION_SCHEMA_ID,
+    EvidenceProcessingError,
+    artifact_format_contract_snapshot,
+    detect_exact_artifact_format,
+    evidence_processing_contract_snapshot,
+    failure_provenance,
+    hosted_enrichment_status,
+    processing_outcome,
+    recovery_action_contract_snapshot,
+    recovery_fingerprint,
+    registration_format_outcome,
+)
 from qcoder.current_loop_run_summary import (
     EVIDENCE_VIEW_IDS,
     RunSummaryError,
@@ -130,13 +147,14 @@ from qcoder.current_loop_run_summary import (
 )
 from qcoder.context_loop import CONTEXT_LOOP_GATE
 
-COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v10"
-COORDINATOR_RESULT_SCHEMA_VERSION = 10
-COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v8"
-PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v7"
+COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v11"
+COORDINATOR_RESULT_SCHEMA_VERSION = 11
+COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v9"
+PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v8"
 OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
     {
         "qcoder.current_loop.coordinator_state.v6",
+        "qcoder.current_loop.coordinator_state.v7",
         "qcoder.current_loop.coordinator_state.v5",
         "qcoder.current_loop.coordinator_state.v4",
         "qcoder.current_loop.coordinator_state.v1",
@@ -145,8 +163,8 @@ OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
     }
 )
 COORDINATOR_STATE_SCHEMA_VERSION = 8
-RECOVERY_SCHEMA_ID = "qcoder.current_loop.recovery.v1"
-RECOVERY_SCHEMA_VERSION = 1
+RECOVERY_SCHEMA_ID = "qcoder.current_loop.recovery.v2"
+RECOVERY_SCHEMA_VERSION = 2
 CONSEQUENCE_PROJECTION_SCHEMA_ID = "qcoder.current_loop.consequence_projection.v1"
 PERFORMANCE_SCHEMA_ID = "qcoder.current_loop.private_performance.v1"
 INPUT_SOURCE_DISPOSITION_SCHEMA_ID = "qcoder.current_loop.permitted_input_source_disposition.v1"
@@ -239,6 +257,7 @@ _PHASE_TRANSITIONS = {
         "abandoned",
     ),
     "evidence_processing": (
+        "generation_ready",
         "artifact_authorization",
         "current_build_review",
         "continuation_choice",
@@ -326,6 +345,33 @@ EXPLORATORY_FIXED_PROHIBITIONS = (
 )
 
 _RECOVERY = {
+    "circuit_format_unsupported": (
+        "The exact circuit artifact is not a locally supported structural-analysis format.",
+        "Continue with the available evidence, provide an exact OpenQASM 2 artifact under "
+        "separate IDE authority, skip this artifact derivation, or stop the loop.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "artifact_format_unsupported": (
+        "The exact artifact format is outside this role's automatic processing contract.",
+        "Use the advertised exact-artifact fallback, provide a supported artifact, skip "
+        "this derivation, or stop the loop.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "unknown_local_internal": (
+        "A bounded local qCoder operation failed without a safely publishable detail.",
+        "Keep prior evidence intact, refresh the result, then choose an advertised bounded "
+        "alternative or stop the loop.",
+        True,
+        False,
+        True,
+        False,
+    ),
     "activation_capture_required": (
         "No reviewed exact Request Baseline capture exists in this workspace.",
         "Stage the complete customer message through activate without approval, review the "
@@ -1074,6 +1120,11 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "current_loop_contract": contract_snapshot()["schema_id"],
             "operation_receipt": event_receipt_snapshot()["schema_id"],
             "recovery": RECOVERY_SCHEMA_ID,
+            "artifact_format_contract": ARTIFACT_FORMAT_CONTRACT_SCHEMA_ID,
+            "artifact_processing_outcome": PROCESSING_OUTCOME_SCHEMA_ID,
+            "hosted_enrichment": HOSTED_ENRICHMENT_SCHEMA_ID,
+            "recovery_action": RECOVERY_ACTION_SCHEMA_ID,
+            "failure_provenance": FAILURE_PROVENANCE_SCHEMA_ID,
             "contract_sidecar": sidecar_contract_snapshot()["schema_id"],
             "run_summary": run_summary_contract_snapshot()["schema_id"],
             "evidence_view": evidence_view_contract_snapshot()["schema_id"],
@@ -1097,7 +1148,11 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
                 "stop_loop",
             ],
             "recoverable_next_invocation_required": True,
+            "refresh_executes_selected_action": False,
         },
+        "artifact_format_contract": artifact_format_contract_snapshot(),
+        "evidence_processing_contract": evidence_processing_contract_snapshot(),
+        "recovery_action_contract": recovery_action_contract_snapshot(),
         "contract_sidecar": sidecar_contract_snapshot(),
         "run_summary": run_summary_contract_snapshot(),
         "evidence_view": evidence_view_contract_snapshot(),
@@ -1426,6 +1481,7 @@ def _invocation_template(
     reused_inputs: Sequence[str] = (),
     new_inputs: Sequence[str] = (),
     argument_values: Sequence[Mapping[str, Any]] = (),
+    fixed_argument_values: Mapping[str, Any] | None = None,
     alternatives: Sequence[str] = (),
     uses_transport: bool | None = None,
 ) -> dict[str, Any]:
@@ -1440,6 +1496,7 @@ def _invocation_template(
         "reused_canonical_inputs": list(reused_inputs),
         "new_input_roles": list(new_inputs),
         "argument_values": [deepcopy(dict(item)) for item in argument_values],
+        "fixed_argument_values": deepcopy(dict(fixed_argument_values or {})),
         "allowed_subcommand_alternatives": list(alternatives),
         "private_workspace_path_embedded": False,
         "token_contents_embedded": False,
@@ -1709,6 +1766,7 @@ class CurrentLoopCoordinator:
             if existing.get("schema_id") in {
                 "qcoder.current_loop.local_state.v2",
                 "qcoder.current_loop.local_state.v3",
+                "qcoder.current_loop.local_state.v4",
             }:
                 migrate_current_loop_state(self.store)
 
@@ -1860,19 +1918,6 @@ class CurrentLoopCoordinator:
             return self._pending_activation_result(operation="status", state=state)
         coordinator = self._coordinator_state(state)
         active_recovery = coordinator.get("active_recovery")
-        if isinstance(active_recovery, Mapping):
-            refreshed = deepcopy(coordinator)
-            refreshed.pop("active_recovery", None)
-            refreshed["state_status"] = "ready"
-            refreshed["checkpoint_kind"] = "none"
-            refreshed["customer_summary"] = (
-                "qCoder refreshed the current local revision after the bounded recovery. "
-                "Use the newly generated next invocation; prior valid authority and evidence "
-                "remain intact."
-            )
-            self._replace_coordinator(refreshed)
-            state = self.store.read()
-            coordinator = self._coordinator_state(state)
         status_details: dict[str, Any] = {
             "generation_context_outcome": deepcopy(coordinator.get("generation_context_outcome"))
         }
@@ -1882,6 +1927,21 @@ class CurrentLoopCoordinator:
                 "strategy": active_recovery.get("strategy"),
                 "prior_valid_authority_preserved": True,
                 "prior_valid_evidence_preserved": True,
+                "executes_selected_action": False,
+                "active_recovery_preserved": True,
+            }
+            status_details["recovery_contract"] = {
+                "schema_id": RECOVERY_SCHEMA_ID,
+                "schema_version": RECOVERY_SCHEMA_VERSION,
+                "safe_error_category": active_recovery.get("category"),
+                "strategy": active_recovery.get("strategy"),
+                "prior_valid_authority_preserved": True,
+                "prior_valid_evidence_preserved": True,
+                "hosted_operation_permitted": False,
+                "alternatives": deepcopy(active_recovery.get("alternatives") or []),
+                "complete_next_invocation_required": True,
+                "refresh_executes_selected_action": False,
+                "convergence_fingerprint": active_recovery.get("fingerprint"),
             }
         pending_resolution = coordinator.get("pending_decision_resolution")
         if isinstance(pending_resolution, Mapping):
@@ -1905,6 +1965,23 @@ class CurrentLoopCoordinator:
             summary=coordinator["customer_summary"],
             elapsed=self.clock() - started,
             details=status_details,
+            checkpoint_protocol=(
+                {
+                    "supported_next_action": "refresh_bounded_recovery",
+                    "next_invocation": _invocation_template(
+                        "status",
+                        reused_inputs=("current_qcoder_owned_local_state",),
+                    ),
+                    "required_authority_input": None,
+                    "awaiting_confirmation_fields": [],
+                    "confirmation_transmission_state": "not_applicable",
+                    "identical_repeat_prohibited": False,
+                    "permitted_input_source": "fresh_qcoder_coordinator_result",
+                    "no_action_reason": None,
+                }
+                if isinstance(active_recovery, Mapping)
+                else None
+            ),
         )
 
     def stage_checkpoint_input(
@@ -2038,7 +2115,7 @@ class CurrentLoopCoordinator:
                 category="checkpoint_input_review_required",
                 details=self._checkpoint_input_display(record),
             )
-        except (CurrentLoopError, CurrentLoopConflict, ValueError) as exc:
+        except (CurrentLoopError, CurrentLoopConflict, EvidenceProcessingError, ValueError) as exc:
             return self._exception_result("stage_checkpoint_input", exc, started)
 
     def approve_staged_checkpoint_input(
@@ -4082,6 +4159,40 @@ class CurrentLoopCoordinator:
             )
             coordinator = self._coordinator_state(state)
             normalized = self._normalize_candidates(candidates)
+            format_outcomes: list[dict[str, Any]] = []
+            eligible_candidates: list[dict[str, Any]] = []
+            for item in normalized:
+                if operation_receipt_id is not None:
+                    name = Path(str(item["path"])).name.casefold()
+                    if any(marker in name for marker in (".env", "secret", "credential", "token")):
+                        raise CurrentLoopError(
+                            "operation_receipt_sensitive_output_requires_selection"
+                        )
+                provenance = (
+                    "customer_selected_exact_artifact"
+                    if item["provenance"] == "user_selected"
+                    else "assistant_operation_receipt"
+                )
+                outcome = registration_format_outcome(
+                    path=Path(str(item["path"])),
+                    role=str(item["role"]),
+                    provenance=provenance,
+                )
+                item["detected_format"] = outcome["detected_format"]
+                item["format_contract_schema_id"] = ARTIFACT_FORMAT_CONTRACT_SCHEMA_ID
+                format_outcomes.append(outcome)
+                if operation_receipt_id is None or outcome["automatic_registration_supported"]:
+                    eligible_candidates.append(item)
+            normalized = eligible_candidates
+            if not normalized:
+                raise EvidenceProcessingError(
+                    "artifact_format_unsupported",
+                    origin="local_artifact_validation",
+                    safe_details={
+                        "registration_outcomes": format_outcomes,
+                        "artifact_format_contract": artifact_format_contract_snapshot(),
+                    },
+                )
             activity_receipt = None
             category_by_role = {
                 "source": "python_manifestation",
@@ -4105,6 +4216,7 @@ class CurrentLoopCoordinator:
                         workspace_binding=str(state["workspace_root"]),
                         current_state_revision=int(state["state_revision"]),
                         role=str(item["role"]),
+                        detected_format=str(item["detected_format"]),
                     )
                     if not contract_permits(
                         state["current_loop_contract"],
@@ -4233,6 +4345,8 @@ class CurrentLoopCoordinator:
                     "raw_file_contents_included": False,
                     "operation_receipt_consumed": operation_receipt_id is not None,
                     "activity_receipt": deepcopy(activity_receipt),
+                    "registration_outcomes": format_outcomes,
+                    "artifact_format_contract": artifact_format_contract_snapshot(),
                 },
             )
         except (
@@ -4240,6 +4354,7 @@ class CurrentLoopCoordinator:
             CurrentLoopConflict,
             CurrentLoopContractError,
             EventReceiptError,
+            EvidenceProcessingError,
             ValueError,
         ) as exc:
             return self._exception_result("register_artifacts", exc, started)
@@ -4372,6 +4487,12 @@ class CurrentLoopCoordinator:
             return self._exception_result("authorize_artifacts", exc, started)
 
     def process_authorized_artifacts(self) -> dict[str, Any]:
+        """Derive each authorized artifact locally and independently.
+
+        This operation is deliberately incapable of calling Protected. Optional
+        hosted enrichment is a later, separately generated invocation.
+        """
+
         started = self.clock()
         extraction_started = self.clock()
         try:
@@ -4390,112 +4511,210 @@ class CurrentLoopCoordinator:
                     category=category,
                     phase="evidence_processing",
                     elapsed=self.clock() - started,
+                    origin="local_artifact_validation",
                 )
             extracted_roles: list[str] = []
+            outcomes: list[dict[str, Any]] = []
             run_summary_payload: dict[str, Any] | None = None
             run_summary_lineage: dict[str, Any] | None = None
             for item in authorization["items"]:
                 path = Path(item["local_path"])
-                role = item["artifact_role"]
+                role = str(item["artifact_role"])
+                content_digest = str(item["content_digest"])
+                detected_format = "unknown"
                 category_by_role = {
                     "source": "python_manifestation",
                     "circuit_qasm": "circuit_manifestation",
                     "results": "result_manifestation",
                 }
-                category = category_by_role.get(str(role))
+                category = category_by_role.get(role)
                 if category is None:
-                    raise CurrentLoopError("unsupported_authorized_artifact_type")
-                self._require_contract_permission(
-                    state,
-                    category=category,
-                    dimension="derive",
-                )
-                if role == "source":
-                    source = extract_selected_python_file_evidence(
-                        path,
-                        logical_source_label=path.name,
-                    )
-                    self._save_artifact("source_evidence", source, "source-evidence.json")
-                    manifestation = self._python_manifestation(source)
-                    self._save_artifact(
-                        "python_manifestation",
-                        manifestation,
-                        "python-manifestation.json",
-                    )
-                    extracted_roles.extend(["source_evidence", "python_manifestation"])
-                elif role == "circuit_qasm":
-                    qasm_text = path.read_text(encoding="utf-8")
-                    circuit = build_circuit_manifestation(
-                        qasm_text=qasm_text,
-                        stage="logical_circuit",
-                    )
-                    self._save_artifact(
-                        "circuit_manifestation",
-                        circuit,
-                        "circuit-manifestation.json",
-                    )
-                    extracted_roles.append("circuit_manifestation")
-                elif role == "results":
-                    result_input = _load_json_file(path)
-                    related_ref = self._related_circuit_reference(self.store.read(), path)
-                    if (
-                        result_input.get("status") == "failed"
-                        or result_input.get("run_status") == "failed"
-                    ):
-                        result = self._failed_result_manifestation(
-                            related_circuit_ref=related_ref,
-                            safe_category=str(
-                                result_input.get("error_category") or "local_run_failed"
-                            ),
+                    outcomes.append(
+                        processing_outcome(
+                            role=role,
+                            content_digest=content_digest,
+                            detected_format="unsupported",
+                            status="failed_local",
+                            safe_error_category="unsupported_authorized_artifact_type",
                         )
+                    )
+                    continue
+                try:
+                    self._require_contract_permission(
+                        self.store.read(),
+                        category=category,
+                        dimension="derive",
+                    )
+                    detected_format = detect_exact_artifact_format(path, role)
+                    if role == "source":
+                        if detected_format != "python_source":
+                            raise EvidenceProcessingError(
+                                "artifact_format_unsupported",
+                                origin="local_source_derivation",
+                            )
+                        source = extract_selected_python_file_evidence(
+                            path,
+                            logical_source_label=path.name,
+                        )
+                        self._save_artifact("source_evidence", source, "source-evidence.json")
+                        manifestation = self._python_manifestation(source)
+                        self._save_artifact(
+                            "python_manifestation",
+                            manifestation,
+                            "python-manifestation.json",
+                        )
+                        roles = ["source_evidence", "python_manifestation"]
+                    elif role == "circuit_qasm":
+                        if detected_format != "openqasm_2":
+                            raise EvidenceProcessingError(
+                                "circuit_format_unsupported",
+                                origin="local_circuit_derivation",
+                                safe_details={
+                                    "detected_format": detected_format,
+                                    "supported_formats": ["openqasm_2"],
+                                },
+                            )
+                        circuit = build_circuit_manifestation(
+                            qasm_text=path.read_text(encoding="utf-8"),
+                            stage="logical_circuit",
+                        )
+                        self._save_artifact(
+                            "circuit_manifestation",
+                            circuit,
+                            "circuit-manifestation.json",
+                        )
+                        roles = ["circuit_manifestation"]
                     else:
-                        counts_value = result_input.get("counts", result_input)
-                        if not isinstance(counts_value, Mapping):
-                            raise CurrentLoopError("result_artifact_invalid")
-                        counts = {str(key): int(value) for key, value in counts_value.items()}
-                        result = build_result_manifestation(
-                            counts=counts,
-                            related_circuit_ref=related_ref,
-                            user_provided_shots=(
-                                int(result_input["shots"])
-                                if isinstance(result_input.get("shots"), int)
-                                else None
-                            ),
-                        )
-                        run_summary_payload = (
-                            deepcopy(result_input)
-                            if "counts" in result_input
-                            else {"counts": deepcopy(result_input)}
-                        )
-                        activity = next(
-                            (
-                                receipt
-                                for receipt in state.get("activity_receipts", [])
-                                if isinstance(receipt, Mapping)
-                                and any(
-                                    isinstance(registered, Mapping)
-                                    and registered.get("role") == "results"
-                                    and registered.get("content_digest")
-                                    == item.get("content_digest")
-                                    for registered in receipt.get("registered_artifacts", [])
+                        if detected_format != "qcoder_result_json":
+                            raise EvidenceProcessingError(
+                                "artifact_format_unsupported",
+                                origin="local_result_derivation",
+                            )
+                        result_input = _load_json_file(path)
+                        current_state = self.store.read()
+                        try:
+                            related_ref = self._related_circuit_reference(current_state, path)
+                            circuit_available = True
+                        except CurrentLoopError:
+                            related_ref = (
+                                "session-artifact-"
+                                + sha256(f"unavailable:{content_digest}".encode()).hexdigest()[:16]
+                            )
+                            circuit_available = False
+                        if (
+                            result_input.get("status") == "failed"
+                            or result_input.get("run_status") == "failed"
+                        ):
+                            result = self._failed_result_manifestation(
+                                related_circuit_ref=related_ref,
+                                safe_category=str(
+                                    result_input.get("error_category") or "local_run_failed"
+                                ),
+                            )
+                        else:
+                            counts_value = result_input.get("counts", result_input)
+                            if not isinstance(counts_value, Mapping):
+                                raise EvidenceProcessingError(
+                                    "result_artifact_invalid",
+                                    origin="local_result_derivation",
                                 )
-                            ),
-                            None,
+                            counts = {str(key): int(value) for key, value in counts_value.items()}
+                            result = build_result_manifestation(
+                                counts=counts,
+                                related_circuit_ref=related_ref,
+                                user_provided_shots=(
+                                    int(result_input["shots"])
+                                    if isinstance(result_input.get("shots"), int)
+                                    else None
+                                ),
+                            )
+                            if not circuit_available:
+                                result = with_artifact_digest(
+                                    {
+                                        **{
+                                            key: deepcopy(value)
+                                            for key, value in result.items()
+                                            if key != "artifact_digest"
+                                        },
+                                        "related_circuit_availability": "unavailable",
+                                    }
+                                )
+                            run_summary_payload = (
+                                deepcopy(result_input)
+                                if "counts" in result_input
+                                else {"counts": deepcopy(result_input)}
+                            )
+                            activity = next(
+                                (
+                                    receipt
+                                    for receipt in current_state.get("activity_receipts", [])
+                                    if isinstance(receipt, Mapping)
+                                    and any(
+                                        isinstance(registered, Mapping)
+                                        and registered.get("role") == "results"
+                                        and registered.get("content_digest") == content_digest
+                                        for registered in receipt.get("registered_artifacts", [])
+                                    )
+                                ),
+                                None,
+                            )
+                            if isinstance(activity, Mapping):
+                                run_summary_lineage = {
+                                    "status": "recorded",
+                                    "operation_receipt_id": activity.get("operation_receipt_id"),
+                                    "activity_digest": activity.get("activity_digest"),
+                                }
+                        self._save_artifact(
+                            "result_manifestation",
+                            result,
+                            "result-manifestation.json",
                         )
-                        if isinstance(activity, Mapping):
-                            run_summary_lineage = {
-                                "status": "recorded",
-                                "operation_receipt_id": activity.get("operation_receipt_id"),
-                                "activity_digest": activity.get("activity_digest"),
-                            }
-                    self._save_artifact(
-                        "result_manifestation",
-                        result,
-                        "result-manifestation.json",
+                        roles = ["result_manifestation"]
+                    extracted_roles.extend(roles)
+                    outcomes.append(
+                        processing_outcome(
+                            role=role,
+                            content_digest=content_digest,
+                            detected_format=detected_format,
+                            status="completed",
+                            manifestation_roles=roles,
+                        )
                     )
-                    extracted_roles.append("result_manifestation")
-                else:
-                    raise CurrentLoopError("unsupported_authorized_artifact_type")
+                except (EvidenceProcessingError, CurrentLoopContractError) as exc:
+                    error_category = str(getattr(exc, "category", "unknown_local_internal"))
+                    outcomes.append(
+                        processing_outcome(
+                            role=role,
+                            content_digest=content_digest,
+                            detected_format=detected_format,
+                            status=(
+                                "unsupported_format"
+                                if error_category
+                                in {"artifact_format_unsupported", "circuit_format_unsupported"}
+                                else "excluded"
+                                if error_category == "current_loop_contract_policy_prohibited"
+                                else "failed_local"
+                            ),
+                            limitation=(
+                                "Circuit structural derivation is unavailable because the "
+                                "exact artifact is not OpenQASM 2."
+                                if error_category == "circuit_format_unsupported"
+                                else "Local derivation was unavailable for this exact artifact."
+                            ),
+                            safe_error_category=error_category,
+                        )
+                    )
+                except (ValueError, OSError):
+                    outcomes.append(
+                        processing_outcome(
+                            role=role,
+                            content_digest=content_digest,
+                            detected_format=detected_format,
+                            status="failed_local",
+                            limitation="A bounded local derivation failed for this exact artifact.",
+                            safe_error_category=f"local_{role}_derivation_failed",
+                        )
+                    )
             state = self.store.read()
             if (
                 run_summary_payload is not None
@@ -4506,104 +4725,119 @@ class CurrentLoopCoordinator:
                     dimension="prepare",
                 )
             ):
-                summary = build_run_summary(
-                    loop_ref=str(state["loop_ref"]),
-                    workspace_binding=str(state["workspace_root"]),
-                    state_revision=int(state["state_revision"]),
-                    contract_revision=int(state["current_loop_contract"]["contract_revision"]),
-                    result_payload=run_summary_payload,
-                    result_manifestation=self._saved_artifact(state, "result_manifestation"),
-                    circuit_manifestation=(
-                        self._saved_artifact(state, "circuit_manifestation")
-                        if "circuit_manifestation" in state["saved_artifacts"]
-                        else None
-                    ),
-                    source_manifestation=(
-                        self._saved_artifact(state, "python_manifestation")
-                        if "python_manifestation" in state["saved_artifacts"]
-                        else None
-                    ),
-                    operation_lineage=run_summary_lineage,
-                )
-                summary_reference = str(summary["artifact_ref"])
-                save_run_summary(
-                    store=self.store,
-                    summary=summary,
-                    destination=(self.artifact_directory / f"{summary_reference}.json"),
-                    expected_revision=int(state["state_revision"]),
-                )
-                extracted_roles.append("run_summary")
-                state = self.store.read()
-            if "result_manifestation" in state["saved_artifacts"]:
-                if self.transport is None:
-                    return self._recovery_result(
-                        operation="process_authorized_artifacts",
-                        category="protected_service_unavailable",
-                        phase="evidence_processing",
-                        elapsed=self.clock() - started,
+                try:
+                    summary = build_run_summary(
+                        loop_ref=str(state["loop_ref"]),
+                        workspace_binding=str(state["workspace_root"]),
+                        state_revision=int(state["state_revision"]),
+                        contract_revision=int(state["current_loop_contract"]["contract_revision"]),
+                        result_payload=run_summary_payload,
+                        result_manifestation=self._saved_artifact(state, "result_manifestation"),
+                        circuit_manifestation=(
+                            self._saved_artifact(state, "circuit_manifestation")
+                            if "circuit_manifestation" in state["saved_artifacts"]
+                            else None
+                        ),
+                        source_manifestation=(
+                            self._saved_artifact(state, "python_manifestation")
+                            if "python_manifestation" in state["saved_artifacts"]
+                            else None
+                        ),
+                        operation_lineage=run_summary_lineage,
                     )
-                result_review_payload = self._protected_call(
-                    "create_result_review_context_card",
-                    {
-                        "context_loop": "current_build_context_v1",
-                        "result_manifestation": self._saved_artifact(state, "result_manifestation"),
-                        "evidence_parent_artifacts": [
-                            self._saved_artifact(state, role)
-                            for role in (
-                                "circuit_manifestation",
-                                "result_manifestation",
-                            )
-                            if role in state["saved_artifacts"]
-                        ],
-                    },
-                )
-                result_review = self._response_artifact(
-                    result_review_payload, "result_review_context_card"
-                )
-                self._save_artifact(
-                    "result_review_context_card",
-                    result_review,
-                    "result-review-context-card.json",
-                )
-                extracted_roles.append("result_review_context_card")
-                state = self.store.read()
-            if (
+                    summary_reference = str(summary["artifact_ref"])
+                    save_run_summary(
+                        store=self.store,
+                        summary=summary,
+                        destination=(self.artifact_directory / f"{summary_reference}.json"),
+                        expected_revision=int(state["state_revision"]),
+                    )
+                    extracted_roles.append("run_summary")
+                    state = self.store.read()
+                except (RunSummaryError, CurrentLoopError, OSError, ValueError):
+                    outcomes.append(
+                        processing_outcome(
+                            role="results",
+                            content_digest=sha256(
+                                json.dumps(
+                                    run_summary_payload,
+                                    ensure_ascii=True,
+                                    sort_keys=True,
+                                ).encode()
+                            ).hexdigest(),
+                            detected_format="qcoder_result_json",
+                            status="failed_local",
+                            limitation="Local Run Summary construction was unavailable.",
+                            safe_error_category="local_run_summary_failed",
+                        )
+                    )
+            hosted_available = "result_manifestation" in state["saved_artifacts"] or (
                 "source_evidence" in state["saved_artifacts"]
                 and "working_blueprint" in state["saved_artifacts"]
                 and "output_evidence_contract" in state["saved_artifacts"]
-            ):
-                if self.transport is None:
-                    return self._recovery_result(
-                        operation="process_authorized_artifacts",
-                        category="protected_service_unavailable",
-                        phase="evidence_processing",
-                        elapsed=self.clock() - started,
-                    )
-                alignment_payload = self._protected_call(
-                    "create_source_blueprint_alignment_review",
-                    {
-                        "implementation_blueprint": self._saved_artifact(
-                            state, "working_blueprint"
-                        ),
-                        "output_evidence_contract": self._saved_artifact(
-                            state, "output_evidence_contract"
-                        ),
-                        "selected_python_source_evidence": self._saved_artifact(
-                            state, "source_evidence"
-                        ),
-                    },
-                )
-                alignment = self._response_artifact(
-                    alignment_payload, "source_blueprint_alignment_review"
-                )
-                self._save_artifact(
-                    "source_blueprint_alignment",
-                    alignment,
-                    "source-blueprint-alignment.json",
-                )
-                extracted_roles.append("source_blueprint_alignment")
-            state = self.store.read()
+            )
+            hosted = hosted_enrichment_status("available" if hosted_available else "not_offered")
+
+            def processing_mutator(value: dict[str, Any]) -> Mapping[str, Any]:
+                for outcome in outcomes:
+                    key = f"{outcome['role']}:{outcome['content_digest']}"
+                    value["artifact_processing_outcomes"][key] = deepcopy(outcome)
+                value["hosted_enrichment"] = deepcopy(hosted)
+                return value
+
+            state = self.store.update(
+                processing_mutator,
+                expected_revision=int(state["state_revision"]),
+            )
             coordinator = self._coordinator_state(state)
+            limitation_count = sum(1 for outcome in outcomes if outcome["status"] != "completed")
+            circuit_limitation = next(
+                (
+                    outcome
+                    for outcome in outcomes
+                    if outcome.get("safe_error_category") == "circuit_format_unsupported"
+                ),
+                None,
+            )
+            bounded_recovery: dict[str, Any] | None = None
+            if isinstance(circuit_limitation, Mapping):
+                fingerprint = recovery_fingerprint(
+                    category="circuit_format_unsupported",
+                    operation="process_authorized_artifacts",
+                    input_digests=[str(circuit_limitation["content_digest"])],
+                )
+                actions = [
+                    "continue_with_limitations",
+                    "provide_supported_circuit_artifact",
+                    "skip_current_artifact_derivation",
+                    "stop_loop",
+                ]
+                coordinator["active_recovery"] = {
+                    "schema_id": RECOVERY_SCHEMA_ID,
+                    "schema_version": RECOVERY_SCHEMA_VERSION,
+                    "category": "circuit_format_unsupported",
+                    "strategy": "bounded_alternative",
+                    "reference": f"recovery-{fingerprint[:24]}",
+                    "fingerprint": fingerprint,
+                    "occurrence_count": 1,
+                    "deterministic": True,
+                    "alternatives": actions,
+                    "origin": "local_circuit_derivation",
+                    "nonblocking": True,
+                }
+                bounded_recovery = {
+                    "schema_id": RECOVERY_SCHEMA_ID,
+                    "schema_version": RECOVERY_SCHEMA_VERSION,
+                    "strategy": "bounded_alternative",
+                    "safe_error_category": "circuit_format_unsupported",
+                    "prior_valid_authority_preserved": True,
+                    "prior_valid_evidence_preserved": True,
+                    "hosted_operation_permitted": False,
+                    "alternatives": actions,
+                    "complete_next_invocation_required": True,
+                    "convergence_fingerprint": fingerprint,
+                    "deterministic_failure": True,
+                }
             coordinator.update(
                 {
                     "phase": "evidence_processing",
@@ -4614,6 +4848,7 @@ class CurrentLoopCoordinator:
                         "evidence was saved. Raw artifacts remained local."
                     ),
                     "evidence_processing_complete": True,
+                    "hosted_enrichment_status": hosted["status"],
                 }
             )
             coordinator["performance"]["local_extraction_seconds"] += max(
@@ -4628,6 +4863,21 @@ class CurrentLoopCoordinator:
                 elapsed=self.clock() - started,
                 details={
                     "extracted_roles": extracted_roles,
+                    "per_item_outcomes": outcomes,
+                    "processing_partial": limitation_count > 0,
+                    "evidence_limitations": [
+                        outcome["limitation"]
+                        for outcome in outcomes
+                        if isinstance(outcome.get("limitation"), str)
+                    ],
+                    "local_processing": {
+                        "transport": LOCAL_ONLY,
+                        "protected_calls_attempted": 0,
+                        "per_item_isolation": True,
+                        "successful_outcomes_persisted": True,
+                    },
+                    "hosted_enrichment": hosted,
+                    "recovery_contract": bounded_recovery,
                     "run_summary": {
                         "schema": run_summary_contract_snapshot(),
                         "automatic_preparation": "run_summary" in extracted_roles,
@@ -4645,8 +4895,322 @@ class CurrentLoopCoordinator:
                     "manual_extractor_commands": 0,
                 },
             )
-        except (CurrentLoopError, CurrentLoopConflict, ValueError, OSError) as exc:
+        except (
+            CurrentLoopError,
+            CurrentLoopConflict,
+            CurrentLoopContractError,
+            EvidenceProcessingError,
+            ValueError,
+            OSError,
+        ) as exc:
             return self._exception_result("process_authorized_artifacts", exc, started)
+
+    def enrich_authorized_evidence(self) -> dict[str, Any]:
+        """Optionally enrich already-persisted evidence without endangering local results."""
+
+        started = self.clock()
+        try:
+            state = self._require_phase(
+                "enrich_authorized_evidence",
+                {"evidence_processing", "current_build_review"},
+            )
+            coordinator = self._coordinator_state(state)
+            if coordinator.get("evidence_processing_complete") is not True:
+                raise EvidenceProcessingError(
+                    "local_evidence_processing_required",
+                    origin="contract_or_authority",
+                )
+            hosted = state.get("hosted_enrichment")
+            if not isinstance(hosted, Mapping) or hosted.get("status") not in {
+                "available",
+                "rejected",
+                "unavailable",
+                "skipped",
+            }:
+                raise EvidenceProcessingError(
+                    "hosted_enrichment_not_available",
+                    origin="contract_or_authority",
+                )
+            if self.transport is None:
+                return self._recovery_result(
+                    operation="enrich_authorized_evidence",
+                    category="protected_service_unavailable",
+                    phase=coordinator["phase"],
+                    elapsed=self.clock() - started,
+                    origin="hosted_transport",
+                    deterministic=False,
+                    alternatives=("retry_hosted_enrichment", "skip_hosted_enrichment", "stop_loop"),
+                )
+            attempt_count = int(hosted.get("attempts", 0)) + 1
+
+            def in_progress(value: dict[str, Any]) -> Mapping[str, Any]:
+                value["hosted_enrichment"] = hosted_enrichment_status(
+                    "in_progress", attempts=attempt_count
+                )
+                return value
+
+            state = self.store.update(in_progress, expected_revision=int(state["state_revision"]))
+            enriched_roles: list[str] = []
+            try:
+                if "result_manifestation" in state["saved_artifacts"]:
+                    result_review_payload = self._protected_call(
+                        "create_result_review_context_card",
+                        {
+                            "context_loop": "current_build_context_v1",
+                            "result_manifestation": self._saved_artifact(
+                                state, "result_manifestation"
+                            ),
+                            "evidence_parent_artifacts": [
+                                self._saved_artifact(state, role)
+                                for role in ("circuit_manifestation", "result_manifestation")
+                                if role in state["saved_artifacts"]
+                            ],
+                        },
+                    )
+                    try:
+                        result_review = self._response_artifact(
+                            result_review_payload, "result_review_context_card"
+                        )
+                    except CurrentLoopError as exc:
+                        raise EvidenceProcessingError(
+                            exc.category,
+                            origin="hosted_operation",
+                            deterministic=False,
+                            protected_call_attempted=True,
+                        ) from exc
+                    self._save_artifact(
+                        "result_review_context_card",
+                        result_review,
+                        "result-review-context-card.json",
+                    )
+                    enriched_roles.append("result_review_context_card")
+                    state = self.store.read()
+                if all(
+                    role in state["saved_artifacts"]
+                    for role in (
+                        "source_evidence",
+                        "working_blueprint",
+                        "output_evidence_contract",
+                    )
+                ):
+                    alignment_payload = self._protected_call(
+                        "create_source_blueprint_alignment_review",
+                        {
+                            "implementation_blueprint": self._saved_artifact(
+                                state, "working_blueprint"
+                            ),
+                            "output_evidence_contract": self._saved_artifact(
+                                state, "output_evidence_contract"
+                            ),
+                            "selected_python_source_evidence": self._saved_artifact(
+                                state, "source_evidence"
+                            ),
+                        },
+                    )
+                    try:
+                        alignment = self._response_artifact(
+                            alignment_payload, "source_blueprint_alignment_review"
+                        )
+                    except CurrentLoopError as exc:
+                        raise EvidenceProcessingError(
+                            exc.category,
+                            origin="hosted_operation",
+                            deterministic=False,
+                            protected_call_attempted=True,
+                        ) from exc
+                    self._save_artifact(
+                        "source_blueprint_alignment",
+                        alignment,
+                        "source-blueprint-alignment.json",
+                    )
+                    enriched_roles.append("source_blueprint_alignment")
+            except (CurrentLoopError, EvidenceProcessingError) as exc:
+                current = self.store.read()
+                safe_category = str(getattr(exc, "category", "protected_operation_rejected"))
+
+                def rejected(value: dict[str, Any]) -> Mapping[str, Any]:
+                    value["hosted_enrichment"] = hosted_enrichment_status(
+                        "rejected",
+                        provenance="hosted_rejection",
+                        attempts=attempt_count,
+                        last_safe_category=safe_category,
+                    )
+                    return value
+
+                self.store.update(rejected, expected_revision=int(current["state_revision"]))
+                return self._exception_result("enrich_authorized_evidence", exc, started)
+            current = self.store.read()
+
+            def completed(value: dict[str, Any]) -> Mapping[str, Any]:
+                value["hosted_enrichment"] = hosted_enrichment_status(
+                    "completed", attempts=attempt_count
+                )
+                return value
+
+            state = self.store.update(completed, expected_revision=int(current["state_revision"]))
+            coordinator = self._coordinator_state(state)
+            coordinator["hosted_enrichment_status"] = "completed"
+            coordinator["state_status"] = "ready"
+            coordinator["checkpoint_kind"] = "none"
+            coordinator["customer_summary"] = (
+                "Optional hosted enrichment completed. Local evidence and the Run Summary "
+                "remain independently available."
+            )
+            coordinator.pop("active_recovery", None)
+            self._replace_coordinator(coordinator)
+            return self._result(
+                operation="enrich_authorized_evidence",
+                ok=True,
+                state=self.store.read(),
+                summary=coordinator["customer_summary"],
+                elapsed=self.clock() - started,
+                details={
+                    "enriched_roles": enriched_roles,
+                    "local_evidence_preserved": True,
+                    "run_summary_preserved": True,
+                    "hosted_enrichment": self.store.read()["hosted_enrichment"],
+                },
+            )
+        except (CurrentLoopError, CurrentLoopConflict, EvidenceProcessingError) as exc:
+            return self._exception_result("enrich_authorized_evidence", exc, started)
+
+    def execute_recovery_action(
+        self,
+        *,
+        recovery_reference: str,
+        action: str,
+        expected_contract_revision: int,
+    ) -> dict[str, Any]:
+        """Execute one selected bounded action; refreshing never executes it."""
+
+        started = self.clock()
+        try:
+            state = self.store.read()
+            contract = state.get("current_loop_contract")
+            if (
+                not isinstance(contract, Mapping)
+                or int(contract["contract_revision"]) != expected_contract_revision
+            ):
+                raise CurrentLoopError("contract_revision_stale")
+            coordinator = self._coordinator_state(state)
+            active = coordinator.get("active_recovery")
+            if not isinstance(active, Mapping) or active.get("reference") != recovery_reference:
+                raise EvidenceProcessingError(
+                    "recovery_reference_stale",
+                    origin="contract_or_authority",
+                )
+            alternatives = active.get("alternatives")
+            if not isinstance(alternatives, list) or action not in alternatives:
+                raise EvidenceProcessingError(
+                    "recovery_action_not_permitted",
+                    origin="contract_or_authority",
+                    safe_details={"advertised_actions": list(alternatives or [])},
+                )
+            if action == "stop_loop":
+                raise EvidenceProcessingError(
+                    "recovery_stop_requires_abandon_invocation",
+                    origin="contract_or_authority",
+                )
+            if action == "retry_hosted_enrichment":
+                raise EvidenceProcessingError(
+                    "recovery_hosted_retry_requires_hosted_invocation",
+                    origin="contract_or_authority",
+                )
+            if action == "skip_hosted_enrichment":
+                current = self.store.read()
+
+                def skip_hosted(value: dict[str, Any]) -> Mapping[str, Any]:
+                    existing = value.get("hosted_enrichment", {})
+                    value["hosted_enrichment"] = hosted_enrichment_status(
+                        "skipped",
+                        provenance=(
+                            "hosted_rejection"
+                            if isinstance(existing, Mapping)
+                            and existing.get("status") in {"rejected", "unavailable"}
+                            else "explicit_customer_choice"
+                        ),
+                        attempts=(
+                            int(existing.get("attempts", 0)) if isinstance(existing, Mapping) else 0
+                        ),
+                    )
+                    return value
+
+                state = self.store.update(
+                    skip_hosted, expected_revision=int(current["state_revision"])
+                )
+                summary = (
+                    "Optional hosted enrichment was skipped. Local manifestations, the "
+                    "Run Summary, and local evidence views remain available."
+                )
+            elif action == "provide_supported_circuit_artifact":
+                summary = (
+                    "A fresh, separately authorized IDE operation may now create or select "
+                    "one exact OpenQASM 2 circuit artifact."
+                )
+                coordinator["phase"] = "generation_ready"
+                coordinator["evidence_processing_complete"] = True
+            elif action in {
+                "continue_with_limitations",
+                "skip_current_artifact_derivation",
+                "abandon_step",
+            }:
+                summary = (
+                    "The optional failed derivation step was closed with its limitation. "
+                    "Prior trustworthy evidence and authority remain intact."
+                )
+            elif action == "retry_local_derivation":
+                if (
+                    active.get("deterministic") is True
+                    and int(active.get("occurrence_count", 0)) > 0
+                ):
+                    raise EvidenceProcessingError(
+                        "deterministic_retry_requires_changed_input",
+                        origin="local_artifact_validation",
+                    )
+                coordinator["evidence_processing_complete"] = False
+                summary = "Local derivation may be retried using the current exact authorized set."
+            elif action == "decline_build_review":
+                summary = "The optional Build Review was declined; the Blueprint is unchanged."
+                coordinator["phase"] = "continuation_choice"
+            else:
+                raise EvidenceProcessingError(
+                    "recovery_action_not_permitted",
+                    origin="contract_or_authority",
+                )
+            history = coordinator.setdefault("recovery_history", [])
+            history.append(
+                {
+                    "reference": recovery_reference,
+                    "action": action,
+                    "fingerprint": active.get("fingerprint"),
+                    "prior_authority_preserved": True,
+                    "prior_evidence_preserved": True,
+                }
+            )
+            coordinator["active_recovery"] = None
+            coordinator["state_status"] = "ready"
+            coordinator["checkpoint_kind"] = "none"
+            coordinator["customer_summary"] = summary
+            if action == "skip_hosted_enrichment":
+                coordinator["hosted_enrichment_status"] = "skipped"
+            self._replace_coordinator(coordinator)
+            return self._result(
+                operation="execute_recovery_action",
+                ok=True,
+                state=self.store.read(),
+                summary=summary,
+                elapsed=self.clock() - started,
+                details={
+                    "executed_action": action,
+                    "recovery_reference": recovery_reference,
+                    "refresh_operation_executed_action": False,
+                    "prior_valid_authority_preserved": True,
+                    "prior_valid_evidence_preserved": True,
+                    "hosted_operation_permitted": False,
+                },
+            )
+        except (CurrentLoopError, CurrentLoopConflict, EvidenceProcessingError) as exc:
+            return self._exception_result("execute_recovery_action", exc, started)
 
     def decline_build_review(self, *, explicit_authority: bool) -> dict[str, Any]:
         """Decline the optional passive review without changing the Blueprint."""
@@ -5232,14 +5796,26 @@ class CurrentLoopCoordinator:
             if not isinstance(portable_descriptor, Mapping):
                 raise CurrentLoopError("selected_portable_bundle_missing")
             confirmation_started = self.clock()
-            payload = self.transport.confirm_selected_bundle(
-                selected_bundle_file=portable_descriptor["local_path"],
-                semantic_confirmation=semantic_confirmation,
-            )
+            try:
+                payload = self.transport.confirm_selected_bundle(
+                    selected_bundle_file=portable_descriptor["local_path"],
+                    semantic_confirmation=semantic_confirmation,
+                )
+            except Exception as exc:
+                raise EvidenceProcessingError(
+                    "protected_service_unavailable",
+                    origin="hosted_transport",
+                    deterministic=False,
+                    protected_call_attempted=True,
+                ) from exc
             self._record_protected_call(max(0.0, self.clock() - confirmation_started))
             if payload.get("ok") is False:
-                raise CurrentLoopError(
-                    str(payload.get("error_category") or "protected_operation_rejected")
+                raise EvidenceProcessingError(
+                    str(payload.get("error_category") or "protected_operation_rejected"),
+                    origin="hosted_operation",
+                    deterministic=False,
+                    protected_call_attempted=True,
+                    protected_non_success=True,
                 )
             evolved = self._response_artifact(payload, "evolved_blueprint")
             working = self._saved_artifact(state, "working_blueprint")
@@ -5861,16 +6437,37 @@ class CurrentLoopCoordinator:
 
     def _protected_call(self, tool_name: str, arguments: Mapping[str, Any]) -> dict[str, Any]:
         if self.local_only_surface:
-            raise CurrentLoopError("local_sidecar_hosted_operation_prohibited")
+            raise EvidenceProcessingError(
+                "local_sidecar_hosted_operation_prohibited",
+                origin="contract_or_authority",
+            )
         if self.transport is None:
-            raise CurrentLoopError("protected_service_unavailable")
+            raise EvidenceProcessingError(
+                "protected_service_unavailable",
+                origin="hosted_transport",
+                deterministic=False,
+            )
         started = self.clock()
-        payload = self.transport.call(tool_name, arguments)
+        try:
+            payload = self.transport.call(tool_name, arguments)
+        except Exception as exc:
+            raise EvidenceProcessingError(
+                "protected_service_unavailable",
+                origin="hosted_transport",
+                deterministic=False,
+                protected_call_attempted=True,
+            ) from exc
         elapsed = max(0.0, self.clock() - started)
         self._record_protected_call(elapsed)
         if payload.get("ok") is False:
             category = str(payload.get("error_category") or "protected_operation_rejected")
-            raise CurrentLoopError(category)
+            raise EvidenceProcessingError(
+                category,
+                origin="hosted_operation",
+                deterministic=False,
+                protected_call_attempted=True,
+                protected_non_success=True,
+            )
         return payload
 
     def _record_protected_call(self, elapsed: float) -> None:
@@ -6608,6 +7205,9 @@ class CurrentLoopCoordinator:
             "customer_summary": summary,
             "artifact_candidates": [],
             "evidence_processing_complete": False,
+            "hosted_enrichment_status": "not_offered",
+            "active_recovery": None,
+            "recovery_history": [],
             "consequence_projection": None,
             "authority_separation": {
                 "qcoder_activation": "explicit_user_authority",
@@ -6658,7 +7258,7 @@ class CurrentLoopCoordinator:
         if result.get("schema_id") in {
             PREVIOUS_COORDINATOR_STATE_SCHEMA_ID,
             *OLDER_COORDINATOR_STATE_SCHEMA_IDS,
-        } and result.get("schema_version") in {1, 2, 3, 4, 5, 6, 7}:
+        } and result.get("schema_version") in {1, 2, 3, 4, 5, 6, 7, 8}:
             result["schema_id"] = COORDINATOR_STATE_SCHEMA_ID
             result["schema_version"] = COORDINATOR_STATE_SCHEMA_VERSION
             result.setdefault("effective_generation_posture", state.get("generation_posture"))
@@ -6668,6 +7268,9 @@ class CurrentLoopCoordinator:
             result.setdefault("active_generation_artifacts", {})
             result.setdefault("generation_parent_history", [])
             result.setdefault("evidence_processing_complete", False)
+            result.setdefault("hosted_enrichment_status", "not_offered")
+            result.setdefault("active_recovery", None)
+            result.setdefault("recovery_history", [])
             result.setdefault("pending_checkpoint_input", None)
             result.setdefault("checkpoint_input_history", [])
             result.setdefault("next_loop_branch", None)
@@ -6684,6 +7287,9 @@ class CurrentLoopCoordinator:
         result.setdefault("active_generation_artifacts", {})
         result.setdefault("generation_parent_history", [])
         result.setdefault("evidence_processing_complete", False)
+        result.setdefault("hosted_enrichment_status", "not_offered")
+        result.setdefault("active_recovery", None)
+        result.setdefault("recovery_history", [])
         result.setdefault("pending_checkpoint_input", None)
         result.setdefault("checkpoint_input_history", [])
         result.setdefault("next_loop_branch", None)
@@ -6704,6 +7310,23 @@ class CurrentLoopCoordinator:
         if not isinstance(result.get("posture_transition_history"), list):
             raise CurrentLoopError("current_loop_state_corrupt")
         if not isinstance(result.get("evidence_processing_complete"), bool):
+            raise CurrentLoopError("current_loop_state_corrupt")
+        if result.get("hosted_enrichment_status") not in {
+            "not_offered",
+            "available",
+            "in_progress",
+            "completed",
+            "rejected",
+            "unavailable",
+            "skipped",
+            "declined",
+        }:
+            raise CurrentLoopError("current_loop_state_corrupt")
+        if result.get("active_recovery") is not None and not isinstance(
+            result.get("active_recovery"), Mapping
+        ):
+            raise CurrentLoopError("current_loop_state_corrupt")
+        if not isinstance(result.get("recovery_history"), list):
             raise CurrentLoopError("current_loop_state_corrupt")
         if result.get("pending_checkpoint_input") is not None and not isinstance(
             result.get("pending_checkpoint_input"), Mapping
@@ -6952,6 +7575,7 @@ class CurrentLoopCoordinator:
                         ("review-build" if processing_complete else "process-authorized-artifacts"),
                         alternatives=(
                             (
+                                "enrich-authorized-evidence",
                                 "decline-build-review",
                                 "evidence-view",
                             )
@@ -6965,7 +7589,7 @@ class CurrentLoopCoordinator:
                                 else "exact_approved_artifact_set"
                             ),
                         ),
-                        uses_transport=True,
+                        uses_transport=processing_complete,
                     ),
                 }
             )
@@ -7685,6 +8309,11 @@ class CurrentLoopCoordinator:
             protocol=protocol,
         )
         result_details = deepcopy(dict(details or {}))
+        result_details = self._attach_executable_recovery_alternatives(
+            state=state,
+            checkpoint_kind=str(coordinator["checkpoint_kind"]),
+            details=result_details,
+        )
         pending = coordinator.get("pending_checkpoint_input")
         if isinstance(pending, Mapping):
             result_details.update(self._checkpoint_input_display(pending))
@@ -7712,6 +8341,89 @@ class CurrentLoopCoordinator:
             ),
             **protocol,
         }
+
+    def _attach_executable_recovery_alternatives(
+        self,
+        *,
+        state: Mapping[str, Any],
+        checkpoint_kind: str,
+        details: dict[str, Any],
+    ) -> dict[str, Any]:
+        recovery = details.get("recovery_contract")
+        if not isinstance(recovery, dict):
+            return details
+        alternatives = recovery.get("alternatives")
+        if not isinstance(alternatives, list):
+            return details
+        coordinator = self._coordinator_state(state)
+        active = coordinator.get("active_recovery")
+        reference = (
+            str(active.get("reference"))
+            if isinstance(active, Mapping) and isinstance(active.get("reference"), str)
+            else f"recovery-{str(recovery.get('convergence_fingerprint', 'unbound'))[:24]}"
+        )
+        contract_revision = int(state["current_loop_contract"]["contract_revision"])
+        completed: list[dict[str, Any]] = []
+        for value in alternatives:
+            action = str(value.get("action")) if isinstance(value, Mapping) else str(value)
+            if action == "retry_hosted_enrichment":
+                template = _invocation_template("enrich-authorized-evidence", uses_transport=True)
+            elif action == "stop_loop":
+                template = _invocation_template(
+                    "abandon",
+                    required_flags=("--approve",),
+                    fixed_argument_values={"--approve": True},
+                )
+            elif action == "decline_build_review":
+                template = _invocation_template(
+                    "decline-build-review",
+                    required_flags=("--approve",),
+                    fixed_argument_values={"--approve": True},
+                )
+            else:
+                template = _invocation_template(
+                    "execute-recovery-action",
+                    required_flags=(
+                        "--recovery-reference",
+                        "--action",
+                        "--expected-contract-revision",
+                    ),
+                    fixed_argument_values={
+                        "--recovery-reference": reference,
+                        "--action": action,
+                        "--expected-contract-revision": contract_revision,
+                    },
+                )
+            bound = build_operation_invocation(
+                template,
+                executable=self.runtime_executable,
+                workspace=str(state["workspace_root"]),
+                base_url=self.hosted_base_url,
+                token_file=self.hosted_token_file,
+                state_revision=int(state["state_revision"]),
+                loop_ref=str(state["loop_ref"]),
+                checkpoint=checkpoint_kind,
+            )
+            completed.append(
+                {
+                    "action": action,
+                    "customer_meaning": next(
+                        (
+                            row["customer_meaning"]
+                            for row in recovery_action_contract_snapshot()["actions"]
+                            if row["action"] == action
+                        ),
+                        action.replace("_", " "),
+                    ),
+                    "recovery_reference": reference,
+                    "invocation": bound["operation_specific_invocation"],
+                }
+            )
+        recovery["alternatives"] = completed
+        recovery["zero_non_executable_alternatives"] = all(
+            isinstance(item.get("invocation"), Mapping) for item in completed
+        )
+        return details
 
     def _contract_control_invocations(
         self, *, state: Mapping[str, Any], checkpoint_kind: str
@@ -8396,11 +9108,16 @@ class CurrentLoopCoordinator:
         phase: str,
         elapsed: float,
         details: Mapping[str, Any] | None = None,
+        origin: str = "contract_or_authority",
+        deterministic: bool = True,
+        alternatives: Sequence[str] | None = None,
+        protected_call_attempted: bool = False,
+        protected_non_success: bool = False,
     ) -> dict[str, Any]:
         normalized = _ERROR_ALIASES.get(category, category)
         recovery = _RECOVERY.get(
             normalized,
-            _RECOVERY["protected_operation_rejected"],
+            _RECOVERY["unknown_local_internal"],
         )
         status = (
             "conflict"
@@ -8434,6 +9151,12 @@ class CurrentLoopCoordinator:
             "certification_fallback_available": recovery[5],
             **deepcopy(dict(details or {})),
         }
+        payload["failure_provenance"] = failure_provenance(
+            origin=origin,
+            category=normalized,
+            protected_call_attempted=protected_call_attempted,
+            protected_non_success=protected_non_success,
+        )
         strategy = (
             "qcoder_corrects"
             if normalized
@@ -8454,6 +9177,26 @@ class CurrentLoopCoordinator:
             )
             else "restage_with_construction"
         )
+        selected_alternatives = list(
+            alternatives
+            or (
+                ("continue_with_limitations", "provide_supported_circuit_artifact", "stop_loop")
+                if normalized in {"artifact_format_unsupported", "circuit_format_unsupported"}
+                else ("retry_hosted_enrichment", "skip_hosted_enrichment", "stop_loop")
+                if origin in {"hosted_transport", "hosted_operation"}
+                else ("abandon_step", "stop_loop")
+            )
+        )
+        input_digests = [
+            str(value)
+            for value in (details or {}).get("input_digests", [])
+            if isinstance(value, str)
+        ]
+        fingerprint = recovery_fingerprint(
+            category=normalized,
+            operation=operation,
+            input_digests=input_digests,
+        )
         payload["recovery_contract"] = {
             "schema_id": RECOVERY_SCHEMA_ID,
             "schema_version": RECOVERY_SCHEMA_VERSION,
@@ -8468,9 +9211,12 @@ class CurrentLoopCoordinator:
             ),
             "customer_review_required": recovery[3],
             "hosted_operation_permitted": False,
-            "alternatives": ["skip", "abandon_step", "stop_loop"],
+            "alternatives": selected_alternatives,
             "state_and_contract_binding_required": True,
             "complete_next_invocation_required": True,
+            "refresh_executes_selected_action": False,
+            "deterministic_failure": deterministic,
+            "convergence_fingerprint": fingerprint,
         }
         recovery_protocol = (
             {
@@ -8507,6 +9253,18 @@ class CurrentLoopCoordinator:
                 checkpoint_protocol=recovery_protocol,
             )
         coordinator = self._coordinator_state(state)
+        previous = coordinator.get("active_recovery")
+        occurrence_count = (
+            int(previous.get("occurrence_count", 0)) + 1
+            if isinstance(previous, Mapping) and previous.get("fingerprint") == fingerprint
+            else 1
+        )
+        if deterministic and occurrence_count > 1:
+            selected_alternatives = [
+                action for action in selected_alternatives if action != "retry_local_derivation"
+            ]
+            payload["recovery_contract"]["alternatives"] = selected_alternatives
+            payload["recovery_contract"]["futile_identical_retry_removed"] = True
         coordinator.update(
             {
                 "state_status": status,
@@ -8523,6 +9281,12 @@ class CurrentLoopCoordinator:
                 "schema_version": RECOVERY_SCHEMA_VERSION,
                 "category": normalized,
                 "strategy": strategy,
+                "reference": f"recovery-{fingerprint[:24]}",
+                "fingerprint": fingerprint,
+                "occurrence_count": occurrence_count,
+                "deterministic": deterministic,
+                "alternatives": selected_alternatives,
+                "origin": origin,
             }
         self._replace_coordinator(coordinator)
         return self._result(
@@ -8540,9 +9304,15 @@ class CurrentLoopCoordinator:
         category = (
             str(getattr(exc, "category"))
             if isinstance(getattr(exc, "category", None), str)
-            else "protected_operation_rejected"
+            else "unknown_local_internal"
         )
         category = _ERROR_ALIASES.get(category, category)
+        if category == "protected_operation_rejected" and not (
+            isinstance(exc, EvidenceProcessingError)
+            and exc.protected_call_attempted
+            and exc.protected_non_success
+        ):
+            category = "unknown_local_internal"
         if category not in _RECOVERY:
             if category.startswith("checkpoint_input_") or category.startswith(
                 "coordinator_protocol_"
@@ -8554,16 +9324,43 @@ class CurrentLoopCoordinator:
                 category = "unsupported_schema"
             elif "parent" in category or "digest" in category:
                 category = "parent_digest_mismatch"
-            elif "selected" in category or "artifact" in category:
-                category = "protected_operation_rejected"
+            elif isinstance(exc, EvidenceProcessingError):
+                pass
+            elif category.startswith(
+                ("selected_", "artifact_", "current_loop_", "contract_", "operation_receipt_")
+            ):
+                pass
+            elif category.startswith(("protected_", "preview_")):
+                pass
             else:
-                category = "protected_operation_rejected"
+                category = "unknown_local_internal"
+        origin = (
+            exc.origin
+            if isinstance(exc, EvidenceProcessingError)
+            else "hosted_operation"
+            if category.startswith(("protected_", "preview_"))
+            else "contract_or_authority"
+            if isinstance(exc, (CurrentLoopError, CurrentLoopConflict))
+            else "unknown_local_internal"
+        )
         return self._recovery_result(
             operation=operation,
             category=category,
             phase=self._safe_phase(),
             elapsed=max(0.0, self.clock() - started),
-            details=(exc.safe_details if isinstance(exc, CheckpointInputStructuralError) else None),
+            details=(
+                exc.safe_details
+                if isinstance(exc, (CheckpointInputStructuralError, EvidenceProcessingError))
+                else None
+            ),
+            origin=origin,
+            deterministic=(exc.deterministic if isinstance(exc, EvidenceProcessingError) else True),
+            protected_call_attempted=(
+                exc.protected_call_attempted if isinstance(exc, EvidenceProcessingError) else False
+            ),
+            protected_non_success=(
+                exc.protected_non_success if isinstance(exc, EvidenceProcessingError) else False
+            ),
         )
 
     def _safe_phase(self) -> str:

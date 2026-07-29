@@ -57,6 +57,8 @@ def test_inventory_is_complete_deterministic_and_diagnostics_only() -> None:
         "register-artifacts",
         "authorize-artifacts",
         "process-authorized-artifacts",
+        "enrich-authorized-evidence",
+        "execute-recovery-action",
         "review-build",
         "continue-unchanged",
         "propose-change",
@@ -99,7 +101,7 @@ def test_all_local_only_invocations_exclude_hosted_transport() -> None:
 def test_hosted_invocations_own_exact_transport_and_platform_serialization() -> None:
     for subcommand in (
         "prepare-generation",
-        "process-authorized-artifacts",
+        "enrich-authorized-evidence",
         "review-build",
         "propose-change",
         "confirm-change",
@@ -221,8 +223,8 @@ def test_binding_v7_has_no_global_transport_routing_or_ambiguous_instruction(
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v8"
-    assert descriptor["schema_version"] == 8
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v9"
+    assert descriptor["schema_version"] == 9
     assert descriptor["operation_invocation_contract"]["global_transport_argument_array"] is False
     assert descriptor["operation_transport_inventory"]["diagnostics_only"] is True
     assert (
@@ -264,6 +266,6 @@ def test_ready_protocols_emit_operation_specific_invocations(tmp_path: Path) -> 
     hosted_contract = hosted["next_invocation"]["operation_specific_invocation"]
     assert local_contract["transport_classification"] == LOCAL_ONLY
     assert "--token-file" not in local_contract["qcoder_owned_argv_prefix"]
-    assert hosted_contract["transport_classification"] == HOSTED_CAPABLE
-    assert "--token-file" in hosted_contract["qcoder_owned_argv_prefix"]
+    assert hosted_contract["transport_classification"] == LOCAL_ONLY
+    assert "--token-file" not in hosted_contract["qcoder_owned_argv_prefix"]
     assert hosted_contract["state_binding"]["revision"] == 1

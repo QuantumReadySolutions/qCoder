@@ -1410,11 +1410,34 @@ def _cmd_current_loop(argv: list[str]) -> int:
     )
     authorize.add_argument("--artifact-type", default=None)
 
-    process = sub.add_parser(
+    sub.add_parser(
         "process-authorized-artifacts",
-        help="Run supported local extraction for the exact approved set.",
+        help="Run per-item local derivation for the exact approved set; never calls hosted services.",
     )
-    _add_current_loop_transport_arguments(process, DEFAULT_BASE_URL, default_token_file())
+    enrich = sub.add_parser(
+        "enrich-authorized-evidence",
+        help="Optionally enrich already-persisted local evidence through existing hosted review.",
+    )
+    _add_current_loop_transport_arguments(enrich, DEFAULT_BASE_URL, default_token_file())
+    recover = sub.add_parser(
+        "execute-recovery-action",
+        help="Execute one qCoder-advertised bounded recovery action.",
+    )
+    recover.add_argument("--recovery-reference", required=True)
+    recover.add_argument(
+        "--action",
+        required=True,
+        choices=(
+            "continue_with_limitations",
+            "provide_supported_circuit_artifact",
+            "skip_current_artifact_derivation",
+            "retry_local_derivation",
+            "skip_hosted_enrichment",
+            "decline_build_review",
+            "abandon_step",
+        ),
+    )
+    recover.add_argument("--expected-contract-revision", required=True, type=int)
 
     review = sub.add_parser(
         "review-build",
@@ -1878,6 +1901,14 @@ def _cmd_current_loop(argv: list[str]) -> int:
             )
         elif command == "process-authorized-artifacts":
             result = coordinator.process_authorized_artifacts()
+        elif command == "enrich-authorized-evidence":
+            result = coordinator.enrich_authorized_evidence()
+        elif command == "execute-recovery-action":
+            result = coordinator.execute_recovery_action(
+                recovery_reference=args.recovery_reference,
+                action=args.action,
+                expected_contract_revision=args.expected_contract_revision,
+            )
         elif command == "review-build":
             result = coordinator.review_build()
         elif command == "decline-build-review":

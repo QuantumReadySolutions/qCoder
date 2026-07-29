@@ -45,9 +45,10 @@ UNCHANGED_CONTINUATION_SCHEMA_ID = "qcoder.unchanged_continuation.v1"
 SELECTED_ARTIFACT_AUTHORIZATION_SCHEMA_ID = "qcoder.selected_artifact_authorization.v1"
 LEGACY_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v1"
 OLDER_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v2"
-PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v3"
-CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v4"
-CURRENT_LOOP_STATE_SCHEMA_VERSION = 4
+CONTRACT_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v3"
+PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v4"
+CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v5"
+CURRENT_LOOP_STATE_SCHEMA_VERSION = 5
 
 LOOP_INSTANCE_RECORD_MAX_BYTES = 65_536
 NEXT_LOOP_SEED_MAX_BYTES = 65_536
@@ -1397,11 +1398,11 @@ def _state_digest(value: Mapping[str, Any]) -> str:
 
 
 def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
-    """Atomically migrate one active v2/v3 state into v4.
+    """Atomically migrate one active v2/v3/v4 state into v5.
 
-    Version 4 adds only qCoder-owned Run Summary references.  A v3 contract is
-    preserved byte-for-byte; a v2 state receives the same fresh Assist contract
-    used by the historical v2-to-v3 migration.
+    Version 5 adds qCoder-owned per-item processing outcomes, optional hosted
+    enrichment state, and bounded recovery references. Existing contract and
+    Run Summary content is preserved.
     """
 
     state = store.read()
@@ -1414,7 +1415,8 @@ def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
     schema_version = state.get("schema_version")
     if (schema_id, schema_version) not in {
         (OLDER_CURRENT_LOOP_STATE_SCHEMA_ID, 2),
-        (PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID, 3),
+        (CONTRACT_CURRENT_LOOP_STATE_SCHEMA_ID, 3),
+        (PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID, 4),
     }:
         raise CurrentLoopError("current_loop_state_migration_unsupported")
     if state.get("state_kind") != "active_loop":
@@ -1436,8 +1438,21 @@ def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
         )
         migrated["operation_receipts"] = {}
         migrated["activity_receipts"] = []
-    migrated["run_summary_index"] = {}
-    migrated["latest_run_summary_reference"] = None
+    if schema_id in {OLDER_CURRENT_LOOP_STATE_SCHEMA_ID, CONTRACT_CURRENT_LOOP_STATE_SCHEMA_ID}:
+        migrated["run_summary_index"] = {}
+        migrated["latest_run_summary_reference"] = None
+    migrated["artifact_processing_outcomes"] = {}
+    migrated["hosted_enrichment"] = {
+        "schema_id": "qcoder.current_loop.hosted_enrichment_status.v1",
+        "schema_version": 1,
+        "status": "not_offered",
+        "provenance": None,
+        "attempts": 0,
+        "last_safe_category": None,
+        "local_evidence_preserved": True,
+        "run_summary_preserved": True,
+    }
+    migrated["recovery_actions"] = {}
     return store.replace(migrated, expected_revision=int(state["state_revision"]))
 
 
@@ -1454,8 +1469,12 @@ def current_loop_state_error(value: object) -> str | None:
             and value.get("schema_version") == 2
         )
         or (
-            value.get("schema_id") == PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID
+            value.get("schema_id") == CONTRACT_CURRENT_LOOP_STATE_SCHEMA_ID
             and value.get("schema_version") == 3
+        )
+        or (
+            value.get("schema_id") == PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID
+            and value.get("schema_version") == 4
         )
     )
     current = (
@@ -1509,8 +1528,12 @@ def current_loop_state_error(value: object) -> str | None:
             (
                 current
                 or (
-                    value.get("schema_id") == PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID
+                    value.get("schema_id") == CONTRACT_CURRENT_LOOP_STATE_SCHEMA_ID
                     and value.get("schema_version") == 3
+                )
+                or (
+                    value.get("schema_id") == PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID
+                    and value.get("schema_version") == 4
                 )
                 or (
                     value.get("schema_id") == OLDER_CURRENT_LOOP_STATE_SCHEMA_ID
@@ -1549,6 +1572,42 @@ def current_loop_state_error(value: object) -> str | None:
         latest = value.get("latest_run_summary_reference")
         if latest is not None and latest not in summaries:
             return "current_loop_latest_run_summary_reference_invalid"
+        outcomes = value.get("artifact_processing_outcomes")
+        if not isinstance(outcomes, Mapping):
+            return "current_loop_artifact_processing_outcomes_invalid"
+        for reference, outcome in outcomes.items():
+            if not isinstance(reference, str) or not isinstance(outcome, Mapping):
+                return "current_loop_artifact_processing_outcome_invalid"
+            if outcome.get("schema_id") != "qcoder.current_loop.artifact_processing_outcome.v1":
+                return "current_loop_artifact_processing_outcome_invalid"
+            if outcome.get("status") not in {
+                "completed",
+                "unsupported_format",
+                "missing",
+                "stale",
+                "invalid_digest",
+                "excluded",
+                "failed_local",
+            }:
+                return "current_loop_artifact_processing_outcome_invalid"
+        hosted = value.get("hosted_enrichment")
+        if not isinstance(hosted, Mapping):
+            return "current_loop_hosted_enrichment_invalid"
+        if hosted.get("schema_id") != "qcoder.current_loop.hosted_enrichment_status.v1":
+            return "current_loop_hosted_enrichment_invalid"
+        if hosted.get("status") not in {
+            "not_offered",
+            "available",
+            "in_progress",
+            "completed",
+            "rejected",
+            "unavailable",
+            "skipped",
+            "declined",
+        }:
+            return "current_loop_hosted_enrichment_invalid"
+        if not isinstance(value.get("recovery_actions"), Mapping):
+            return "current_loop_recovery_actions_invalid"
     if not isinstance(value.get("saved_artifacts"), Mapping):
         return "current_loop_saved_artifacts_invalid"
     if not isinstance(value.get("stage_freshness"), Mapping):
@@ -1717,6 +1776,18 @@ def activate_current_loop(
         "activity_receipts": [],
         "run_summary_index": {},
         "latest_run_summary_reference": None,
+        "artifact_processing_outcomes": {},
+        "hosted_enrichment": {
+            "schema_id": "qcoder.current_loop.hosted_enrichment_status.v1",
+            "schema_version": 1,
+            "status": "not_offered",
+            "provenance": None,
+            "attempts": 0,
+            "last_safe_category": None,
+            "local_evidence_preserved": True,
+            "run_summary_preserved": True,
+        },
+        "recovery_actions": {},
         "directory_scan_performed": False,
         "watcher_active": False,
         "upload_performed": False,

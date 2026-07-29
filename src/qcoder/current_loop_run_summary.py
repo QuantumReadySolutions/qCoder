@@ -305,6 +305,14 @@ def build_run_summary(
             "The summary reports registered evidence and does not prove correctness.",
             "Circuit structure does not by itself prove output-state entanglement.",
             "Missing execution settings remain missing and are not inferred from source.",
+            *(
+                [
+                    "Circuit structural evidence is unavailable; circuit width, depth, "
+                    "and gate count are omitted."
+                ]
+                if circuit_manifestation is None
+                else []
+            ),
         ],
         "raw_result_artifact_embedded": False,
         "complete_raw_counts_embedded": False,
