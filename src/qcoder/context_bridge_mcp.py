@@ -67,6 +67,7 @@ from qcoder.current_loop_invocation import (
     invocation_contract_snapshot,
     operation_transport_inventory,
 )
+from qcoder.current_loop_bounded_control import bounded_control_contract_snapshot
 from qcoder.current_loop_bootstrap import (
     bootstrap_contract_snapshot,
     invocation_lifecycle_snapshot,
@@ -107,8 +108,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 6
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v6"
+CLIENT_BINDING_SCHEMA_VERSION = 7
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v7"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -246,7 +247,12 @@ bounded policy. Off means no active loop. Use only qCoder-supplied contract stat
 bounded-adjustment, broadening-confirmation, exclusion, restoration, and deletion invocations.
 Never edit JSON or YAML, reconstruct policy, or decide whether a change broadens authority.
 Narrowing applies immediately; broadening requires a qCoder proposal and separate authority-only
-confirmation.
+confirmation. For every bounded local control, consume the complete versioned input contract in
+the current result. Select only advertised machine values and valid combinations, use only
+qCoder-supplied artifact, proposal, receipt, revision, loop, and workspace references, and explain
+choices with the supplied customer meanings. Never inspect parser help, source, package files,
+proof records, transcripts, or .qcoder to discover a domain. Off uses qCoder's distinct stop-loop
+invocation and is never serialized as an all-false active contract.
 
 RECOVERY
 Recoverable results preserve prior valid authority and evidence and include a versioned recovery
@@ -335,6 +341,7 @@ def build_client_binding_descriptor(
                 post_result_invocation_contract=post_result_contract,
             ),
             "operation_transport_inventory": operation_transport_inventory(),
+            "bounded_control_input_contract": bounded_control_contract_snapshot(),
             "checkpoint_input_contract": {
                 "schema_id": CHECKPOINT_INPUT_SCHEMA_ID,
                 "schema_version": CHECKPOINT_INPUT_SCHEMA_VERSION,

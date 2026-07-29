@@ -19,7 +19,8 @@ CONTRACT_MAX_HISTORY = 64
 CONTRACT_MAX_EXCLUSIONS = 128
 CONTRACT_MAX_TOMBSTONES = 128
 
-PRESETS = ("evidence_only", "assist", "custom")
+NAMED_PRESETS = ("evidence_only", "assist")
+PRESETS = (*NAMED_PRESETS, "custom")
 PRESET_PROVENANCE = (
     "activation_default",
     "explicit_customer_selection",
@@ -36,6 +37,31 @@ EVIDENCE_CATEGORIES = (
     "result_manifestation",
     "lineage",
     "derived_metrics",
+)
+ADJUSTMENT_DIMENSIONS = (
+    "collect",
+    "derive",
+    "recommend",
+    "prepare",
+    "request_application_or_execution",
+    "assistant_derived_exposure",
+    "assistant_raw_exposure",
+)
+ADJUSTMENT_VALUES_BY_DIMENSION = {
+    "collect": ("disabled", "enabled"),
+    "derive": ("disabled", "enabled"),
+    "recommend": ("disabled", "enabled"),
+    "prepare": ("disabled", "bounded_non_material"),
+    "request_application_or_execution": ("disabled", "enabled"),
+    "assistant_derived_exposure": ("disabled", "on_request", "standing"),
+    # Raw assistant exposure is a policy ceiling in contract.v1.  Advertising
+    # broader modes would promise a value that deterministic validation rejects.
+    "assistant_raw_exposure": ("disabled",),
+}
+EVIDENCE_EXCLUSION_REASONS = (
+    "customer_excluded",
+    "privacy_narrowing",
+    "not_relevant",
 )
 DIMENSIONS = (
     "collect",
@@ -108,7 +134,7 @@ def _category_policy(*, preset: str) -> dict[str, Any]:
 def compile_preset(preset: str) -> dict[str, Any]:
     """Compile a named preset into the complete category policy."""
 
-    if preset not in {"evidence_only", "assist"}:
+    if preset not in NAMED_PRESETS:
         raise CurrentLoopContractError("contract_named_preset_invalid")
     return {
         "categories": {
@@ -287,7 +313,7 @@ def set_preset(
     validate_contract(contract)
     if expected_contract_revision != contract["contract_revision"]:
         raise CurrentLoopContractError("contract_revision_stale")
-    if preset not in {"evidence_only", "assist"}:
+    if preset not in NAMED_PRESETS:
         raise CurrentLoopContractError("contract_preset_invalid")
     if provenance not in PRESET_PROVENANCE:
         raise CurrentLoopContractError("contract_provenance_invalid")
@@ -337,34 +363,26 @@ def adjust(
         raise CurrentLoopContractError("contract_revision_stale")
     if category not in EVIDENCE_CATEGORIES:
         raise CurrentLoopContractError("contract_category_invalid")
-    if dimension not in {
-        "collect",
-        "derive",
-        "recommend",
-        "prepare",
-        "request_application_or_execution",
-        "assistant_derived_exposure",
-        "assistant_raw_exposure",
-    }:
+    if dimension not in ADJUSTMENT_DIMENSIONS:
         raise CurrentLoopContractError("contract_dimension_invalid")
     if provenance not in PRESET_PROVENANCE:
         raise CurrentLoopContractError("contract_provenance_invalid")
     policy = deepcopy(dict(contract["effective_policy"]))
     row = policy["categories"][category]
     if dimension in {"collect", "derive", "recommend", "request_application_or_execution"}:
-        if value not in {"enabled", "disabled"}:
+        if value not in ADJUSTMENT_VALUES_BY_DIMENSION[dimension]:
             raise CurrentLoopContractError("contract_adjustment_value_invalid")
         row[dimension] = value == "enabled"
     elif dimension == "prepare":
-        if value not in {"disabled", "bounded_non_material"}:
+        if value not in ADJUSTMENT_VALUES_BY_DIMENSION[dimension]:
             raise CurrentLoopContractError("contract_adjustment_value_invalid")
         row["prepare"] = value
     else:
-        if value not in {"disabled", "on_request", "standing"}:
+        if dimension == "assistant_raw_exposure" and value != "disabled":
+            raise CurrentLoopContractError("contract_raw_exposure_ceiling")
+        if value not in ADJUSTMENT_VALUES_BY_DIMENSION[dimension]:
             raise CurrentLoopContractError("contract_adjustment_value_invalid")
         form = "derived" if dimension == "assistant_derived_exposure" else "raw"
-        if form == "raw" and value != "disabled":
-            raise CurrentLoopContractError("contract_raw_exposure_ceiling")
         row["expose"]["connected_assistant"][form] = value
     kind = classify_change(contract["effective_policy"], policy)
     if kind == "broadening":
@@ -438,6 +456,8 @@ def exclude_evidence(
     validate_contract(contract)
     if expected_contract_revision != contract["contract_revision"]:
         raise CurrentLoopContractError("contract_revision_stale")
+    if reason not in EVIDENCE_EXCLUSION_REASONS:
+        raise CurrentLoopContractError("contract_evidence_exclusion_reason_invalid")
     exclusions = deepcopy(dict(contract["evidence_exclusions"]))
     if len(exclusions) >= CONTRACT_MAX_EXCLUSIONS and artifact_reference not in exclusions:
         raise CurrentLoopContractError("contract_evidence_exclusions_full")

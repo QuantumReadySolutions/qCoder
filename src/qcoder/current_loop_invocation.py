@@ -15,9 +15,13 @@ import shlex
 import subprocess
 from typing import Any, Mapping, Sequence
 
+from qcoder.current_loop_bounded_control import (
+    BOUNDED_CONTROL_INPUT_SCHEMA_ID,
+    BOUNDED_CONTROL_INPUT_SCHEMA_VERSION,
+)
 
-INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v1"
-INVOCATION_CONTRACT_SCHEMA_VERSION = 1
+INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v2"
+INVOCATION_CONTRACT_SCHEMA_VERSION = 2
 OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v1"
 OPERATION_INVENTORY_SCHEMA_VERSION = 1
 
@@ -348,6 +352,11 @@ def build_operation_invocation(
         ],
         "token_contents_embedded": False,
         "credential_values_retained_in_proof": False,
+        "bounded_control_input_contract": (
+            deepcopy(dict(result["bounded_control_input_contract"]))
+            if isinstance(result.get("bounded_control_input_contract"), Mapping)
+            else None
+        ),
     }
     contract["canonical_full_argv_digest"] = _digest({"argv": structured_argv})
     contract["sanitized_argv_structure_digest"] = _digest({"argv": fixed_redacted})
@@ -375,4 +384,7 @@ def invocation_contract_snapshot() -> dict[str, Any]:
         "global_transport_argument_array": False,
         "assistant_routes_transport": False,
         "local_only_excludes_hosted_transport": True,
+        "bounded_control_input_schema_id": BOUNDED_CONTROL_INPUT_SCHEMA_ID,
+        "bounded_control_input_schema_version": BOUNDED_CONTROL_INPUT_SCHEMA_VERSION,
+        "bounded_local_controls_are_self_describing": True,
     }

@@ -49,6 +49,19 @@ Connected assistants use qCoder-generated local invocations for contract status,
 selection, one bounded category/dimension adjustment, broadening confirmation, evidence
 exclusion, restoration, and deletion. Customers speak naturally; they never edit JSON or YAML.
 
+Every such invocation carries `qcoder.current_loop.bounded_control_input.v1`. The contract
+publishes exact preset, category, dimension, value, reason, and eligible-reference domains;
+customer-language meanings; current values; and the complete valid-selection graph. It is derived
+from the same constants used by parser choices and contract validation. The assistant selects only
+advertised values, never constructs a policy document, never invents proposal, receipt, evidence,
+revision, loop, or workspace references, and never consults help, source, package files, proof
+records, transcripts, or `.qcoder` to discover a domain.
+
+`Off` is not a `contract-set-preset` value. It is the distinct qCoder-generated stop-loop action,
+because an inactive loop cannot contain an ordinary all-false active contract. Unsupported values
+or invalid combinations return safe bounded recovery with refreshed domains and a complete local
+next invocation; they do not alter the prior valid contract or evidence.
+
 Narrowing applies immediately, cancels now-disallowed future use, and marks dependent views stale
 or incomplete. It cannot recall information already exposed. Broadening produces an exact pending
 proposal and requires a separate authority-only confirmation. Stale contract or state revisions

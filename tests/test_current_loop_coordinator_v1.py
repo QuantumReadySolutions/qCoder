@@ -619,7 +619,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("56630702a3bcf0fe2bd843022be2627059a2ccad7095b3de243f6082bb053214")
+    assert contract_digest == ("61a5a481da8651f926dad07a14a34c49d40ea7031edf0777aec3a1c0d60cdc75")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
@@ -632,7 +632,16 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "authorization_partial",
         "canonical_artifact_modified",
         "client_state_conflict",
+        "contract_adjustment_value_invalid",
         "contract_broadening_proposal_stale",
+        "contract_category_invalid",
+        "contract_dimension_invalid",
+        "contract_evidence_exclusion_missing",
+        "contract_evidence_exclusion_reason_invalid",
+        "contract_evidence_not_locally_controlled",
+        "contract_evidence_reference_unknown",
+        "contract_preset_invalid",
+        "contract_raw_exposure_ceiling",
         "contract_revision_stale",
         "current_loop_contract_policy_prohibited",
         "ide_write_or_run_denied",

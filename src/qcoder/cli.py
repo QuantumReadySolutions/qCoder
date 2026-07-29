@@ -51,6 +51,17 @@ from qcoder.current_loop_bootstrap import (
     REQUEST_BASELINE_MAX_CODEPOINTS,
     REQUEST_BASELINE_MAX_UTF8_BYTES,
 )
+from qcoder.current_loop_contract import (
+    ADJUSTMENT_DIMENSIONS,
+    ADJUSTMENT_VALUES_BY_DIMENSION,
+    EVIDENCE_CATEGORIES,
+    EVIDENCE_EXCLUSION_REASONS,
+    NAMED_PRESETS,
+)
+from qcoder.current_loop_event_receipts import (
+    SUPPORTED_OPERATION_CATEGORIES,
+    SUPPORTED_OUTPUT_ROLES,
+)
 
 EXPLORER_BETA_DOCS_URL = "https://qcoder.ai/manual/student-beta/"
 OSS_DOCS_URL = "https://qcoder.ai/manual/oss/"
@@ -1077,41 +1088,26 @@ def _cmd_current_loop(argv: list[str]) -> int:
     contract_preset = sub.add_parser(
         "contract-set-preset", help="Select one bounded Current Loop Contract preset."
     )
-    contract_preset.add_argument("--preset", choices=("evidence_only", "assist"), required=True)
+    contract_preset.add_argument("--preset", choices=NAMED_PRESETS, required=True)
     contract_preset.add_argument("--expected-contract-revision", type=int, required=True)
     contract_adjust = sub.add_parser(
         "contract-adjust", help="Adjust one bounded contract category and dimension."
     )
     contract_adjust.add_argument(
         "--category",
-        choices=(
-            "request_baseline",
-            "working_blueprint",
-            "generation_context",
-            "python_manifestation",
-            "circuit_manifestation",
-            "result_manifestation",
-            "lineage",
-            "derived_metrics",
-        ),
+        choices=EVIDENCE_CATEGORIES,
         required=True,
     )
     contract_adjust.add_argument(
         "--dimension",
-        choices=(
-            "collect",
-            "derive",
-            "recommend",
-            "prepare",
-            "request_application_or_execution",
-            "assistant_derived_exposure",
-            "assistant_raw_exposure",
-        ),
+        choices=ADJUSTMENT_DIMENSIONS,
         required=True,
     )
     contract_adjust.add_argument(
         "--value",
-        choices=("enabled", "disabled", "bounded_non_material", "on_request", "standing"),
+        choices=tuple(
+            sorted({item for values in ADJUSTMENT_VALUES_BY_DIMENSION.values() for item in values})
+        ),
         required=True,
     )
     contract_adjust.add_argument("--expected-contract-revision", type=int, required=True)
@@ -1125,7 +1121,7 @@ def _cmd_current_loop(argv: list[str]) -> int:
     evidence_exclude.add_argument("--artifact-reference", required=True)
     evidence_exclude.add_argument(
         "--reason",
-        choices=("customer_excluded", "privacy_narrowing", "not_relevant"),
+        choices=EVIDENCE_EXCLUSION_REASONS,
         required=True,
     )
     evidence_exclude.add_argument("--expected-contract-revision", type=int, required=True)
@@ -1291,13 +1287,13 @@ def _cmd_current_loop(argv: list[str]) -> int:
     )
     authority.add_argument(
         "--operation-category",
-        choices=("ide_write", "ide_modify", "ide_execute"),
+        choices=SUPPORTED_OPERATION_CATEGORIES,
         default="ide_write",
     )
     authority.add_argument(
         "--output-role",
         action="append",
-        choices=("source", "circuit_qasm", "results"),
+        choices=SUPPORTED_OUTPUT_ROLES,
         default=[],
     )
 

@@ -160,6 +160,7 @@ def test_exact_message_activation_creates_assist_receipt_and_defers_posture(
         "exclude",
         "restore",
         "delete",
+        "stop_loop",
     }
     assert all(item["transport_classification"] == "local_only" for item in controls.values())
     assert all("--base-url" not in item["structured_argv"] for item in controls.values())

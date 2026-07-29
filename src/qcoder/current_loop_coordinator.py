@@ -80,6 +80,7 @@ from qcoder.current_loop_invocation import (
     LOCAL_ONLY,
     build_operation_invocation,
     invocation_contract_snapshot,
+    operation_for_subcommand,
     operation_transport_inventory,
 )
 from qcoder.current_loop_bootstrap import (
@@ -98,6 +99,13 @@ from qcoder.current_loop_contract import (
     restore_evidence as contract_restore_evidence,
     set_preset as set_contract_preset,
     validate_contract,
+)
+from qcoder.current_loop_bounded_control import (
+    BOUNDED_CONTROL_INPUT_SCHEMA_ID,
+    bounded_control_contract_snapshot,
+    bounded_control_contracts,
+    contract_for_operation as bounded_contract_for_operation,
+    dynamic_argument_contracts,
 )
 from qcoder.current_loop_event_receipts import (
     EventReceiptError,
@@ -370,6 +378,78 @@ _RECOVERY = {
     "contract_broadening_proposal_stale": (
         "The pending contract broadening no longer matches the current contract revision.",
         "Refresh the current contract, then request a new bounded proposal if still wanted.",
+        True,
+        True,
+        True,
+        False,
+    ),
+    "contract_preset_invalid": (
+        "The supplied preset is outside the current bounded preset domain.",
+        "Use one preset from the refreshed qCoder bounded-control contract.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "contract_category_invalid": (
+        "The supplied evidence category is outside the current bounded domain.",
+        "Use one category from the refreshed qCoder bounded-control contract.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "contract_dimension_invalid": (
+        "The supplied participation dimension is outside the current bounded domain.",
+        "Use one dimension valid for the selected category in the refreshed contract.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "contract_adjustment_value_invalid": (
+        "The supplied value is not valid for the selected category and dimension.",
+        "Use one value from the refreshed valid-selection graph.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "contract_raw_exposure_ceiling": (
+        "The requested raw assistant exposure exceeds the contract.v1 policy ceiling.",
+        "Keep raw exposure disabled or choose another advertised bounded adjustment.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "contract_evidence_exclusion_reason_invalid": (
+        "The supplied evidence-exclusion reason is outside the bounded domain.",
+        "Use one reason from the refreshed qCoder evidence-control contract.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "contract_evidence_reference_unknown": (
+        "The supplied evidence reference is not an eligible qCoder-owned reference.",
+        "Select one exact reference from the refreshed eligible-reference list.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "contract_evidence_exclusion_missing": (
+        "The supplied evidence reference is not currently excluded.",
+        "Select one exact reference from the refreshed restore-eligible list.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "contract_evidence_not_locally_controlled": (
+        "The supplied evidence reference is not locally controlled by qCoder.",
+        "Select one exact reference from the refreshed deletion-eligible list.",
         True,
         True,
         True,
@@ -970,12 +1050,14 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "bootstrap_invocation": BOOTSTRAP_INVOCATION_SCHEMA_ID,
             "pre_result_entry_inventory": PRE_RESULT_ENTRY_INVENTORY_SCHEMA_ID,
             "operation_invocation": INVOCATION_CONTRACT_SCHEMA_ID,
+            "bounded_control_input": BOUNDED_CONTROL_INPUT_SCHEMA_ID,
             "invocation_lifecycle": INVOCATION_LIFECYCLE_SCHEMA_ID,
             "current_loop_contract": contract_snapshot()["schema_id"],
             "operation_receipt": event_receipt_snapshot()["schema_id"],
             "recovery": RECOVERY_SCHEMA_ID,
         },
         "operation_invocation": invocation_contract_snapshot(),
+        "bounded_control_input": bounded_control_contract_snapshot(),
         "operation_transport_inventory": operation_transport_inventory(),
         "current_loop_contract": contract_snapshot(),
         "operation_receipt": event_receipt_snapshot(),
@@ -3222,6 +3304,72 @@ class CurrentLoopCoordinator:
         except (CurrentLoopError, CurrentLoopContractError) as exc:
             return self._exception_result("contract_status", exc, started)
 
+    def _bounded_control_rejection(
+        self,
+        *,
+        operation: str,
+        category: str,
+        field_name: str,
+        received: object,
+        started: float,
+    ) -> dict[str, Any]:
+        try:
+            state = self.store.read()
+            contract = bounded_contract_for_operation(
+                state,
+                operation=operation,
+                artifact_directory=self.artifact_directory,
+            )
+        except CurrentLoopError:
+            contract = None
+        expected = None
+        if isinstance(contract, Mapping):
+            expected = next(
+                (
+                    deepcopy(dict(item))
+                    for item in contract.get("fields", [])
+                    if isinstance(item, Mapping) and item.get("name") == field_name
+                ),
+                None,
+            )
+        safe_value = (
+            received
+            if isinstance(received, str)
+            and len(received) <= 64
+            and received.replace("_", "").replace("-", "").isalnum()
+            else None
+        )
+        received_bytes = (
+            str(received).encode("utf-8")
+            if isinstance(received, (str, int, float, bool))
+            else type(received).__name__.encode("utf-8")
+        )
+        return self._recovery_result(
+            operation=operation,
+            category=category,
+            phase=self._safe_phase(),
+            elapsed=self.clock() - started,
+            details={
+                "bounded_control_rejection": {
+                    "schema_id": "qcoder.current_loop.bounded_control_rejection.v1",
+                    "error_category": category,
+                    "operation": operation,
+                    "field_name": field_name,
+                    "expected_field_contract": expected,
+                    "received_type": type(received).__name__,
+                    "received_bounded_value": safe_value,
+                    "received_utf8_sha256": sha256(received_bytes).hexdigest(),
+                    "current_contract_revision": (
+                        contract.get("contract_revision") if isinstance(contract, Mapping) else None
+                    ),
+                    "assistant_should_stop_or_recover": "recover",
+                    "hosted_operation_permitted": False,
+                    "raw_policy_or_evidence_echoed": False,
+                    "fresh_bounded_control_contract_required": True,
+                }
+            },
+        )
+
     def contract_set_preset(
         self, *, preset: str, expected_contract_revision: int
     ) -> dict[str, Any]:
@@ -3261,7 +3409,17 @@ class CurrentLoopCoordinator:
                     "previously_exposed_information_recallable": False,
                 },
             )
-        except (CurrentLoopError, CurrentLoopConflict, CurrentLoopContractError) as exc:
+        except CurrentLoopContractError as exc:
+            if exc.category == "contract_preset_invalid":
+                return self._bounded_control_rejection(
+                    operation="contract_set_preset",
+                    category=exc.category,
+                    field_name="preset",
+                    received=preset,
+                    started=started,
+                )
+            return self._exception_result("contract_set_preset", exc, started)
+        except (CurrentLoopError, CurrentLoopConflict) as exc:
             return self._exception_result("contract_set_preset", exc, started)
 
     def contract_adjust(
@@ -3305,7 +3463,27 @@ class CurrentLoopCoordinator:
                     "current_loop_contract": deepcopy(outcome["contract"]),
                 },
             )
-        except (CurrentLoopError, CurrentLoopConflict, CurrentLoopContractError) as exc:
+        except CurrentLoopContractError as exc:
+            field_name = {
+                "contract_category_invalid": "category",
+                "contract_dimension_invalid": "dimension",
+                "contract_adjustment_value_invalid": "value",
+                "contract_raw_exposure_ceiling": "value",
+            }.get(exc.category)
+            if field_name is not None:
+                return self._bounded_control_rejection(
+                    operation="contract_adjust",
+                    category=exc.category,
+                    field_name=field_name,
+                    received={
+                        "category": category,
+                        "dimension": dimension,
+                        "value": value,
+                    }[field_name],
+                    started=started,
+                )
+            return self._exception_result("contract_adjust", exc, started)
+        except (CurrentLoopError, CurrentLoopConflict) as exc:
             return self._exception_result("contract_adjust", exc, started)
 
     def contract_confirm_broadening(
@@ -3373,7 +3551,27 @@ class CurrentLoopCoordinator:
                 elapsed=self.clock() - started,
                 details={"artifact_reference": artifact_reference, "dependent_views_stale": True},
             )
-        except (CurrentLoopError, CurrentLoopConflict, CurrentLoopContractError) as exc:
+        except CurrentLoopContractError as exc:
+            if exc.category == "contract_evidence_exclusion_reason_invalid":
+                return self._bounded_control_rejection(
+                    operation="evidence_exclude",
+                    category=exc.category,
+                    field_name="reason",
+                    received=reason,
+                    started=started,
+                )
+            return self._exception_result("evidence_exclude", exc, started)
+        except CurrentLoopError as exc:
+            if exc.category == "contract_evidence_reference_unknown":
+                return self._bounded_control_rejection(
+                    operation="evidence_exclude",
+                    category=exc.category,
+                    field_name="artifact_reference",
+                    received=artifact_reference,
+                    started=started,
+                )
+            return self._exception_result("evidence_exclude", exc, started)
+        except CurrentLoopConflict as exc:
             return self._exception_result("evidence_exclude", exc, started)
 
     def evidence_restore(
@@ -3399,6 +3597,18 @@ class CurrentLoopCoordinator:
                 details={"artifact_reference": artifact_reference, "explicit_restore": True},
             )
         except (CurrentLoopError, CurrentLoopConflict, CurrentLoopContractError) as exc:
+            category = getattr(exc, "category", "")
+            if category in {
+                "contract_evidence_reference_unknown",
+                "contract_evidence_exclusion_missing",
+            }:
+                return self._bounded_control_rejection(
+                    operation="evidence_restore",
+                    category=str(category),
+                    field_name="artifact_reference",
+                    received=artifact_reference,
+                    started=started,
+                )
             return self._exception_result("evidence_restore", exc, started)
 
     def evidence_delete(
@@ -3451,6 +3661,18 @@ class CurrentLoopCoordinator:
             CurrentLoopContractError,
             OSError,
         ) as exc:
+            category = getattr(exc, "category", "")
+            if category in {
+                "contract_evidence_reference_unknown",
+                "contract_evidence_not_locally_controlled",
+            }:
+                return self._bounded_control_rejection(
+                    operation="evidence_delete",
+                    category=str(category),
+                    field_name="artifact_reference",
+                    received=artifact_reference,
+                    started=started,
+                )
             return self._exception_result("evidence_delete", exc, started)
 
     def record_ide_authority(
@@ -7025,6 +7247,10 @@ class CurrentLoopCoordinator:
         if not isinstance(contract, Mapping):
             return {}
         contract_revision = int(contract["contract_revision"])
+        contracts = bounded_control_contracts(
+            state,
+            artifact_directory=self.artifact_directory,
+        )
         rows = {
             "inspect": _invocation_template("contract-status"),
             "set_preset": _invocation_template(
@@ -7073,9 +7299,27 @@ class CurrentLoopCoordinator:
                 ),
                 reused_inputs=("qcoder_displayed_locally_controlled_artifact_reference",),
             ),
+            "stop_loop": _invocation_template(
+                "abandon",
+                required_flags=("--approve",),
+                new_inputs=("explicit_stop_loop_authority",),
+            ),
+        }
+        contract_operations = {
+            "inspect": "contract_status",
+            "set_preset": "contract_set_preset",
+            "adjust": "contract_adjust",
+            "confirm_broadening": "contract_confirm_broadening",
+            "exclude": "evidence_exclude",
+            "restore": "evidence_restore",
+            "delete": "evidence_delete",
+            "stop_loop": "stop_loop",
         }
         result: dict[str, Any] = {}
         for name, template in rows.items():
+            bounded_contract = contracts[contract_operations[name]]
+            template["bounded_control_input_contract"] = bounded_contract
+            template["argument_values"] = dynamic_argument_contracts(bounded_contract)
             if "--expected-contract-revision" in template.get("required_flags", []):
                 template["fixed_argument_values"] = {
                     "--expected-contract-revision": contract_revision
@@ -7197,7 +7441,51 @@ class CurrentLoopCoordinator:
             if isinstance(pending, Mapping) and isinstance(pending.get("operation"), str)
             else None
         )
+        invocation = deepcopy(dict(invocation))
         try:
+            operation = operation_for_subcommand(
+                (
+                    str(invocation["subcommand"])
+                    if isinstance(invocation.get("subcommand"), str)
+                    else None
+                )
+            )
+            bounded_contract = bounded_contract_for_operation(
+                state,
+                operation=operation,
+                artifact_directory=self.artifact_directory,
+            )
+            if isinstance(bounded_contract, Mapping):
+                invocation["bounded_control_input_contract"] = bounded_contract
+                existing_arguments = invocation.get("argument_values")
+                arguments = (
+                    [deepcopy(dict(item)) for item in existing_arguments]
+                    if isinstance(existing_arguments, list)
+                    else []
+                )
+                existing_flags = {
+                    item.get("flag") for item in arguments if isinstance(item, Mapping)
+                }
+                arguments.extend(
+                    item
+                    for item in dynamic_argument_contracts(bounded_contract)
+                    if item.get("flag") not in existing_flags
+                )
+                invocation["argument_values"] = arguments
+                fixed = (
+                    deepcopy(dict(invocation["fixed_argument_values"]))
+                    if isinstance(invocation.get("fixed_argument_values"), Mapping)
+                    else {}
+                )
+                for field in bounded_contract.get("fields", []):
+                    if (
+                        isinstance(field, Mapping)
+                        and isinstance(field.get("flag"), str)
+                        and field.get("ownership") == "qcoder_owned_prebound_value"
+                        and "fixed_value" in field
+                    ):
+                        fixed[str(field["flag"])] = field["fixed_value"]
+                invocation["fixed_argument_values"] = fixed
             completed["next_invocation"] = build_operation_invocation(
                 invocation,
                 executable=self.runtime_executable,

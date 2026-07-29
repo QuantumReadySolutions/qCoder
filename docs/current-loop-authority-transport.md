@@ -46,14 +46,14 @@ single-capability use follows the applicable existing MCP tool without
 activating Current Loop.
 
 The versioned `qcoder.current_loop.invocation_lifecycle.v1` binds the bootstrap
-contract to `qcoder.current_loop.operation_invocation.v1`, leaving no
+contract to `qcoder.current_loop.operation_invocation.v2`, leaving no
 construction gap at the first result.
 
 ## Operation-specific invocation routing
 
 qCoder owns both operation routing and invocation construction. Every actionable
 coordinator result carries a versioned
-`qcoder.current_loop.operation_invocation.v1` object. Its structured argv is
+`qcoder.current_loop.operation_invocation.v2` object. Its structured argv is
 canonical; its POSIX and Windows serializations are qCoder-produced views.
 Connected assistants execute the supplied invocation and do not append, remove,
 move, quote, reinterpret, or conditionally apply transport arguments.

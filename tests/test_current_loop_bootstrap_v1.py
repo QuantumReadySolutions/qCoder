@@ -142,10 +142,10 @@ def test_bootstrap_owns_platform_serialization_and_cwd_semantics() -> None:
     assert workspace["later_invocations_bound_to_exact_recorded_workspace"] is True
 
 
-def test_binding_v6_delivers_bootstrap_and_complete_lifecycle() -> None:
+def test_binding_v7_delivers_bootstrap_and_complete_lifecycle() -> None:
     binding = _descriptor("/runtime/python")
-    assert binding["schema_version"] == 6
-    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v6"
+    assert binding["schema_version"] == 7
+    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v7"
     bootstrap = binding["bootstrap_invocation_contract"]
     assert bootstrap["schema_id"] == BOOTSTRAP_INVOCATION_SCHEMA_ID
     assert bootstrap["supported_entrypoints"][FRESH_ACTIVE_BUILD_ENTRYPOINT][

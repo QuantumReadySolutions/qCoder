@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0a2+wi0419.explorercontract1binding1
+
+- Complete the client-visible bounded-control domains, valid-selection graph,
+  qCoder-owned reference prebinding, and source-blind recovery contract.
+
 ## 0.6.0a2+wi0419.explorercontract1
 
 - Add the canonical one-loop Current Loop Contract, Assist activation receipts,
