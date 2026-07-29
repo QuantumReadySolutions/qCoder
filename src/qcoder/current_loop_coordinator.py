@@ -81,6 +81,11 @@ from qcoder.current_loop_invocation import (
     invocation_contract_snapshot,
     operation_transport_inventory,
 )
+from qcoder.current_loop_bootstrap import (
+    BOOTSTRAP_INVOCATION_SCHEMA_ID,
+    INVOCATION_LIFECYCLE_SCHEMA_ID,
+    PRE_RESULT_ENTRY_INVENTORY_SCHEMA_ID,
+)
 from qcoder.context_loop import CONTEXT_LOOP_GATE
 
 COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v9"
@@ -892,7 +897,10 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "performance": PERFORMANCE_SCHEMA_ID,
             "checkpoint_input": CHECKPOINT_INPUT_SCHEMA_ID,
             "checkpoint_input_semantic_contract": CHECKPOINT_INPUT_SEMANTIC_SCHEMA_ID,
+            "bootstrap_invocation": BOOTSTRAP_INVOCATION_SCHEMA_ID,
+            "pre_result_entry_inventory": PRE_RESULT_ENTRY_INVENTORY_SCHEMA_ID,
             "operation_invocation": INVOCATION_CONTRACT_SCHEMA_ID,
+            "invocation_lifecycle": INVOCATION_LIFECYCLE_SCHEMA_ID,
         },
         "operation_invocation": invocation_contract_snapshot(),
         "operation_transport_inventory": operation_transport_inventory(),

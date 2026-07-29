@@ -1,7 +1,53 @@
 # Current Loop free-text authority transport
 
 This inventory is normative for the connected-assistant runtime in
-`0.6.0a2+wi0418.authoritytransport5`.
+`0.6.0a2+wi0418.authoritytransport6`.
+
+## Pre-result bootstrap invocation
+
+qCoder owns invocation construction before and after the first coordinator
+result. Before a result exists, the Connected Assistant binding supplies
+`qcoder.current_loop.bootstrap_invocation.v1` and the diagnostics-only
+`qcoder.current_loop.pre_result_entry_inventory.v1`.
+
+For a fresh explicitly requested active build, the supported bootstrap
+entrypoint is `fresh_active_build_request_baseline_staging`. Its canonical
+structured argv invokes the existing `activate` operation with
+`--request-stdin`; it contains no Request Baseline text, workspace path, base
+URL, token-file argument, credential, or hosted placeholder. The assistant
+supplies only:
+
+- the exact active IDE workspace as client execution working-directory
+  metadata; and
+- the complete customer message as bounded, non-interactive UTF-8 stdin with
+  no normalization.
+
+qCoder derives its workspace binding from that exact execution context using
+the existing expand-user then absolute-path semantics. It performs no hidden
+workspace lookup. State-path symlink components fail closed; case identity
+follows the platform filesystem without qCoder rewriting it. A missing or
+inaccessible working directory fails in the client execution environment
+before qCoder state is created. Later invocations carry the exact workspace,
+loop, revision, and checkpoint bindings returned by qCoder.
+
+Bootstrap staging creates only a pending exact-request capture. It grants no
+activation, posture, IDE, artifact-review, governing-change, or Protected
+authority. qCoder displays the complete exact Request Baseline and returns the
+post-result authority-only activation invocation. Approval reuses qCoder-held
+bytes and never retransmits the request.
+
+`coordinator_prefix` remains diagnostics-only installation metadata. Neither
+it nor either diagnostics inventory is a command-construction surface.
+Connected assistants do not run `current-loop --help`, subcommand help, parser
+inspection, or trial commands to discover the bootstrap. Explicit existing-loop
+status/continuation re-entry has its own local-only bootstrap invocation.
+Available/inactive performs no qCoder operation, and bounded
+single-capability use follows the applicable existing MCP tool without
+activating Current Loop.
+
+The versioned `qcoder.current_loop.invocation_lifecycle.v1` binds the bootstrap
+contract to `qcoder.current_loop.operation_invocation.v1`, leaving no
+construction gap at the first result.
 
 ## Operation-specific invocation routing
 
@@ -24,8 +70,8 @@ qCoder activation, posture, intent, IDE, artifact-review, and governing-change
 authority.
 
 Mechanism proof, fixed-metadata binding proof, semantic-field binding proof,
-invocation-routing proof, and named-client proof remain separate evidence
-layers.
+bootstrap binding proof, post-result invocation-routing proof, and named-client
+proof remain separate evidence layers.
 
 Classification:
 

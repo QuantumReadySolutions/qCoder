@@ -47,11 +47,15 @@ from qcoder.algorithm_blueprint import (
     extract_selected_python_source_evidence,
 )
 from qcoder.development_evidence import PROFILE_IDS, SOURCE_EVIDENCE_DEPTH_GATE
+from qcoder.current_loop_bootstrap import (
+    REQUEST_BASELINE_MAX_CODEPOINTS,
+    REQUEST_BASELINE_MAX_UTF8_BYTES,
+)
 
 EXPLORER_BETA_DOCS_URL = "https://qcoder.ai/manual/student-beta/"
 OSS_DOCS_URL = "https://qcoder.ai/manual/oss/"
-_CURRENT_LOOP_REQUEST_MAX_CODEPOINTS = 20_000
-_CURRENT_LOOP_REQUEST_MAX_UTF8_BYTES = _CURRENT_LOOP_REQUEST_MAX_CODEPOINTS * 4
+_CURRENT_LOOP_REQUEST_MAX_CODEPOINTS = REQUEST_BASELINE_MAX_CODEPOINTS
+_CURRENT_LOOP_REQUEST_MAX_UTF8_BYTES = REQUEST_BASELINE_MAX_UTF8_BYTES
 
 
 def _is_non_default_service_url(value: str | None) -> bool:
@@ -1769,7 +1773,57 @@ def _cmd_current_loop(argv: list[str]) -> int:
             )
         else:
             result = coordinator.abandon(explicit_authority=args.approve)
-    except ValueError as exc:
+    except (ValueError, OSError) as exc:
+        if (
+            command == "activate"
+            and args.request_stdin
+            and args.expected_revision is None
+            and args.expected_loop_ref is None
+            and args.expected_checkpoint is None
+        ):
+            error_category = (
+                str(exc)
+                if isinstance(exc, ValueError) and str(exc)
+                else "bootstrap_workspace_or_input_unavailable"
+            )
+            print(
+                json.dumps(
+                    {
+                        "schema_id": "qcoder.current_loop.bootstrap_rejection.v1",
+                        "schema_version": 1,
+                        "ok": False,
+                        "error_category": error_category,
+                        "expected_entrypoint": ("fresh_active_build_request_baseline_staging"),
+                        "received_operation": "activate",
+                        "expected_input_channel": "exact_utf8_stdin",
+                        "received_input_channel_category": "stdin",
+                        "expected_transport_classification": "local_only",
+                        "received_argument_categories": [
+                            "activate",
+                            "request_stdin",
+                        ],
+                        "workspace_error_category": (
+                            "workspace_or_state_path_unavailable"
+                            if isinstance(exc, OSError)
+                            else None
+                        ),
+                        "assistant_should_stop": True,
+                        "hosted_operation_permitted": False,
+                        "fresh_customer_input_required": error_category
+                        in {
+                            "request_input_empty",
+                            "request_input_invalid_utf8",
+                            "request_baseline_original_request_too_large",
+                        },
+                        "fresh_bootstrap_contract_required": False,
+                        "raw_request_content_included": False,
+                        "token_contents_included": False,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 2
         parser.error(str(exc))
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result.get("ok") is True else 2

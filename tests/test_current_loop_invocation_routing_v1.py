@@ -194,7 +194,7 @@ def test_revision_loop_and_checkpoint_replay_fail_closed(tmp_path: Path) -> None
         raise AssertionError("stale invocation unexpectedly accepted")
 
 
-def test_binding_v4_has_no_global_transport_routing_or_ambiguous_instruction(
+def test_binding_v5_has_no_global_transport_routing_or_ambiguous_instruction(
     tmp_path: Path,
 ) -> None:
     instructions = build_client_activation_instructions(
@@ -207,14 +207,24 @@ def test_binding_v4_has_no_global_transport_routing_or_ambiguous_instruction(
     assert '"transport_arguments"' not in instructions
     assert "append these hosted flags" not in lowered
     assert "determine whether this operation uses hosted transport" not in lowered
-    assert "operation_specific_invocation exactly as supplied" in instructions
+    assert "each supplied structured invocation" in instructions
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v4"
-    assert descriptor["schema_version"] == 4
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v5"
+    assert descriptor["schema_version"] == 5
     assert descriptor["operation_invocation_contract"]["global_transport_argument_array"] is False
     assert descriptor["operation_transport_inventory"]["diagnostics_only"] is True
+    assert (
+        descriptor["bootstrap_invocation_contract"][
+            "coordinator_prefix_is_command_construction_primitive"
+        ]
+        is False
+    )
+    assert (
+        descriptor["invocation_lifecycle_contract"]["gap_between_bootstrap_and_post_result"]
+        is False
+    )
     assert "transport_arguments" not in json.dumps(descriptor)
 
 

@@ -75,7 +75,7 @@ def _write_token(path: Path, text: str = "ctxbridge-token-not-printed") -> None:
 def _activation_runtime(instructions: str) -> dict[str, object]:
     marker = (
         "Configured qCoder runtime (JSON values are exact operational metadata; "
-        "coordinator_prefix is an argv array):\n"
+        "coordinator_prefix is diagnostics-only metadata):\n"
     )
     serialized = instructions.split(marker, 1)[1]
     runtime, _ = json.JSONDecoder().raw_decode(serialized)
@@ -204,6 +204,7 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
             "qcoder",
             "current-loop",
         ],
+        "coordinator_prefix_diagnostics_only": True,
         "base_url": base_url,
         "token_file_path": token_path,
         "hosted_runtime_configuration": {
@@ -218,7 +219,7 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
     for required in (
         "explicitly asks to use qCoder",
         "Never activate silently",
-        "Use the supplied python_executable exactly",
+        "Use the supplied python_executable only through qCoder's exact bootstrap",
         "Never run `which` or `where`",
         "inspect PATH or environment variables",
         "Never inspect Cursor, Claude Code, or Codex configuration",
@@ -226,7 +227,7 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
         "Never open, read, print, copy, hash, or validate the token-file contents",
         "authorize only invoking the declared qCoder runtime",
         "grant no general access outside the active workspace",
-        "stop if it does not expose qCoder current-loop",
+        "Do not run current-loop --help",
         "Stop on authentication, entitlement, or hosted-service failure",
         "Never manually sequence Context Bridge tools",
         "never substitute a local or manual review fallback",
@@ -298,8 +299,11 @@ def test_initialize_binds_two_surfaces_and_three_workstyles_without_new_tool(
         "Active build",
         "ACTIVE-BUILD LOCAL EXECUTION",
         "ordinary local command-execution capability",
-        "Do not compare coordinator_prefix against the twelve-tool catalog",
-        "absence from that catalog is intentional",
+        "fresh_active_build_request_baseline_staging",
+        "client_execution_working_directory",
+        "exact UTF-8 stdin",
+        "Do not inspect help",
+        "construct a command from coordinator_prefix",
         "supported qCoder active-build route",
         "not a local fallback",
         "customer-authored CLI choreography",
@@ -344,6 +348,18 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
     assert binding["operation_invocation_contract"]["global_transport_argument_array"] is False
     assert binding["operation_invocation_contract"]["assistant_routes_transport"] is False
     assert binding["operation_transport_inventory"]["diagnostics_only"] is True
+    assert binding["bootstrap_invocation_contract"]["schema_id"] == (
+        "qcoder.current_loop.bootstrap_invocation.v1"
+    )
+    assert binding["pre_result_entry_inventory"]["schema_id"] == (
+        "qcoder.current_loop.pre_result_entry_inventory.v1"
+    )
+    assert binding["invocation_lifecycle_contract"]["schema_id"] == (
+        "qcoder.current_loop.invocation_lifecycle.v1"
+    )
+    assert (
+        binding["invocation_lifecycle_contract"]["gap_between_bootstrap_and_post_result"] is False
+    )
     assert binding["checkpoint_input_contract"] == {
         "schema_id": "qcoder.current_loop.checkpoint_input.v3",
         "schema_version": 3,
@@ -377,6 +393,8 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
         "local_orchestration": {
             "transport": "local_command",
             "command_prefix": prefix,
+            "command_prefix_diagnostics_only": True,
+            "assistant_constructs_commands_from_prefix": False,
             "orchestration_surface_is_not_an_mcp_tool": True,
             "customer_never_types_command": True,
         },
@@ -392,18 +410,19 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
     }
     assert binding["workstyle_routes"]["active_build"] == {
         "trigger": "explicit_use_qcoder_for_this_build_or_accepted_offer",
-        "action": "invoke_local_coordinator_first",
+        "action": "execute_fresh_active_build_bootstrap_invocation",
         "then": "follow_coordinator_directed_local_and_hosted_actions",
     }
     assert binding["manual_active_build_tool_sequencing_prohibited"] is True
-    for prohibited in (
-        "token",
-        "credential",
-        "account",
-        "customer_workspace",
-        "environment",
+    for prohibited_value in (
+        "secret-token-value",
+        "customer@example.invalid",
+        "account-private-identifier",
+        "administrator-secret",
     ):
-        assert prohibited not in serialized.lower()
+        assert prohibited_value not in serialized
+    assert '"token_contents_embedded":false' in serialized
+    assert '"credential_bearing_metadata_embedded":false' in serialized
 
 
 def test_client_binding_descriptor_supports_posix_windows_and_space_paths() -> None:
@@ -458,8 +477,10 @@ def test_positive_local_execution_guidance_precedes_and_is_outside_prohibitions(
     prohibited_section = instructions.split("PROHIBITED ACTIONS", 1)[1]
     assert "ordinary local command-execution capability" in active_section
     assert "customer never types the command" in active_section
-    assert "first execute coordinator_prefix with --help" in instructions
-    assert "first execute coordinator_prefix with --help" not in prohibited_section
+    assert "first execute coordinator_prefix with --help" not in instructions
+    assert "Do not run current-loop --help" in instructions
+    assert "fresh_active_build_request_baseline_staging" in instructions
+    assert "diagnostics only" in instructions
     assert "Use the supplied python_executable exactly" not in prohibited_section
 
 
@@ -481,6 +502,7 @@ def test_activation_runtime_paths_with_spaces_are_unambiguous_for_posix_and_wind
         "qcoder",
         "current-loop",
     ]
+    assert posix_runtime["coordinator_prefix_diagnostics_only"] is True
     assert posix_runtime["token_file_path"] == posix_token
 
     windows_python = r"C:\Program Files\qCoder Runtime\python.exe"
@@ -500,6 +522,7 @@ def test_activation_runtime_paths_with_spaces_are_unambiguous_for_posix_and_wind
         "qcoder",
         "current-loop",
     ]
+    assert windows_runtime["coordinator_prefix_diagnostics_only"] is True
     assert windows_runtime["token_file_path"] == windows_token
 
 
@@ -531,11 +554,12 @@ def test_activation_instruction_preserves_lossless_request_baseline_protocol(
         "reword",
         "is additive and never removes wording from original_request",
         "Stop before activation if exact transfer cannot be completed",
-        "stage the exact complete message through activate without --approve",
+        "exact fresh-active-build bootstrap invocation",
+        "exact UTF-8 stdin channel",
         "returned complete capture",
         "Do not ask the user to repeat the task",
         "never use a later one-word “Yes” as original_request",
-        "invoke activate with --approve only",
+        "exact authority-only invocation returned by qCoder",
         "Do not resend or reconstruct the request",
         "Posture remains separate",
     ):
@@ -2295,8 +2319,10 @@ def test_mcp_stdio_content_length_lists_exact_tools(tmp_path: Path) -> None:
         assert runtime["token_file_path"] == str(token_file.resolve())
         for required in (
             "explicitly asks to use qCoder",
-            "Use the supplied python_executable exactly",
-            "coordinator_prefix argv array",
+            "Use the supplied python_executable only through qCoder's exact bootstrap",
+            "coordinator_prefix is diagnostics-only metadata",
+            "fresh_active_build_request_baseline_staging",
+            "Do not run current-loop --help",
             "Never run `which` or `where`",
             "Request Baseline",
             "Never manually sequence Context Bridge tools",

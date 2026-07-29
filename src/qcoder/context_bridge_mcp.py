@@ -67,6 +67,11 @@ from qcoder.current_loop_invocation import (
     invocation_contract_snapshot,
     operation_transport_inventory,
 )
+from qcoder.current_loop_bootstrap import (
+    bootstrap_contract_snapshot,
+    invocation_lifecycle_snapshot,
+    pre_result_entry_inventory,
+)
 from qcoder.current_loop_checkpoint_input import (
     CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_ID,
     CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_VERSION,
@@ -102,8 +107,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 4
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v4"
+CLIENT_BINDING_SCHEMA_VERSION = 5
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v5"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -129,13 +134,17 @@ coordinator-directed local and hosted actions. Generation posture is a later gen
 not a workstyle route.
 
 ACTIVE-BUILD LOCAL EXECUTION
-Execute the supplied coordinator_prefix argv through the client's ordinary local command-execution
-capability. That capability may be displayed as terminal, shell, Bash, or another client-specific
-name; qCoder does not depend on its displayed name. Do not compare coordinator_prefix against the
-twelve-tool catalog: its absence from that catalog is intentional. Invoking the exact declared
-coordinator is the supported qCoder active-build route, not a local fallback, customer-authored
-CLI choreography, or an improvised review. The customer never types the command. Do not perform
-the requested IDE write or run before the coordinator reaches its separate authority checkpoint.
+For a fresh active build, execute the exact fresh_active_build_request_baseline_staging bootstrap
+invocation supplied in the versioned client binding through the client's ordinary local
+command-execution capability. That capability may be displayed as terminal, shell, Bash, or
+another client-specific name; qCoder does not depend on its displayed name. Use the exact active
+IDE workspace as the invocation's client_execution_working_directory and supply only the complete
+customer message as exact UTF-8 stdin. Do not inspect help, construct a command from
+coordinator_prefix, or construct a command from the diagnostics-only entry or operation
+inventories. The customer never types the command. The bootstrap is the supported qCoder
+active-build route, not a local fallback, customer-authored CLI choreography, or an improvised
+review. Do not perform the requested IDE write or run before the coordinator reaches its separate
+authority checkpoint.
 
 Hosted operations during active build: the coordinator may invoke or direct existing Context
 Bridge operations. Follow those directions and never invent a hosted-tool order. Do not call one
@@ -153,14 +162,14 @@ completed.
 ACTIVATION PROTOCOL
 qCoder Current Loop is opt-in: do nothing unless the user explicitly asks to use qCoder for the
 current build or explicitly accepts an activation offer. Never activate silently. For a task
-received before activation, stage the exact complete message through activate without --approve.
-Use inline transfer for concise text and prefer explicit --request-stdin for longer or multiline
-text so no project file is created; never ask the customer to create a request file.
+received before activation, use the binding's exact fresh-active-build bootstrap invocation to
+stage the complete message through its declared exact UTF-8 stdin channel. Do not derive the
+activate subcommand or any flag from this prose. Never ask the customer to create a request file.
 Use qCoder's returned complete capture when asking: “Use qCoder for this build and preserve the
 following exact Request Baseline?” Do not ask the user to repeat the task, and never use a later
-one-word “Yes” as original_request. After approval, invoke activate with --approve only; let qCoder
-reuse the pending capture. Do not resend or reconstruct the request. Posture remains separate
-unless explicitly supplied with its own attributable authority.
+one-word “Yes” as original_request. After approval, execute the exact authority-only invocation
+returned by qCoder; let qCoder reuse the pending capture. Do not resend or reconstruct the request.
+Posture remains separate unless explicitly supplied with its own attributable authority.
 
 CHECKPOINT PROTOCOL
 Conversational approval and canonical confirmation are distinct. After the user approves a
@@ -280,6 +289,9 @@ def build_client_binding_descriptor(
             sort_keys=True,
         ).encode("utf-8")
     ).hexdigest()
+    executable = str(coordinator_prefix[0])
+    post_result_contract = invocation_contract_snapshot()
+    bootstrap_contract = bootstrap_contract_snapshot(executable=executable)
     return {
         "client_binding_contract": {
             "schema_id": CLIENT_BINDING_SCHEMA_ID,
@@ -287,7 +299,15 @@ def build_client_binding_descriptor(
             "contract_id": CLIENT_BINDING_CONTRACT_ID,
             "package_version": __version__,
             "coordinator_contract_digest": contract_digest,
-            "operation_invocation_contract": invocation_contract_snapshot(),
+            "bootstrap_invocation_contract": bootstrap_contract,
+            "pre_result_entry_inventory": pre_result_entry_inventory(
+                executable=executable,
+            ),
+            "operation_invocation_contract": post_result_contract,
+            "invocation_lifecycle_contract": invocation_lifecycle_snapshot(
+                executable=executable,
+                post_result_invocation_contract=post_result_contract,
+            ),
             "operation_transport_inventory": operation_transport_inventory(),
             "checkpoint_input_contract": {
                 "schema_id": CHECKPOINT_INPUT_SCHEMA_ID,
@@ -323,6 +343,8 @@ def build_client_binding_descriptor(
                 "local_orchestration": {
                     "transport": "local_command",
                     "command_prefix": list(coordinator_prefix),
+                    "command_prefix_diagnostics_only": True,
+                    "assistant_constructs_commands_from_prefix": False,
                     "orchestration_surface_is_not_an_mcp_tool": True,
                     "customer_never_types_command": True,
                 },
@@ -339,7 +361,7 @@ def build_client_binding_descriptor(
                 },
                 "active_build": {
                     "trigger": "explicit_use_qcoder_for_this_build_or_accepted_offer",
-                    "action": "invoke_local_coordinator_first",
+                    "action": "execute_fresh_active_build_bootstrap_invocation",
                     "then": "follow_coordinator_directed_local_and_hosted_actions",
                 },
             },
@@ -370,6 +392,7 @@ def build_client_activation_instructions(
             "qcoder",
             "current-loop",
         ],
+        "coordinator_prefix_diagnostics_only": True,
         "base_url": str(base_url),
         "token_file_path": token_path,
         "hosted_runtime_configuration": {
@@ -388,19 +411,20 @@ def build_client_activation_instructions(
     return (
         f"{CLIENT_ACTIVATION_INSTRUCTIONS}\n"
         "CONFIGURED RUNTIME\n"
-        "Use the supplied python_executable exactly and extend coordinator_prefix without replacing "
-        "its executable. qCoder owns operation routing and invocation construction: execute each "
-        "operation_specific_invocation exactly as supplied, without appending, removing, moving, "
-        "quoting, or reinterpreting transport arguments. Local-only invocations deliberately contain "
-        "no hosted transport metadata. Hosted transport first appears in the exact invocation for an "
-        "authorized hosted-capable transition. The diagnostics-only operation inventory never delegates "
-        "command construction to the assistant. As a positive setup "
-        "check, first execute coordinator_prefix with --help through the ordinary local "
-        "command-execution capability; stop if it does not expose qCoder current-loop.\n\n"
+        "Use the supplied python_executable only through qCoder's exact bootstrap and post-result "
+        "invocation contracts. qCoder owns operation routing and invocation construction: execute "
+        "each supplied structured invocation or qCoder-supplied platform serialization exactly, "
+        "without appending, removing, moving, quoting, or reinterpreting arguments. Local-only "
+        "invocations deliberately contain no hosted transport metadata. Hosted transport first "
+        "appears in the exact invocation for an authorized hosted-capable transition. The "
+        "coordinator_prefix and both inventories are diagnostics only and are never "
+        "command-construction primitives. Do not run current-loop --help or subcommand help to learn an "
+        "invocation. Installation or reachability checks, if performed by the client environment, "
+        "must not become a source of command-construction semantics.\n\n"
         "Configured qCoder runtime (JSON values are exact operational metadata; "
-        "coordinator_prefix is an argv array):\n"
+        "coordinator_prefix is diagnostics-only metadata):\n"
         f"{runtime_block}\n\n"
-        "Use the coordinator_prefix argv array exactly as supplied.\n\n"
+        "Never execute coordinator_prefix as an invocation or derive flags from it.\n\n"
         "Connected-assistant client binding (JSON values are the versioned routing descriptor):\n"
         f"{binding_block}\n\n"
         f"{CLIENT_AUTHORITY_AND_PROHIBITED_INSTRUCTIONS}"

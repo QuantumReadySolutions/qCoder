@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0a2+wi0418.authoritytransport6
+
+- Supply complete local-only bootstrap invocations before the first Current
+  Loop coordinator result.
+- Bind exact Request Baseline stdin staging to explicit working-directory
+  semantics without help-based discovery or coordinator-prefix construction.
+
 ## 0.6.0a2+wi0418.authoritytransport5
 
 - Bind every Current Loop action to a qCoder-owned operation-specific invocation.

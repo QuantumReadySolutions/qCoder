@@ -134,34 +134,32 @@ def test_explicit_stdin_capture_is_exact_and_rejects_empty_or_tty(
     empty_workspace = tmp_path / "empty-stdin"
     empty_workspace.mkdir()
     monkeypatch.setattr(sys, "stdin", _BinaryStdin(b""))
-    with pytest.raises(SystemExit) as empty:
-        cli_main(
-            [
-                "current-loop",
-                "--workspace",
-                str(empty_workspace),
-                "activate",
-                "--request-stdin",
-            ]
-        )
-    assert empty.value.code == 2
-    capsys.readouterr()
+    code, rejected = _invoke(
+        capsys,
+        empty_workspace,
+        "activate",
+        "--request-stdin",
+    )
+    assert code == 2
+    assert rejected["schema_id"] == "qcoder.current_loop.bootstrap_rejection.v1"
+    assert rejected["error_category"] == "request_input_empty"
+    assert rejected["assistant_should_stop"] is True
+    assert rejected["hosted_operation_permitted"] is False
+    assert rejected["raw_request_content_included"] is False
 
     tty_workspace = tmp_path / "tty-stdin"
     tty_workspace.mkdir()
     monkeypatch.setattr(sys, "stdin", _BinaryStdin(b"ignored", tty=True))
-    with pytest.raises(SystemExit) as tty:
-        cli_main(
-            [
-                "current-loop",
-                "--workspace",
-                str(tty_workspace),
-                "activate",
-                "--request-stdin",
-            ]
-        )
-    assert tty.value.code == 2
-    assert "request_stdin_requires_noninteractive_input" in capsys.readouterr().err
+    code, rejected = _invoke(
+        capsys,
+        tty_workspace,
+        "activate",
+        "--request-stdin",
+    )
+    assert code == 2
+    assert rejected["error_category"] == "request_stdin_requires_noninteractive_input"
+    assert rejected["assistant_should_stop"] is True
+    assert rejected["hosted_operation_permitted"] is False
 
 
 def test_file_and_stdin_reject_invalid_utf8(
@@ -190,18 +188,16 @@ def test_file_and_stdin_reject_invalid_utf8(
     stdin_workspace = tmp_path / "invalid-stdin"
     stdin_workspace.mkdir()
     monkeypatch.setattr(sys, "stdin", _BinaryStdin(b"\x80"))
-    with pytest.raises(SystemExit) as stdin_error:
-        cli_main(
-            [
-                "current-loop",
-                "--workspace",
-                str(stdin_workspace),
-                "activate",
-                "--request-stdin",
-            ]
-        )
-    assert stdin_error.value.code == 2
-    assert "request_input_invalid_utf8" in capsys.readouterr().err
+    code, rejected = _invoke(
+        capsys,
+        stdin_workspace,
+        "activate",
+        "--request-stdin",
+    )
+    assert code == 2
+    assert rejected["error_category"] == "request_input_invalid_utf8"
+    assert rejected["assistant_should_stop"] is True
+    assert rejected["hosted_operation_permitted"] is False
 
 
 def test_request_sources_are_mutually_exclusive(
