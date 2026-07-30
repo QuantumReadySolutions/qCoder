@@ -686,8 +686,10 @@ _RECOVERY = {
     ),
     "ordinary_iteration_instruction_required": (
         "A quiet ordinary iteration needs the exact current customer instruction.",
-        "Use the qCoder-generated record-ide-authority invocation and its exact "
-        "customer-instruction stdin channel.",
+        (
+            "Use the qCoder-generated record-ide-authority invocation and its exact "
+            "customer-instruction stdin channel."
+        ),
         True,
         False,
         True,
@@ -695,8 +697,10 @@ _RECOVERY = {
     ),
     "governing_blueprint_unavailable": (
         "This adaptive loop has no governing Working Blueprint for lineage closure.",
-        "Return to quiet iteration, close the loop through the receipt-style stop path, "
-        "or request Blueprint review when meaningful.",
+        (
+            "Return to quiet iteration, close the loop through the receipt-style stop path, "
+            "or request Blueprint review when meaningful."
+        ),
         True,
         False,
         True,
@@ -704,8 +708,10 @@ _RECOVERY = {
     ),
     "canonical_parent_set_incomplete": (
         "A parent-dependent operation lacks one or more qCoder-owned canonical parents.",
-        "Keep the valid loop and evidence intact; return to quiet iteration or use a "
-        "qCoder-generated parent-dependent route after its parents exist.",
+        (
+            "Keep the valid loop and evidence intact; return to quiet iteration or use a "
+            "qCoder-generated parent-dependent route after its parents exist."
+        ),
         True,
         False,
         True,
@@ -729,8 +735,10 @@ _RECOVERY = {
     ),
     "parent_digest_mismatch": (
         "An actual expected-versus-observed qCoder parent digest comparison failed.",
-        "Refresh or rebind the qCoder-owned parent and retry only through a newly "
-        "generated invocation; never reconstruct the parent from conversation.",
+        (
+            "Refresh or rebind the qCoder-owned parent and retry only through a newly "
+            "generated invocation; never reconstruct the parent from conversation."
+        ),
         True,
         False,
         True,
@@ -738,8 +746,10 @@ _RECOVERY = {
     ),
     "parent_artifact_missing": (
         "A qCoder-owned canonical parent artifact is unavailable.",
-        "Restore or recreate it through qCoder, or return to quiet iteration without "
-        "attempting lineage closure.",
+        (
+            "Restore or recreate it through qCoder, or return to quiet iteration without "
+            "attempting lineage closure."
+        ),
         True,
         False,
         True,
@@ -747,8 +757,10 @@ _RECOVERY = {
     ),
     "unsupported_iteration_route": (
         "A loop-closing or governing route was selected for an ordinary iteration.",
-        "Return to quiet iteration and use the exact current customer instruction through "
-        "the native-card IDE-authority route.",
+        (
+            "Return to quiet iteration and use the exact current customer instruction through "
+            "the native-card IDE-authority route."
+        ),
         True,
         False,
         True,
