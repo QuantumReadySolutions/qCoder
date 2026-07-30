@@ -134,8 +134,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 15
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v15"
+CLIENT_BINDING_SCHEMA_VERSION = 16
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v16"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -341,6 +341,24 @@ qCoder-owned. Use the qCoder-managed current_build_facts composite view for grou
 run/circuit questions. Use qCoder's bounded help operation for status or product-surface
 questions. An exact unchanged continuation or stop instruction uses qCoder's completion receipt
 without restaging.
+
+DIRECT GOVERNANCE AND COMPLETION ROUTING
+For one exact generation-governance request, use the supplied
+contract-set-generation-governance invocation. Do not call contract status first, reconstruct the
+editable customer document, or call review-document or apply-document. Adaptive to Blueprint
+required is immediate narrowing. Blueprint required to Adaptive creates one exact pending
+broadening proposal; use the separately supplied authority-only confirmation without
+retransmitting JSON. Selecting the already-effective value is a no-op and creates no contract
+revision or proposal. Use customer-document review only for a multi-field or explicit JSON-editing
+request.
+
+For an exact ordinary finish, stop, or close request with no blocking material checkpoint, use
+the supplied complete-instruction invocation with its exact customer-instruction stdin channel
+and stop disposition. Do not decline Build Review separately, fetch another catalog after the
+complete invocation is available, use continue_unchanged without a governing Blueprint, or route
+the normal finish through abandon. A pending unconfirmed contract broadening does not block this
+close and is cancelled unapplied. Present the completion receipt as a requested closed loop, not
+as abandonment.
 
 ITERATION-SAFE EVIDENCE
 Treat every qCoder-owned artifact revision, evidence snapshot, manifestation revision, Run Summary,

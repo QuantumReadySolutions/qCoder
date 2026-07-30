@@ -21,8 +21,8 @@ CUSTOMER_INTERACTION_SCHEMA_ID = "qcoder.current_loop.customer_interaction.v3"
 CUSTOMER_INTERACTION_SCHEMA_VERSION = 3
 ASSISTANT_CONTEXT_UPDATE_SCHEMA_ID = "qcoder.current_loop.assistant_context_update.v2"
 ASSISTANT_CONTEXT_UPDATE_SCHEMA_VERSION = 2
-COMPLETION_RECEIPT_SCHEMA_ID = "qcoder.current_loop.completion_receipt.v1"
-COMPLETION_RECEIPT_SCHEMA_VERSION = 1
+COMPLETION_RECEIPT_SCHEMA_ID = "qcoder.current_loop.completion_receipt.v2"
+COMPLETION_RECEIPT_SCHEMA_VERSION = 2
 HELP_SCHEMA_ID = "qcoder.current_loop.help.v2"
 HELP_SCHEMA_VERSION = 2
 INTENT_RECEIPT_SCHEMA_ID = "qcoder.current_loop.intent_receipt.v1"
@@ -228,10 +228,17 @@ def completion_receipt(
     build_review_disposition: str,
     state_revision: int,
     contract_revision: int,
+    pending_contract_proposal_disposition: str,
     provenance: str = "exact_current_customer_message",
 ) -> dict[str, Any]:
     if disposition not in {"continue_unchanged", "stop_loop"}:
         raise ValueError("completion_receipt_disposition_invalid")
+    if pending_contract_proposal_disposition not in {
+        "none",
+        "retained_unapplied",
+        "cancelled_unapplied",
+    }:
+        raise ValueError("completion_receipt_pending_proposal_disposition_invalid")
     result = {
         "schema_id": COMPLETION_RECEIPT_SCHEMA_ID,
         "schema_version": COMPLETION_RECEIPT_SCHEMA_VERSION,
@@ -242,6 +249,11 @@ def completion_receipt(
         "build_review_disposition": build_review_disposition,
         "next_loop_disposition": "do_not_start",
         "cross_loop_carryover": False,
+        "pending_contract_proposal_disposition": (pending_contract_proposal_disposition),
+        "pending_contract_proposal_applied": False,
+        "customer_project_files_preserved": True,
+        "qcoder_contract_or_evidence_state_carries_forward": False,
+        "normal_requested_finish_described_as_abandonment": False,
         "state_revision": state_revision,
         "contract_revision": contract_revision,
         "provenance": provenance,

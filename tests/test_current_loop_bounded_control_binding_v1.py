@@ -83,11 +83,13 @@ def test_every_local_control_field_has_complete_ownership_and_domain(
         "contract_status",
         "contract_set_preset",
         "contract_adjust",
+        "contract_set_generation_governance",
         "contract_confirm_broadening",
         "evidence_exclude",
         "evidence_restore",
         "evidence_delete",
         "stop_loop",
+        "complete_instruction",
     }
     for operation, contract in controls.items():
         assert contract["schema_id"] == BOUNDED_CONTROL_INPUT_SCHEMA_ID
@@ -117,11 +119,13 @@ def test_every_local_control_field_has_complete_ownership_and_domain(
         "reset_to_preset",
         "set_preset",
         "adjust",
+        "set_generation_governance",
         "confirm_broadening",
         "exclude",
         "restore",
         "delete",
         "stop_loop",
+        "finish_loop",
         "open_editor",
         "evidence_view",
         "decline_build_review",
@@ -334,7 +338,7 @@ def test_binding_v7_delivers_the_static_contract_and_customer_meanings() -> None
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     assert descriptor["contract_id"] == CLIENT_BINDING_CONTRACT_ID
-    assert descriptor["contract_id"].endswith(".v15")
+    assert descriptor["contract_id"].endswith(".v16")
     contract = descriptor["bounded_control_input_contract"]
     assert contract["schema_id"] == BOUNDED_CONTROL_INPUT_SCHEMA_ID
     assert contract["contract_digest"]

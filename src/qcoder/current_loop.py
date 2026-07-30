@@ -2338,6 +2338,8 @@ def purge_completed_loop_local_evidence(
         "qcoder_controlled_file_labels": deleted,
         "user_project_files_deleted": False,
         "future_loop_evidence_retained": False,
+        "loop_bound_sidecar_invalidated": True,
+        "sidecar_process_observes_state_absence_and_terminates": True,
         "directory_discovery_performed": False,
     }
 

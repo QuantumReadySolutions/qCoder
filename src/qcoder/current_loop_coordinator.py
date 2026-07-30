@@ -4512,6 +4512,14 @@ class CurrentLoopCoordinator:
                     "category": "contract_change",
                 },
                 {
+                    "customer_meaning": (
+                        "Require Blueprint approval before future generation, or allow "
+                        "Adaptive generation again."
+                    ),
+                    "route": "bounded_control_catalog:set_generation_governance",
+                    "category": "contract_change",
+                },
+                {
                     "customer_meaning": "Open qCoder settings for this build.",
                     "route": "bounded_control_catalog:open_editor",
                     "category": "product_surface",
@@ -4528,7 +4536,7 @@ class CurrentLoopCoordinator:
                 },
                 {
                     "customer_meaning": "Stop this qCoder loop.",
-                    "route": "bounded_control_catalog:stop_loop",
+                    "route": "bounded_control_catalog:finish_loop",
                     "category": "stop",
                 },
             ]
@@ -4619,16 +4627,63 @@ class CurrentLoopCoordinator:
                 }
                 and coordinator.get("state_status") == "checkpoint_required"
             ):
-                raise CurrentLoopError("completion_material_proposal_pending")
+                return self._result(
+                    operation="complete_instruction",
+                    ok=False,
+                    category="completion_material_proposal_pending",
+                    state=state,
+                    summary=(
+                        "The loop remains active because a material decision is awaiting "
+                        "the customer's bounded response."
+                    ),
+                    elapsed=max(0.0, self.clock() - started),
+                    details={
+                        "completion_performed": False,
+                        "prior_valid_authority_preserved": True,
+                        "prior_valid_evidence_preserved": True,
+                        "customer_instruction_reconstructed": False,
+                        "material_checkpoint_preserved": True,
+                    },
+                )
+            contract = state["current_loop_contract"]
+            pending_proposal = contract.get("pending_broadening_proposal")
+            pending_proposal_disposition = (
+                "cancelled_unapplied"
+                if stop_loop and isinstance(pending_proposal, Mapping)
+                else ("retained_unapplied" if isinstance(pending_proposal, Mapping) else "none")
+            )
+            hosted_status = str(state.get("hosted_enrichment", {}).get("status", "not_offered"))
+            hosted_disposition = {
+                "not_offered": "not_requested",
+                "available": "not_requested",
+                "skipped": "skipped",
+                "declined": "declined",
+                "completed": "completed_before_close",
+                "in_progress": "in_progress_at_close",
+                "rejected": "not_completed",
+                "unavailable": "not_completed",
+            }.get(hosted_status, "not_requested")
+            build_review = coordinator.get("build_review")
+            build_review_status = (
+                str(build_review.get("status")) if isinstance(build_review, Mapping) else None
+            )
+            build_review_disposition = (
+                "declined"
+                if build_review_status == "declined"
+                else (
+                    "completed_before_close"
+                    if coordinator.get("consequence_projection") is not None
+                    else "not_requested"
+                )
+            )
             receipt = completion_receipt(
                 instruction_utf8_sha256=sha256(exact_instruction.encode()).hexdigest(),
                 disposition="stop_loop" if stop_loop else "continue_unchanged",
-                hosted_enrichment_disposition=str(
-                    state.get("hosted_enrichment", {}).get("status", "not_offered")
-                ),
-                build_review_disposition="declined_or_not_requested",
+                hosted_enrichment_disposition=hosted_disposition,
+                build_review_disposition=build_review_disposition,
                 state_revision=int(state["state_revision"]),
-                contract_revision=int(state["current_loop_contract"]["contract_revision"]),
+                contract_revision=int(contract["contract_revision"]),
+                pending_contract_proposal_disposition=(pending_proposal_disposition),
             )
 
             def receipt_mutator(value: dict[str, Any]) -> Mapping[str, Any]:
@@ -4648,10 +4703,25 @@ class CurrentLoopCoordinator:
                     expected_revision=int(state["state_revision"]),
                 )
                 phase = "abandoned"
-                summary = (
-                    "The qCoder loop is closed with the Blueprint unchanged, no hosted "
-                    "enrichment or Build Review, no next loop, and no carryover."
-                )
+                if hosted_disposition in {
+                    "not_requested",
+                    "skipped",
+                    "declined",
+                } and build_review_disposition in {"not_requested", "declined"}:
+                    summary = (
+                        "The qCoder loop is closed. The Blueprint is unchanged, hosted "
+                        "enrichment and Build Review were not used, no next loop was "
+                        "started, and no qCoder contract or evidence state carries "
+                        "forward. Your project files remain."
+                    )
+                else:
+                    summary = (
+                        "The qCoder loop is closed with the Blueprint unchanged. No next "
+                        "loop was started, no qCoder contract or evidence state carries "
+                        "forward, and your project files remain. The completion receipt "
+                        "records the exact prior hosted-enrichment and Build Review "
+                        "dispositions."
+                    )
             else:
                 phase = coordinator["phase"]
                 summary = "Ordinary work may continue unchanged; no restaged approval is required."
@@ -4676,6 +4746,13 @@ class CurrentLoopCoordinator:
                     "evolved_blueprint_created": False,
                     "next_loop_started": False,
                     "cross_loop_carryover": False,
+                    "pending_contract_proposal_cancelled_unapplied": (
+                        pending_proposal_disposition == "cancelled_unapplied"
+                    ),
+                    "normal_requested_finish": stop_loop,
+                    "abandonment_selected": False,
+                    "customer_project_files_preserved": True,
+                    "customer_completion_copy_uses_abandonment_language": False,
                 },
             )
             if stop_loop:
@@ -5130,33 +5207,95 @@ class CurrentLoopCoordinator:
                 state["current_loop_contract"],
                 document,
             )
+            classification = str(review["classification"])
+            if classification == "neutral":
+                current = str(state["current_loop_contract"]["generation_governance"])
+                return self._result(
+                    operation="contract_set_generation_governance",
+                    ok=True,
+                    state=state,
+                    summary=(
+                        f"Generation governance is already "
+                        f"{current.replace('_', ' ')}. No proposal or contract "
+                        "revision was created."
+                    ),
+                    elapsed=self.clock() - started,
+                    details={
+                        "disposition": "no_op",
+                        "management_disposition": "cancelled",
+                        "generation_governance": current,
+                        "selected_generation_governance": governance,
+                        "contract_revision_changed": False,
+                        "pending_proposal_created": False,
+                        "customer_document_round_trip_required": False,
+                        "contract_status_preflight_required": False,
+                        "raw_policy_retransmitted": False,
+                        "same_management_service_as_browser": True,
+                    },
+                    persist_performance=False,
+                )
             choice = {
                 "narrowing": "apply_narrowing",
                 "broadening": "create_broadening_proposal",
-                "neutral": "cancel",
-            }.get(str(review["classification"]))
+            }.get(classification)
             if choice is None:
                 raise ContractManagementError("customer_contract_mixed_choice_required")
-            result = self.contract_apply_customer_document(
-                document=document,
+            outcome = apply_customer_contract_review(
+                state["current_loop_contract"],
+                review,
                 choice=choice,
-                explicit_authority=False,
                 surface="ide",
+                explicit_authority=False,
             )
-            result["operation"] = "contract_set_generation_governance"
-            management_disposition = result["details"].get("disposition")
-            result["details"]["management_disposition"] = management_disposition
-            result["details"]["disposition"] = {
-                "narrowing_applied": "narrowing",
-                "broadening_proposed": "broadening",
-                "cancelled": "unchanged",
-            }.get(management_disposition, management_disposition)
-            result["details"]["generation_governance"] = governance
-            result["details"]["internal_posture"] = self.store.read()["current_loop_contract"][
+            management_disposition = str(outcome["disposition"])
+            updated = self._replace_contract(
+                outcome["contract"],
+                cancel_pending_for_narrowing=(management_disposition == "narrowing_applied"),
+            )
+            contract = updated["current_loop_contract"]
+            coordinator = self._coordinator_state(updated)
+            coordinator["effective_generation_posture"] = contract[
                 "effective_internal_generation_posture"
             ]
-            result["details"]["customer_posture_question_required"] = False
-            return result
+            self._replace_coordinator(coordinator)
+            updated = self.store.read()
+            disposition = {
+                "narrowing_applied": "narrowing",
+                "broadening_proposed": "broadening",
+            }[management_disposition]
+            requires_confirmation = disposition == "broadening"
+            summary = (
+                "Blueprint-required generation governance is effective now."
+                if disposition == "narrowing"
+                else (
+                    "Adaptive generation is an exact pending broadening proposal. "
+                    "The current Blueprint-required contract remains effective until "
+                    "separate authority-only confirmation."
+                )
+            )
+            return self._result(
+                operation="contract_set_generation_governance",
+                ok=True,
+                state=updated,
+                summary=summary,
+                elapsed=self.clock() - started,
+                category=("contract_broadening_proposed" if requires_confirmation else None),
+                details={
+                    "disposition": disposition,
+                    "management_disposition": management_disposition,
+                    "generation_governance": governance,
+                    "effective_generation_governance": contract["generation_governance"],
+                    "internal_posture": contract["effective_internal_generation_posture"],
+                    "contract_change_receipt": deepcopy(outcome["receipt"]),
+                    "pending_proposal": deepcopy(outcome["proposal"]),
+                    "requires_explicit_customer_confirmation": (requires_confirmation),
+                    "customer_posture_question_required": False,
+                    "customer_document_round_trip_required": False,
+                    "contract_status_preflight_required": False,
+                    "raw_policy_retransmitted": False,
+                    "same_management_service_as_browser": True,
+                },
+            )
         except (CurrentLoopContractError, ContractManagementError) as exc:
             return self._bounded_control_rejection(
                 operation="contract_set_generation_governance",
@@ -9862,6 +10001,7 @@ class CurrentLoopCoordinator:
                                 "decline-build-review",
                                 "evidence-view",
                                 "open-contract-editor",
+                                "complete-instruction",
                             )
                             if processing_complete
                             else ()
@@ -10766,6 +10906,7 @@ class CurrentLoopCoordinator:
                     "circuit_workbench",
                     "run_summary",
                     "evidence_views",
+                    "finish_loop",
                 )
                 if state.get("quiet_iteration_status") == "assist_iteration_ready"
                 else ()
@@ -10943,6 +11084,14 @@ class CurrentLoopCoordinator:
                 ),
                 new_inputs=("bounded_category_dimension_value",),
             ),
+            "set_generation_governance": _invocation_template(
+                "contract-set-generation-governance",
+                required_flags=(
+                    "--governance",
+                    "--expected-contract-revision",
+                ),
+                new_inputs=("bounded_generation_governance",),
+            ),
             "confirm_broadening": _invocation_template(
                 "contract-confirm-broadening",
                 required_flags=("--expected-contract-revision", "--approve"),
@@ -10979,6 +11128,21 @@ class CurrentLoopCoordinator:
                 required_flags=("--approve",),
                 new_inputs=("explicit_stop_loop_authority",),
             ),
+            **(
+                {
+                    "finish_loop": _invocation_template(
+                        "complete-instruction",
+                        required_flags=("--instruction-stdin", "--stop"),
+                        new_inputs=("exact_current_customer_finish_instruction",),
+                    )
+                }
+                if checkpoint_kind
+                not in {
+                    "governing_change_confirmation",
+                    "decision_resolution",
+                }
+                else {}
+            ),
             "open_editor": _invocation_template("open-contract-editor"),
             "evidence_view": _invocation_template(
                 "evidence-view",
@@ -11003,11 +11167,13 @@ class CurrentLoopCoordinator:
             "reset_to_preset": "contract_reset_to_preset",
             "set_preset": "contract_set_preset",
             "adjust": "contract_adjust",
+            "set_generation_governance": "contract_set_generation_governance",
             "confirm_broadening": "contract_confirm_broadening",
             "exclude": "evidence_exclude",
             "restore": "evidence_restore",
             "delete": "evidence_delete",
             "stop_loop": "stop_loop",
+            "finish_loop": "complete_instruction",
             "open_editor": "open_contract_editor",
             "evidence_view": "evidence_view",
             "decline_build_review": "decline_build_review",

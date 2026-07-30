@@ -42,6 +42,7 @@ def _evidence_ready(tmp_path: Path) -> CurrentLoopCoordinator:
         value["generation_posture"] = "exploratory_first_pass"
         value["loop_instance_record_path"] = str(record_path)
         value["loop_instance_record_digest"] = record["artifact_digest"]
+        value["quiet_iteration_status"] = "assist_iteration_ready"
         value["coordinator"] = current
         return value
 
@@ -57,6 +58,8 @@ def test_build_review_offer_is_optional_and_decline_continues(tmp_path: Path) ->
     assert status["next_invocation"]["subcommand"] == "record-ide-authority"
     assert status["next_invocation"]["transport_classification"] == "local_only"
     assert "decline-build-review" in status["next_invocation"]["allowed_subcommand_alternatives"]
+    assert "complete-instruction" in status["next_invocation"]["allowed_subcommand_alternatives"]
+    assert "finish_loop" in status["customer_envelope"]["optional_secondary_action_references"]
     declined = coordinator.decline_build_review(explicit_authority=True)
     assert declined["ok"] is True
     assert declined["phase"] == "evidence_processing"

@@ -19,6 +19,7 @@ from qcoder.current_loop_contract import (
     ADJUSTMENT_VALUES_BY_DIMENSION,
     EVIDENCE_CATEGORIES,
     EVIDENCE_EXCLUSION_REASONS,
+    GENERATION_GOVERNANCE_VALUES,
     NAMED_PRESETS,
     CurrentLoopContractError,
     adjust,
@@ -86,6 +87,15 @@ EXCLUSION_REASON_MEANINGS = {
     "not_relevant": "The evidence is not relevant to the remaining current-loop work.",
 }
 PROVENANCE_VALUES = ("assistant_created", "assistant_modified", "user_selected")
+GENERATION_GOVERNANCE_MEANINGS = {
+    "adaptive": (
+        "Adaptive — proceed quietly from exact customer intent and bounded reversible "
+        "assumptions; interrupt only for a material decision or genuine blocker."
+    ),
+    "blueprint_required": (
+        "Blueprint required — resolve and confirm governing material choices before generation."
+    ),
+}
 _ADJUSTMENT_GRAPH_CACHE: dict[str, dict[str, Any]] = {}
 
 
@@ -330,6 +340,125 @@ def adjustment_selection_contract(
         _ADJUSTMENT_GRAPH_CACHE.pop(next(iter(_ADJUSTMENT_GRAPH_CACHE)))
     _ADJUSTMENT_GRAPH_CACHE[cache_key] = deepcopy(result)
     return result
+
+
+def generation_governance_selection_contract(
+    contract: Mapping[str, Any], *, _contract_is_validated: bool = False
+) -> dict[str, Any]:
+    """Describe one compact, revision-bound generation-governance selection."""
+
+    if not _contract_is_validated:
+        validate_contract(contract)
+    current = str(contract["generation_governance"])
+    options = []
+    for value in GENERATION_GOVERNANCE_VALUES:
+        disposition = (
+            "no_op"
+            if value == current
+            else (
+                "broadening"
+                if current == "blueprint_required" and value == "adaptive"
+                else "narrowing"
+            )
+        )
+        options.append(
+            _option(
+                value,
+                GENERATION_GOVERNANCE_MEANINGS[value],
+                change_disposition=disposition,
+                confirmation_required=disposition == "broadening",
+            )
+        )
+    return {
+        "operation": "contract_set_generation_governance",
+        "subcommand": "contract-set-generation-governance",
+        "current_generation_governance": current,
+        "fields": [
+            {
+                "name": "generation_governance",
+                "flag": "--governance",
+                "ownership": CUSTOMER_SELECTS,
+                "required": True,
+                "json_type": "string",
+                "accepted_values": options,
+                "parser_mapping": "one_exact_cli_value",
+                "arbitrary_text_prohibited": True,
+            },
+            {
+                "name": "expected_contract_revision",
+                "flag": "--expected-contract-revision",
+                "ownership": QCODER_PREBINDS,
+                "required": True,
+                "json_type": "integer",
+                "fixed_value": int(contract["contract_revision"]),
+                "parser_mapping": "one_exact_cli_integer",
+            },
+        ],
+        "one_field_compact_operation": True,
+        "narrowing_applies_immediately": True,
+        "broadening_creates_pending_proposal": True,
+        "broadening_confirmation_is_separate": True,
+        "no_op_creates_revision_or_proposal": False,
+        "raw_policy_replacement_prohibited": True,
+        "editable_document_round_trip_required": False,
+        "contract_status_preflight_required": False,
+    }
+
+
+def completion_control_contract(state: Mapping[str, Any]) -> dict[str, Any]:
+    """Describe one exact-message ordinary loop-close route."""
+
+    contract = state["current_loop_contract"]
+    return {
+        "operation": "complete_instruction",
+        "subcommand": "complete-instruction",
+        "fields": [
+            {
+                "name": "exact_current_customer_instruction",
+                "flag": None,
+                "transport": "stdin",
+                "ownership": "exact_current_customer_message",
+                "required": True,
+                "json_type": "string",
+                "minimum_utf8_bytes": 1,
+                "maximum_utf8_bytes": 65_536,
+                "assistant_reconstructs_or_paraphrases": False,
+            },
+            {
+                "name": "instruction_stdin",
+                "flag": "--instruction-stdin",
+                "ownership": QCODER_PREBINDS,
+                "required": True,
+                "json_type": "boolean",
+                "fixed_value": True,
+            },
+            {
+                "name": "stop",
+                "flag": "--stop",
+                "ownership": QCODER_PREBINDS,
+                "required": True,
+                "json_type": "boolean",
+                "fixed_value": True,
+            },
+            {
+                "name": "expected_contract_revision",
+                "flag": None,
+                "ownership": QCODER_PREBINDS,
+                "required": True,
+                "json_type": "integer",
+                "fixed_value": int(contract["contract_revision"]),
+            },
+        ],
+        "ordinary_finish_route": True,
+        "separate_build_review_decline_required": False,
+        "continue_unchanged_used": False,
+        "next_loop_started": False,
+        "cross_loop_carryover": False,
+        "pending_unconfirmed_broadening_cancelled_on_close": True,
+        "customer_project_files_preserved": True,
+        "raw_policy_replacement_prohibited": True,
+        "hosted_operation_permitted": False,
+    }
 
 
 def _saved_reference_options(state: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -672,6 +801,10 @@ def bounded_control_contracts(
         },
         "contract_set_preset": preset_selection_contract(contract, _contract_is_validated=True),
         "contract_adjust": adjustment_selection_contract(contract, _contract_is_validated=True),
+        "contract_set_generation_governance": generation_governance_selection_contract(
+            contract,
+            _contract_is_validated=True,
+        ),
         "contract_confirm_broadening": {
             "operation": "contract_confirm_broadening",
             "subcommand": "contract-confirm-broadening",
@@ -718,6 +851,7 @@ def bounded_control_contracts(
             ],
             "off_is_absence_of_active_loop": True,
         },
+        "complete_instruction": completion_control_contract(state),
     }
     controls.update(
         evidence_control_contracts(
@@ -748,11 +882,13 @@ def bounded_control_contract_snapshot() -> dict[str, Any]:
             "contract_status",
             "contract_set_preset",
             "contract_adjust",
+            "contract_set_generation_governance",
             "contract_confirm_broadening",
             "evidence_exclude",
             "evidence_restore",
             "evidence_delete",
             "stop_loop",
+            "complete_instruction",
             "record_ide_authority",
             "register_artifacts",
             "refresh_bounded_recovery",
@@ -807,7 +943,9 @@ def contract_for_operation(
         "contract_status",
         "contract_set_preset",
         "contract_adjust",
+        "contract_set_generation_governance",
         "contract_confirm_broadening",
+        "complete_instruction",
         "evidence_exclude",
         "evidence_restore",
         "evidence_delete",
