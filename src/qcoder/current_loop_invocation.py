@@ -15,13 +15,19 @@ import shlex
 import subprocess
 from typing import Any, Mapping, Sequence
 
+from qcoder.current_loop_adaptive_intent import (
+    ADAPTIVE_INTENT_DOCUMENT_SCHEMA_ID,
+    ADAPTIVE_INTENT_DOCUMENT_SCHEMA_VERSION,
+    ADAPTIVE_INTENT_INPUT_SCHEMA_ID,
+    ADAPTIVE_INTENT_INPUT_SCHEMA_VERSION,
+)
 from qcoder.current_loop_bounded_control import (
     BOUNDED_CONTROL_INPUT_SCHEMA_ID,
     BOUNDED_CONTROL_INPUT_SCHEMA_VERSION,
 )
 
-INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v4"
-INVOCATION_CONTRACT_SCHEMA_VERSION = 4
+INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v5"
+INVOCATION_CONTRACT_SCHEMA_VERSION = 5
 OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v3"
 OPERATION_INVENTORY_SCHEMA_VERSION = 3
 
@@ -349,6 +355,8 @@ def build_operation_invocation(
         input_channel = "checkpoint_input_stdin_or_bounded_file"
     elif any("request-stdin" in str(item) for item in required_flags):
         input_channel = "exact_request_stdin"
+    elif subcommand == "prepare-adaptive-intent":
+        input_channel = "qcoder_owned_single_use_json_file"
     elif dynamic_arguments or required_flags:
         input_channel = "bounded_declared_arguments"
     contract: dict[str, Any] = {
@@ -398,6 +406,12 @@ def build_operation_invocation(
             if isinstance(result.get("bounded_control_input_contract"), Mapping)
             else None
         ),
+        "input_contract_kind": result.get("input_contract_kind"),
+        "adaptive_intent_input_contract": (
+            deepcopy(dict(result["adaptive_intent_input_contract"]))
+            if isinstance(result.get("adaptive_intent_input_contract"), Mapping)
+            else None
+        ),
     }
     contract["canonical_full_argv_digest"] = _digest({"argv": structured_argv})
     contract["sanitized_argv_structure_digest"] = _digest({"argv": fixed_redacted})
@@ -428,4 +442,9 @@ def invocation_contract_snapshot() -> dict[str, Any]:
         "bounded_control_input_schema_id": BOUNDED_CONTROL_INPUT_SCHEMA_ID,
         "bounded_control_input_schema_version": BOUNDED_CONTROL_INPUT_SCHEMA_VERSION,
         "bounded_local_controls_are_self_describing": True,
+        "adaptive_intent_input_schema_id": ADAPTIVE_INTENT_INPUT_SCHEMA_ID,
+        "adaptive_intent_input_schema_version": ADAPTIVE_INTENT_INPUT_SCHEMA_VERSION,
+        "adaptive_intent_document_schema_id": ADAPTIVE_INTENT_DOCUMENT_SCHEMA_ID,
+        "adaptive_intent_document_schema_version": ADAPTIVE_INTENT_DOCUMENT_SCHEMA_VERSION,
+        "adaptive_intent_fields_file_is_qcoder_owned_and_self_describing": True,
     }

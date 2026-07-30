@@ -62,6 +62,19 @@ from qcoder.current_loop import (
     stage_pending_activation_capture,
     update_selected_artifact_authorization,
 )
+from qcoder.current_loop_adaptive_intent import (
+    ADAPTIVE_INTENT_DOCUMENT_SCHEMA_ID,
+    ADAPTIVE_INTENT_INPUT_CONTRACT_KIND,
+    ADAPTIVE_INTENT_INPUT_SCHEMA_ID,
+    AdaptiveIntentInputError,
+    adaptive_intent_contract_snapshot,
+    adaptive_intent_input_path,
+    build_adaptive_intent_input_contract,
+    classify_profile_from_request,
+    consume_fields_file,
+    initialize_fields_file,
+    invalidate_fields_file,
+)
 from qcoder.current_loop_checkpoint_input import (
     CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_ID,
     CHECKPOINT_INPUT_SEMANTIC_SCHEMA_ID,
@@ -157,12 +170,13 @@ from qcoder.current_loop_quiet_workflow import (
 )
 from qcoder.context_loop import CONTEXT_LOOP_GATE
 
-COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v12"
-COORDINATOR_RESULT_SCHEMA_VERSION = 12
-COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v10"
-PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v9"
+COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v13"
+COORDINATOR_RESULT_SCHEMA_VERSION = 13
+COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v11"
+PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v10"
 OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
     {
+        "qcoder.current_loop.coordinator_state.v9",
         "qcoder.current_loop.coordinator_state.v6",
         "qcoder.current_loop.coordinator_state.v7",
         "qcoder.current_loop.coordinator_state.v8",
@@ -173,7 +187,7 @@ OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
         "qcoder.current_loop.coordinator_state.v3",
     }
 )
-COORDINATOR_STATE_SCHEMA_VERSION = 10
+COORDINATOR_STATE_SCHEMA_VERSION = 11
 RECOVERY_SCHEMA_ID = "qcoder.current_loop.recovery.v2"
 RECOVERY_SCHEMA_VERSION = 2
 CONSEQUENCE_PROJECTION_SCHEMA_ID = "qcoder.current_loop.consequence_projection.v1"
@@ -1134,6 +1148,8 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "pre_result_entry_inventory": PRE_RESULT_ENTRY_INVENTORY_SCHEMA_ID,
             "operation_invocation": INVOCATION_CONTRACT_SCHEMA_ID,
             "bounded_control_input": BOUNDED_CONTROL_INPUT_SCHEMA_ID,
+            "adaptive_intent_input": ADAPTIVE_INTENT_INPUT_SCHEMA_ID,
+            "adaptive_intent_fields_document": ADAPTIVE_INTENT_DOCUMENT_SCHEMA_ID,
             "invocation_lifecycle": INVOCATION_LIFECYCLE_SCHEMA_ID,
             "current_loop_contract": contract_snapshot()["schema_id"],
             "operation_receipt": event_receipt_snapshot()["schema_id"],
@@ -1159,6 +1175,7 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
         },
         "operation_invocation": invocation_contract_snapshot(),
         "bounded_control_input": bounded_control_contract_snapshot(),
+        "adaptive_intent_input": adaptive_intent_contract_snapshot(),
         "operation_transport_inventory": operation_transport_inventory(),
         "current_loop_contract": contract_snapshot(),
         "operation_receipt": event_receipt_snapshot(),
@@ -1627,6 +1644,7 @@ def _authority_input(
 
 _ACTION_INPUT_SOURCE_CATEGORIES = {
     "record_adaptive_intent_receipt": ("qcoder_declared_attributable_value",),
+    "reconstruct_adaptive_intent_input": ("qcoder_declared_attributable_value",),
     "select_generation_posture_or_stop": (
         "bounded_enumerated_customer_choice",
         "authority_only_approval",
@@ -1680,6 +1698,7 @@ def _default_permitted_input_source(action: str) -> str:
         "record_adaptive_intent_receipt": (
             "qcoder_declared_attributable_intent_fields_without_customer_approval"
         ),
+        "reconstruct_adaptive_intent_input": ("fresh_qcoder_owned_adaptive_intent_contract"),
         "select_generation_posture_or_stop": (
             "explicit_customer_bounded_posture_choice_or_explicitly_accepted_"
             "supported_recommendation"
@@ -3467,10 +3486,63 @@ class CurrentLoopCoordinator:
         except (CurrentLoopError, CurrentLoopContractError) as exc:
             return self._exception_result("contract_status", exc, started)
 
+    def _adaptive_intent_contract(
+        self,
+        state: Mapping[str, Any],
+        *,
+        initialize: bool,
+    ) -> dict[str, Any]:
+        coordinator = self._coordinator_state(state)
+        try:
+            baseline = self._saved_artifact(state, "request_baseline")
+            request = baseline.get("original_request")
+            if not isinstance(request, str):
+                raise CurrentLoopError("canonical_parent_set_incomplete")
+            baseline_digest = str(baseline["artifact_digest"])
+            contract = state["current_loop_contract"]
+            governance = str(contract["generation_governance"])
+            contract_revision = int(contract["contract_revision"])
+            internal_posture = str(
+                coordinator.get("effective_generation_posture")
+                or contract["effective_internal_generation_posture"]
+            )
+            profile_id = classify_profile_from_request(request)
+        except (CurrentLoopError, KeyError, TypeError):
+            # Protocol-matrix construction intentionally has no canonical state.
+            # It still receives a complete self-describing synthetic invocation,
+            # which cannot be promoted into a real loop.
+            baseline_digest = "0" * 64
+            governance = "adaptive"
+            contract_revision = 0
+            internal_posture = "exploratory_first_pass"
+            profile_id = "generic_qiskit"
+        path = adaptive_intent_input_path(
+            state_path=self.state_path,
+            loop_ref=str(state["loop_ref"]),
+            state_revision=int(state["state_revision"]),
+        )
+        result = build_adaptive_intent_input_contract(
+            input_path=path,
+            loop_ref=str(state["loop_ref"]),
+            workspace_binding=str(state["workspace_root"]),
+            state_revision=int(state["state_revision"]),
+            contract_revision=contract_revision,
+            generation_governance=governance,
+            internal_profile_classification=profile_id,
+            internal_posture_mapping=internal_posture,
+            request_baseline_digest=baseline_digest,
+            phase=str(coordinator["phase"]),
+            checkpoint=str(coordinator["checkpoint_kind"]),
+        )
+        if initialize:
+            initialize_fields_file(result)
+        return result
+
     def prepare_adaptive_intent(
         self,
         *,
-        fields: Mapping[str, Mapping[str, Any]],
+        fields: Mapping[str, Mapping[str, Any]] | None = None,
+        fields_file: str | Path | None = None,
     ) -> dict[str, Any]:
         """Record ordinary mixed-provenance intent without manufacturing approval."""
 
@@ -3482,9 +3554,23 @@ class CurrentLoopCoordinator:
             contract = state["current_loop_contract"]
             governance = str(contract["generation_governance"])
             baseline = self._saved_artifact(state, "request_baseline")
+            consumed_path: str | Path | None = None
+            if fields_file is not None:
+                input_contract = self._adaptive_intent_contract(state, initialize=False)
+                normalized_fields = consume_fields_file(
+                    supplied_path=fields_file,
+                    contract=input_contract,
+                )
+                consumed_path = fields_file
+            elif isinstance(fields, Mapping):
+                # Retain direct in-process test/instrumentation parity. Connected
+                # assistants receive only the versioned file contract.
+                normalized_fields = fields
+            else:
+                raise AdaptiveIntentInputError("adaptive_intent_file_missing")
             receipt = intent_receipt(
                 request_baseline_digest=str(baseline["artifact_digest"]),
-                fields=fields,
+                fields=normalized_fields,
                 generation_governance=governance,
                 state_revision=int(state["state_revision"]),
                 contract_revision=int(contract["contract_revision"]),
@@ -3519,6 +3605,8 @@ class CurrentLoopCoordinator:
                     }
                 )
             self._replace_coordinator(coordinator)
+            if consumed_path is not None:
+                invalidate_fields_file(consumed_path)
             return self._result(
                 operation="prepare_adaptive_intent",
                 ok=True,
@@ -3532,8 +3620,75 @@ class CurrentLoopCoordinator:
                     "user_confirmation_manufactured": False,
                 },
             )
+        except AdaptiveIntentInputError as exc:
+            if fields_file is not None:
+                try:
+                    invalidate_fields_file(fields_file)
+                except AdaptiveIntentInputError:
+                    pass
+            return self._adaptive_intent_recovery_result(exc, started)
         except (CurrentLoopError, CurrentLoopContractError, ValueError) as exc:
             return self._exception_result("prepare_adaptive_intent", exc, started)
+
+    def _adaptive_intent_recovery_result(
+        self,
+        exc: AdaptiveIntentInputError,
+        started: float,
+    ) -> dict[str, Any]:
+        """Restage one correctable machine document with a fresh complete route."""
+
+        state = self.store.read()
+        return self._result(
+            operation="prepare_adaptive_intent",
+            ok=False,
+            category=exc.category,
+            state=state,
+            summary=(
+                "The adaptive-intent machine document was rejected safely. qCoder supplied "
+                "a fresh single-use document and complete local invocation; prior activation, "
+                "contract, Request Baseline, authority, and evidence remain intact."
+            ),
+            elapsed=self.clock() - started,
+            details={
+                "safe_error_category": exc.category,
+                "received_private_content_echoed": False,
+                "prior_valid_activation_preserved": True,
+                "prior_valid_contract_preserved": True,
+                "prior_valid_request_baseline_preserved": True,
+                "prior_valid_evidence_preserved": True,
+                "hosted_operation_permitted": False,
+                "recovery_contract": {
+                    "schema_id": RECOVERY_SCHEMA_ID,
+                    "schema_version": RECOVERY_SCHEMA_VERSION,
+                    "strategy": "restage_with_construction",
+                    "safe_error_category": exc.category,
+                    "prior_valid_authority_preserved": True,
+                    "prior_valid_evidence_preserved": True,
+                    "permitted_input_source": "fresh_adaptive_intent_input_contract",
+                    "customer_review_required": False,
+                    "hosted_operation_permitted": False,
+                    "alternatives": [],
+                    "state_and_contract_binding_required": True,
+                    "complete_next_invocation_required": True,
+                    "refresh_executes_selected_action": False,
+                    "deterministic_failure": True,
+                },
+            },
+            checkpoint_protocol={
+                "supported_next_action": "reconstruct_adaptive_intent_input",
+                "next_invocation": _invocation_template(
+                    "prepare-adaptive-intent",
+                    required_flags=("--fields-file",),
+                    reused_inputs=("fresh_qcoder_owned_adaptive_intent_contract",),
+                ),
+                "required_authority_input": None,
+                "awaiting_confirmation_fields": [],
+                "confirmation_transmission_state": "not_applicable",
+                "identical_repeat_prohibited": True,
+                "permitted_input_source": "fresh_qcoder_owned_adaptive_intent_contract",
+                "no_action_reason": None,
+            },
+        )
 
     def help(self, *, topic: str) -> dict[str, Any]:
         """Return one bounded, local, state-grounded help projection."""
@@ -7746,7 +7901,7 @@ class CurrentLoopCoordinator:
         if result.get("schema_id") in {
             PREVIOUS_COORDINATOR_STATE_SCHEMA_ID,
             *OLDER_COORDINATOR_STATE_SCHEMA_IDS,
-        } and result.get("schema_version") in {1, 2, 3, 4, 5, 6, 7, 8}:
+        } and result.get("schema_version") in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}:
             result["schema_id"] = COORDINATOR_STATE_SCHEMA_ID
             result["schema_version"] = COORDINATOR_STATE_SCHEMA_VERSION
             result.setdefault("effective_generation_posture", state.get("generation_posture"))
@@ -9285,6 +9440,27 @@ class CurrentLoopCoordinator:
                     else None
                 )
             )
+            if operation == "prepare_adaptive_intent":
+                adaptive_contract = self._adaptive_intent_contract(state, initialize=True)
+                invocation["input_contract_kind"] = ADAPTIVE_INTENT_INPUT_CONTRACT_KIND
+                invocation["adaptive_intent_input_contract"] = adaptive_contract
+                fixed = (
+                    deepcopy(dict(invocation["fixed_argument_values"]))
+                    if isinstance(invocation.get("fixed_argument_values"), Mapping)
+                    else {}
+                )
+                fixed["--fields-file"] = adaptive_contract["fields_file_transport"][
+                    "exact_qcoder_owned_path"
+                ]
+                invocation["fixed_argument_values"] = fixed
+                invocation["argument_values"] = [
+                    deepcopy(dict(item))
+                    for item in invocation.get("argument_values", [])
+                    if isinstance(item, Mapping) and item.get("flag") != "--fields-file"
+                ]
+                invocation["new_inputs"] = [
+                    "assistant_fills_only_declared_value_and_provenance_slots"
+                ]
             bounded_contract = bounded_contract_for_operation(
                 state,
                 operation=operation,
@@ -9414,7 +9590,17 @@ class CurrentLoopCoordinator:
             "content_transport": (
                 "checkpoint_input_stdin_or_file"
                 if checkpoint_transport
-                else ("request_inline_or_explicit_stdin_or_file" if request_transport else "none")
+                else (
+                    "request_inline_or_explicit_stdin_or_file"
+                    if request_transport
+                    else "qcoder_owned_single_use_json_file"
+                    if action
+                    in {
+                        "record_adaptive_intent_receipt",
+                        "reconstruct_adaptive_intent_input",
+                    }
+                    else "none"
+                )
             ),
             "accepted_values": _bounded_values_for_action(action),
             "arbitrary_free_text_in_argv_permitted": False,

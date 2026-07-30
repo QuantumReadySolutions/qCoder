@@ -1815,11 +1815,7 @@ def _cmd_current_loop(argv: list[str]) -> int:
         elif command == "help":
             result = coordinator.help(topic=args.topic)
         elif command == "prepare-adaptive-intent":
-            fields_path = Path(args.fields_file).expanduser().absolute()
-            fields_value = json.loads(fields_path.read_text(encoding="utf-8"))
-            if not isinstance(fields_value, dict):
-                parser.error("prepare-adaptive-intent --fields-file must contain an object")
-            result = coordinator.prepare_adaptive_intent(fields=fields_value)
+            result = coordinator.prepare_adaptive_intent(fields_file=args.fields_file)
         elif command == "contract-set-preset":
             result = coordinator.contract_set_preset(
                 preset=args.preset,

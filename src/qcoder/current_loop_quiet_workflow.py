@@ -12,9 +12,8 @@ from hashlib import sha256
 import json
 from typing import Any, Mapping, Sequence
 
-
-CUSTOMER_INTERACTION_SCHEMA_ID = "qcoder.current_loop.customer_interaction.v1"
-CUSTOMER_INTERACTION_SCHEMA_VERSION = 1
+CUSTOMER_INTERACTION_SCHEMA_ID = "qcoder.current_loop.customer_interaction.v2"
+CUSTOMER_INTERACTION_SCHEMA_VERSION = 2
 ASSISTANT_CONTEXT_UPDATE_SCHEMA_ID = "qcoder.current_loop.assistant_context_update.v1"
 ASSISTANT_CONTEXT_UPDATE_SCHEMA_VERSION = 1
 COMPLETION_RECEIPT_SCHEMA_ID = "qcoder.current_loop.completion_receipt.v1"
@@ -77,6 +76,28 @@ def customer_interaction(
         "authority_request",
         "blocker_or_recovery",
     }
+    compact_next: dict[str, Any] | None = None
+    if next_invocation:
+        operation_contract = next_invocation.get("operation_specific_invocation")
+        if isinstance(operation_contract, Mapping):
+            compact_next = {
+                "operation": operation_contract.get("operation"),
+                "subcommand": operation_contract.get("subcommand"),
+                "structured_argv": deepcopy(operation_contract.get("structured_argv")),
+                "invocation_contract_digest": operation_contract.get("contract_digest"),
+                "full_invocation_location": "coordinator_result.next_invocation",
+                "full_input_contract_location": (
+                    "coordinator_result.next_invocation."
+                    "operation_specific_invocation.adaptive_intent_input_contract"
+                    if isinstance(operation_contract.get("adaptive_intent_input_contract"), Mapping)
+                    else None
+                ),
+            }
+        else:
+            compact_next = {
+                "subcommand": next_invocation.get("subcommand"),
+                "full_invocation_location": "coordinator_result.next_invocation",
+            }
     result = {
         "schema_id": CUSTOMER_INTERACTION_SCHEMA_ID,
         "schema_version": CUSTOMER_INTERACTION_SCHEMA_VERSION,
@@ -84,7 +105,7 @@ def customer_interaction(
         "requires_customer_response": requires,
         "concise_customer_message": concise_message,
         "safe_choices": [deepcopy(dict(item)) for item in safe_choices],
-        "next_invocation": deepcopy(dict(next_invocation)) if next_invocation else None,
+        "next_invocation": compact_next,
         "activity_receipts": [deepcopy(dict(item)) for item in activity_receipts],
         "help_available": True,
         "current_summary_reference": summary_reference,
@@ -111,7 +132,7 @@ def intent_receipt(
         provenance = value.get("provenance")
         if provenance not in INTENT_PROVENANCE:
             raise ValueError("intent_receipt_provenance_invalid")
-        if provenance == "unresolved" and value.get("material") is True:
+        if value.get("material") is True:
             blockers.append(name)
         normalized[name] = value
     result = {

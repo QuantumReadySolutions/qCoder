@@ -68,6 +68,10 @@ from qcoder.current_loop_invocation import (
     operation_transport_inventory,
 )
 from qcoder.current_loop_bounded_control import bounded_control_contract_snapshot
+from qcoder.current_loop_adaptive_intent import (
+    adaptive_intent_completeness_matrix,
+    adaptive_intent_contract_snapshot,
+)
 from qcoder.current_loop_contract_sidecar import sidecar_contract_snapshot
 from qcoder.current_loop_run_summary import (
     evidence_view_contract_snapshot,
@@ -119,8 +123,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 10
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v10"
+CLIENT_BINDING_SCHEMA_VERSION = 11
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v11"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -250,6 +254,21 @@ reconstruct, inspect source, inspect proof records, search transcripts, or inspe
 machine-readable no_action_disposition means no invocation is currently permitted. At
 next_loop_ready the completed build's governing-change branch is closed: use only the
 qCoder-managed start-next route or stop with no further action.
+
+ADAPTIVE INTENT INPUT
+For quiet adaptive intent, use only the complete
+qcoder.current_loop.adaptive_intent_input.v1 contract in qCoder's current operation-specific
+invocation. qCoder supplies the exact single-use UTF-8 JSON path, a ready-to-fill document, all
+fixed identity/state/governance/profile values, every accepted field and type, provenance,
+materiality, and limits. Modify only the declared value and provenance slots, preserving every
+fixed value and the JSON shape. Do not choose another path, infer a field, calculate a digest,
+use qcoder_classified provenance for an assistant-authored value, or ask the customer to create
+or approve the machine document. Routine attributable adaptive intent is internal client work,
+requires no customer response, and proceeds to the exact native-card IDE-authority invocation.
+When the contract identifies a genuinely unresolved governing choice, present qCoder's single
+grouped material-decision checkpoint and only its supplied customer-language choices and
+invocations. Never inspect help, source, package files, proof records, transcripts, or .qcoder
+to construct adaptive intent.
 
 IDE WORK AND ARTIFACT HANDOFF
 After action-specific IDE write/run authority, perform only the user-authorized development work.
@@ -396,6 +415,8 @@ def build_client_binding_descriptor(
             ),
             "operation_transport_inventory": operation_transport_inventory(),
             "bounded_control_input_contract": bounded_control_contract_snapshot(),
+            "adaptive_intent_input_contract": adaptive_intent_contract_snapshot(),
+            "adaptive_intent_input_completeness_matrix": adaptive_intent_completeness_matrix(),
             "artifact_format_contract": artifact_format_contract_snapshot(),
             "evidence_processing_contract": evidence_processing_contract_snapshot(),
             "recovery_action_contract": recovery_action_contract_snapshot(),
@@ -473,6 +494,8 @@ def build_client_binding_descriptor(
             "hosted_enrichment_on_request": True,
             "build_review_on_request": True,
             "customer_interaction_envelope_primary": True,
+            "adaptive_intent_fields_file_qcoder_owned": True,
+            "adaptive_intent_routine_customer_response_required": False,
         }
     }
 

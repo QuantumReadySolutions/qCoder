@@ -48,9 +48,10 @@ LEGACY_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v1"
 OLDER_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v2"
 CONTRACT_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v3"
 OLDER_PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v4"
-PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v5"
-CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v6"
-CURRENT_LOOP_STATE_SCHEMA_VERSION = 6
+PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v5"
+PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v6"
+CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v7"
+CURRENT_LOOP_STATE_SCHEMA_VERSION = 7
 
 LOOP_INSTANCE_RECORD_MAX_BYTES = 65_536
 NEXT_LOOP_SEED_MAX_BYTES = 65_536
@@ -1409,10 +1410,11 @@ def _state_digest(value: Mapping[str, Any]) -> str:
 
 
 def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
-    """Atomically migrate one active v2-v5 state into v6.
+    """Atomically migrate one active v2-v6 state into v7.
 
-    Version 6 adds quiet one-loop interaction state and Contract v2. Existing
-    evidence, receipts, and Run Summary content is preserved.
+    Version 7 records the adaptive-intent client-contract transition without
+    persisting its single-use machine document. Existing evidence and quiet
+    workflow receipts are preserved.
     """
 
     state = store.read()
@@ -1427,7 +1429,8 @@ def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
         (OLDER_CURRENT_LOOP_STATE_SCHEMA_ID, 2),
         (CONTRACT_CURRENT_LOOP_STATE_SCHEMA_ID, 3),
         (OLDER_PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID, 4),
-        (PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID, 5),
+        (PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID, 5),
+        (PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID, 6),
     }:
         raise CurrentLoopError("current_loop_state_migration_unsupported")
     if state.get("state_kind") != "active_loop":
@@ -1452,7 +1455,10 @@ def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
     if schema_id in {OLDER_CURRENT_LOOP_STATE_SCHEMA_ID, CONTRACT_CURRENT_LOOP_STATE_SCHEMA_ID}:
         migrated["run_summary_index"] = {}
         migrated["latest_run_summary_reference"] = None
-    if schema_id != PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID:
+    if schema_id not in {
+        PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID,
+        PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID,
+    }:
         migrated["artifact_processing_outcomes"] = {}
         migrated["hosted_enrichment"] = {
             "schema_id": "qcoder.current_loop.hosted_enrichment_status.v1",
@@ -1468,11 +1474,12 @@ def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
     contract = migrated.get("current_loop_contract")
     if isinstance(contract, Mapping) and contract.get("schema_version") == 1:
         migrated["current_loop_contract"] = migrate_contract_v1(contract)
-    migrated["assistant_context_updates"] = []
-    migrated["latest_assistant_context_update"] = None
-    migrated["completion_receipt"] = None
-    migrated["current_build_context_refresh"] = None
-    migrated["quiet_iteration_status"] = "not_ready"
+    if schema_id != PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID:
+        migrated["assistant_context_updates"] = []
+        migrated["latest_assistant_context_update"] = None
+        migrated["completion_receipt"] = None
+        migrated["current_build_context_refresh"] = None
+        migrated["quiet_iteration_status"] = "not_ready"
     return store.replace(migrated, expected_revision=int(state["state_revision"]))
 
 
@@ -1497,8 +1504,12 @@ def current_loop_state_error(value: object) -> str | None:
             and value.get("schema_version") == 4
         )
         or (
-            value.get("schema_id") == PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID
+            value.get("schema_id") == PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID
             and value.get("schema_version") == 5
+        )
+        or (
+            value.get("schema_id") == PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID
+            and value.get("schema_version") == 6
         )
     )
     current = (
@@ -1560,8 +1571,12 @@ def current_loop_state_error(value: object) -> str | None:
                     and value.get("schema_version") == 4
                 )
                 or (
-                    value.get("schema_id") == PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID
+                    value.get("schema_id") == PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID
                     and value.get("schema_version") == 5
+                )
+                or (
+                    value.get("schema_id") == PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID
+                    and value.get("schema_version") == 6
                 )
                 or (
                     value.get("schema_id") == OLDER_CURRENT_LOOP_STATE_SCHEMA_ID
