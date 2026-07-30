@@ -26,6 +26,7 @@ from qcoder.current_loop_contract import (
     migrate_contract_v1,
     new_contract,
 )
+from qcoder.current_loop_iteration import parent_digest_failure_details
 
 from qcoder.algorithm_blueprint import (
     artifact_digest_matches,
@@ -50,8 +51,9 @@ CONTRACT_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v3"
 OLDER_PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v4"
 PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v5"
 PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v6"
-CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v7"
-CURRENT_LOOP_STATE_SCHEMA_VERSION = 7
+ADAPTIVE_INTENT_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v7"
+CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v8"
+CURRENT_LOOP_STATE_SCHEMA_VERSION = 8
 
 LOOP_INSTANCE_RECORD_MAX_BYTES = 65_536
 NEXT_LOOP_SEED_MAX_BYTES = 65_536
@@ -294,9 +296,15 @@ _STALE_RECOVERY = {
 class CurrentLoopError(ValueError):
     """Bounded local continuity failure with a stable category."""
 
-    def __init__(self, category: str):
+    def __init__(
+        self,
+        category: str,
+        *,
+        safe_details: Mapping[str, Any] | None = None,
+    ):
         super().__init__(category)
         self.category = category
+        self.safe_details = deepcopy(dict(safe_details or {}))
 
 
 class CurrentLoopConflict(CurrentLoopError):
@@ -1410,11 +1418,10 @@ def _state_digest(value: Mapping[str, Any]) -> str:
 
 
 def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
-    """Atomically migrate one active v2-v6 state into v7.
+    """Atomically migrate one active v2-v7 state into v8.
 
-    Version 7 records the adaptive-intent client-contract transition without
-    persisting its single-use machine document. Existing evidence and quiet
-    workflow receipts are preserved.
+    Version 8 records bounded quiet-iteration authority receipts. Existing
+    evidence, adaptive-intent state, and quiet-workflow receipts are preserved.
     """
 
     state = store.read()
@@ -1431,6 +1438,7 @@ def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
         (OLDER_PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID, 4),
         (PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID, 5),
         (PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID, 6),
+        (ADAPTIVE_INTENT_CURRENT_LOOP_STATE_SCHEMA_ID, 7),
     }:
         raise CurrentLoopError("current_loop_state_migration_unsupported")
     if state.get("state_kind") != "active_loop":
@@ -1458,6 +1466,7 @@ def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
     if schema_id not in {
         PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID,
         PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID,
+        ADAPTIVE_INTENT_CURRENT_LOOP_STATE_SCHEMA_ID,
     }:
         migrated["artifact_processing_outcomes"] = {}
         migrated["hosted_enrichment"] = {
@@ -1474,12 +1483,17 @@ def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
     contract = migrated.get("current_loop_contract")
     if isinstance(contract, Mapping) and contract.get("schema_version") == 1:
         migrated["current_loop_contract"] = migrate_contract_v1(contract)
-    if schema_id != PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID:
+    if schema_id not in {
+        PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID,
+        ADAPTIVE_INTENT_CURRENT_LOOP_STATE_SCHEMA_ID,
+    }:
         migrated["assistant_context_updates"] = []
         migrated["latest_assistant_context_update"] = None
         migrated["completion_receipt"] = None
         migrated["current_build_context_refresh"] = None
         migrated["quiet_iteration_status"] = "not_ready"
+    migrated["iteration_authority_receipts"] = []
+    migrated["latest_iteration_authority_receipt"] = None
     return store.replace(migrated, expected_revision=int(state["state_revision"]))
 
 
@@ -1510,6 +1524,10 @@ def current_loop_state_error(value: object) -> str | None:
         or (
             value.get("schema_id") == PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID
             and value.get("schema_version") == 6
+        )
+        or (
+            value.get("schema_id") == ADAPTIVE_INTENT_CURRENT_LOOP_STATE_SCHEMA_ID
+            and value.get("schema_version") == 7
         )
     )
     current = (
@@ -1577,6 +1595,10 @@ def current_loop_state_error(value: object) -> str | None:
                 or (
                     value.get("schema_id") == PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID
                     and value.get("schema_version") == 6
+                )
+                or (
+                    value.get("schema_id") == ADAPTIVE_INTENT_CURRENT_LOOP_STATE_SCHEMA_ID
+                    and value.get("schema_version") == 7
                 )
                 or (
                     value.get("schema_id") == OLDER_CURRENT_LOOP_STATE_SCHEMA_ID
@@ -1662,6 +1684,11 @@ def current_loop_state_error(value: object) -> str | None:
             return "current_loop_completion_receipt_invalid"
         if value.get("quiet_iteration_status") not in {"not_ready", "assist_iteration_ready"}:
             return "current_loop_quiet_iteration_status_invalid"
+        if not isinstance(value.get("iteration_authority_receipts"), list):
+            return "current_loop_iteration_authority_receipts_invalid"
+        latest_iteration = value.get("latest_iteration_authority_receipt")
+        if latest_iteration is not None and not isinstance(latest_iteration, Mapping):
+            return "current_loop_iteration_authority_receipt_invalid"
     if not isinstance(value.get("saved_artifacts"), Mapping):
         return "current_loop_saved_artifacts_invalid"
     if not isinstance(value.get("stage_freshness"), Mapping):
@@ -1847,6 +1874,8 @@ def activate_current_loop(
         "completion_receipt": None,
         "current_build_context_refresh": None,
         "quiet_iteration_status": "not_ready",
+        "iteration_authority_receipts": [],
+        "latest_iteration_authority_receipt": None,
         "directory_scan_performed": False,
         "watcher_active": False,
         "upload_performed": False,
@@ -2580,7 +2609,30 @@ def expand_next_loop_seed(
         except CurrentLoopError as exc:
             raise CurrentLoopError("next_loop_seed_parent_invalid") from exc
         if actual != descriptor:
-            raise CurrentLoopError("parent_digest_mismatch")
+            expected_digest = descriptor.get("artifact_digest")
+            observed_digest = actual.get("artifact_digest")
+            if (
+                isinstance(expected_digest, str)
+                and isinstance(observed_digest, str)
+                and expected_digest != observed_digest
+            ):
+                raise CurrentLoopError(
+                    "parent_digest_mismatch",
+                    safe_details=parent_digest_failure_details(
+                        expected_digest_reference=expected_digest,
+                        observed_digest_reference=observed_digest,
+                        parent_role=role,
+                    ),
+                )
+            raise CurrentLoopError(
+                "parent_reference_stale",
+                safe_details={
+                    "parent_role": role,
+                    "qcoder_owned_reference": True,
+                    "raw_parent_content_included": False,
+                    "private_parent_path_included": False,
+                },
+            )
         tool_input[field] = deepcopy(artifact)
         supplied_parents[role] = artifact
     governing_descriptor = seed["governing_blueprint"]
@@ -2660,6 +2712,7 @@ def current_loop_contract_snapshot() -> dict[str, Any]:
             "unchanged_continuation": UNCHANGED_CONTINUATION_SCHEMA_ID,
             "selected_artifact_authorization": (SELECTED_ARTIFACT_AUTHORIZATION_SCHEMA_ID),
             "local_state": CURRENT_LOOP_STATE_SCHEMA_ID,
+            "adaptive_intent_local_state": ADAPTIVE_INTENT_CURRENT_LOOP_STATE_SCHEMA_ID,
             "previous_local_state": PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID,
             "older_local_state": OLDER_CURRENT_LOOP_STATE_SCHEMA_ID,
             "legacy_local_state": LEGACY_CURRENT_LOOP_STATE_SCHEMA_ID,

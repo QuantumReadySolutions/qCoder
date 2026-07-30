@@ -172,6 +172,7 @@ def test_contract_snapshot_is_local_bounded_and_does_not_add_inventory() -> None
         "unchanged_continuation": UNCHANGED_CONTINUATION_SCHEMA_ID,
         "selected_artifact_authorization": (SELECTED_ARTIFACT_AUTHORIZATION_SCHEMA_ID),
         "local_state": CURRENT_LOOP_STATE_SCHEMA_ID,
+        "adaptive_intent_local_state": "qcoder.current_loop.local_state.v7",
         "previous_local_state": "qcoder.current_loop.local_state.v6",
         "older_local_state": "qcoder.current_loop.local_state.v2",
         "legacy_local_state": LEGACY_CURRENT_LOOP_STATE_SCHEMA_ID,

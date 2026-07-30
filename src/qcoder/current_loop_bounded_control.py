@@ -548,7 +548,24 @@ def operation_receipt_contract(state: Mapping[str, Any]) -> dict[str, Any]:
                     "json_type": "boolean",
                     "authority_only": True,
                 },
+                {
+                    "name": "exact_iteration_instruction",
+                    "flag": "--instruction-stdin",
+                    "ownership": "exact_current_customer_message_transport",
+                    "required": state.get("quiet_iteration_status") == "assist_iteration_ready",
+                    "json_type": "string",
+                    "maximum_utf8_bytes": 65_536,
+                    "input_channel": "stdin",
+                    "provenance": "user_stated",
+                    "stored_as_digest_only": True,
+                    "arbitrary_text_in_argv": False,
+                },
             ],
+            "ordinary_iteration_route": (
+                "record_ide_authority"
+                if state.get("quiet_iteration_status") == "assist_iteration_ready"
+                else None
+            ),
         },
         "consume_operation_receipt": {
             "operation": "register_artifacts",

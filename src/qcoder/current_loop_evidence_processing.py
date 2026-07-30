@@ -110,6 +110,9 @@ _RECOVERY_MEANINGS = {
     "retry_hosted_enrichment": "Retry the optional hosted enrichment using current authority.",
     "skip_hosted_enrichment": "Skip only the optional hosted-enrichment attempt.",
     "decline_build_review": "Decline the optional Build Review and continue unchanged.",
+    "return_to_iteration_ready": (
+        "Return this valid active loop to quiet ordinary iteration without discarding evidence."
+    ),
     "abandon_step": "Abandon only the current optional step.",
     "stop_loop": "Stop qCoder for this build.",
 }

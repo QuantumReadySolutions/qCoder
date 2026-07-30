@@ -12,8 +12,13 @@ from hashlib import sha256
 import json
 from typing import Any, Mapping, Sequence
 
-CUSTOMER_INTERACTION_SCHEMA_ID = "qcoder.current_loop.customer_interaction.v2"
-CUSTOMER_INTERACTION_SCHEMA_VERSION = 2
+from qcoder.current_loop_iteration import (
+    ITERATION_AUTHORITY_RECEIPT_SCHEMA_ID,
+    iteration_contract_snapshot,
+)
+
+CUSTOMER_INTERACTION_SCHEMA_ID = "qcoder.current_loop.customer_interaction.v3"
+CUSTOMER_INTERACTION_SCHEMA_VERSION = 3
 ASSISTANT_CONTEXT_UPDATE_SCHEMA_ID = "qcoder.current_loop.assistant_context_update.v1"
 ASSISTANT_CONTEXT_UPDATE_SCHEMA_VERSION = 1
 COMPLETION_RECEIPT_SCHEMA_ID = "qcoder.current_loop.completion_receipt.v1"
@@ -66,6 +71,8 @@ def customer_interaction(
     next_invocation: Mapping[str, Any] | None = None,
     activity_receipts: Sequence[Mapping[str, Any]] = (),
     summary_reference: str | None = None,
+    assist_iteration_ready: bool = False,
+    optional_on_request_actions: Sequence[str] = (),
 ) -> dict[str, Any]:
     if kind not in INTERACTION_KINDS:
         raise ValueError("customer_interaction_kind_invalid")
@@ -109,6 +116,8 @@ def customer_interaction(
         "activity_receipts": [deepcopy(dict(item)) for item in activity_receipts],
         "help_available": True,
         "current_summary_reference": summary_reference,
+        "assist_iteration_ready": assist_iteration_ready,
+        "optional_on_request_actions": [str(item) for item in optional_on_request_actions],
         "stable_domain_contracts_repeated": False,
         "raw_policy_included": False,
         "raw_evidence_included": False,
@@ -284,6 +293,7 @@ def quiet_workflow_contract_snapshot() -> dict[str, Any]:
         "completion_receipt_schema_id": COMPLETION_RECEIPT_SCHEMA_ID,
         "help_schema_id": HELP_SCHEMA_ID,
         "intent_receipt_schema_id": INTENT_RECEIPT_SCHEMA_ID,
+        "iteration_authority_receipt_schema_id": ITERATION_AUTHORITY_RECEIPT_SCHEMA_ID,
         "interaction_kinds": list(INTERACTION_KINDS),
         "intent_provenance": list(INTENT_PROVENANCE),
         "help_topics": list(HELP_TOPICS),
@@ -293,6 +303,7 @@ def quiet_workflow_contract_snapshot() -> dict[str, Any]:
         "build_review": "on_request",
         "raw_exposure_default": False,
         "cross_loop_carryover": False,
+        "quiet_iteration_routing": iteration_contract_snapshot(),
     }
     payload["contract_digest"] = _digest(payload)
     return payload

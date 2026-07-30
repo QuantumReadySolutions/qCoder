@@ -1328,6 +1328,14 @@ def _cmd_current_loop(argv: list[str]) -> int:
         choices=SUPPORTED_OUTPUT_ROLES,
         default=[],
     )
+    authority.add_argument(
+        "--instruction-stdin",
+        action="store_true",
+        help=(
+            "Read the exact current ordinary development instruction from UTF-8 stdin. "
+            "qCoder stores only its bounded receipt and digest; the instruction is never argv."
+        ),
+    )
 
     register = sub.add_parser(
         "register-artifacts",
@@ -1455,6 +1463,7 @@ def _cmd_current_loop(argv: list[str]) -> int:
             "retry_local_derivation",
             "skip_hosted_enrichment",
             "decline_build_review",
+            "return_to_iteration_ready",
             "abandon_step",
         ),
     )
@@ -1906,11 +1915,21 @@ def _cmd_current_loop(argv: list[str]) -> int:
                 posture_only=args.use_current_intent,
             )
         elif command == "record-ide-authority":
+            exact_iteration_instruction = None
+            if args.instruction_stdin:
+                raw_instruction = sys.stdin.buffer.read(65_537)
+                if len(raw_instruction) > 65_536:
+                    parser.error("iteration instruction exceeds 65536 bytes")
+                try:
+                    exact_iteration_instruction = raw_instruction.decode("utf-8")
+                except UnicodeDecodeError:
+                    parser.error("iteration instruction must be UTF-8")
             result = coordinator.record_ide_authority(
                 allowed=args.allow,
                 explicit_user_action=args.explicit,
                 operation_category=args.operation_category,
                 output_role_ceiling=args.output_role or ("source", "circuit_qasm", "results"),
+                exact_iteration_instruction=exact_iteration_instruction,
             )
         elif command == "register-artifacts":
             candidates = []

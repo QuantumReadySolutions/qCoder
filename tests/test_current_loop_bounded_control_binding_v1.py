@@ -323,7 +323,7 @@ def test_binding_v7_delivers_the_static_contract_and_customer_meanings() -> None
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     assert descriptor["contract_id"] == CLIENT_BINDING_CONTRACT_ID
-    assert descriptor["contract_id"].endswith(".v11")
+    assert descriptor["contract_id"].endswith(".v12")
     contract = descriptor["bounded_control_input_contract"]
     assert contract["schema_id"] == BOUNDED_CONTROL_INPUT_SCHEMA_ID
     assert contract["contract_digest"]

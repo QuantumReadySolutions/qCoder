@@ -87,7 +87,7 @@ def test_binding_v11_publishes_dedicated_complete_adaptive_intent_contract() -> 
     binding = build_client_binding_descriptor(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v11"
+    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v12"
     contract = binding["adaptive_intent_input_contract"]
     assert contract["schema_id"] == ADAPTIVE_INTENT_INPUT_SCHEMA_ID
     assert set(contract["profiles"]) == {"generic_qiskit", "grover_search", "qaoa"}
@@ -169,8 +169,8 @@ def test_local_state_v6_migrates_to_v7_without_quiet_history_reset(tmp_path: Pat
     state["state_digest"] = current_loop_module._state_digest(state)
     coordinator.state_path.write_text(canonical_json(state), encoding="utf-8")
     migrated = migrate_current_loop_state(coordinator.store)
-    assert migrated["schema_id"] == "qcoder.current_loop.local_state.v7"
-    assert migrated["schema_version"] == 7
+    assert migrated["schema_id"] == "qcoder.current_loop.local_state.v8"
+    assert migrated["schema_version"] == 8
     assert migrated["assistant_context_updates"] == [{"marker": "preserved"}]
 
 

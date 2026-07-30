@@ -572,9 +572,9 @@ def _activate_and_prepare(
 
 def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
     snapshot = coordinator_contract_snapshot()
-    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v13"
-    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v11"
-    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 13
+    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v14"
+    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v12"
+    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 14
     assert all(snapshot["checkpoint_result_protocol"].values())
     assert snapshot["permitted_input_source_taxonomy"] == {
         "schema_id": INPUT_SOURCE_DISPOSITION_SCHEMA_ID,
@@ -620,7 +620,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("95d7d647d4240b1dd911c1ddec4a41a95e22e839a3d6a012ea1526dcb8ebaa62")
+    assert contract_digest == ("8fae11db1de76293885d0dbbec92c610c776a0b4a1cb2d5dec50365eef856964")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
@@ -633,6 +633,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "authorization_declined",
         "authorization_partial",
         "canonical_artifact_modified",
+        "canonical_parent_set_incomplete",
         "circuit_format_unsupported",
         "client_state_conflict",
         "contract_adjustment_value_invalid",
@@ -647,13 +648,17 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "contract_raw_exposure_ceiling",
         "contract_revision_stale",
         "current_loop_contract_policy_prohibited",
+        "governing_blueprint_unavailable",
         "ide_write_or_run_denied",
         "local_state_corrupt",
         "loop_already_active",
         "loop_not_activated",
         "operation_receipt_missing",
         "operation_receipt_stale",
+        "ordinary_iteration_instruction_required",
+        "parent_artifact_missing",
         "parent_digest_mismatch",
+        "parent_reference_stale",
         "posture_required",
         "protected_operation_rejected",
         "protected_service_unavailable",
@@ -669,6 +674,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "selected_file_missing",
         "selected_file_stale",
         "unknown_local_internal",
+        "unsupported_iteration_route",
         "unsupported_schema",
     ]
     assert snapshot["connected_clients"] == list(CLIENT_NAMES)
@@ -2640,8 +2646,8 @@ def test_every_checkpoint_result_is_deterministically_actionable(tmp_path: Path)
             summary="Synthetic checkpoint contract test.",
         )
         _assert_actionable_checkpoint(result)
-        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v13"
-        assert result["schema_version"] == 13
+        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v14"
+        assert result["schema_version"] == 14
 
 
 @pytest.mark.parametrize(

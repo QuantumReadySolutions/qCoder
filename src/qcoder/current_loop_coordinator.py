@@ -168,15 +168,25 @@ from qcoder.current_loop_quiet_workflow import (
     intent_receipt,
     quiet_workflow_contract_snapshot,
 )
+from qcoder.current_loop_iteration import (
+    ITERATION_AUTHORITY_RECEIPT_SCHEMA_ID,
+    PARENT_ERROR_TAXONOMY_SCHEMA_ID,
+    iteration_authority_receipt,
+    iteration_contract_snapshot,
+    parent_digest_failure_details,
+    parent_digest_failure_provenance_valid,
+    parent_error_taxonomy_snapshot,
+)
 from qcoder.context_loop import CONTEXT_LOOP_GATE
 
-COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v13"
-COORDINATOR_RESULT_SCHEMA_VERSION = 13
-COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v11"
-PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v10"
+COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v14"
+COORDINATOR_RESULT_SCHEMA_VERSION = 14
+COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v12"
+PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v11"
 OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
     {
         "qcoder.current_loop.coordinator_state.v9",
+        "qcoder.current_loop.coordinator_state.v10",
         "qcoder.current_loop.coordinator_state.v6",
         "qcoder.current_loop.coordinator_state.v7",
         "qcoder.current_loop.coordinator_state.v8",
@@ -187,9 +197,9 @@ OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
         "qcoder.current_loop.coordinator_state.v3",
     }
 )
-COORDINATOR_STATE_SCHEMA_VERSION = 11
-RECOVERY_SCHEMA_ID = "qcoder.current_loop.recovery.v2"
-RECOVERY_SCHEMA_VERSION = 2
+COORDINATOR_STATE_SCHEMA_VERSION = 12
+RECOVERY_SCHEMA_ID = "qcoder.current_loop.recovery.v3"
+RECOVERY_SCHEMA_VERSION = 3
 CONSEQUENCE_PROJECTION_SCHEMA_ID = "qcoder.current_loop.consequence_projection.v1"
 PERFORMANCE_SCHEMA_ID = "qcoder.current_loop.private_performance.v1"
 INPUT_SOURCE_DISPOSITION_SCHEMA_ID = "qcoder.current_loop.permitted_input_source_disposition.v1"
@@ -294,8 +304,14 @@ _PHASE_TRANSITIONS = {
         "continuation_choice",
         "abandoned",
     ),
-    "current_build_review": ("awaiting_local_artifacts", "continuation_choice", "abandoned"),
+    "current_build_review": (
+        "evidence_processing",
+        "awaiting_local_artifacts",
+        "continuation_choice",
+        "abandoned",
+    ),
     "continuation_choice": (
+        "evidence_processing",
         "awaiting_local_artifacts",
         "current_build_review",
         "change_confirmation",
@@ -320,7 +336,7 @@ _READY_PHASE_PROTOCOL_DISPOSITIONS = {
     "generation_ready": "obtain_separate_ide_write_or_run_authority",
     "awaiting_local_artifacts": "perform_authorized_ide_work_and_register_exact_paths",
     "artifact_authorization": "obtain_exact_artifact_set_authorization",
-    "evidence_processing": "process_or_review_exact_authorized_evidence",
+    "evidence_processing": "process_exact_evidence_or_remain_assist_iteration_ready",
     "current_build_review": "review_current_build",
     "continuation_choice": "stage_exact_continuation_choice",
     "change_confirmation": "stage_exact_proposal_confirmation_or_decline",
@@ -668,6 +684,41 @@ _RECOVERY = {
         True,
         False,
     ),
+    "ordinary_iteration_instruction_required": (
+        "A quiet ordinary iteration needs the exact current customer instruction.",
+        "Use the qCoder-generated record-ide-authority invocation and its exact "
+        "customer-instruction stdin channel.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "governing_blueprint_unavailable": (
+        "This adaptive loop has no governing Working Blueprint for lineage closure.",
+        "Return to quiet iteration, close the loop through the receipt-style stop path, "
+        "or request Blueprint review when meaningful.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "canonical_parent_set_incomplete": (
+        "A parent-dependent operation lacks one or more qCoder-owned canonical parents.",
+        "Keep the valid loop and evidence intact; return to quiet iteration or use a "
+        "qCoder-generated parent-dependent route after its parents exist.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "parent_reference_stale": (
+        "A qCoder-owned canonical parent reference is stale.",
+        "Refresh qCoder state and use only the newly supplied parent-bound invocation.",
+        True,
+        False,
+        True,
+        False,
+    ),
     "canonical_artifact_modified": (
         "A saved canonical qCoder artifact no longer matches its recorded bytes.",
         "Restore the exact artifact or recreate it through the supported operation.",
@@ -677,12 +728,31 @@ _RECOVERY = {
         True,
     ),
     "parent_digest_mismatch": (
-        "An explicitly supplied parent does not match the required digest.",
-        "Supply the exact saved parent file. Do not repair it from conversation.",
-        False,
+        "An actual expected-versus-observed qCoder parent digest comparison failed.",
+        "Refresh or rebind the qCoder-owned parent and retry only through a newly "
+        "generated invocation; never reconstruct the parent from conversation.",
+        True,
         False,
         True,
         True,
+    ),
+    "parent_artifact_missing": (
+        "A qCoder-owned canonical parent artifact is unavailable.",
+        "Restore or recreate it through qCoder, or return to quiet iteration without "
+        "attempting lineage closure.",
+        True,
+        False,
+        True,
+        False,
+    ),
+    "unsupported_iteration_route": (
+        "A loop-closing or governing route was selected for an ordinary iteration.",
+        "Return to quiet iteration and use the exact current customer instruction through "
+        "the native-card IDE-authority route.",
+        True,
+        False,
+        True,
+        False,
     ),
     "client_state_conflict": (
         "Another local client updated current-loop state first.",
@@ -1171,11 +1241,15 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "completion_receipt": quiet_workflow_contract_snapshot()[
                 "completion_receipt_schema_id"
             ],
+            "iteration_authority_receipt": ITERATION_AUTHORITY_RECEIPT_SCHEMA_ID,
+            "parent_error_taxonomy": PARENT_ERROR_TAXONOMY_SCHEMA_ID,
             "help": quiet_workflow_contract_snapshot()["help_schema_id"],
         },
         "operation_invocation": invocation_contract_snapshot(),
         "bounded_control_input": bounded_control_contract_snapshot(),
         "adaptive_intent_input": adaptive_intent_contract_snapshot(),
+        "quiet_iteration": iteration_contract_snapshot(),
+        "parent_error_taxonomy": parent_error_taxonomy_snapshot(),
         "operation_transport_inventory": operation_transport_inventory(),
         "current_loop_contract": contract_snapshot(),
         "operation_receipt": event_receipt_snapshot(),
@@ -1674,6 +1748,10 @@ _ACTION_INPUT_SOURCE_CATEGORIES = {
         "authority_only_approval",
     ),
     "obtain_separate_ide_write_or_run_authority": ("authority_only_approval",),
+    "assist_iteration_ready": (
+        "exact_request_capture_transport",
+        "authority_only_approval",
+    ),
     "perform_authorized_ide_work_and_register_exact_paths": ("exact_artifact_lineage",),
     "obtain_exact_artifact_set_authorization": (
         "qcoder_held_staged_value",
@@ -1690,6 +1768,7 @@ _ACTION_INPUT_SOURCE_CATEGORIES = {
     ),
     "stop_and_present_checkpoint": ("authority_only_approval",),
     "refresh_bounded_recovery": ("qcoder_managed_canonical_reference",),
+    "return_to_iteration_ready": ("qcoder_managed_canonical_reference",),
 }
 
 
@@ -1714,11 +1793,15 @@ def _default_permitted_input_source(action: str) -> str:
             "explicit_user_authority_only_for_qcoder_held_activation_request"
         ),
         "obtain_separate_ide_write_or_run_authority": ("explicit_user_authority_only"),
+        "assist_iteration_ready": (
+            "exact_current_customer_development_instruction_and_native_ide_authority"
+        ),
         "obtain_exact_artifact_set_authorization": (
             "explicit_user_bounded_exact_set_action_on_qcoder_displayed_candidates"
         ),
         "stop_and_present_checkpoint": "explicit_user_checkpoint_authority",
         "refresh_bounded_recovery": "fresh_qcoder_coordinator_result",
+        "return_to_iteration_ready": "current_qcoder_owned_recovery_reference",
     }
     source = defaults.get(action)
     if source is None:
@@ -4558,6 +4641,7 @@ class CurrentLoopCoordinator:
         explicit_user_action: bool,
         operation_category: str = "ide_write",
         output_role_ceiling: Sequence[str] = ("source", "circuit_qasm", "results"),
+        exact_iteration_instruction: str | None = None,
     ) -> dict[str, Any]:
         started = self.clock()
         try:
@@ -4581,6 +4665,26 @@ class CurrentLoopCoordinator:
                     elapsed=self.clock() - started,
                 )
             coordinator = self._coordinator_state(state)
+            originating_phase = str(coordinator["phase"])
+            quiet_iteration = (
+                originating_phase
+                in {"evidence_processing", "current_build_review", "continuation_choice"}
+                and state.get("quiet_iteration_status") == "assist_iteration_ready"
+            )
+            if quiet_iteration and exact_iteration_instruction is None:
+                raise CurrentLoopError("ordinary_iteration_instruction_required")
+            iteration_receipt = (
+                iteration_authority_receipt(
+                    exact_instruction=exact_iteration_instruction,
+                    loop_ref=str(state["loop_ref"]),
+                    workspace_binding=str(state["workspace_root"]),
+                    state_revision=int(state["state_revision"]),
+                    contract_revision=int(state["current_loop_contract"]["contract_revision"]),
+                    action_category=operation_category,
+                )
+                if quiet_iteration and exact_iteration_instruction is not None
+                else None
+            )
             receipt = issue_operation_receipt(
                 loop_ref=str(state["loop_ref"]),
                 workspace_binding=str(state["workspace_root"]),
@@ -4591,6 +4695,12 @@ class CurrentLoopCoordinator:
 
             def receipt_mutator(value: dict[str, Any]) -> Mapping[str, Any]:
                 value["operation_receipts"][receipt["receipt_id"]] = receipt
+                if iteration_receipt is not None:
+                    value["iteration_authority_receipts"].append(deepcopy(iteration_receipt))
+                    value["iteration_authority_receipts"] = value["iteration_authority_receipts"][
+                        -32:
+                    ]
+                    value["latest_iteration_authority_receipt"] = deepcopy(iteration_receipt)
                 return value
 
             state = self.store.update(
@@ -4641,9 +4751,22 @@ class CurrentLoopCoordinator:
                     "candidate_discovery_permitted": False,
                     "qcoder_local_state_access_permitted": False,
                     "operation_receipt": deepcopy(receipt),
+                    "iteration_authority_receipt": deepcopy(iteration_receipt),
+                    "ordinary_iteration": quiet_iteration,
+                    "exact_iteration_instruction_provenance": (
+                        "user_stated" if iteration_receipt is not None else None
+                    ),
+                    "build_review_implicitly_deferred": (iteration_receipt is not None),
+                    "governing_blueprint_unchanged": True,
+                    "continuation_artifact_created": False,
                 },
             )
-        except (CurrentLoopError, CurrentLoopConflict, EventReceiptError) as exc:
+        except (
+            CurrentLoopError,
+            CurrentLoopConflict,
+            EventReceiptError,
+            ValueError,
+        ) as exc:
             return self._exception_result("record_ide_authority", exc, started)
 
     def register_artifacts(
@@ -4884,6 +5007,16 @@ class CurrentLoopCoordinator:
                         str(self.store.read().get("latest_run_summary_reference"))
                         if self.store.read().get("latest_run_summary_reference") is not None
                         else None
+                    ),
+                    assist_iteration_ready=bool(processed_details.get("assist_iteration_ready")),
+                    optional_on_request_actions=(
+                        "hosted_enrichment",
+                        "build_review",
+                        "contract_editor",
+                        "blueprint",
+                        "circuit_workbench",
+                        "run_summary",
+                        "evidence_views",
                     ),
                 )
                 return processed
@@ -5813,8 +5946,21 @@ class CurrentLoopCoordinator:
                 coordinator["evidence_processing_complete"] = False
                 summary = "Local derivation may be retried using the current exact authorized set."
             elif action == "decline_build_review":
-                summary = "The optional Build Review was declined; the Blueprint is unchanged."
-                coordinator["phase"] = "continuation_choice"
+                summary = (
+                    "The optional Build Review was declined; the Blueprint is unchanged "
+                    "and quiet ordinary iteration is ready."
+                )
+                coordinator["phase"] = "evidence_processing"
+                coordinator["evidence_processing_complete"] = True
+                coordinator["assist_iteration_ready"] = True
+            elif action == "return_to_iteration_ready":
+                summary = (
+                    "The valid loop returned to quiet ordinary iteration. Existing authority "
+                    "and evidence remain intact; future IDE write or run authority is separate."
+                )
+                coordinator["phase"] = "evidence_processing"
+                coordinator["evidence_processing_complete"] = True
+                coordinator["assist_iteration_ready"] = True
             else:
                 raise EvidenceProcessingError(
                     "recovery_action_not_permitted",
@@ -5861,7 +6007,8 @@ class CurrentLoopCoordinator:
         started = self.clock()
         try:
             state = self._require_phase(
-                "decline_build_review", {"evidence_processing", "current_build_review"}
+                "decline_build_review",
+                {"evidence_processing", "current_build_review", "continuation_choice"},
             )
             if explicit_authority is not True:
                 return self._checkpoint_result(
@@ -5874,13 +6021,15 @@ class CurrentLoopCoordinator:
             coordinator = self._coordinator_state(state)
             coordinator.update(
                 {
-                    "phase": "continuation_choice",
-                    "state_status": "checkpoint_required",
+                    "phase": "evidence_processing",
+                    "state_status": "ready",
                     "checkpoint_kind": "none",
                     "customer_summary": (
-                        "Build Review was declined. The governing Blueprint is unchanged; "
-                        "continue or request the review later."
+                        "Build Review was declined for now. The governing Blueprint and "
+                        "current evidence are unchanged; quiet ordinary iteration is ready."
                     ),
+                    "evidence_processing_complete": True,
+                    "assist_iteration_ready": True,
                     "build_review": {
                         "status": "declined",
                         "optional": True,
@@ -5904,6 +6053,8 @@ class CurrentLoopCoordinator:
                     "evolved_blueprint_created": False,
                     "hosted_operation_invoked": False,
                     "may_request_later": True,
+                    "customer_response_required": False,
+                    "assist_iteration_ready": True,
                 },
             )
         except (CurrentLoopError, CurrentLoopConflict) as exc:
@@ -6131,6 +6282,19 @@ class CurrentLoopCoordinator:
                     ),
                     elapsed=self.clock() - started,
                 )
+            if "working_blueprint" not in state.get("saved_artifacts", {}):
+                raise EvidenceProcessingError(
+                    "governing_blueprint_unavailable",
+                    origin="contract_or_authority",
+                    safe_details={
+                        "exact_instruction_utf8_sha256": sha256(
+                            user_statement.encode("utf-8")
+                        ).hexdigest(),
+                        "instruction_provenance": "user_stated",
+                        "ordinary_iteration_recovery_available": True,
+                        "working_blueprint_reference_supplied_by_assistant": False,
+                    },
+                )
             freshness = check_current_loop_freshness(
                 store=self.store, expected_revision=state["state_revision"]
             )
@@ -6248,7 +6412,12 @@ class CurrentLoopCoordinator:
                     "start_next_uses_qcoder_managed_references": True,
                 },
             )
-        except (CurrentLoopError, CurrentLoopConflict, ValueError) as exc:
+        except (
+            CurrentLoopError,
+            CurrentLoopConflict,
+            EvidenceProcessingError,
+            ValueError,
+        ) as exc:
             return self._exception_result("continue_unchanged", exc, started)
 
     def propose_change(
@@ -6462,11 +6631,17 @@ class CurrentLoopCoordinator:
                 )
             evolved = self._response_artifact(payload, "evolved_blueprint")
             working = self._saved_artifact(state, "working_blueprint")
-            if evolved.get("working_blueprint_parent", {}).get("digest") not in {
-                None,
-                _artifact_digest(working),
-            }:
-                raise CurrentLoopError("parent_digest_mismatch")
+            observed_parent_digest = evolved.get("working_blueprint_parent", {}).get("digest")
+            expected_parent_digest = _artifact_digest(working)
+            if observed_parent_digest not in {None, expected_parent_digest}:
+                raise CurrentLoopError(
+                    "parent_digest_mismatch",
+                    safe_details=parent_digest_failure_details(
+                        expected_digest_reference=expected_parent_digest,
+                        observed_digest_reference=str(observed_parent_digest),
+                        parent_role="working_blueprint",
+                    ),
+                )
             self._save_artifact("evolved_blueprint", evolved, "evolved-blueprint.json")
             required = {"governing_blueprint": ("implementation_blueprint", evolved)}
             if "output_evidence_contract" in state["saved_artifacts"]:
@@ -7901,7 +8076,7 @@ class CurrentLoopCoordinator:
         if result.get("schema_id") in {
             PREVIOUS_COORDINATOR_STATE_SCHEMA_ID,
             *OLDER_COORDINATOR_STATE_SCHEMA_IDS,
-        } and result.get("schema_version") in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}:
+        } and result.get("schema_version") in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}:
             result["schema_id"] = COORDINATOR_STATE_SCHEMA_ID
             result["schema_version"] = COORDINATOR_STATE_SCHEMA_VERSION
             result.setdefault("effective_generation_posture", state.get("generation_posture"))
@@ -8228,17 +8403,28 @@ class CurrentLoopCoordinator:
             protocol.update(
                 {
                     "supported_next_action": (
-                        "review_current_build"
+                        "assist_iteration_ready"
                         if processing_complete
                         else "process_exact_authorized_artifacts"
                     ),
                     "next_invocation": _invocation_template(
-                        ("review-build" if processing_complete else "process-authorized-artifacts"),
+                        (
+                            "record-ide-authority"
+                            if processing_complete
+                            else "process-authorized-artifacts"
+                        ),
+                        required_flags=(
+                            ("--allow", "--explicit", "--instruction-stdin")
+                            if processing_complete
+                            else ()
+                        ),
                         alternatives=(
                             (
                                 "enrich-authorized-evidence",
+                                "review-build",
                                 "decline-build-review",
                                 "evidence-view",
+                                "open-contract-editor",
                             )
                             if processing_complete
                             else ()
@@ -8250,14 +8436,40 @@ class CurrentLoopCoordinator:
                                 else "exact_approved_artifact_set"
                             ),
                         ),
-                        uses_transport=processing_complete,
+                        new_inputs=(
+                            (
+                                "exact_current_customer_iteration_instruction",
+                                "action_specific_native_ide_authority",
+                            )
+                            if processing_complete
+                            else ()
+                        ),
+                        uses_transport=False,
                     ),
                 }
             )
-            protocol["permitted_input_source"] = "exact_authorized_local_artifact_set"
+            protocol["permitted_input_source"] = (
+                "exact_current_customer_development_instruction_and_native_ide_authority"
+                if processing_complete
+                else "exact_authorized_local_artifact_set"
+            )
             if processing_complete:
+                protocol["assist_iteration_ready"] = True
+                protocol["invocation_activation_condition"] = (
+                    "exact_ordinary_customer_development_instruction"
+                )
                 protocol["build_review_optional"] = True
+                protocol["build_review_availability"] = "available_on_request"
+                protocol["hosted_enrichment_availability"] = "available_on_request"
                 protocol["decline_blocks_loop_completion"] = False
+                protocol["required_authority_input"] = _authority_input(
+                    "--allow",
+                    (
+                        "Authorize only the exact current ordinary IDE write or run "
+                        "instruction after that customer instruction exists."
+                    ),
+                    additional_flags=("--explicit", "--instruction-stdin"),
+                )
             return protocol
         if phase == "current_build_review" and state_status == "ready":
             protocol.update(
@@ -9030,6 +9242,24 @@ class CurrentLoopCoordinator:
                 str(state.get("latest_run_summary_reference"))
                 if state.get("latest_run_summary_reference") is not None
                 else None
+            ),
+            assist_iteration_ready=(
+                state.get("quiet_iteration_status") == "assist_iteration_ready"
+                and coordinator.get("phase") == "evidence_processing"
+                and coordinator.get("evidence_processing_complete") is True
+            ),
+            optional_on_request_actions=(
+                (
+                    "hosted_enrichment",
+                    "build_review",
+                    "contract_editor",
+                    "blueprint",
+                    "circuit_workbench",
+                    "run_summary",
+                    "evidence_views",
+                )
+                if state.get("quiet_iteration_status") == "assist_iteration_ready"
+                else ()
             ),
         )
         return result
@@ -9892,7 +10122,9 @@ class CurrentLoopCoordinator:
                 "selected_file_stale",
                 "selected_file_missing",
                 "canonical_artifact_modified",
+                "parent_reference_stale",
                 "parent_digest_mismatch",
+                "parent_artifact_missing",
                 "seed_incomplete",
             }
             else "blocked"
@@ -9913,6 +10145,8 @@ class CurrentLoopCoordinator:
             "certification_fallback_available": recovery[5],
             **deepcopy(dict(details or {})),
         }
+        payload["assistant_should_stop"] = not recoverable
+        payload["recovery_or_continuation_required"] = recoverable
         payload["failure_provenance"] = failure_provenance(
             origin=origin,
             category=normalized,
@@ -9936,6 +10170,14 @@ class CurrentLoopCoordinator:
                 "unsupported" in normalized
                 or "invalid" in normalized
                 or normalized == "current_loop_contract_policy_prohibited"
+                or normalized
+                in {
+                    "governing_blueprint_unavailable",
+                    "canonical_parent_set_incomplete",
+                    "parent_reference_stale",
+                    "parent_digest_mismatch",
+                    "parent_artifact_missing",
+                }
             )
             else "restage_with_construction"
         )
@@ -9946,6 +10188,16 @@ class CurrentLoopCoordinator:
                 if normalized in {"artifact_format_unsupported", "circuit_format_unsupported"}
                 else ("retry_hosted_enrichment", "skip_hosted_enrichment", "stop_loop")
                 if origin in {"hosted_transport", "hosted_operation"}
+                else ("return_to_iteration_ready", "stop_loop")
+                if normalized
+                in {
+                    "governing_blueprint_unavailable",
+                    "canonical_parent_set_incomplete",
+                    "parent_reference_stale",
+                    "parent_digest_mismatch",
+                    "parent_artifact_missing",
+                    "unsupported_iteration_route",
+                }
                 else ("abandon_step", "stop_loop")
             )
         )
@@ -9959,6 +10211,7 @@ class CurrentLoopCoordinator:
             operation=operation,
             input_digests=input_digests,
         )
+        recovery_reference = f"recovery-{fingerprint[:24]}"
         payload["recovery_contract"] = {
             "schema_id": RECOVERY_SCHEMA_ID,
             "schema_version": RECOVERY_SCHEMA_VERSION,
@@ -10043,13 +10296,39 @@ class CurrentLoopCoordinator:
                 "schema_version": RECOVERY_SCHEMA_VERSION,
                 "category": normalized,
                 "strategy": strategy,
-                "reference": f"recovery-{fingerprint[:24]}",
+                "reference": recovery_reference,
                 "fingerprint": fingerprint,
                 "occurrence_count": occurrence_count,
                 "deterministic": deterministic,
                 "alternatives": selected_alternatives,
                 "origin": origin,
             }
+            if "return_to_iteration_ready" in selected_alternatives:
+                recovery_protocol = {
+                    "supported_next_action": "return_to_iteration_ready",
+                    "next_invocation": _invocation_template(
+                        "execute-recovery-action",
+                        required_flags=(
+                            "--recovery-reference",
+                            "--action",
+                            "--expected-contract-revision",
+                        ),
+                        fixed_argument_values={
+                            "--recovery-reference": recovery_reference,
+                            "--action": "return_to_iteration_ready",
+                            "--expected-contract-revision": int(
+                                state["current_loop_contract"]["contract_revision"]
+                            ),
+                        },
+                        reused_inputs=("current_qcoder_owned_recovery_reference",),
+                    ),
+                    "required_authority_input": None,
+                    "awaiting_confirmation_fields": [],
+                    "confirmation_transmission_state": "not_applicable",
+                    "identical_repeat_prohibited": False,
+                    "permitted_input_source": "current_qcoder_owned_recovery_reference",
+                    "no_action_reason": None,
+                }
         self._replace_coordinator(coordinator)
         return self._result(
             operation=operation,
@@ -10069,10 +10348,19 @@ class CurrentLoopCoordinator:
             else "unknown_local_internal"
         )
         category = _ERROR_ALIASES.get(category, category)
+        safe_details = (
+            deepcopy(dict(exc.safe_details))
+            if isinstance(getattr(exc, "safe_details", None), Mapping)
+            else {}
+        )
         if category == "protected_operation_rejected" and not (
             isinstance(exc, EvidenceProcessingError)
             and exc.protected_call_attempted
             and exc.protected_non_success
+        ):
+            category = "unknown_local_internal"
+        if category == "parent_digest_mismatch" and not parent_digest_failure_provenance_valid(
+            safe_details
         ):
             category = "unknown_local_internal"
         if category not in _RECOVERY:
@@ -10084,8 +10372,6 @@ class CurrentLoopCoordinator:
                 category = "reconstruction_attempt_refused"
             elif "schema" in category or "version" in category:
                 category = "unsupported_schema"
-            elif "parent" in category or "digest" in category:
-                category = "parent_digest_mismatch"
             elif isinstance(exc, EvidenceProcessingError):
                 pass
             elif category.startswith(
@@ -10111,8 +10397,15 @@ class CurrentLoopCoordinator:
             phase=self._safe_phase(),
             elapsed=max(0.0, self.clock() - started),
             details=(
-                exc.safe_details
-                if isinstance(exc, (CheckpointInputStructuralError, EvidenceProcessingError))
+                safe_details
+                if isinstance(
+                    exc,
+                    (
+                        CurrentLoopError,
+                        CheckpointInputStructuralError,
+                        EvidenceProcessingError,
+                    ),
+                )
                 else None
             ),
             origin=origin,

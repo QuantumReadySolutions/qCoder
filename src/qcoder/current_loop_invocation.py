@@ -25,9 +25,10 @@ from qcoder.current_loop_bounded_control import (
     BOUNDED_CONTROL_INPUT_SCHEMA_ID,
     BOUNDED_CONTROL_INPUT_SCHEMA_VERSION,
 )
+from qcoder.current_loop_iteration import ITERATION_AUTHORITY_RECEIPT_SCHEMA_ID
 
-INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v5"
-INVOCATION_CONTRACT_SCHEMA_VERSION = 5
+INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v6"
+INVOCATION_CONTRACT_SCHEMA_VERSION = 6
 OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v3"
 OPERATION_INVENTORY_SCHEMA_VERSION = 3
 
@@ -355,6 +356,8 @@ def build_operation_invocation(
         input_channel = "checkpoint_input_stdin_or_bounded_file"
     elif any("request-stdin" in str(item) for item in required_flags):
         input_channel = "exact_request_stdin"
+    elif any("instruction-stdin" in str(item) for item in required_flags):
+        input_channel = "exact_current_customer_instruction_stdin"
     elif subcommand == "prepare-adaptive-intent":
         input_channel = "qcoder_owned_single_use_json_file"
     elif dynamic_arguments or required_flags:
@@ -447,4 +450,7 @@ def invocation_contract_snapshot() -> dict[str, Any]:
         "adaptive_intent_document_schema_id": ADAPTIVE_INTENT_DOCUMENT_SCHEMA_ID,
         "adaptive_intent_document_schema_version": ADAPTIVE_INTENT_DOCUMENT_SCHEMA_VERSION,
         "adaptive_intent_fields_file_is_qcoder_owned_and_self_describing": True,
+        "iteration_authority_receipt_schema_id": ITERATION_AUTHORITY_RECEIPT_SCHEMA_ID,
+        "ordinary_iteration_instruction_channel": ("exact_current_customer_instruction_stdin"),
+        "continue_unchanged_is_ordinary_iteration": False,
     }

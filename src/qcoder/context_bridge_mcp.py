@@ -78,6 +78,10 @@ from qcoder.current_loop_run_summary import (
     run_summary_contract_snapshot,
 )
 from qcoder.current_loop_quiet_workflow import quiet_workflow_contract_snapshot
+from qcoder.current_loop_iteration import (
+    iteration_contract_snapshot,
+    parent_error_taxonomy_snapshot,
+)
 from qcoder.current_loop_evidence_processing import (
     artifact_format_contract_snapshot,
     evidence_processing_contract_snapshot,
@@ -123,8 +127,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 11
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v11"
+CLIENT_BINDING_SCHEMA_VERSION = 12
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v12"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -308,7 +312,14 @@ question. Use each customer_interaction envelope as the primary communication co
 activity_receipt or no_customer_interaction_required result is non-blocking. Interrupt only for a
 material decision, authority, privacy or raw exposure, cost or external service, execution, or
 genuine blocker boundary. Hosted enrichment and Build Review are on request and are not
-automatically offered. Use the qCoder-managed current_build_facts composite view for grouped
+automatically offered. After local processing, assist_iteration_ready is authoritative; never
+replace it with Build Review, hosted enrichment, or continuation_choice. When the customer gives
+an exact ordinary development instruction, implicitly defer optional Build Review, preserve the
+instruction as user_stated, and execute the supplied record-IDE-authority invocation with its
+exact stdin channel. Do not call decline-build-review, continue-unchanged, or stage a paraphrase.
+The governing Blueprint remains unchanged unless the customer explicitly requests promotion.
+continue_unchanged is lineage closure, not ordinary iteration, and every canonical parent remains
+qCoder-owned. Use the qCoder-managed current_build_facts composite view for grouped
 run/circuit questions. Use qCoder's bounded help operation for status or product-surface
 questions. An exact unchanged continuation or stop instruction uses qCoder's completion receipt
 without restaging.
@@ -424,6 +435,8 @@ def build_client_binding_descriptor(
             "run_summary_contract": run_summary_contract_snapshot(),
             "evidence_view_contract": evidence_view_contract_snapshot(),
             "quiet_everyday_workflow_contract": quiet_workflow_contract_snapshot(),
+            "quiet_iteration_routing_contract": iteration_contract_snapshot(),
+            "parent_error_taxonomy": parent_error_taxonomy_snapshot(),
             "checkpoint_input_contract": {
                 "schema_id": CHECKPOINT_INPUT_SCHEMA_ID,
                 "schema_version": CHECKPOINT_INPUT_SCHEMA_VERSION,

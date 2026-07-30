@@ -53,10 +53,16 @@ def test_build_review_offer_is_optional_and_decline_continues(tmp_path: Path) ->
     coordinator = _evidence_ready(tmp_path)
     status = coordinator.status()
     assert status["build_review_optional"] is True
+    assert status["supported_next_action"] == "assist_iteration_ready"
+    assert status["next_invocation"]["subcommand"] == "record-ide-authority"
+    assert status["next_invocation"]["transport_classification"] == "local_only"
     assert "decline-build-review" in status["next_invocation"]["allowed_subcommand_alternatives"]
     declined = coordinator.decline_build_review(explicit_authority=True)
     assert declined["ok"] is True
-    assert declined["phase"] == "continuation_choice"
+    assert declined["phase"] == "evidence_processing"
+    assert declined["state_status"] == "ready"
+    assert declined["details"]["assist_iteration_ready"] is True
+    assert declined["customer_interaction"]["requires_customer_response"] is False
     assert declined["details"]["working_blueprint_unchanged"] is True
     assert declined["details"]["evolved_blueprint_created"] is False
     assert declined["details"]["hosted_operation_invoked"] is False
