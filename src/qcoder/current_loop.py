@@ -52,8 +52,9 @@ OLDER_PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state
 PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v5"
 PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v6"
 ADAPTIVE_INTENT_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v7"
-CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v8"
-CURRENT_LOOP_STATE_SCHEMA_VERSION = 8
+QUIET_ITERATION_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v8"
+CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v9"
+CURRENT_LOOP_STATE_SCHEMA_VERSION = 9
 
 LOOP_INSTANCE_RECORD_MAX_BYTES = 65_536
 NEXT_LOOP_SEED_MAX_BYTES = 65_536
@@ -1418,10 +1419,11 @@ def _state_digest(value: Mapping[str, Any]) -> str:
 
 
 def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
-    """Atomically migrate one active v2-v7 state into v8.
+    """Atomically migrate one active v2-v8 state into v9.
 
-    Version 8 records bounded quiet-iteration authority receipts. Existing
-    evidence, adaptive-intent state, and quiet-workflow receipts are preserved.
+    Version 9 adds immutable registered revisions and coherent evidence
+    snapshots. Existing quiet-workflow records remain available through a
+    bounded migration alias map. Inconsistent evidence bindings fail closed.
     """
 
     state = store.read()
@@ -1439,6 +1441,7 @@ def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
         (PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID, 5),
         (PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID, 6),
         (ADAPTIVE_INTENT_CURRENT_LOOP_STATE_SCHEMA_ID, 7),
+        (QUIET_ITERATION_CURRENT_LOOP_STATE_SCHEMA_ID, 8),
     }:
         raise CurrentLoopError("current_loop_state_migration_unsupported")
     if state.get("state_kind") != "active_loop":
@@ -1486,14 +1489,51 @@ def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
     if schema_id not in {
         PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID,
         ADAPTIVE_INTENT_CURRENT_LOOP_STATE_SCHEMA_ID,
+        QUIET_ITERATION_CURRENT_LOOP_STATE_SCHEMA_ID,
     }:
         migrated["assistant_context_updates"] = []
         migrated["latest_assistant_context_update"] = None
         migrated["completion_receipt"] = None
         migrated["current_build_context_refresh"] = None
         migrated["quiet_iteration_status"] = "not_ready"
-    migrated["iteration_authority_receipts"] = []
-    migrated["latest_iteration_authority_receipt"] = None
+    if schema_id != QUIET_ITERATION_CURRENT_LOOP_STATE_SCHEMA_ID:
+        migrated["iteration_authority_receipts"] = []
+        migrated["latest_iteration_authority_receipt"] = None
+    if schema_id == QUIET_ITERATION_CURRENT_LOOP_STATE_SCHEMA_ID:
+        from qcoder.current_loop_registration import migrate_v8_evidence_registry
+
+        try:
+            evidence = migrate_v8_evidence_registry(migrated)
+        except CurrentLoopError as exc:
+            preserved = store.state_path.with_name(
+                f"state.v8-preserved-{state['state_digest'][:16]}.json"
+            )
+            if not preserved.exists():
+                _atomic_write_bytes(
+                    preserved,
+                    canonical_bytes(state),
+                    maximum_bytes=CURRENT_LOOP_STATE_MAX_BYTES,
+                )
+            raise CurrentLoopError(
+                "current_loop_state_migration_requires_fresh_loop",
+                safe_details={
+                    "safe_category": exc.category,
+                    "preserved_state_reference": preserved.name,
+                    "recovery_actions": ["start_fresh_loop", "stop_loop"],
+                },
+            ) from exc
+        migrated.update(evidence)
+        migrated["legacy_run_summary_index_v1"] = deepcopy(
+            dict(migrated.get("run_summary_index", {}))
+        )
+        migrated["run_summary_index"] = {}
+        migrated["latest_run_summary_reference"] = None
+    else:
+        from qcoder.current_loop_registration import new_evidence_registry
+
+        migrated["evidence_registry"] = new_evidence_registry()
+        migrated["registered_pending_derivation"] = None
+        migrated["current_evidence_status"] = "pending"
     return store.replace(migrated, expected_revision=int(state["state_revision"]))
 
 
@@ -1528,6 +1568,10 @@ def current_loop_state_error(value: object) -> str | None:
         or (
             value.get("schema_id") == ADAPTIVE_INTENT_CURRENT_LOOP_STATE_SCHEMA_ID
             and value.get("schema_version") == 7
+        )
+        or (
+            value.get("schema_id") == QUIET_ITERATION_CURRENT_LOOP_STATE_SCHEMA_ID
+            and value.get("schema_version") == 8
         )
     )
     current = (
@@ -1601,6 +1645,10 @@ def current_loop_state_error(value: object) -> str | None:
                     and value.get("schema_version") == 7
                 )
                 or (
+                    value.get("schema_id") == QUIET_ITERATION_CURRENT_LOOP_STATE_SCHEMA_ID
+                    and value.get("schema_version") == 8
+                )
+                or (
                     value.get("schema_id") == OLDER_CURRENT_LOOP_STATE_SCHEMA_ID
                     and value.get("schema_version") == 2
                 )
@@ -1643,15 +1691,20 @@ def current_loop_state_error(value: object) -> str | None:
         for reference, outcome in outcomes.items():
             if not isinstance(reference, str) or not isinstance(outcome, Mapping):
                 return "current_loop_artifact_processing_outcome_invalid"
-            if outcome.get("schema_id") != "qcoder.current_loop.artifact_processing_outcome.v1":
+            if outcome.get("schema_id") not in {
+                "qcoder.current_loop.artifact_processing_outcome.v1",
+                "qcoder.current_loop.processing_outcome.v2",
+            }:
                 return "current_loop_artifact_processing_outcome_invalid"
             if outcome.get("status") not in {
+                "pending",
                 "completed",
                 "unsupported_format",
                 "missing",
                 "stale",
                 "invalid_digest",
                 "excluded",
+                "deleted",
                 "failed_local",
             }:
                 return "current_loop_artifact_processing_outcome_invalid"
@@ -1689,6 +1742,26 @@ def current_loop_state_error(value: object) -> str | None:
         latest_iteration = value.get("latest_iteration_authority_receipt")
         if latest_iteration is not None and not isinstance(latest_iteration, Mapping):
             return "current_loop_iteration_authority_receipt_invalid"
+        from qcoder.current_loop_registration import evidence_registry_error
+
+        registry_error = evidence_registry_error(value.get("evidence_registry"))
+        if registry_error:
+            return registry_error
+        pending = value.get("registered_pending_derivation")
+        if pending is not None:
+            if not isinstance(pending, Mapping):
+                return "current_loop_registered_pending_derivation_invalid"
+            registry = value["evidence_registry"]
+            if pending.get("snapshot_id") not in registry["snapshots"]:
+                return "current_loop_registered_pending_snapshot_invalid"
+        if value.get("current_evidence_status") not in {
+            "fresh",
+            "stale",
+            "incomplete",
+            "failed",
+            "pending",
+        }:
+            return "current_loop_evidence_status_invalid"
     if not isinstance(value.get("saved_artifacts"), Mapping):
         return "current_loop_saved_artifacts_invalid"
     if not isinstance(value.get("stage_freshness"), Mapping):
@@ -1820,6 +1893,8 @@ def activate_current_loop(
             canonical_bytes(record),
             maximum_bytes=LOOP_INSTANCE_RECORD_MAX_BYTES,
         )
+    from qcoder.current_loop_registration import new_evidence_registry
+
     state: dict[str, Any] = {
         "schema_id": CURRENT_LOOP_STATE_SCHEMA_ID,
         "schema_version": CURRENT_LOOP_STATE_SCHEMA_VERSION,
@@ -1876,6 +1951,9 @@ def activate_current_loop(
         "quiet_iteration_status": "not_ready",
         "iteration_authority_receipts": [],
         "latest_iteration_authority_receipt": None,
+        "evidence_registry": new_evidence_registry(),
+        "registered_pending_derivation": None,
+        "current_evidence_status": "pending",
         "directory_scan_performed": False,
         "watcher_active": False,
         "upload_performed": False,
@@ -2166,10 +2244,102 @@ def read_run_summary(descriptor: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def read_run_summaries(state: Mapping[str, Any]) -> list[dict[str, Any]]:
-    return [
-        read_run_summary(descriptor)
-        for _reference, descriptor in sorted(state.get("run_summary_index", {}).items())
-    ]
+    summaries: list[dict[str, Any]] = []
+    for _reference, descriptor in sorted(state.get("run_summary_index", {}).items()):
+        summary = read_run_summary(descriptor)
+        status = descriptor.get("status")
+        computed = False
+        if status in {
+            "fresh",
+            "stale",
+            "incomplete",
+            "failed",
+            "pending",
+        } and status != summary.get("freshness", {}).get("status"):
+            summary["freshness"] = {
+                **deepcopy(dict(summary.get("freshness", {}))),
+                "status": status,
+                "stale_reasons": (
+                    [str(descriptor["stale_reason"])]
+                    if isinstance(descriptor.get("stale_reason"), str)
+                    else deepcopy(summary.get("freshness", {}).get("stale_reasons", []))
+                ),
+            }
+            computed = True
+        if isinstance(descriptor.get("currency"), str) and descriptor["currency"] != summary.get(
+            "currency"
+        ):
+            summary["currency"] = descriptor["currency"]
+            computed = True
+        if computed:
+            summary["presentation_status_computed_from_registry"] = True
+        summaries.append(summary)
+    return summaries
+
+
+def purge_completed_loop_local_evidence(
+    *,
+    store: CurrentLoopStore,
+    explicit_authority: bool,
+) -> dict[str, Any]:
+    """Delete only exact qCoder-controlled files, then remove the closed state."""
+
+    if explicit_authority is not True:
+        raise CurrentLoopError("current_loop_cleanup_authority_required")
+    state = store.read()
+    controlled_root = store.state_path.parent
+    paths: set[Path] = set()
+    registry = state.get("evidence_registry")
+    if isinstance(registry, Mapping):
+        for snapshot in registry.get("snapshots", {}).values():
+            if not isinstance(snapshot, Mapping):
+                continue
+            for descriptor in snapshot.get("manifestation_revision_set", {}).values():
+                if isinstance(descriptor, Mapping) and isinstance(
+                    descriptor.get("local_path"), str
+                ):
+                    paths.add(Path(descriptor["local_path"]).absolute())
+    for descriptor in state.get("run_summary_index", {}).values():
+        if isinstance(descriptor, Mapping) and isinstance(descriptor.get("local_path"), str):
+            paths.add(Path(descriptor["local_path"]).absolute())
+    for descriptor in state.get("saved_artifacts", {}).values():
+        if isinstance(descriptor, Mapping) and isinstance(descriptor.get("local_path"), str):
+            paths.add(Path(descriptor["local_path"]).absolute())
+    for field in (
+        "loop_instance_record_path",
+        "continuation_path",
+        "next_loop_seed_path",
+    ):
+        value = state.get(field)
+        if isinstance(value, str):
+            paths.add(Path(value).absolute())
+    deleted: list[str] = []
+    failures: list[str] = []
+    for path in sorted(paths, key=str):
+        if not _path_within(path, controlled_root):
+            continue
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            failures.append(path.name)
+        else:
+            deleted.append(path.name)
+    if failures:
+        raise CurrentLoopError(
+            "current_loop_cleanup_incomplete",
+            safe_details={"failed_qcoder_file_labels": failures},
+        )
+    deletion = store.delete_state(explicit_authority=True)
+    return {
+        "state_deleted": deletion["deleted"],
+        "qcoder_controlled_file_count": len(deleted),
+        "qcoder_controlled_file_labels": deleted,
+        "user_project_files_deleted": False,
+        "future_loop_evidence_retained": False,
+        "directory_discovery_performed": False,
+    }
 
 
 def replace_run_summary(

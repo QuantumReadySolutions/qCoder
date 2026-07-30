@@ -10,8 +10,8 @@ from typing import Any, Mapping
 
 ARTIFACT_FORMAT_CONTRACT_SCHEMA_ID = "qcoder.current_loop.artifact_format_contract.v1"
 ARTIFACT_FORMAT_CONTRACT_SCHEMA_VERSION = 1
-PROCESSING_OUTCOME_SCHEMA_ID = "qcoder.current_loop.artifact_processing_outcome.v1"
-PROCESSING_OUTCOME_SCHEMA_VERSION = 1
+PROCESSING_OUTCOME_SCHEMA_ID = "qcoder.current_loop.processing_outcome.v2"
+PROCESSING_OUTCOME_SCHEMA_VERSION = 2
 HOSTED_ENRICHMENT_SCHEMA_ID = "qcoder.current_loop.hosted_enrichment_status.v1"
 HOSTED_ENRICHMENT_SCHEMA_VERSION = 1
 RECOVERY_ACTION_SCHEMA_ID = "qcoder.current_loop.recovery_action.v1"
@@ -265,11 +265,15 @@ def processing_outcome(
     manifestation_roles: list[str] | None = None,
     limitation: str | None = None,
     safe_error_category: str | None = None,
+    artifact_revision_id: str | None = None,
+    evidence_snapshot_id: str | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "schema_id": PROCESSING_OUTCOME_SCHEMA_ID,
         "schema_version": PROCESSING_OUTCOME_SCHEMA_VERSION,
         "role": role,
+        "artifact_revision_id": artifact_revision_id,
+        "evidence_snapshot_id": evidence_snapshot_id,
         "content_digest": content_digest,
         "detected_format": detected_format,
         "status": status,

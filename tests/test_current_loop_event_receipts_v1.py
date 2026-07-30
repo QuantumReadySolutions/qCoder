@@ -136,7 +136,7 @@ def test_sensitive_output_requires_existing_exact_selection_fallback(tmp_path: P
     }
 
 
-def test_operation_receipt_registration_isolates_qasm3_from_valid_source(
+def test_operation_receipt_registration_rejects_qasm3_atomically(
     tmp_path: Path,
 ) -> None:
     coordinator = _active(tmp_path)
@@ -166,12 +166,13 @@ def test_operation_receipt_registration_isolates_qasm3_from_valid_source(
         ],
         operation_receipt_id=authority["details"]["operation_receipt"]["receipt_id"],
     )
-    assert result["ok"] is True
-    outcomes = {item["role"]: item for item in result["details"]["registration_outcomes"]}
-    assert outcomes["source"]["registration_disposition"] == "eligible"
-    assert outcomes["circuit_qasm"]["detected_format"] == "openqasm_3"
-    assert outcomes["circuit_qasm"]["registration_disposition"] == "unsupported_format"
-    assert result["details"]["registered_candidate_count"] == 1
+    assert result["ok"] is False
+    assert result["category"] == "artifact_format_unsupported"
+    state = coordinator.store.read()
+    receipt = state["operation_receipts"][authority["details"]["operation_receipt"]["receipt_id"]]
+    assert receipt["status"] == "issued"
+    assert state["evidence_registry"]["role_heads"] == {}
+    assert "source_evidence" not in state["saved_artifacts"]
 
 
 def test_operation_receipt_rejects_symlink_without_reading_target(tmp_path: Path) -> None:
@@ -200,10 +201,7 @@ def test_operation_receipt_rejects_symlink_without_reading_target(tmp_path: Path
         operation_receipt_id=authority["details"]["operation_receipt"]["receipt_id"],
     )
     assert result["ok"] is False
-    assert result["category"] in {
-        "selected_artifact_symlink_prohibited",
-        "protected_operation_rejected",
-    }
+    assert result["category"] == "selected_artifact_symlink_prohibited"
 
 
 def test_contract_collection_ceiling_is_enforced_before_receipt_consumption(

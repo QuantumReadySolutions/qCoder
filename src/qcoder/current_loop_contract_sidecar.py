@@ -20,6 +20,7 @@ import threading
 import time
 from typing import Any, Mapping
 
+from qcoder.current_loop import CurrentLoopError
 from qcoder.current_loop_bounded_control import (
     bounded_control_contract_snapshot,
     bounded_control_contracts,
@@ -32,6 +33,7 @@ from qcoder.current_loop_run_summary import (
     evidence_view_contract_snapshot,
     run_summary_contract_snapshot,
 )
+from qcoder.current_loop_vocabulary import vocabulary_snapshot
 
 
 SIDECAR_SCHEMA_ID = "qcoder.current_loop.contract_sidecar.v2"
@@ -206,6 +208,7 @@ def sidecar_contract_snapshot() -> dict[str, Any]:
             "bounded_controls": bounded_control_contract_snapshot(),
             "evidence_views": evidence_view_contract_snapshot(),
             "generation_governance": list(GENERATION_GOVERNANCE_VALUES),
+            "canonical_evidence_vocabulary": vocabulary_snapshot(),
         },
         "request_requires": [
             "loop_bound_capability",
@@ -260,7 +263,13 @@ class SidecarSession:
     def validate_live_binding(self) -> Mapping[str, Any]:
         if self.expired():
             raise ValueError("sidecar_expired")
-        state = self.coordinator.store.read()
+        try:
+            state = self.coordinator.store.read()
+        except CurrentLoopError as exc:
+            if exc.category == "current_loop_not_active":
+                self.closed = True
+                raise ValueError("sidecar_loop_closed") from exc
+            raise
         if state.get("loop_ref") != self.loop_ref:
             raise ValueError("sidecar_loop_stale")
         if state.get("workspace_root") != self.workspace_binding:

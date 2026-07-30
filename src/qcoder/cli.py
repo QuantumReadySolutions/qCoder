@@ -1461,6 +1461,7 @@ def _cmd_current_loop(argv: list[str]) -> int:
             "provide_supported_circuit_artifact",
             "skip_current_artifact_derivation",
             "retry_local_derivation",
+            "retry_registration",
             "skip_hosted_enrichment",
             "decline_build_review",
             "return_to_iteration_ready",

@@ -572,9 +572,9 @@ def _activate_and_prepare(
 
 def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
     snapshot = coordinator_contract_snapshot()
-    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v14"
-    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v12"
-    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 14
+    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v15"
+    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v13"
+    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 15
     assert all(snapshot["checkpoint_result_protocol"].values())
     assert snapshot["permitted_input_source_taxonomy"] == {
         "schema_id": INPUT_SOURCE_DISPOSITION_SCHEMA_ID,
@@ -595,11 +595,13 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "adaptive_governance_from_contract": True,
         "routine_posture_question": False,
     }
-    assert snapshot["artifact_candidate_provenance"] == [
-        "assistant_created",
-        "assistant_modified",
-        "user_selected",
+    assert snapshot["artifact_candidate_event_dispositions"] == [
+        "created",
+        "modified",
+        "selected",
+        "restored",
     ]
+    assert snapshot["legacy_artifact_candidate_provenance"]["persisted_as_bare_provenance"] is False
     assert snapshot["artifact_handoff"] == {
         "awaiting_local_artifacts_actionable": True,
         "exact_ide_operation_paths_only": True,
@@ -611,6 +613,11 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "registration_authorizes_review": False,
         "operation_receipt_supported": True,
         "operation_receipt_single_use": True,
+        "operation_receipt_single_use_meaning": (
+            "consumed_after_successful_atomic_canonical_registration"
+        ),
+        "authorization_source_client_supplied": False,
+        "registered_and_presentation_currentness_separate": True,
     }
     contract_digest = hashlib.sha256(
         json.dumps(
@@ -620,7 +627,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("8fae11db1de76293885d0dbbec92c610c776a0b4a1cb2d5dec50365eef856964")
+    assert contract_digest == ("f472f4121f4bd348819903e7d6c1677b9269951327c98689fbaacf4fab6fae04")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
@@ -654,6 +661,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "loop_already_active",
         "loop_not_activated",
         "operation_receipt_missing",
+        "operation_receipt_sensitive_output_requires_selection",
         "operation_receipt_stale",
         "ordinary_iteration_instruction_required",
         "parent_artifact_missing",
@@ -671,6 +679,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "request_baseline_label_provenance_required",
         "request_baseline_label_without_value",
         "seed_incomplete",
+        "selected_artifact_symlink_prohibited",
         "selected_file_missing",
         "selected_file_stale",
         "unknown_local_internal",
@@ -810,17 +819,17 @@ def _write_local_artifacts(workspace: Path) -> list[dict[str, Any]]:
         {
             "role": "source",
             "path": str(source),
-            "provenance": "assistant_created",
+            "event_disposition": "created",
         },
         {
             "role": "circuit_qasm",
             "path": str(qasm),
-            "provenance": "assistant_created",
+            "event_disposition": "created",
         },
         {
             "role": "results",
             "path": str(result),
-            "provenance": "assistant_created",
+            "event_disposition": "created",
         },
     ]
 
@@ -925,7 +934,7 @@ def test_incremental_exact_registration_is_additive_idempotent_and_unapproved(
             "role": "source",
             "display_path": "optimizer.py",
             "external": False,
-            "provenance": "assistant_created",
+            "event_disposition": "created",
         }
     ]
     assert first["details"]["review_authorized"] is False
@@ -940,13 +949,13 @@ def test_incremental_exact_registration_is_additive_idempotent_and_unapproved(
             "role": "source",
             "display_path": "optimizer.py",
             "external": False,
-            "provenance": "assistant_created",
+            "event_disposition": "created",
         },
         {
             "role": "circuit_qasm",
             "display_path": "optimizer.qasm",
             "external": False,
-            "provenance": "assistant_created",
+            "event_disposition": "created",
         },
     ]
     assert repeated["supported_next_action"] == ("obtain_exact_artifact_set_authorization")
@@ -990,19 +999,19 @@ def test_mixed_exact_provenance_accumulates_without_inspected_files(
             "role": "source",
             "display_path": "created.py",
             "external": False,
-            "provenance": "assistant_created",
+            "event_disposition": "created",
         },
         {
             "role": "source",
             "display_path": "existing.py",
             "external": False,
-            "provenance": "assistant_modified",
+            "event_disposition": "modified",
         },
         {
             "role": "circuit_qasm",
             "display_path": "selected.qasm",
             "external": False,
-            "provenance": "user_selected",
+            "event_disposition": "selected",
         },
     ]
     assert "inspected-only.txt" not in json.dumps(result, sort_keys=True)
@@ -1027,11 +1036,11 @@ def test_legacy_user_supplied_is_accepted_only_as_user_selected_alias(
         ]
     )
 
-    assert result["details"]["visible_candidate_set"][0]["provenance"] == ("user_selected")
+    assert result["details"]["visible_candidate_set"][0]["event_disposition"] == ("selected")
     assert "user_supplied" not in json.dumps(result["details"], sort_keys=True)
 
 
-def test_conflicting_provenance_for_one_exact_path_fails_closed(
+def test_same_path_event_disposition_is_not_sticky_authority(
     tmp_path: Path,
 ) -> None:
     coordinator, workspace = _coordinator(tmp_path, PublicBuilderTransport())
@@ -1059,9 +1068,8 @@ def test_conflicting_provenance_for_one_exact_path_fails_closed(
         ]
     )
 
-    assert conflict["ok"] is False
-    assert conflict["category"] == "artifact_candidate_provenance_conflict"
-    assert "do not guess" in conflict["details"]["supported_next_action"].lower()
+    assert conflict["ok"] is True
+    assert conflict["details"]["idempotent_registration"] is True
 
 
 @pytest.mark.parametrize(
@@ -1386,7 +1394,6 @@ def test_authorization_add_one_and_decline_are_exact_local_actions(
                 "source_evidence",
                 "python_manifestation",
                 "circuit_manifestation",
-                "result_manifestation",
             },
             True,
         ),
@@ -1437,13 +1444,11 @@ def test_coordinated_partial_and_failed_run_paths(
     state = CurrentLoopStore.for_workspace(workspace).read()
     assert expected_saved <= set(state["saved_artifacts"])
     if failed_run:
-        result = json.loads(
-            Path(state["saved_artifacts"]["result_manifestation"]["local_path"]).read_text(
-                encoding="utf-8"
-            )
+        outcome = next(
+            item for item in processed["details"]["per_item_outcomes"] if item["role"] == "results"
         )
-        assert result["stage_availability"] == "not_run"
-        assert result["raw_error_included"] is False
+        assert outcome["status"] == "failed_local"
+        assert outcome["safe_error_category"] == "unknown_local_internal"
         assert state["run_summary_index"] == {}
     elif "results" in selected_roles:
         assert processed["details"]["run_summary"]["automatic_preparation"] is True
@@ -1499,12 +1504,10 @@ def test_failed_run_replaces_unapproved_error_text_with_safe_category(
     )
     processed = coordinator.process_authorized_artifacts()
     assert processed["ok"] is True
-    manifestation = json.loads(
-        (workspace / ".qcoder/current-loop/artifacts/result-manifestation.json").read_text(
-            encoding="utf-8"
-        )
+    outcome = next(
+        item for item in processed["details"]["per_item_outcomes"] if item["role"] == "results"
     )
-    assert manifestation["safe_failure_category"] == "local_run_failed"
+    assert outcome["safe_error_category"] == "unknown_local_internal"
     assert "raw exception" not in json.dumps(transport.calls)
 
 
@@ -2646,8 +2649,8 @@ def test_every_checkpoint_result_is_deterministically_actionable(tmp_path: Path)
             summary="Synthetic checkpoint contract test.",
         )
         _assert_actionable_checkpoint(result)
-        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v14"
-        assert result["schema_version"] == 14
+        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v15"
+        assert result["schema_version"] == 15
 
 
 @pytest.mark.parametrize(

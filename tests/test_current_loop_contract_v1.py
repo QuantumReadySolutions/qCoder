@@ -236,7 +236,7 @@ def test_v3_state_migrates_to_v6_without_contract_or_summary_inheritance(
     previous["state_digest"] = _state_digest(previous)
     store.replace(previous, expected_revision=current["state_revision"])
     migrated = migrate_current_loop_state(store)
-    assert migrated["schema_id"] == "qcoder.current_loop.local_state.v8"
+    assert migrated["schema_id"] == "qcoder.current_loop.local_state.v9"
     assert migrated["current_loop_contract"] == previous["current_loop_contract"]
     assert migrated["run_summary_index"] == {}
     assert migrated["latest_run_summary_reference"] is None

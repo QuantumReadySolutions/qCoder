@@ -87,6 +87,12 @@ from qcoder.current_loop_evidence_processing import (
     evidence_processing_contract_snapshot,
     recovery_action_contract_snapshot,
 )
+from qcoder.current_loop_registration import registration_contract_snapshot
+from qcoder.current_loop_derivation import derivation_contract_snapshot
+from qcoder.current_loop_freshness import freshness_contract_snapshot
+from qcoder.current_loop_retention import retention_contract_snapshot
+from qcoder.current_loop_recovery import recovery_contract_snapshot
+from qcoder.current_loop_vocabulary import vocabulary_snapshot
 from qcoder.current_loop_bootstrap import (
     bootstrap_contract_snapshot,
     invocation_lifecycle_snapshot,
@@ -127,8 +133,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 12
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v12"
+CLIENT_BINDING_SCHEMA_VERSION = 13
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v13"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -282,10 +288,17 @@ separate chat ceremony. Native permission remains action-specific qCoder authori
 grants unrelated edits, external hardware, paid activity, raw exposure, or Blueprint change. Retain exact
 paths returned by your own write or modify operations; no directory orientation is needed before
 creating a new file. Register only those retained exact paths or paths the user explicitly
-selected, with truthful assistant_created, assistant_modified, or user_selected provenance.
+selected, with the truthful created, modified, or selected event disposition. Event disposition
+is non-authoritative metadata; qCoder owns the operation-receipt or direct-selection authorization
+source and enrollment authority.
 When qCoder supplies a single-use operation receipt, return its ID with only exact literal outputs
 of that IDE action. Never invent receipt metadata. Unknown, unsupported, secret-bearing, or
 potentially sensitive outputs require exact customer selection, exclusion, or rejection.
+The receipt remains issued while qCoder validates every candidate and is consumed only by the
+single atomic canonical registration commit. A successful commit creates immutable artifact
+revisions and moves registered role heads. Same path with new content is a new revision; identical
+role, path, and digest is idempotent. Registration and derivation are distinct: registered evidence
+may be pending while the prior coherent presentation snapshot remains explicitly prior.
 Before producing an artifact, use the binding's artifact-format contract for its role. Circuit
 structural analysis currently accepts OpenQASM 2, so an assistant-created circuit-QASM output
 must use the advertised OpenQASM 2 producer contract. OpenQASM 3 is identified honestly but is
@@ -323,6 +336,17 @@ qCoder-owned. Use the qCoder-managed current_build_facts composite view for grou
 run/circuit questions. Use qCoder's bounded help operation for status or product-surface
 questions. An exact unchanged continuation or stop instruction uses qCoder's completion receipt
 without restaging.
+
+ITERATION-SAFE EVIDENCE
+Treat every qCoder-owned artifact revision, evidence snapshot, manifestation revision, Run Summary,
+and Current Build Context reference as opaque. Never construct, locate, or combine them. Ordinary
+evidence views use only the current promoted snapshot. A prior summary is available only by an
+explicit qCoder-owned retained reference and must disclose newer pending or failed evidence.
+Run Summary integrity and currency are separate. Do not present a trustworthy prior summary as
+the latest iteration. Snapshot promotion is atomic; partial snapshots name missing roles, and a
+total newer derivation failure leaves prior context available with an explicit newer-failure
+notice. Recovery is qCoder-generated and deterministic. Never repeat registration during pending
+derivation recovery, never consume another receipt, and never scan for replacement evidence.
 
 CURRENT LOOP CONTRACT
 Assist is the default one-loop participation preset after exact-message activation. Evidence only
@@ -431,6 +455,12 @@ def build_client_binding_descriptor(
             "artifact_format_contract": artifact_format_contract_snapshot(),
             "evidence_processing_contract": evidence_processing_contract_snapshot(),
             "recovery_action_contract": recovery_action_contract_snapshot(),
+            "canonical_current_loop_vocabulary": vocabulary_snapshot(),
+            "atomic_registration_contract": registration_contract_snapshot(),
+            "immutable_derivation_contract": derivation_contract_snapshot(),
+            "freshness_and_currency_contract": freshness_contract_snapshot(),
+            "bounded_retention_contract": retention_contract_snapshot(),
+            "evidence_recovery_contract": recovery_contract_snapshot(),
             "contract_sidecar": sidecar_contract_snapshot(),
             "run_summary_contract": run_summary_contract_snapshot(),
             "evidence_view_contract": evidence_view_contract_snapshot(),
@@ -509,6 +539,13 @@ def build_client_binding_descriptor(
             "customer_interaction_envelope_primary": True,
             "adaptive_intent_fields_file_qcoder_owned": True,
             "adaptive_intent_routine_customer_response_required": False,
+            "artifact_event_disposition_is_authority": False,
+            "artifact_authorization_source_qcoder_owned": True,
+            "artifact_revisions_immutable": True,
+            "registered_role_heads_client_constructible": False,
+            "snapshot_promotion_atomic": True,
+            "prior_summary_implicitly_latest": False,
+            "cross_loop_evidence_retention": False,
         }
     }
 

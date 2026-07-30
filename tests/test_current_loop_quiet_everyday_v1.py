@@ -285,12 +285,19 @@ def test_second_run_refreshes_context_without_qcoder_conversation(tmp_path: Path
     assert receipt["build_review_implicitly_deferred"] is True
     assert receipt["raw_instruction_retained"] is False
     assert "working_blueprint" not in state["saved_artifacts"]
-    assert len(state["assistant_context_updates"]) == 2
+    updates = state["assistant_context_updates"]
+    assert len(updates) == 4
+    assert [item["newer_iteration_status"] for item in updates] == [
+        "pending",
+        None,
+        "pending",
+        None,
+    ]
     assert (
-        state["assistant_context_updates"][0]["context_digest"]
-        != (state["assistant_context_updates"][1]["context_digest"])
+        state["assistant_context_updates"][1]["context_digest"]
+        != (state["assistant_context_updates"][3]["context_digest"])
     )
-    assert state["assistant_context_updates"][1]["top_outcomes"][0]["bitstring"] == "10"
+    assert state["assistant_context_updates"][3]["top_outcomes"][0]["bitstring"] == "10"
 
 
 def test_grouped_view_and_help_are_qcoder_managed(tmp_path: Path) -> None:
@@ -455,7 +462,7 @@ def test_sidecar_and_binding_share_v2_governance_and_quiet_contract(tmp_path: Pa
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v12"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v13"
     quiet = descriptor["quiet_everyday_workflow_contract"]
     assert quiet["customer_interaction_schema_id"] == CUSTOMER_INTERACTION_SCHEMA_ID
     assert quiet["assist_default"] == "quiet_everyday"

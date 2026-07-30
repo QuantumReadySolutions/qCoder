@@ -13,7 +13,7 @@ from qcoder import __version__
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts/verify-release-version.py"
-EXPECTED_VERSION = "0.6.0a2+wi0419.explorercontract3iteration1style1"
+EXPECTED_VERSION = "0.6.0a3+wi0419.evidencerevision1"
 
 
 def _load_verifier():
@@ -55,7 +55,7 @@ def test_built_wheel_sdist_and_customer_pin_agree(tmp_path: Path) -> None:
         customer_roots=[REPO_ROOT],
     )
     assert result["version"] == EXPECTED_VERSION
-    assert result["public_version"] == "0.6.0a2"
+    assert result["public_version"] == "0.6.0a3"
     assert result["private_candidate_identity"] is True
     assert result["old_candidate_identity_absent"] is True
 

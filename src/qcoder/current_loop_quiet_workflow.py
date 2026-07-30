@@ -19,8 +19,8 @@ from qcoder.current_loop_iteration import (
 
 CUSTOMER_INTERACTION_SCHEMA_ID = "qcoder.current_loop.customer_interaction.v3"
 CUSTOMER_INTERACTION_SCHEMA_VERSION = 3
-ASSISTANT_CONTEXT_UPDATE_SCHEMA_ID = "qcoder.current_loop.assistant_context_update.v1"
-ASSISTANT_CONTEXT_UPDATE_SCHEMA_VERSION = 1
+ASSISTANT_CONTEXT_UPDATE_SCHEMA_ID = "qcoder.current_loop.assistant_context_update.v2"
+ASSISTANT_CONTEXT_UPDATE_SCHEMA_VERSION = 2
 COMPLETION_RECEIPT_SCHEMA_ID = "qcoder.current_loop.completion_receipt.v1"
 COMPLETION_RECEIPT_SCHEMA_VERSION = 1
 HELP_SCHEMA_ID = "qcoder.current_loop.help.v1"
@@ -175,14 +175,32 @@ def assistant_context_update(
     circuit_metrics: Mapping[str, Any] | None,
     freshness: str,
     contract_revision: int,
+    evidence_snapshot_id: str | None = None,
+    artifact_revision_references: Mapping[str, str] | None = None,
+    currency: str = "current",
+    newer_iteration_status: str | None = None,
+    prior_context_available: bool = False,
 ) -> dict[str, Any]:
-    if freshness not in {"fresh", "stale", "incomplete"}:
+    if freshness not in {"fresh", "stale", "incomplete", "failed", "pending"}:
         raise ValueError("assistant_context_update_freshness_invalid")
+    if currency not in {
+        "current",
+        "prior",
+        "prior_newer_pending",
+        "prior_newer_failed",
+        "superseded",
+    }:
+        raise ValueError("assistant_context_update_currency_invalid")
     bounded_outcomes = [deepcopy(dict(item)) for item in top_outcomes[:16]]
     result = {
         "schema_id": ASSISTANT_CONTEXT_UPDATE_SCHEMA_ID,
         "schema_version": ASSISTANT_CONTEXT_UPDATE_SCHEMA_VERSION,
         "run_reference": run_reference,
+        "evidence_snapshot_id": evidence_snapshot_id,
+        "artifact_revision_references": deepcopy(dict(artifact_revision_references or {})),
+        "currency": currency,
+        "newer_iteration_status": newer_iteration_status,
+        "prior_context_available": prior_context_available,
         "backend_or_simulator": backend,
         "shot_count": shots,
         "top_outcomes": bounded_outcomes,

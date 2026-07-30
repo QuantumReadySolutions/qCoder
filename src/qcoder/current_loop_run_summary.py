@@ -11,7 +11,6 @@ from copy import deepcopy
 from hashlib import sha256
 import json
 import math
-import secrets
 from typing import Any, Mapping, Sequence
 
 from qcoder.algorithm_blueprint import artifact_digest_matches, with_artifact_digest
@@ -19,8 +18,8 @@ from qcoder.current_loop_contract import permits, validate_contract
 from qcoder.engines.review.counts_v0 import normalize_counts_v0
 
 
-RUN_SUMMARY_SCHEMA_ID = "qcoder.current_loop.run_summary.v1"
-RUN_SUMMARY_SCHEMA_VERSION = 1
+RUN_SUMMARY_SCHEMA_ID = "qcoder.current_loop.run_summary.v2"
+RUN_SUMMARY_SCHEMA_VERSION = 2
 EVIDENCE_VIEW_SCHEMA_ID = "qcoder.current_loop.evidence_view.v1"
 EVIDENCE_VIEW_SCHEMA_VERSION = 1
 CONCISE_LOOP_SUMMARY_SCHEMA_ID = "qcoder.current_loop.concise_loop_summary.v1"
@@ -230,6 +229,11 @@ def build_run_summary(
     circuit_manifestation: Mapping[str, Any] | None = None,
     source_manifestation: Mapping[str, Any] | None = None,
     operation_lineage: Mapping[str, Any] | None = None,
+    evidence_snapshot_id: str | None = None,
+    artifact_revision_bindings: Mapping[str, str] | None = None,
+    artifact_revision_digests: Mapping[str, str] | None = None,
+    manifestation_revision_bindings: Mapping[str, str] | None = None,
+    derivation_version: str = "qcoder.current_loop.derivation.v1",
 ) -> dict[str, Any]:
     """Build one bounded canonical execution-evidence summary."""
 
@@ -265,19 +269,37 @@ def build_run_summary(
         if not artifact_digest_matches(dict(source_manifestation)):
             raise RunSummaryError("run_summary_source_manifestation_digest_invalid")
         bindings.append(_evidence_binding(source_manifestation, role="python_manifestation"))
+    snapshot_id = evidence_snapshot_id or (
+        "evidence-snapshot-legacy-"
+        + _digest(
+            {
+                "loop_ref": loop_ref,
+                "result_digest": _artifact_digest(result_manifestation),
+                "state_revision": state_revision,
+            }
+        )[:24]
+    )
+    artifact_revisions = dict(artifact_revision_bindings or {})
+    artifact_digests = dict(artifact_revision_digests or {})
+    manifestation_revisions = dict(manifestation_revision_bindings or {})
     summary = {
         "schema_id": RUN_SUMMARY_SCHEMA_ID,
         "schema_version": RUN_SUMMARY_SCHEMA_VERSION,
         "artifact_type": "run_summary",
-        "artifact_ref": f"run-summary-{secrets.token_hex(16)}",
         "loop_ref": loop_ref,
         "workspace_binding": workspace_binding,
+        "evidence_snapshot_id": snapshot_id,
+        "artifact_revision_bindings": artifact_revisions,
+        "artifact_revision_digests": artifact_digests,
+        "manifestation_revision_bindings": manifestation_revisions,
+        "derivation_version": derivation_version,
         "source_state_revision": state_revision,
         "source_contract_revision": contract_revision,
         "creation_revision": state_revision + 1,
         "evidence_bindings": bindings,
         "result_evidence_reference": _artifact_reference(result_manifestation),
         "result_evidence_digest": _artifact_digest(result_manifestation),
+        "result_manifestation_counts_digest": result_manifestation.get("bounded_counts_digest"),
         "operation_lineage": (
             deepcopy(dict(operation_lineage))
             if isinstance(operation_lineage, Mapping)
@@ -303,6 +325,8 @@ def build_run_summary(
             "stale_reasons": [],
             "source_digest_validation_required": True,
         },
+        "integrity_status": "fresh",
+        "currency": "current",
         "missing_execution_fields": missing,
         "warnings": warnings,
         "limitations": [
@@ -326,6 +350,16 @@ def build_run_summary(
         "persistent_project_history": False,
         "cross_loop_evidence_used": False,
     }
+    summary["count_projection_support_digest"] = _digest(
+        {
+            "result_artifact_revision": artifact_revisions.get("results"),
+            "result_artifact_digest": artifact_digests.get("results"),
+            "result_manifestation_digest": _artifact_digest(result_manifestation),
+            "result_manifestation_counts_digest": result_manifestation.get("bounded_counts_digest"),
+            "count_projection": counts,
+        }
+    )
+    summary["artifact_ref"] = "run-summary-" + _digest(summary)[:32]
     return with_artifact_digest(summary)
 
 
@@ -344,6 +378,26 @@ def run_summary_error(value: object) -> str | None:
         value.get("workspace_binding"), str
     ):
         return "run_summary_binding_invalid"
+    if not isinstance(value.get("evidence_snapshot_id"), str):
+        return "run_summary_snapshot_binding_invalid"
+    if not isinstance(value.get("artifact_revision_bindings"), Mapping):
+        return "run_summary_artifact_revision_binding_invalid"
+    if not isinstance(value.get("artifact_revision_digests"), Mapping):
+        return "run_summary_artifact_revision_digest_binding_invalid"
+    if not isinstance(value.get("manifestation_revision_bindings"), Mapping):
+        return "run_summary_manifestation_revision_binding_invalid"
+    if not isinstance(value.get("derivation_version"), str):
+        return "run_summary_derivation_binding_invalid"
+    if value.get("integrity_status") not in {"fresh", "stale", "incomplete", "failed"}:
+        return "run_summary_integrity_status_invalid"
+    if value.get("currency") not in {
+        "current",
+        "prior",
+        "prior_newer_pending",
+        "prior_newer_failed",
+        "superseded",
+    }:
+        return "run_summary_currency_invalid"
     if not isinstance(value.get("evidence_bindings"), list) or not value["evidence_bindings"]:
         return "run_summary_evidence_binding_invalid"
     if not isinstance(value.get("result_evidence_reference"), str) or not isinstance(
@@ -364,6 +418,87 @@ def run_summary_error(value: object) -> str | None:
     return None
 
 
+def validate_run_summary_snapshot_binding(
+    summary: Mapping[str, Any],
+    snapshot: Mapping[str, Any],
+) -> str | None:
+    """Reject count/metric bindings that mix independent evidence generations."""
+
+    error = run_summary_error(summary)
+    if error:
+        return error
+    if summary.get("evidence_snapshot_id") != snapshot.get("snapshot_id"):
+        return "run_summary_snapshot_mismatch"
+    if summary.get("artifact_revision_bindings") != snapshot.get("role_revision_set"):
+        return "run_summary_artifact_revision_set_mismatch"
+    if summary.get("artifact_revision_digests") != snapshot.get(
+        "artifact_revision_digest_bindings"
+    ):
+        return "run_summary_artifact_revision_digest_set_mismatch"
+    manifestation_set = snapshot.get("manifestation_revision_set")
+    if not isinstance(manifestation_set, Mapping):
+        return "run_summary_manifestation_revision_set_invalid"
+    expected = summary.get("manifestation_revision_bindings")
+    if expected != {
+        role: descriptor.get("manifestation_revision_id")
+        for role, descriptor in manifestation_set.items()
+        if isinstance(descriptor, Mapping)
+    }:
+        return "run_summary_manifestation_revision_set_mismatch"
+    role_parents = {
+        "result_manifestation": "results",
+        "circuit_manifestation": "circuit_qasm",
+        "python_manifestation": "source",
+        "source_evidence": "source",
+    }
+    binding_by_role = {
+        binding.get("role"): binding
+        for binding in summary["evidence_bindings"]
+        if isinstance(binding, Mapping)
+    }
+    for manifestation_role, descriptor in manifestation_set.items():
+        if not isinstance(descriptor, Mapping):
+            return "run_summary_manifestation_revision_set_invalid"
+        parent_role = role_parents.get(str(manifestation_role))
+        if parent_role is not None and descriptor.get("parent_artifact_revision_id") != summary[
+            "artifact_revision_bindings"
+        ].get(parent_role):
+            return "run_summary_manifestation_parent_mismatch"
+        summary_role = (
+            "python_manifestation"
+            if manifestation_role == "python_manifestation"
+            else manifestation_role
+        )
+        binding = binding_by_role.get(summary_role)
+        if binding is not None and binding.get("artifact_digest") != descriptor.get(
+            "artifact_digest"
+        ):
+            return "run_summary_manifestation_digest_mismatch"
+    result_binding = summary["artifact_revision_bindings"].get("results")
+    result_manifestation = next(
+        (
+            binding
+            for binding in summary["evidence_bindings"]
+            if binding.get("role") == "result_manifestation"
+        ),
+        None,
+    )
+    if not isinstance(result_binding, str) or not isinstance(result_manifestation, Mapping):
+        return "run_summary_result_revision_binding_missing"
+    expected_support = _digest(
+        {
+            "result_artifact_revision": result_binding,
+            "result_artifact_digest": summary["artifact_revision_digests"].get("results"),
+            "result_manifestation_digest": result_manifestation.get("artifact_digest"),
+            "result_manifestation_counts_digest": summary.get("result_manifestation_counts_digest"),
+            "count_projection": summary["count_projection"],
+        }
+    )
+    if summary.get("count_projection_support_digest") != expected_support:
+        return "run_summary_count_projection_binding_mismatch"
+    return None
+
+
 def mark_run_summary_stale(summary: Mapping[str, Any], *, reasons: Sequence[str]) -> dict[str, Any]:
     if run_summary_error(summary):
         raise RunSummaryError("run_summary_invalid")
@@ -373,6 +508,7 @@ def mark_run_summary_stale(summary: Mapping[str, Any], *, reasons: Sequence[str]
         "stale_reasons": sorted(set(str(reason) for reason in reasons)),
         "source_digest_validation_required": True,
     }
+    result["integrity_status"] = "stale"
     return with_artifact_digest(
         {key: value for key, value in result.items() if key != "artifact_digest"}
     )
@@ -389,6 +525,7 @@ def mark_run_summary_fresh(summary: Mapping[str, Any]) -> dict[str, Any]:
         "stale_reasons": [],
         "source_digest_validation_required": True,
     }
+    result["integrity_status"] = "fresh"
     return with_artifact_digest(
         {key: value for key, value in result.items() if key != "artifact_digest"}
     )
@@ -412,7 +549,10 @@ def share_safe_run_summary_projection(summary: Mapping[str, Any], *, full: bool)
             "schema_id": RUN_SUMMARY_SCHEMA_ID,
             "artifact_ref": summary["artifact_ref"],
             "loop_ref": summary["loop_ref"],
+            "evidence_snapshot_id": summary["evidence_snapshot_id"],
             "freshness": deepcopy(summary["freshness"]),
+            "integrity_status": summary["integrity_status"],
+            "currency": summary["currency"],
             "execution_observations": {
                 key: deepcopy(value)
                 for key, value in summary["execution_observations"].items()
@@ -722,6 +862,12 @@ def run_summary_contract_snapshot() -> dict[str, Any]:
         "blueprint_object": False,
         "cross_loop_evidence": False,
         "missing_fields_inferred": False,
+        "exact_artifact_revision_bindings": True,
+        "exact_manifestation_revision_bindings": True,
+        "evidence_snapshot_binding": True,
+        "integrity_and_currency_separate": True,
+        "prior_summary_implicitly_current": False,
+        "count_projection_binding_validated": True,
     }
     payload["contract_digest"] = _digest(payload)
     return payload

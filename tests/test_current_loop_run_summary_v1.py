@@ -77,7 +77,7 @@ def test_run_summary_is_bounded_execution_evidence(tmp_path: Path) -> None:
     coordinator = _active(tmp_path)
     summary = _summary(coordinator, outcomes=20)
     assert run_summary_error(summary) is None
-    assert summary["schema_id"] == "qcoder.current_loop.run_summary.v1"
+    assert summary["schema_id"] == "qcoder.current_loop.run_summary.v2"
     assert summary["blueprint_mutated"] is False
     assert summary["evolved_blueprint_created"] is False
     assert summary["raw_result_artifact_embedded"] is False

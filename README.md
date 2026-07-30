@@ -19,11 +19,11 @@ The current public local path is **qCoder OSS**. OSS commands run locally and do
 
 ## Current product boundaries
 
-The `0.6.0a2` release candidate combines **OSS local commands**, Explorer compatibility commands,
+The `0.6.0a3` release candidate combines **OSS local commands**, Explorer compatibility commands,
 and the Context Bridge adapter for eligible Explorer users. Pro is not launched and is not a
 current public product path.
 
-This source is the held, unpublished `0.6.0a2` release candidate. Public installation remains
+This source is the held, unpublished `0.6.0a3` release candidate. Public installation remains
 unavailable until a separate package-publication decision.
 
 - **OSS commands** (`analyze`, `batch`, `context`, `review`) are Apache-2.0, local-first/offline, and useful without an account or token. They do not upload data, call a qCoder hosted service, or run QPU/simulator jobs.
@@ -51,7 +51,7 @@ adopt a blueprint decision.
 
 ## Context Bridge inventory
 
-The `0.6.0a2` release candidate preserves the existing eight Evidence Review operations and adds
+The `0.6.0a3` release candidate preserves the existing eight Evidence Review operations and adds
 four Algorithm Blueprint operations, for exactly twelve Context Bridge capability tools:
 
 - `get_guided_evidence_context`
@@ -122,7 +122,7 @@ release-candidate documentation does not claim publication or public rollout.
 Install:
 
 ```bash
-python -m pip install "qcoder==0.6.0a2"
+python -m pip install "qcoder==0.6.0a3"
 ```
 
 Analyze a circuit:
