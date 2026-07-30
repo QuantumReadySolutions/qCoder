@@ -163,7 +163,21 @@ from qcoder.current_loop_derivation import (
     promote_derivation_snapshot,
     read_manifestation_revision,
 )
-from qcoder.current_loop_freshness import freshness_contract_snapshot
+from qcoder.current_loop_freshness import (
+    freshness_contract_snapshot,
+    run_summary_status,
+    snapshot_status,
+)
+from qcoder.current_loop_result_envelope import (
+    BOUNDED_CONTROL_REFERENCE_SCHEMA_ID,
+    CUSTOMER_ENVELOPE_SCHEMA_ID,
+    TIERED_RESULT_ENVELOPE_SCHEMA_ID,
+    bounded_control_envelope,
+    control_policy_matrix,
+    controls_required_inline,
+    customer_envelope,
+    performance_diagnostics,
+)
 from qcoder.current_loop_retention import retention_contract_snapshot
 from qcoder.current_loop_recovery import recovery_contract_snapshot
 from qcoder.current_loop_vocabulary import vocabulary_snapshot
@@ -213,8 +227,8 @@ from qcoder.current_loop_iteration import (
 )
 from qcoder.context_loop import CONTEXT_LOOP_GATE
 
-COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v15"
-COORDINATOR_RESULT_SCHEMA_VERSION = 15
+COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v16"
+COORDINATOR_RESULT_SCHEMA_VERSION = 16
 COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v13"
 PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v12"
 OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
@@ -1368,6 +1382,9 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "iteration_authority_receipt": ITERATION_AUTHORITY_RECEIPT_SCHEMA_ID,
             "parent_error_taxonomy": PARENT_ERROR_TAXONOMY_SCHEMA_ID,
             "help": quiet_workflow_contract_snapshot()["help_schema_id"],
+            "customer_envelope": CUSTOMER_ENVELOPE_SCHEMA_ID,
+            "tiered_result_envelope": TIERED_RESULT_ENVELOPE_SCHEMA_ID,
+            "bounded_control_reference": BOUNDED_CONTROL_REFERENCE_SCHEMA_ID,
             "canonical_vocabulary": vocabulary_snapshot()["schema_id"],
             "registration_transaction": registration_contract_snapshot()["schema_id"],
             "derivation": derivation_contract_snapshot()["schema_id"],
@@ -1380,6 +1397,9 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
         "quiet_iteration": iteration_contract_snapshot(),
         "parent_error_taxonomy": parent_error_taxonomy_snapshot(),
         "operation_transport_inventory": operation_transport_inventory(),
+        "tiered_result_envelope": control_policy_matrix(
+            [str(row["operation"]) for row in operation_transport_inventory()["operations"]]
+        ),
         "current_loop_contract": contract_snapshot(),
         "contract_management": contract_management_snapshot(),
         "operation_receipt": event_receipt_snapshot(),
@@ -4263,102 +4283,314 @@ class CurrentLoopCoordinator:
             },
         )
 
+    def bounded_control_catalog(self) -> dict[str, Any]:
+        """Fetch one exact digest-bound local control catalog on demand."""
+
+        started = self.clock()
+        try:
+            state = self.store.read()
+            return self._result(
+                operation="bounded_control_catalog",
+                ok=True,
+                state=state,
+                summary="The exact bounded-control catalog is ready.",
+                elapsed=self.clock() - started,
+                details={
+                    "catalog_fetch": {
+                        "schema_id": "qcoder.current_loop.bounded_control_catalog_fetch.v1",
+                        "schema_version": 1,
+                        "local_only": True,
+                        "customer_cli_product": False,
+                        "client_may_infer_domains": False,
+                    }
+                },
+                persist_performance=False,
+            )
+        except (CurrentLoopError, CurrentLoopContractError, ValueError) as exc:
+            return self._exception_result("bounded_control_catalog", exc, started)
+
+    @staticmethod
+    def _help_contract_projection(
+        effective: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        policy = effective["effective_customer_policy"]
+        categories = policy["evidence_categories"]
+        collected = [role for role, row in categories.items() if row.get("collect") == "enabled"]
+        derived = [
+            role for role, row in categories.items() if row.get("local_derivation") == "enabled"
+        ]
+        exposed = [
+            role
+            for role, row in categories.items()
+            if row.get("derived_assistant_exposure") in {"standing", "on_request"}
+        ]
+        permissions = [
+            f"Collect exact authorized evidence for {len(collected)} bounded categories.",
+            f"Derive local context for {len(derived)} bounded categories.",
+        ]
+        if exposed:
+            permissions.append(
+                f"Share bounded derived context for {len(exposed)} categories as configured."
+            )
+        prohibitions = [
+            "No raw evidence is shared by default.",
+            "No IDE editing or execution occurs without separate authority.",
+            "No external service, hardware, paid activity, or Blueprint change is implied.",
+        ]
+        return {
+            "effective_preset": effective["effective_preset"],
+            "generation_governance": effective["generation_governance"],
+            "contract_revision": effective["contract_revision"],
+            "effective_policy_digest": effective["effective_policy_digest"],
+            "assistant_exposure": {
+                "derived_categories": exposed,
+                "raw": "disabled",
+            },
+            "hosted_enrichment": policy["hosted_enrichment"],
+            "build_review": policy["build_review"],
+            "permissions": permissions,
+            "prohibitions": prohibitions,
+        }
+
+    @staticmethod
+    def _help_evidence_projection(state: Mapping[str, Any]) -> dict[str, Any]:
+        registry = state["evidence_registry"]
+        current_snapshot_id = registry.get("current_presentation_snapshot_id")
+        pending_snapshot_id = registry.get("pending_snapshot_id")
+        current_snapshot = (
+            registry.get("snapshots", {}).get(current_snapshot_id)
+            if isinstance(current_snapshot_id, str)
+            else None
+        )
+        status = (
+            snapshot_status(state, snapshot_id=current_snapshot_id)
+            if isinstance(current_snapshot, Mapping)
+            else None
+        )
+        current_summary_reference = state.get("latest_run_summary_reference")
+        summary_status = (
+            run_summary_status(state, summary_reference=current_summary_reference)
+            if isinstance(current_summary_reference, str)
+            and current_summary_reference in state.get("run_summary_index", {})
+            else None
+        )
+        failed_newer = any(
+            isinstance(item, Mapping)
+            and item.get("snapshot_status") == "failed"
+            and item.get("creation_state_revision", 0)
+            > (
+                current_snapshot.get("creation_state_revision", 0)
+                if isinstance(current_snapshot, Mapping)
+                else 0
+            )
+            for item in registry.get("snapshots", {}).values()
+        ) or any(
+            isinstance(item, Mapping) and item.get("currency") == "prior_newer_failed"
+            for item in state.get("run_summary_index", {}).values()
+        )
+        processing = (
+            str(current_snapshot.get("snapshot_status"))
+            if isinstance(current_snapshot, Mapping)
+            else "pending"
+            if pending_snapshot_id is not None
+            else "failed"
+            if failed_newer
+            else "none"
+        )
+        current_build_context = (
+            current_snapshot.get("current_build_context")
+            if isinstance(current_snapshot, Mapping)
+            else None
+        )
+        missing_or_failed = (
+            list(current_build_context.get("missing_or_failed_roles", []))
+            if isinstance(current_build_context, Mapping)
+            else []
+        )
+        limitations = (
+            list(current_build_context.get("limitations", []))
+            if isinstance(current_build_context, Mapping)
+            else []
+        )
+        warnings: list[dict[str, Any]] = []
+        if pending_snapshot_id is not None:
+            warnings.append(
+                {
+                    "object": "registered_evidence",
+                    "status": "pending",
+                    "reason": "Newer exact evidence is registered and awaiting local derivation.",
+                }
+            )
+        if failed_newer:
+            warnings.append(
+                {
+                    "object": "newer_evidence_snapshot",
+                    "status": "failed",
+                    "reason": "A newer exact evidence snapshot failed local derivation.",
+                }
+            )
+        if processing == "partial":
+            warnings.append(
+                {
+                    "object": "current_evidence_snapshot",
+                    "status": "partial",
+                    "reason": (
+                        "Some exact roles are unavailable: "
+                        + ", ".join(sorted(str(item) for item in missing_or_failed))
+                    ),
+                }
+            )
+        return {
+            "available": current_snapshot is not None or pending_snapshot_id is not None,
+            "current_snapshot_id": current_snapshot_id,
+            "processing_completeness": processing,
+            "integrity": status.get("integrity") if isinstance(status, Mapping) else None,
+            "presentation_currency": (
+                status.get("currency") if isinstance(status, Mapping) else None
+            ),
+            "newer_iteration_status": (
+                "pending" if pending_snapshot_id is not None else "failed" if failed_newer else None
+            ),
+            "current_run_summary_available": bool(
+                isinstance(summary_status, Mapping)
+                and summary_status.get("is_current_run_summary") is True
+            ),
+            "only_prior_run_summary_available": bool(
+                state.get("run_summary_index")
+                and not (
+                    isinstance(summary_status, Mapping)
+                    and summary_status.get("is_current_run_summary") is True
+                )
+            ),
+            "missing_or_failed_roles": sorted(str(item) for item in missing_or_failed),
+            "limitations": sorted(str(item) for item in limitations),
+            "warnings": warnings,
+            "legacy_dependent_views_stale_authoritative": False,
+        }
+
     def help(self, *, topic: str) -> dict[str, Any]:
         """Return one bounded, local, state-grounded help projection."""
 
         started = self.clock()
+        state_started = time.perf_counter()
         try:
             if topic not in HELP_TOPICS:
                 raise CurrentLoopError("current_loop_help_topic_invalid")
             state = self.store.read()
             contract = state["current_loop_contract"]
             coordinator = self._coordinator_state(state)
+            state_seconds = time.perf_counter() - state_started
+            projection_started = time.perf_counter()
+            effective = effective_contract_document(contract)
+            contract_projection = self._help_contract_projection(effective)
+            evidence_status = self._help_evidence_projection(state)
             evidence = [
                 {
                     "role": role,
-                    "artifact_reference": value.get("artifact_reference"),
-                    "artifact_digest": value.get("artifact_digest"),
+                    "available": value.get("artifact_reference") is not None,
                 }
                 for role, value in sorted(state.get("saved_artifacts", {}).items())
                 if isinstance(value, Mapping)
             ]
-            limitations = [
-                str(value["limitation"])
-                for value in state.get("artifact_processing_outcomes", {}).values()
-                if isinstance(value, Mapping) and isinstance(value.get("limitation"), str)
-            ]
             actions = [
                 {
                     "customer_meaning": "Show me the qCoder contract.",
-                    "route": "contract_status",
+                    "route": "bounded_control_catalog:inspect",
+                    "category": "inspection",
                 },
                 {
                     "customer_meaning": "Show me the contract JSON.",
-                    "route": "contract_status:effective_and_editable_json",
+                    "route": "bounded_control_catalog:inspect",
+                    "category": "inspection",
                 },
                 {
                     "customer_meaning": (
                         "Stop sharing derived run results with the connected assistant, "
                         "but keep them local."
                     ),
-                    "route": "contract_adjust:qcoder_classified_change",
+                    "route": "bounded_control_catalog:adjust",
+                    "category": "contract_change",
                 },
                 {
                     "customer_meaning": "Open qCoder settings for this build.",
-                    "route": "open_contract_editor",
+                    "route": "bounded_control_catalog:open_editor",
+                    "category": "product_surface",
                 },
                 {
                     "customer_meaning": "Show the Full Run Summary.",
-                    "route": "evidence_view:full_run_summary",
+                    "route": "bounded_control_catalog:evidence_view",
+                    "category": "evidence",
                 },
                 {
-                    "customer_meaning": "Show the Circuit Workbench evidence.",
-                    "route": "evidence_view:current_build_facts",
+                    "customer_meaning": "Explain the current blocker.",
+                    "route": "help:blocker",
+                    "category": "recovery",
                 },
                 {
-                    "customer_meaning": "Request Build Review.",
-                    "route": "review_build",
+                    "customer_meaning": "Stop this qCoder loop.",
+                    "route": "bounded_control_catalog:stop_loop",
+                    "category": "stop",
                 },
             ]
+            blocker = (
+                {
+                    "checkpoint_kind": coordinator["checkpoint_kind"],
+                    "summary": coordinator["customer_summary"],
+                }
+                if coordinator["state_status"] == "checkpoint_required"
+                else None
+            )
             projection = help_response(
                 topic=topic,
                 loop_active=state.get("activation_state") == "active",
-                effective_preset=str(contract["effective_preset"]),
-                contract_summary=(
-                    "Assist is quiet by default; material decisions and authority "
-                    "boundaries remain explicit."
-                ),
-                generation_governance=str(contract["generation_governance"]),
+                phase_summary=str(coordinator["phase"]).replace("_", " "),
+                contract_summary=contract_projection,
+                evidence_status=evidence_status,
+                pending_proposal=effective["pending_broadening"],
                 evidence=evidence,
-                limitations=limitations,
                 latest_activity=(
                     state["activity_receipts"][-1] if state.get("activity_receipts") else None
                 ),
-                blocker=(
-                    {
-                        "checkpoint_kind": coordinator["checkpoint_kind"],
-                        "summary": coordinator["customer_summary"],
-                    }
-                    if coordinator["state_status"] == "checkpoint_required"
-                    else None
-                ),
+                blocker=blocker,
                 supported_actions=actions,
+                browser_editor_available=True,
             )
+            projection_seconds = time.perf_counter() - projection_started
             result = self._result(
                 operation="help",
                 ok=True,
                 state=state,
                 summary="qCoder help is grounded in the active loop and its local contract.",
                 elapsed=self.clock() - started,
-                details={"help": projection, "commands_exposed": False},
+                details={
+                    "help": projection,
+                    "commands_exposed": False,
+                    "contract_management": {
+                        "effective_preset": effective["effective_preset"],
+                        "generation_governance": effective["generation_governance"],
+                        "contract_revision": effective["contract_revision"],
+                        "pending_broadening": effective["pending_broadening"],
+                        "examples": [item["customer_meaning"] for item in actions[:4]],
+                        "browser_editor_optional": True,
+                        "full_contract_json_included": False,
+                        "internal_command_choreography_exposed": False,
+                    },
+                },
+                checkpoint_protocol={
+                    "supported_next_action": None,
+                    "next_invocation": None,
+                    "required_authority_input": None,
+                    "awaiting_confirmation_fields": [],
+                    "confirmation_transmission_state": "not_applicable",
+                    "permitted_input_source": "no_input_permitted_or_required",
+                    "no_action_reason": "generic_help_complete",
+                },
+                performance_parts={
+                    "state_load_validation_seconds": state_seconds,
+                    "help_projection_seconds": projection_seconds,
+                },
+                persist_performance=False,
             )
-            result["details"]["contract_management"] = {
-                "effective_contract": effective_contract_document(contract),
-                "pending_broadening": effective_contract_document(contract)["pending_broadening"],
-                "examples": [item["customer_meaning"] for item in actions[:4]],
-                "browser_editor_optional": True,
-                "internal_command_choreography_exposed": False,
-            }
             return result
         except (CurrentLoopError, CurrentLoopContractError, ValueError) as exc:
             return self._exception_result("help", exc, started)
@@ -4562,10 +4794,6 @@ class CurrentLoopCoordinator:
                 and summary["result_evidence_reference"] not in exclusions
             ]
             limitations: list[str] = []
-            if state["current_loop_contract"].get("dependent_views_stale"):
-                limitations.append(
-                    "One or more evidence changes make dependent views stale or incomplete."
-                )
             if exclusions:
                 limitations.append(
                     "Excluded evidence is unavailable to future summaries and views."
@@ -10345,16 +10573,20 @@ class CurrentLoopCoordinator:
         category: str | None = None,
         details: Mapping[str, Any] | None = None,
         checkpoint_protocol: Mapping[str, Any] | None = None,
+        performance_parts: Mapping[str, float] | None = None,
+        persist_performance: bool = True,
     ) -> dict[str, Any]:
+        result_build_started = time.perf_counter()
         coordinator = self._coordinator_state(state)
-        coordinator["performance"]["coordinator_calls"] += 1
-        coordinator["performance"]["coordinator_seconds"] += max(0.0, elapsed)
-        pending = coordinator.get("pending_checkpoint_input")
-        if isinstance(pending, dict) and pending.get("status") == "pending":
-            pending["expected_state_revision"] = int(state["state_revision"]) + 1
-        self._replace_coordinator(coordinator)
-        state = self.store.read()
-        coordinator = self._coordinator_state(state)
+        if persist_performance:
+            coordinator["performance"]["coordinator_calls"] += 1
+            coordinator["performance"]["coordinator_seconds"] += max(0.0, elapsed)
+            pending = coordinator.get("pending_checkpoint_input")
+            if isinstance(pending, dict) and pending.get("status") == "pending":
+                pending["expected_state_revision"] = int(state["state_revision"]) + 1
+            self._replace_coordinator(coordinator)
+            state = self.store.read()
+            coordinator = self._coordinator_state(state)
         protocol = self._checkpoint_protocol(
             operation=operation,
             phase=coordinator["phase"],
@@ -10364,6 +10596,18 @@ class CurrentLoopCoordinator:
             coordinator=coordinator,
             override=checkpoint_protocol,
         )
+        if operation == "help" and ok:
+            protocol.update(
+                {
+                    "supported_next_action": None,
+                    "next_invocation": None,
+                    "required_authority_input": None,
+                    "awaiting_confirmation_fields": [],
+                    "confirmation_transmission_state": "not_applicable",
+                    "permitted_input_source": "no_input_permitted_or_required",
+                    "no_action_reason": "generic_help_complete",
+                }
+            )
         protocol = self._complete_protocol_disposition(
             phase=coordinator["phase"],
             state_status=coordinator["state_status"],
@@ -10399,6 +10643,57 @@ class CurrentLoopCoordinator:
         pending = coordinator.get("pending_checkpoint_input")
         if isinstance(pending, Mapping):
             result_details.update(self._checkpoint_input_display(pending))
+        controls_started = time.perf_counter()
+        controls = self._contract_control_invocations(
+            state=state,
+            checkpoint_kind=str(coordinator["checkpoint_kind"]),
+        )
+        controls_seconds = time.perf_counter() - controls_started
+        controls_inline, controls_reason = controls_required_inline(
+            operation=operation,
+            ok=ok,
+            checkpoint_kind=str(coordinator["checkpoint_kind"]),
+            details=result_details,
+        )
+        fetch_invocation = build_operation_invocation(
+            _invocation_template("bounded-control-catalog"),
+            executable=self.runtime_executable,
+            workspace=str(state["workspace_root"]),
+            base_url=self.hosted_base_url,
+            token_file=self.hosted_token_file,
+            state_revision=int(state["state_revision"]),
+            loop_ref=str(state["loop_ref"]),
+            checkpoint=str(coordinator["checkpoint_kind"]),
+        )
+        generic_help_template = _invocation_template(
+            "help",
+            required_flags=("--topic",),
+        )
+        generic_help_template["fixed_argument_values"] = {"--topic": "overview"}
+        generic_help_invocation = build_operation_invocation(
+            generic_help_template,
+            executable=self.runtime_executable,
+            workspace=str(state["workspace_root"]),
+            base_url=self.hosted_base_url,
+            token_file=self.hosted_token_file,
+            state_revision=int(state["state_revision"]),
+            loop_ref=str(state["loop_ref"]),
+            checkpoint=str(coordinator["checkpoint_kind"]),
+        )["operation_specific_invocation"]
+        contract = state.get("current_loop_contract")
+        contract_revision = (
+            int(contract["contract_revision"]) if isinstance(contract, Mapping) else 0
+        )
+        control_envelope = bounded_control_envelope(
+            controls=controls,
+            controls_inline=controls_inline,
+            fetch_invocation=fetch_invocation,
+            loop_ref=str(state["loop_ref"]),
+            workspace_binding=sha256(str(state["workspace_root"]).encode()).hexdigest(),
+            state_revision=int(state["state_revision"]),
+            contract_revision=contract_revision,
+            reason=controls_reason,
+        )
         result = {
             "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
             "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
@@ -10417,10 +10712,15 @@ class CurrentLoopCoordinator:
             "token_contents_included": False,
             "local_paths_transmitted": False,
             "assistant_reconstruction_performed": False,
-            "bounded_contract_controls": self._contract_control_invocations(
-                state=state,
-                checkpoint_kind=str(coordinator["checkpoint_kind"]),
-            ),
+            "bounded_contract_controls": controls if controls_inline else {},
+            "bounded_control_catalog": control_envelope,
+            "tiered_result_envelope": {
+                "schema_id": TIERED_RESULT_ENVELOPE_SCHEMA_ID,
+                "schema_version": 1,
+                "full_machine_controls_available": True,
+                "controls_inline": controls_inline,
+                "controls_digest": control_envelope["controls_digest"],
+            },
             **protocol,
         }
         interaction_kind = self._interaction_kind(
@@ -10471,6 +10771,49 @@ class CurrentLoopCoordinator:
                 else ()
             ),
         )
+        result["customer_envelope"] = customer_envelope(
+            operation=operation,
+            interaction=result["customer_interaction"],
+            phase=str(coordinator["phase"]),
+            state_status=str(coordinator["state_status"]),
+            contract_revision=contract_revision,
+            effective_contract_digest=(
+                str(contract.get("effective_policy_digest"))
+                if isinstance(contract, Mapping)
+                else None
+            ),
+            evidence_summary_reference=(
+                str(state.get("latest_run_summary_reference"))
+                if state.get("latest_run_summary_reference") is not None
+                else None
+            ),
+            primary_next_invocation=(
+                protocol.get("next_invocation")
+                if isinstance(protocol.get("next_invocation"), Mapping)
+                else None
+            ),
+            help_invocation=generic_help_invocation,
+            help_available=True,
+            controls=control_envelope,
+        )
+        serialization_started = time.perf_counter()
+        projected_size = len(json.dumps(result, indent=2, sort_keys=True).encode())
+        serialization_seconds = time.perf_counter() - serialization_started
+        parts = dict(performance_parts or {})
+        result["performance_diagnostics"] = performance_diagnostics(
+            total_seconds=max(0.0, elapsed) + (time.perf_counter() - result_build_started),
+            state_load_validation_seconds=float(parts.get("state_load_validation_seconds", 0.0)),
+            help_projection_seconds=float(parts.get("help_projection_seconds", 0.0)),
+            controls_construction_seconds=controls_seconds,
+            result_serialization_seconds=serialization_seconds,
+            final_result_bytes=projected_size,
+            controls_inline=controls_inline,
+        )
+        while True:
+            exact_size = len(json.dumps(result, indent=2, sort_keys=True).encode())
+            if result["performance_diagnostics"]["final_result_bytes"] == exact_size:
+                break
+            result["performance_diagnostics"]["final_result_bytes"] = exact_size
         return result
 
     def _attach_executable_recovery_alternatives(
@@ -10647,6 +10990,11 @@ class CurrentLoopCoordinator:
                 required_flags=("--approve",),
                 new_inputs=("explicit_build_review_decline",),
             ),
+            "help": _invocation_template(
+                "help",
+                required_flags=("--topic",),
+                new_inputs=("qcoder_advertised_help_topic",),
+            ),
         }
         contract_operations = {
             "inspect": "contract_status",
@@ -10663,6 +11011,7 @@ class CurrentLoopCoordinator:
             "open_editor": "open_contract_editor",
             "evidence_view": "evidence_view",
             "decline_build_review": "decline_build_review",
+            "help": "help",
         }
         result: dict[str, Any] = {}
         for name, template in rows.items():
@@ -10790,6 +11139,40 @@ class CurrentLoopCoordinator:
                     "blueprint_mutated": False,
                     "may_request_later": True,
                 }
+            elif name == "help":
+                bounded_contract = {
+                    "schema_id": "qcoder.current_loop.help_control.v1",
+                    "schema_version": 1,
+                    "operation": "help",
+                    "fields": [
+                        {
+                            "name": "topic",
+                            "flag": "--topic",
+                            "ownership": "customer_language_mapped_by_binding",
+                            "required": True,
+                            "json_type": "string",
+                            "accepted_values": [
+                                {
+                                    "value": value,
+                                    "customer_meaning": {
+                                        "overview": "Help me with qCoder.",
+                                        "current_status": "What is qCoder doing?",
+                                        "contract": "Explain the qCoder contract.",
+                                        "evidence": "What evidence does qCoder have?",
+                                        "blocker": "Why is this blocked?",
+                                        "next_actions": "What can I do next?",
+                                        "product_surfaces": "What qCoder views can I open?",
+                                    }[value],
+                                }
+                                for value in HELP_TOPICS
+                            ],
+                        }
+                    ],
+                    "local_only": True,
+                    "hosted_metadata_included": False,
+                    "generic_help_default_topic": "overview",
+                    "generic_help_exactly_one_call": True,
+                }
             else:
                 bounded_contract = contracts[contract_operations[name]]
             template["bounded_control_input_contract"] = bounded_contract
@@ -10899,6 +11282,43 @@ class CurrentLoopCoordinator:
                 category=category,
             ),
             concise_message=summary,
+        )
+        result["bounded_contract_controls"] = {}
+        result["bounded_control_catalog"] = {
+            "schema_id": BOUNDED_CONTROL_REFERENCE_SCHEMA_ID,
+            "schema_version": 1,
+            "controls_schema_id": "qcoder.current_loop.bounded_control_catalog.v1",
+            "controls_schema_version": 1,
+            "controls_digest": None,
+            "controls_inline": True,
+            "inline_reason": "pre_active_protocol",
+            "fetch_invocation": None,
+            "client_may_infer_domains": False,
+            "fetched_catalog_digest_must_match": True,
+        }
+        result["tiered_result_envelope"] = {
+            "schema_id": TIERED_RESULT_ENVELOPE_SCHEMA_ID,
+            "schema_version": 1,
+            "full_machine_controls_available": False,
+            "controls_inline": True,
+            "controls_digest": None,
+        }
+        result["customer_envelope"] = customer_envelope(
+            operation=operation,
+            interaction=result["customer_interaction"],
+            phase=phase,
+            state_status=state_status,
+            contract_revision=None,
+            effective_contract_digest=None,
+            evidence_summary_reference=None,
+            primary_next_invocation=(
+                protocol.get("next_invocation")
+                if isinstance(protocol.get("next_invocation"), Mapping)
+                else None
+            ),
+            help_invocation=None,
+            help_available=False,
+            controls=result["bounded_control_catalog"],
         )
         return result
 

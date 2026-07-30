@@ -153,7 +153,8 @@ def test_exact_message_activation_creates_quiet_assist_receipt_and_adaptive_gove
     assert state["current_loop_contract"]["schema_id"] == CONTRACT_SCHEMA_ID
     assert state["current_loop_contract"]["cross_loop_inheritance"] is False
     assert state["automatic_reopen"] is False
-    controls = result["bounded_contract_controls"]
+    assert result["bounded_control_catalog"]["controls_inline"] is False
+    controls = coordinator.bounded_control_catalog()["bounded_contract_controls"]
     assert set(controls) == {
         "inspect",
         "review_customer_json",
@@ -169,6 +170,7 @@ def test_exact_message_activation_creates_quiet_assist_receipt_and_adaptive_gove
         "open_editor",
         "evidence_view",
         "decline_build_review",
+        "help",
     }
     assert all(item["transport_classification"] == "local_only" for item in controls.values())
     assert all("--base-url" not in item["structured_argv"] for item in controls.values())

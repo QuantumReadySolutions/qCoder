@@ -1129,6 +1129,10 @@ def _cmd_current_loop(argv: list[str]) -> int:
     contract_reset.add_argument("--approve", action="store_true")
     help_parser = sub.add_parser("help", help="Show bounded qCoder help grounded in local state.")
     help_parser.add_argument("--topic", choices=HELP_TOPICS, required=True)
+    sub.add_parser(
+        "bounded-control-catalog",
+        help="Fetch the digest-bound deterministic control catalog for an existing result.",
+    )
     adaptive_intent = sub.add_parser(
         "prepare-adaptive-intent",
         help="Record one qCoder-owned mixed-provenance adaptive intent receipt.",
@@ -1883,6 +1887,8 @@ def _cmd_current_loop(argv: list[str]) -> int:
             )
         elif command == "help":
             result = coordinator.help(topic=args.topic)
+        elif command == "bounded-control-catalog":
+            result = coordinator.bounded_control_catalog()
         elif command == "prepare-adaptive-intent":
             result = coordinator.prepare_adaptive_intent(fields_file=args.fields_file)
         elif command == "contract-set-preset":

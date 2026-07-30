@@ -461,8 +461,10 @@ def set_preset(
     preset: str,
     expected_contract_revision: int,
     provenance: str,
+    _contract_is_validated: bool = False,
 ) -> dict[str, Any]:
-    validate_contract(contract)
+    if not _contract_is_validated:
+        validate_contract(contract)
     if expected_contract_revision != contract["contract_revision"]:
         raise CurrentLoopContractError("contract_revision_stale")
     if preset not in NAMED_PRESETS:
@@ -509,8 +511,10 @@ def adjust(
     value: str,
     expected_contract_revision: int,
     provenance: str,
+    _contract_is_validated: bool = False,
 ) -> dict[str, Any]:
-    validate_contract(contract)
+    if not _contract_is_validated:
+        validate_contract(contract)
     if expected_contract_revision != contract["contract_revision"]:
         raise CurrentLoopContractError("contract_revision_stale")
     if category not in EVIDENCE_CATEGORIES:

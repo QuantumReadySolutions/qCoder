@@ -4,6 +4,7 @@ import json
 from collections.abc import Mapping
 from copy import deepcopy
 from pathlib import Path
+import time
 from typing import Any
 
 import pytest
@@ -189,7 +190,7 @@ def test_canonical_vocabulary_binding_and_state_v9_are_identical(tmp_path: Path)
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     vocabulary = vocabulary_snapshot()
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v14"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v15"
     assert binding["canonical_current_loop_vocabulary"] == vocabulary
     assert (
         binding["contract_sidecar"]["accepted_domains"]["canonical_evidence_vocabulary"]
@@ -534,6 +535,15 @@ def test_contract_management_metadata_preserves_worst_case_evidence_headroom(
     state_bytes = len(canonical_bytes(coordinator.store.read()))
     assert state_bytes <= CURRENT_LOOP_STATE_MAX_BYTES
     assert CURRENT_LOOP_STATE_MAX_BYTES - state_bytes >= 8_192
+    state_before_help = canonical_bytes(coordinator.store.read())
+    help_timings = []
+    for _ in range(5):
+        started = time.perf_counter()
+        help_result = coordinator.help(topic="overview")
+        help_timings.append(time.perf_counter() - started)
+        assert len(json.dumps(help_result, indent=2, sort_keys=True).encode()) <= 32 * 1024
+    assert max(help_timings) <= 2.0
+    assert canonical_bytes(coordinator.store.read()) == state_before_help
 
 
 def test_cross_surface_contract_changes_govern_future_evidence_updates(
@@ -705,6 +715,17 @@ def test_pending_current_view_is_honest_and_status_resumes_exact_snapshot(
     assert pending_view["details"]["registered_newer_pending"] is True
     assert pending_view["details"]["current_run_summary_reference"] is None
     assert pending_view["details"]["evidence_view"]["newer_iteration_status"] == "pending"
+    pending_help = coordinator.help(topic="overview")["details"]["help"]["evidence_status"]
+    assert pending_help["presentation_currency"] == "prior_newer_pending"
+    assert pending_help["newer_iteration_status"] == "pending"
+    assert pending_help["only_prior_run_summary_available"] is True
+    assert pending_help["warnings"] == [
+        {
+            "object": "registered_evidence",
+            "status": "pending",
+            "reason": "Newer exact evidence is registered and awaiting local derivation.",
+        }
+    ]
     resumed = coordinator.status()
     assert resumed["details"]["pending_derivation_resumed"] is True
     current = coordinator.evidence_view(view_id="full_run_summary")
@@ -735,6 +756,13 @@ def test_summary_failure_preserves_explicit_prior_but_never_selects_it_as_latest
     assert state["latest_run_summary_reference"] is None
     assert state["run_summary_index"][prior_reference]["currency"] == ("prior_newer_failed")
     assert state["latest_assistant_context_update"]["newer_iteration_status"] == "failed"
+    failed_help = coordinator.help(topic="overview")["details"]["help"]["evidence_status"]
+    assert failed_help["newer_iteration_status"] == "failed"
+    assert failed_help["only_prior_run_summary_available"] is True
+    assert {item["object"] for item in failed_help["warnings"]} == {
+        "current_evidence_snapshot",
+        "newer_evidence_snapshot",
+    }
     current = coordinator.evidence_view(view_id="full_run_summary")
     assert current["details"]["current_run_summary_reference"] is None
     explicit_prior = coordinator.evidence_view(

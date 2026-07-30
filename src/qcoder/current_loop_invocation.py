@@ -29,8 +29,8 @@ from qcoder.current_loop_iteration import ITERATION_AUTHORITY_RECEIPT_SCHEMA_ID
 
 INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v6"
 INVOCATION_CONTRACT_SCHEMA_VERSION = 6
-OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v3"
-OPERATION_INVENTORY_SCHEMA_VERSION = 3
+OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v4"
+OPERATION_INVENTORY_SCHEMA_VERSION = 4
 
 LOCAL_ONLY = "local_only"
 HOSTED_CAPABLE = "hosted_capable"
@@ -152,6 +152,13 @@ _OPERATION_ROWS: tuple[dict[str, Any], ...] = (
         "transport": LOCAL_ONLY,
     },
     {"operation": "help", "subcommand": "help", "transport": LOCAL_ONLY},
+    {
+        "operation": "bounded_control_catalog",
+        "subcommand": "bounded-control-catalog",
+        "transport": LOCAL_ONLY,
+        "internal_deterministic_transport": True,
+        "customer_cli_product": False,
+    },
     {
         "operation": "prepare_adaptive_intent",
         "subcommand": "prepare-adaptive-intent",

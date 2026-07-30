@@ -106,10 +106,12 @@ def current_adjustment_value(
     *,
     category: str,
     dimension: str,
+    _contract_is_validated: bool = False,
 ) -> str:
     """Return the exact CLI value representing the compiled current policy."""
 
-    validate_contract(contract)
+    if not _contract_is_validated:
+        validate_contract(contract)
     row = contract["effective_policy"]["categories"][category]
     if dimension in {"collect", "derive", "recommend", "request_application_or_execution"}:
         return "enabled" if row[dimension] is True else "disabled"
@@ -132,6 +134,7 @@ def _change_disposition_for_preset(contract: Mapping[str, Any], preset: str) -> 
             if preset == "evidence_only"
             else "explicit_customer_selection"
         ),
+        _contract_is_validated=True,
     )
     return str(outcome["disposition"])
 
@@ -150,12 +153,16 @@ def _change_disposition_for_adjustment(
         value=value,
         expected_contract_revision=int(contract["contract_revision"]),
         provenance="explicit_customer_selection",
+        _contract_is_validated=True,
     )
     return str(outcome["disposition"])
 
 
-def preset_selection_contract(contract: Mapping[str, Any]) -> dict[str, Any]:
-    validate_contract(contract)
+def preset_selection_contract(
+    contract: Mapping[str, Any], *, _contract_is_validated: bool = False
+) -> dict[str, Any]:
+    if not _contract_is_validated:
+        validate_contract(contract)
     options = []
     for preset in NAMED_PRESETS:
         disposition = _change_disposition_for_preset(contract, preset)
@@ -202,8 +209,11 @@ def preset_selection_contract(contract: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def adjustment_selection_contract(contract: Mapping[str, Any]) -> dict[str, Any]:
-    validate_contract(contract)
+def adjustment_selection_contract(
+    contract: Mapping[str, Any], *, _contract_is_validated: bool = False
+) -> dict[str, Any]:
+    if not _contract_is_validated:
+        validate_contract(contract)
     cache_key = str(contract["effective_policy_digest"])
     cached = _ADJUSTMENT_GRAPH_CACHE.get(cache_key)
     if cached is not None:
@@ -240,6 +250,7 @@ def adjustment_selection_contract(contract: Mapping[str, Any]) -> dict[str, Any]
                         contract,
                         category=category,
                         dimension=dimension,
+                        _contract_is_validated=True,
                     ),
                     "accepted_values": values,
                 }
@@ -406,10 +417,14 @@ def _reference_field(
 
 
 def evidence_control_contracts(
-    state: Mapping[str, Any], *, artifact_directory: Path
+    state: Mapping[str, Any],
+    *,
+    artifact_directory: Path,
+    _contract_is_validated: bool = False,
 ) -> dict[str, dict[str, Any]]:
     contract = state["current_loop_contract"]
-    validate_contract(contract)
+    if not _contract_is_validated:
+        validate_contract(contract)
     revision = int(contract["contract_revision"])
     saved = _saved_reference_options(state)
     excluded = {item["value"] for item in _excluded_reference_options(state, contract)}
@@ -655,8 +670,8 @@ def bounded_control_contracts(
             "qcoder_owned_current_contract": True,
             "raw_policy_editing_permitted": False,
         },
-        "contract_set_preset": preset_selection_contract(contract),
-        "contract_adjust": adjustment_selection_contract(contract),
+        "contract_set_preset": preset_selection_contract(contract, _contract_is_validated=True),
+        "contract_adjust": adjustment_selection_contract(contract, _contract_is_validated=True),
         "contract_confirm_broadening": {
             "operation": "contract_confirm_broadening",
             "subcommand": "contract-confirm-broadening",
@@ -704,7 +719,13 @@ def bounded_control_contracts(
             "off_is_absence_of_active_loop": True,
         },
     }
-    controls.update(evidence_control_contracts(state, artifact_directory=artifact_directory))
+    controls.update(
+        evidence_control_contracts(
+            state,
+            artifact_directory=artifact_directory,
+            _contract_is_validated=True,
+        )
+    )
     for value in controls.values():
         value["schema_id"] = BOUNDED_CONTROL_INPUT_SCHEMA_ID
         value["schema_version"] = BOUNDED_CONTROL_INPUT_SCHEMA_VERSION

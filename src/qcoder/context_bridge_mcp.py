@@ -134,8 +134,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 14
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v14"
+CLIENT_BINDING_SCHEMA_VERSION = 15
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v15"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -365,11 +365,29 @@ bounded customer-editable document. qCoder, not the assistant, validates, normal
 classifies every change. One coherent customer request may create one multi-field change set.
 Narrowing applies immediately; broadening requires a qCoder proposal and separate authority-only
 confirmation. For every bounded local control, consume the complete versioned input contract in
-the current result. Select only advertised machine values and valid combinations, use only
+the current result when controls are inline; when controls are referenced, fetch the catalog only
+if the selected action needs its domains and verify the advertised digest. Select only advertised
+machine values and valid combinations, use only
 qCoder-supplied artifact, proposal, receipt, revision, loop, and workspace references, and explain
 choices with the supplied customer meanings. Never inspect parser help, source, package files,
 proof records, transcripts, or .qcoder to discover a domain. Off uses qCoder's distinct stop-loop
 invocation and is never serialized as an all-false active contract.
+
+GENERIC HELP
+For a generic request such as “Help me with qCoder.” execute exactly one qCoder local help
+invocation with topic overview from the current coordinator result, use its top-level
+customer_envelope, and stop qCoder tool composition unless the customer asks for one more
+specific help topic. Do not call loop status, contract status, a Run Summary, an evidence view,
+or the browser sidecar automatically. Do not inspect source, package files, parser help,
+.qcoder, proof records, or transcripts. The current_build_facts evidence view is only for an
+explicit run or circuit evidence question; it is not the generic-help route.
+Use topic evidence for “What evidence does qCoder have?”, blocker for “Why is this blocked?”,
+next_actions for “What can I do next?”, contract for “Explain the contract”, and current_status
+for a specific workflow-status question. Each successful informational result may reference its
+full bounded-control catalog instead of repeating it. Fetch that catalog only when the customer
+selects an action that needs its domains, verify the advertised digest, and never infer domains.
+Checkpoint, contract-management, non-success, and recovery results retain required controls
+inline.
 
 RECOVERY
 Recoverable results preserve prior valid authority and evidence and include a versioned recovery
@@ -553,6 +571,33 @@ def build_client_binding_descriptor(
             "hosted_enrichment_on_request": True,
             "build_review_on_request": True,
             "customer_interaction_envelope_primary": True,
+            "customer_envelope_schema_id": "qcoder.current_loop.customer_envelope.v1",
+            "generic_help": {
+                "schema_id": "qcoder.current_loop.help_control.v1",
+                "schema_version": 1,
+                "operation": "help",
+                "generic_request_topic": "overview",
+                "exactly_one_qcoder_operation": True,
+                "stop_after_compact_envelope": True,
+                "automatic_status_call": False,
+                "automatic_contract_status_call": False,
+                "automatic_evidence_view_call": False,
+                "automatic_browser_call": False,
+                "current_build_facts_for_generic_help": False,
+                "operation_specific_invocation_location": (
+                    "coordinator_result.customer_envelope.help.invocation"
+                ),
+                "topics": {
+                    "overview": "Help me with qCoder.",
+                    "current_status": "What is qCoder doing?",
+                    "contract": "Explain the contract.",
+                    "evidence": "What evidence does qCoder have?",
+                    "blocker": "Why is this blocked?",
+                    "next_actions": "What can I do next?",
+                },
+                "source_help_state_or_transcript_inspection": False,
+            },
+            "tiered_result_envelope": coordinator_contract_snapshot()["tiered_result_envelope"],
             "adaptive_intent_fields_file_qcoder_owned": True,
             "adaptive_intent_routine_customer_response_required": False,
             "artifact_event_disposition_is_authority": False,

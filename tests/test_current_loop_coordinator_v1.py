@@ -572,9 +572,9 @@ def _activate_and_prepare(
 
 def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
     snapshot = coordinator_contract_snapshot()
-    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v15"
+    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v16"
     assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v13"
-    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 15
+    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 16
     assert all(snapshot["checkpoint_result_protocol"].values())
     assert snapshot["permitted_input_source_taxonomy"] == {
         "schema_id": INPUT_SOURCE_DISPOSITION_SCHEMA_ID,
@@ -627,7 +627,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("8cfad9a1997ad3ed9c84d0b86b46680ca12da0a8eb8e5a85f11b5c9ff91cb7bf")
+    assert contract_digest == ("5b5e2806fe72ae0e6473a72ea662ff58b6df5381ef45145c7d1bed4505d9b215")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
@@ -2680,8 +2680,8 @@ def test_every_checkpoint_result_is_deterministically_actionable(tmp_path: Path)
             summary="Synthetic checkpoint contract test.",
         )
         _assert_actionable_checkpoint(result)
-        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v15"
-        assert result["schema_version"] == 15
+        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v16"
+        assert result["schema_version"] == 16
 
 
 @pytest.mark.parametrize(

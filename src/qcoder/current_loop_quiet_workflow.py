@@ -23,8 +23,8 @@ ASSISTANT_CONTEXT_UPDATE_SCHEMA_ID = "qcoder.current_loop.assistant_context_upda
 ASSISTANT_CONTEXT_UPDATE_SCHEMA_VERSION = 2
 COMPLETION_RECEIPT_SCHEMA_ID = "qcoder.current_loop.completion_receipt.v1"
 COMPLETION_RECEIPT_SCHEMA_VERSION = 1
-HELP_SCHEMA_ID = "qcoder.current_loop.help.v1"
-HELP_SCHEMA_VERSION = 1
+HELP_SCHEMA_ID = "qcoder.current_loop.help.v2"
+HELP_SCHEMA_VERSION = 2
 INTENT_RECEIPT_SCHEMA_ID = "qcoder.current_loop.intent_receipt.v1"
 INTENT_RECEIPT_SCHEMA_VERSION = 1
 
@@ -257,39 +257,105 @@ def help_response(
     *,
     topic: str,
     loop_active: bool,
-    effective_preset: str | None,
-    contract_summary: str | None,
-    generation_governance: str | None,
+    phase_summary: str,
+    contract_summary: Mapping[str, Any],
+    evidence_status: Mapping[str, Any],
+    pending_proposal: Mapping[str, Any] | None,
     evidence: Sequence[Mapping[str, Any]],
-    limitations: Sequence[str],
     latest_activity: Mapping[str, Any] | None,
     blocker: Mapping[str, Any] | None,
     supported_actions: Sequence[Mapping[str, Any]],
+    browser_editor_available: bool,
 ) -> dict[str, Any]:
     if topic not in HELP_TOPICS:
         raise ValueError("current_loop_help_topic_invalid")
+    contract = deepcopy(dict(contract_summary))
+    evidence_projection = deepcopy(dict(evidence_status))
+    actions = [deepcopy(dict(item)) for item in supported_actions]
+    common = {
+        "loop_active": loop_active,
+        "phase": phase_summary,
+        "effective_preset": contract.get("effective_preset"),
+        "generation_governance": contract.get("generation_governance"),
+        "permissions": deepcopy(list(contract.get("permissions", []))),
+        "prohibitions": deepcopy(list(contract.get("prohibitions", []))),
+        "pending_proposal": (
+            deepcopy(dict(pending_proposal)) if pending_proposal is not None else None
+        ),
+        "material_blocker": deepcopy(dict(blocker)) if blocker is not None else None,
+        "useful_evidence_available": bool(evidence_projection.get("available")),
+        "evidence_status": evidence_projection,
+        "current_run_summary_available": bool(
+            evidence_projection.get("current_run_summary_available")
+        ),
+        "supported_customer_actions": actions,
+        "browser_editor_available": browser_editor_available,
+    }
+    if topic == "overview":
+        topic_detail = {
+            "purpose": "one_call_generic_help",
+            "summary": (
+                "qCoder is active for this build."
+                if loop_active
+                else "qCoder does not have an active loop for this build."
+            ),
+        }
+    elif topic == "current_status":
+        topic_detail = {
+            "purpose": "current_phase_and_workflow_status",
+            "most_recent_activity_receipt": (
+                deepcopy(dict(latest_activity)) if latest_activity is not None else None
+            ),
+            "processing_status": evidence_projection.get("processing_completeness"),
+        }
+    elif topic == "contract":
+        topic_detail = {
+            "purpose": "compact_effective_contract",
+            "assistant_exposure": contract.get("assistant_exposure"),
+            "hosted_enrichment": contract.get("hosted_enrichment"),
+            "build_review": contract.get("build_review"),
+            "contract_revision": contract.get("contract_revision"),
+            "full_json_included": False,
+            "editor_available": browser_editor_available,
+        }
+    elif topic == "evidence":
+        topic_detail = {
+            "purpose": "evidence_availability_and_detailed_routing",
+            "available_evidence": [deepcopy(dict(item)) for item in evidence],
+            "detailed_evidence_route": "evidence_view",
+            "full_run_summary_included": False,
+        }
+    elif topic == "blocker":
+        topic_detail = {
+            "purpose": "current_blocker_and_recovery",
+            "blocker": deepcopy(dict(blocker)) if blocker is not None else None,
+            "prior_valid_state_preserved": True,
+            "recovery_routes": [
+                deepcopy(item) for item in actions if item.get("category") in {"recovery", "stop"}
+            ],
+        }
+    elif topic == "next_actions":
+        topic_detail = {
+            "purpose": "bounded_customer_next_actions",
+            "actions": actions,
+        }
+    else:
+        topic_detail = {
+            "purpose": "available_product_surfaces",
+            "surfaces": [
+                "current_loop_contract",
+                "working_blueprint",
+                "circuit_workbench",
+                "run_summary",
+                "build_review",
+            ],
+        }
     result = {
         "schema_id": HELP_SCHEMA_ID,
         "schema_version": HELP_SCHEMA_VERSION,
         "topic": topic,
-        "loop_active": loop_active,
-        "effective_preset": effective_preset,
-        "contract_summary": contract_summary,
-        "generation_governance": generation_governance,
-        "available_evidence": [deepcopy(dict(item)) for item in evidence],
-        "limitations": [str(item)[:500] for item in limitations],
-        "most_recent_activity_receipt": (
-            deepcopy(dict(latest_activity)) if latest_activity is not None else None
-        ),
-        "current_material_blocker": deepcopy(dict(blocker)) if blocker is not None else None,
-        "supported_customer_actions": [deepcopy(dict(item)) for item in supported_actions],
-        "product_surfaces": [
-            "current_loop_contract",
-            "working_blueprint",
-            "circuit_workbench",
-            "run_summary",
-            "build_review",
-        ],
+        **common,
+        "topic_detail": topic_detail,
         "separate_authority_still_required": [
             "IDE write or run",
             "raw evidence exposure",
@@ -299,6 +365,10 @@ def help_response(
         "commands_exposed": False,
         "json_choreography_exposed": False,
         "state_reconstructed_from_transcript": False,
+        "exact_counts_included": False,
+        "gate_metrics_included": False,
+        "full_run_summary_included": False,
+        "complete_contract_matrix_included": False,
     }
     result["help_digest"] = _digest(result)
     return result

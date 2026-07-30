@@ -108,7 +108,8 @@ def test_every_local_control_field_has_complete_ownership_and_domain(
                 assert all(item["customer_meaning"] for item in field["accepted_values"])
             if field["ownership"] == "qcoder_owned_prebound_value":
                 assert "fixed_value" in field
-    serialized = activated["bounded_contract_controls"]
+    assert activated["bounded_control_catalog"]["controls_inline"] is False
+    serialized = coordinator.bounded_control_catalog()["bounded_contract_controls"]
     assert set(serialized) == {
         "inspect",
         "review_customer_json",
@@ -124,6 +125,7 @@ def test_every_local_control_field_has_complete_ownership_and_domain(
         "open_editor",
         "evidence_view",
         "decline_build_review",
+        "help",
     }
     for invocation in serialized.values():
         assert invocation["schema_id"] == INVOCATION_CONTRACT_SCHEMA_ID
@@ -133,6 +135,7 @@ def test_every_local_control_field_has_complete_ownership_and_domain(
             "qcoder.current_loop.contract_sidecar.v3",
             "qcoder.current_loop.evidence_view.v1",
             "qcoder.current_loop.build_review_choice.v1",
+            "qcoder.current_loop.help_control.v1",
         }
         assert invocation["transport_classification"] == "local_only"
         assert "--base-url" not in invocation["structured_argv"]
@@ -142,9 +145,9 @@ def test_every_local_control_field_has_complete_ownership_and_domain(
 def test_preset_domain_is_sound_complete_and_off_is_a_distinct_stop_action(
     tmp_path: Path,
 ) -> None:
-    coordinator, activated = _activate(tmp_path)
+    coordinator, _ = _activate(tmp_path)
     contract = coordinator.store.read()["current_loop_contract"]
-    supplied = activated["bounded_contract_controls"]["set_preset"][
+    supplied = coordinator.bounded_control_catalog()["bounded_contract_controls"]["set_preset"][
         "bounded_control_input_contract"
     ]
     field = next(item for item in supplied["fields"] if item["name"] == "preset")
@@ -165,7 +168,7 @@ def test_preset_domain_is_sound_complete_and_off_is_a_distinct_stop_action(
         )
         assert item["change_disposition"] == outcome["disposition"]
     assert supplied["off_disposition"]["advertised_as_preset_selection"] is False
-    stop = activated["bounded_contract_controls"]["stop_loop"]
+    stop = coordinator.bounded_control_catalog()["bounded_contract_controls"]["stop_loop"]
     assert stop["operation"] == "abandon"
     assert "--approve" in stop["structured_argv"]
 
@@ -286,7 +289,8 @@ def test_evidence_references_and_operation_receipts_are_qcoder_supplied(
     tmp_path: Path,
 ) -> None:
     coordinator, activated = _activate(tmp_path)
-    controls = activated["bounded_contract_controls"]
+    assert activated["bounded_control_catalog"]["controls_inline"] is False
+    controls = coordinator.bounded_control_catalog()["bounded_contract_controls"]
     exclude = controls["exclude"]["bounded_control_input_contract"]
     reference_field = next(
         item for item in exclude["fields"] if item["name"] == "artifact_reference"
@@ -301,7 +305,10 @@ def test_evidence_references_and_operation_receipts_are_qcoder_supplied(
         expected_contract_revision=1,
     )
     assert excluded["ok"] is True
-    restore = excluded["bounded_contract_controls"]["restore"]["bounded_control_input_contract"]
+    assert excluded["bounded_control_catalog"]["controls_inline"] is False
+    restore = coordinator.bounded_control_catalog()["bounded_contract_controls"]["restore"][
+        "bounded_control_input_contract"
+    ]
     restore_reference = next(
         item for item in restore["fields"] if item["name"] == "artifact_reference"
     )
@@ -327,7 +334,7 @@ def test_binding_v7_delivers_the_static_contract_and_customer_meanings() -> None
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     assert descriptor["contract_id"] == CLIENT_BINDING_CONTRACT_ID
-    assert descriptor["contract_id"].endswith(".v14")
+    assert descriptor["contract_id"].endswith(".v15")
     contract = descriptor["bounded_control_input_contract"]
     assert contract["schema_id"] == BOUNDED_CONTROL_INPUT_SCHEMA_ID
     assert contract["contract_digest"]

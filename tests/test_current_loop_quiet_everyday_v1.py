@@ -462,7 +462,7 @@ def test_sidecar_and_binding_share_v2_governance_and_quiet_contract(tmp_path: Pa
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v14"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v15"
     quiet = descriptor["quiet_everyday_workflow_contract"]
     assert quiet["customer_interaction_schema_id"] == CUSTOMER_INTERACTION_SCHEMA_ID
     assert quiet["assist_default"] == "quiet_everyday"
