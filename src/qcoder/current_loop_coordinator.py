@@ -100,6 +100,7 @@ from qcoder.current_loop_contract import (
     permits as contract_permits,
     record_deletion as contract_record_deletion,
     restore_evidence as contract_restore_evidence,
+    set_generation_governance,
     set_preset as set_contract_preset,
     validate_contract,
 )
@@ -145,16 +146,26 @@ from qcoder.current_loop_run_summary import (
     run_summary_contract_snapshot,
     share_safe_run_summary_projection,
 )
+from qcoder.current_loop_quiet_workflow import (
+    HELP_TOPICS,
+    assistant_context_update,
+    completion_receipt,
+    customer_interaction,
+    help_response,
+    intent_receipt,
+    quiet_workflow_contract_snapshot,
+)
 from qcoder.context_loop import CONTEXT_LOOP_GATE
 
-COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v11"
-COORDINATOR_RESULT_SCHEMA_VERSION = 11
-COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v9"
-PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v8"
+COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v12"
+COORDINATOR_RESULT_SCHEMA_VERSION = 12
+COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v10"
+PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v9"
 OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
     {
         "qcoder.current_loop.coordinator_state.v6",
         "qcoder.current_loop.coordinator_state.v7",
+        "qcoder.current_loop.coordinator_state.v8",
         "qcoder.current_loop.coordinator_state.v5",
         "qcoder.current_loop.coordinator_state.v4",
         "qcoder.current_loop.coordinator_state.v1",
@@ -162,7 +173,7 @@ OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
         "qcoder.current_loop.coordinator_state.v3",
     }
 )
-COORDINATOR_STATE_SCHEMA_VERSION = 8
+COORDINATOR_STATE_SCHEMA_VERSION = 10
 RECOVERY_SCHEMA_ID = "qcoder.current_loop.recovery.v2"
 RECOVERY_SCHEMA_VERSION = 2
 CONSEQUENCE_PROJECTION_SCHEMA_ID = "qcoder.current_loop.consequence_projection.v1"
@@ -178,6 +189,7 @@ PERMITTED_INPUT_SOURCE_CATEGORIES = (
     "qcoder_managed_canonical_reference",
     "exact_customer_selected_workspace",
     "exact_request_capture_transport",
+    "qcoder_declared_attributable_value",
     "no_input_permitted_or_required",
 )
 
@@ -243,14 +255,18 @@ _PHASE_TRANSITIONS = {
         "artifact_authorization",
         "abandoned",
     ),
-    "intent_review": ("generation_ready", "abandoned"),
+    "intent_review": ("generation_ready", "awaiting_local_artifacts", "abandoned"),
     "generation_ready": (
         "intent_review",
         "awaiting_local_artifacts",
         "artifact_authorization",
         "abandoned",
     ),
-    "awaiting_local_artifacts": ("artifact_authorization", "abandoned"),
+    "awaiting_local_artifacts": (
+        "artifact_authorization",
+        "evidence_processing",
+        "abandoned",
+    ),
     "artifact_authorization": (
         "awaiting_local_artifacts",
         "evidence_processing",
@@ -258,13 +274,15 @@ _PHASE_TRANSITIONS = {
     ),
     "evidence_processing": (
         "generation_ready",
+        "awaiting_local_artifacts",
         "artifact_authorization",
         "current_build_review",
         "continuation_choice",
         "abandoned",
     ),
-    "current_build_review": ("continuation_choice", "abandoned"),
+    "current_build_review": ("awaiting_local_artifacts", "continuation_choice", "abandoned"),
     "continuation_choice": (
+        "awaiting_local_artifacts",
         "current_build_review",
         "change_confirmation",
         "next_loop_ready",
@@ -1128,6 +1146,16 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "contract_sidecar": sidecar_contract_snapshot()["schema_id"],
             "run_summary": run_summary_contract_snapshot()["schema_id"],
             "evidence_view": evidence_view_contract_snapshot()["schema_id"],
+            "customer_interaction": quiet_workflow_contract_snapshot()[
+                "customer_interaction_schema_id"
+            ],
+            "assistant_context_update": quiet_workflow_contract_snapshot()[
+                "assistant_context_update_schema_id"
+            ],
+            "completion_receipt": quiet_workflow_contract_snapshot()[
+                "completion_receipt_schema_id"
+            ],
+            "help": quiet_workflow_contract_snapshot()["help_schema_id"],
         },
         "operation_invocation": invocation_contract_snapshot(),
         "bounded_control_input": bounded_control_contract_snapshot(),
@@ -1156,6 +1184,7 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
         "contract_sidecar": sidecar_contract_snapshot(),
         "run_summary": run_summary_contract_snapshot(),
         "evidence_view": evidence_view_contract_snapshot(),
+        "quiet_everyday_workflow": quiet_workflow_contract_snapshot(),
         "phases": list(PHASES),
         "ready_phase_protocol_dispositions": deepcopy(_READY_PHASE_PROTOCOL_DISPOSITIONS),
         "state_statuses": list(STATE_STATUSES),
@@ -1198,7 +1227,8 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "approval_reuses_pending_capture": True,
             "new_request_with_approval_activates": ("exact_current_customer_message_mode_only"),
             "protected_call_before_activation": False,
-            "posture_authority_separate": True,
+            "adaptive_governance_from_contract": True,
+            "routine_posture_question": False,
         },
         "generation_context_response_modes": [
             "exploratory_generation_context_ready",
@@ -1596,6 +1626,7 @@ def _authority_input(
 
 
 _ACTION_INPUT_SOURCE_CATEGORIES = {
+    "record_adaptive_intent_receipt": ("qcoder_declared_attributable_value",),
     "select_generation_posture_or_stop": (
         "bounded_enumerated_customer_choice",
         "authority_only_approval",
@@ -1646,6 +1677,9 @@ _ACTION_INPUT_SOURCE_CATEGORIES = {
 
 def _default_permitted_input_source(action: str) -> str:
     defaults = {
+        "record_adaptive_intent_receipt": (
+            "qcoder_declared_attributable_intent_fields_without_customer_approval"
+        ),
         "select_generation_posture_or_stop": (
             "explicit_customer_bounded_posture_choice_or_explicitly_accepted_"
             "supported_recommendation"
@@ -2435,7 +2469,7 @@ class CurrentLoopCoordinator:
                 baseline_digest = sha256(original_request.encode("utf-8")).hexdigest()
                 activated = activate_current_loop(
                     workspace_root=self.workspace_root,
-                    generation_posture=None,
+                    generation_posture="exploratory_first_pass",
                     explicit_authority=True,
                     label=label,
                     external_state_path=(
@@ -2451,13 +2485,13 @@ class CurrentLoopCoordinator:
                 state = self.store.read()
                 contract = state["current_loop_contract"]
                 coordinator = self._initial_coordinator_state(
-                    phase="activated",
+                    phase="intent_review",
                     state_status="ready",
                     checkpoint_kind="none",
                     summary=(
-                        "qCoder is active under Assist. The exact current customer message "
-                        "is preserved as the Request Baseline. Generation posture remains unset "
-                        "until generation becomes relevant."
+                        "qCoder is active under quiet Assist. The exact current customer "
+                        "message is preserved as the Request Baseline; adaptive generation "
+                        "governance applies without a posture question."
                     ),
                 )
                 coordinator["activation"] = {
@@ -2466,8 +2500,12 @@ class CurrentLoopCoordinator:
                     "original_request_preserved": True,
                     "redundant_baseline_approval_required": False,
                     "generation_posture_explicit": False,
+                    "generation_governance": "adaptive",
+                    "generation_governance_provenance": "contract_default",
+                    "internal_generation_posture": "exploratory_first_pass",
                 }
                 coordinator["assist_ready"] = True
+                coordinator["effective_generation_posture"] = "exploratory_first_pass"
                 coordinator["request_baseline_reference"] = _artifact_reference(baseline)
                 self._replace_coordinator(coordinator)
                 return self._result(
@@ -2484,7 +2522,11 @@ class CurrentLoopCoordinator:
                         "activation_receipt": deepcopy(contract["activation_receipt"]),
                         "effective_preset": "assist",
                         "assist_ready": True,
-                        "posture_deferred": True,
+                        "posture_deferred": False,
+                        "posture_question_required": False,
+                        "generation_governance": "adaptive",
+                        "generation_governance_provenance": "contract_default",
+                        "internal_generation_posture": "exploratory_first_pass",
                         "ide_write_or_run_authorized": False,
                         "artifact_review_authorized": False,
                     },
@@ -3425,6 +3467,237 @@ class CurrentLoopCoordinator:
         except (CurrentLoopError, CurrentLoopContractError) as exc:
             return self._exception_result("contract_status", exc, started)
 
+    def prepare_adaptive_intent(
+        self,
+        *,
+        fields: Mapping[str, Mapping[str, Any]],
+    ) -> dict[str, Any]:
+        """Record ordinary mixed-provenance intent without manufacturing approval."""
+
+        started = self.clock()
+        try:
+            state = self._require_phase(
+                "prepare_adaptive_intent", {"intent_review", "generation_ready"}
+            )
+            contract = state["current_loop_contract"]
+            governance = str(contract["generation_governance"])
+            baseline = self._saved_artifact(state, "request_baseline")
+            receipt = intent_receipt(
+                request_baseline_digest=str(baseline["artifact_digest"]),
+                fields=fields,
+                generation_governance=governance,
+                state_revision=int(state["state_revision"]),
+                contract_revision=int(contract["contract_revision"]),
+            )
+            coordinator = self._coordinator_state(state)
+            coordinator["adaptive_intent_receipt"] = deepcopy(receipt)
+            if receipt["material_decision_required"]:
+                coordinator.update(
+                    {
+                        "phase": "intent_review",
+                        "state_status": "checkpoint_required",
+                        "checkpoint_kind": "decision_resolution",
+                        "customer_summary": (
+                            "One grouped material-decision checkpoint is required before "
+                            "generation can proceed."
+                        ),
+                    }
+                )
+            else:
+                coordinator.update(
+                    {
+                        "phase": "generation_ready",
+                        "state_status": "ready",
+                        "checkpoint_kind": "none",
+                        "customer_summary": (
+                            "The ordinary build intent is attributable and ready. No "
+                            "interpretation or clarification approval is required."
+                        ),
+                        "effective_generation_posture": contract[
+                            "effective_internal_generation_posture"
+                        ],
+                    }
+                )
+            self._replace_coordinator(coordinator)
+            return self._result(
+                operation="prepare_adaptive_intent",
+                ok=True,
+                state=self.store.read(),
+                summary=coordinator["customer_summary"],
+                elapsed=self.clock() - started,
+                details={
+                    "intent_receipt": receipt,
+                    "routine_interpretation_approval_required": False,
+                    "routine_clarification_approval_required": False,
+                    "user_confirmation_manufactured": False,
+                },
+            )
+        except (CurrentLoopError, CurrentLoopContractError, ValueError) as exc:
+            return self._exception_result("prepare_adaptive_intent", exc, started)
+
+    def help(self, *, topic: str) -> dict[str, Any]:
+        """Return one bounded, local, state-grounded help projection."""
+
+        started = self.clock()
+        try:
+            if topic not in HELP_TOPICS:
+                raise CurrentLoopError("current_loop_help_topic_invalid")
+            state = self.store.read()
+            contract = state["current_loop_contract"]
+            coordinator = self._coordinator_state(state)
+            evidence = [
+                {
+                    "role": role,
+                    "artifact_reference": value.get("artifact_reference"),
+                    "artifact_digest": value.get("artifact_digest"),
+                }
+                for role, value in sorted(state.get("saved_artifacts", {}).items())
+                if isinstance(value, Mapping)
+            ]
+            limitations = [
+                str(value["limitation"])
+                for value in state.get("artifact_processing_outcomes", {}).values()
+                if isinstance(value, Mapping) and isinstance(value.get("limitation"), str)
+            ]
+            actions = [
+                {
+                    "customer_meaning": "Open qCoder settings for this build.",
+                    "route": "open_contract_editor",
+                },
+                {
+                    "customer_meaning": "Show the Full Run Summary.",
+                    "route": "evidence_view:full_run_summary",
+                },
+                {
+                    "customer_meaning": "Show the Circuit Workbench evidence.",
+                    "route": "evidence_view:current_build_facts",
+                },
+                {
+                    "customer_meaning": "Request Build Review.",
+                    "route": "review_build",
+                },
+            ]
+            projection = help_response(
+                topic=topic,
+                loop_active=state.get("activation_state") == "active",
+                effective_preset=str(contract["effective_preset"]),
+                contract_summary=(
+                    "Assist is quiet by default; material decisions and authority "
+                    "boundaries remain explicit."
+                ),
+                generation_governance=str(contract["generation_governance"]),
+                evidence=evidence,
+                limitations=limitations,
+                latest_activity=(
+                    state["activity_receipts"][-1] if state.get("activity_receipts") else None
+                ),
+                blocker=(
+                    {
+                        "checkpoint_kind": coordinator["checkpoint_kind"],
+                        "summary": coordinator["customer_summary"],
+                    }
+                    if coordinator["state_status"] == "checkpoint_required"
+                    else None
+                ),
+                supported_actions=actions,
+            )
+            return self._result(
+                operation="help",
+                ok=True,
+                state=state,
+                summary="qCoder help is grounded in the active loop and its local contract.",
+                elapsed=self.clock() - started,
+                details={"help": projection, "commands_exposed": False},
+            )
+        except (CurrentLoopError, CurrentLoopContractError, ValueError) as exc:
+            return self._exception_result("help", exc, started)
+
+    def complete_instruction(
+        self,
+        *,
+        exact_instruction: str,
+        stop_loop: bool,
+    ) -> dict[str, Any]:
+        """Apply an exact unchanged continuation/stop instruction without restaging."""
+
+        started = self.clock()
+        try:
+            if not isinstance(exact_instruction, str) or not exact_instruction.strip():
+                raise CurrentLoopError("completion_instruction_required")
+            state = self.store.read()
+            if state.get("activation_state") != "active":
+                raise CurrentLoopError("current_loop_not_active")
+            coordinator = self._coordinator_state(state)
+            if (
+                coordinator.get("checkpoint_kind")
+                in {
+                    "governing_change_confirmation",
+                    "decision_resolution",
+                }
+                and coordinator.get("state_status") == "checkpoint_required"
+            ):
+                raise CurrentLoopError("completion_material_proposal_pending")
+            receipt = completion_receipt(
+                instruction_utf8_sha256=sha256(exact_instruction.encode()).hexdigest(),
+                disposition="stop_loop" if stop_loop else "continue_unchanged",
+                hosted_enrichment_disposition=str(
+                    state.get("hosted_enrichment", {}).get("status", "not_offered")
+                ),
+                build_review_disposition="declined_or_not_requested",
+                state_revision=int(state["state_revision"]),
+                contract_revision=int(state["current_loop_contract"]["contract_revision"]),
+            )
+
+            def receipt_mutator(value: dict[str, Any]) -> Mapping[str, Any]:
+                value["completion_receipt"] = deepcopy(receipt)
+                value["quiet_iteration_status"] = "not_ready"
+                return value
+
+            state = self.store.update(
+                receipt_mutator, expected_revision=int(state["state_revision"])
+            )
+            if stop_loop:
+                state = complete_current_loop(
+                    store=self.store,
+                    completion_state="abandoned",
+                    continuation_artifact=None,
+                    next_loop_seed=None,
+                    expected_revision=int(state["state_revision"]),
+                )
+                phase = "abandoned"
+                summary = (
+                    "The qCoder loop is closed with the Blueprint unchanged, no hosted "
+                    "enrichment or Build Review, no next loop, and no carryover."
+                )
+            else:
+                phase = coordinator["phase"]
+                summary = "Ordinary work may continue unchanged; no restaged approval is required."
+            coordinator.update(
+                {
+                    "phase": phase,
+                    "state_status": "ready",
+                    "checkpoint_kind": "none",
+                    "customer_summary": summary,
+                }
+            )
+            self._replace_coordinator(coordinator)
+            return self._result(
+                operation="complete_instruction",
+                ok=True,
+                state=self.store.read(),
+                summary=summary,
+                elapsed=self.clock() - started,
+                details={
+                    "completion_receipt": receipt,
+                    "restaging_required": False,
+                    "evolved_blueprint_created": False,
+                    "next_loop_started": False,
+                    "cross_loop_carryover": False,
+                },
+            )
+        except (CurrentLoopError, CurrentLoopConflict, ValueError) as exc:
+            return self._exception_result("complete_instruction", exc, started)
+
     def open_contract_editor(self) -> dict[str, Any]:
         started = self.clock()
         try:
@@ -3799,6 +4072,65 @@ class CurrentLoopCoordinator:
         except (CurrentLoopError, CurrentLoopConflict) as exc:
             return self._exception_result("contract_adjust", exc, started)
 
+    def contract_set_generation_governance(
+        self,
+        *,
+        governance: str,
+        expected_contract_revision: int,
+    ) -> dict[str, Any]:
+        started = self.clock()
+        try:
+            state = self.store.read()
+            outcome = set_generation_governance(
+                state["current_loop_contract"],
+                governance=governance,
+                expected_contract_revision=expected_contract_revision,
+                provenance="customer_selected_contract_setting",
+            )
+            updated = self._replace_contract(
+                outcome["contract"],
+                cancel_pending_for_narrowing=outcome["disposition"] == "narrowing",
+            )
+            broadening = outcome["disposition"] == "broadening"
+            coordinator = self._coordinator_state(updated)
+            if not broadening:
+                coordinator["effective_generation_posture"] = outcome["contract"][
+                    "effective_internal_generation_posture"
+                ]
+                self._replace_coordinator(coordinator)
+                updated = self.store.read()
+            return self._result(
+                operation="contract_set_generation_governance",
+                ok=True,
+                state=updated,
+                summary=(
+                    "Adaptive generation is proposed and requires explicit approval."
+                    if broadening
+                    else "Blueprint-required generation is effective immediately."
+                ),
+                elapsed=self.clock() - started,
+                category="contract_broadening_proposed" if broadening else None,
+                details={
+                    "disposition": outcome["disposition"],
+                    "pending_proposal": deepcopy(outcome["proposal"]),
+                    "generation_governance": governance,
+                    "internal_posture": outcome["contract"][
+                        "effective_internal_generation_posture"
+                    ],
+                    "customer_posture_question_required": False,
+                },
+            )
+        except CurrentLoopContractError as exc:
+            return self._bounded_control_rejection(
+                operation="contract_set_generation_governance",
+                category=exc.category,
+                field_name="generation_governance",
+                received=governance,
+                started=started,
+            )
+        except (CurrentLoopError, CurrentLoopConflict) as exc:
+            return self._exception_result("contract_set_generation_governance", exc, started)
+
     def contract_confirm_broadening(
         self, *, expected_contract_revision: int, explicit_authority: bool
     ) -> dict[str, Any]:
@@ -4076,7 +4408,15 @@ class CurrentLoopCoordinator:
         try:
             state = self._require_phase(
                 "record_ide_authority",
-                {"activated", "generation_ready", "awaiting_local_artifacts"},
+                {
+                    "activated",
+                    "intent_review",
+                    "generation_ready",
+                    "awaiting_local_artifacts",
+                    "evidence_processing",
+                    "current_build_review",
+                    "continuation_choice",
+                },
             )
             if not explicit_user_action or not allowed:
                 return self._recovery_result(
@@ -4109,14 +4449,16 @@ class CurrentLoopCoordinator:
                     "state_status": "ready",
                     "checkpoint_kind": "none",
                     "customer_summary": (
-                        "The IDE host recorded its separate write or run authority. "
-                        "Perform only the authorized IDE work, retain exact paths returned "
-                        "by write or modify operations, and register those exact paths. "
-                        "qCoder artifact review is still not authorized."
+                        "The native IDE permission recorded this bounded write or run "
+                        "authority. Perform only that action and retain its exact outputs. "
+                        "Under Assist, supported receipt-bound outputs may be enrolled and "
+                        "processed locally without another chat approval."
                     ),
                 }
             )
-            coordinator["authority_separation"]["ide_write_or_run"] = "owned_by_ide_host_not_qcoder"
+            coordinator["authority_separation"]["ide_write_or_run"] = (
+                "action_specific_native_permission_recorded_by_qcoder"
+            )
             self._replace_coordinator(coordinator)
             return self._result(
                 operation="record_ide_authority",
@@ -4127,6 +4469,16 @@ class CurrentLoopCoordinator:
                 details={
                     "artifact_review_authorized": False,
                     "ide_authority_recorded": True,
+                    "native_permission_card_is_authority_channel": True,
+                    "separate_conversational_authority_question_required": False,
+                    "authority_customer_meaning": {
+                        "action_category": operation_category,
+                        "workspace": "current_active_workspace",
+                        "external_hardware_or_paid_activity": False,
+                        "unrelated_edits": False,
+                        "raw_evidence_exposure": False,
+                        "blueprint_change": False,
+                    },
                     "artifact_path_source": (
                         "exact_ide_operation_result_or_explicit_user_selection"
                     ),
@@ -4305,6 +4657,81 @@ class CurrentLoopCoordinator:
                 expected_revision=state["state_revision"],
             )
             coordinator = self._coordinator_state(state)
+            contract = state["current_loop_contract"]
+            automatic_enrollment = (
+                operation_receipt_id is not None
+                and contract.get("effective_preset") == "assist"
+                and all(
+                    contract_permits(
+                        contract,
+                        category=category_by_role[str(item["role"])],
+                        dimension="derive",
+                    )
+                    for item in normalized
+                )
+            )
+            if automatic_enrollment:
+                approved = update_selected_artifact_authorization(
+                    authorization,
+                    action="approve_all",
+                    explicit_action_provenance="current_loop_contract_assist",
+                )
+                state = set_artifact_authorization(
+                    store=self.store,
+                    authorization=approved,
+                    expected_revision=state["state_revision"],
+                )
+                coordinator = self._coordinator_state(state)
+                coordinator.update(
+                    {
+                        "phase": "evidence_processing",
+                        "state_status": "ready",
+                        "checkpoint_kind": "none",
+                        "customer_summary": (
+                            "qCoder enrolled the supported exact outputs from the authorized "
+                            "operation and is processing them locally under Assist."
+                        ),
+                        "artifact_candidates": merged,
+                        "evidence_processing_complete": False,
+                    }
+                )
+                self._replace_coordinator(coordinator)
+                processed = self.process_authorized_artifacts()
+                processed_details = processed.setdefault("details", {})
+                processed_details.update(
+                    {
+                        "automatic_output_enrollment": True,
+                        "artifact_review_conversation_required": False,
+                        "authorization_provenance": [
+                            "exact_authorized_operation_output",
+                            "operation_receipt",
+                            "current_loop_contract_assist",
+                        ],
+                        "operation_receipt_consumed": True,
+                        "activity_receipt": deepcopy(activity_receipt),
+                        "registration_outcomes": format_outcomes,
+                        "registered_candidate_count": len(merged),
+                        "new_candidate_count": added_count,
+                    }
+                )
+                processed["operation"] = "register_artifacts"
+                processed["customer_summary"] = (
+                    "qCoder registered and locally processed the supported exact outputs "
+                    "from the authorized operation. No artifact-review response is required."
+                )
+                processed["customer_interaction"] = customer_interaction(
+                    kind="activity_receipt",
+                    concise_message=processed["customer_summary"],
+                    activity_receipts=(
+                        [activity_receipt] if isinstance(activity_receipt, Mapping) else []
+                    ),
+                    summary_reference=(
+                        str(self.store.read().get("latest_run_summary_reference"))
+                        if self.store.read().get("latest_run_summary_reference") is not None
+                        else None
+                    ),
+                )
+                return processed
             coordinator.update(
                 {
                     "phase": "artifact_authorization",
@@ -4517,6 +4944,7 @@ class CurrentLoopCoordinator:
             outcomes: list[dict[str, Any]] = []
             run_summary_payload: dict[str, Any] | None = None
             run_summary_lineage: dict[str, Any] | None = None
+            context_update: dict[str, Any] | None = None
             for item in authorization["items"]:
                 path = Path(item["local_path"])
                 role = str(item["artifact_role"])
@@ -4754,6 +5182,45 @@ class CurrentLoopCoordinator:
                     )
                     extracted_roles.append("run_summary")
                     state = self.store.read()
+                    if contract_permits(
+                        state["current_loop_contract"],
+                        category="result_manifestation",
+                        dimension="assistant_derived_exposure",
+                    ):
+                        observations = summary["execution_observations"]
+                        backend_observation = observations["backend"]
+                        shots_observation = observations["shots"]
+                        circuit_metrics = None
+                        if "circuit_manifestation" in state["saved_artifacts"]:
+                            circuit_value = self._saved_artifact(state, "circuit_manifestation")
+                            circuit_metrics = {
+                                key: circuit_value.get(key)
+                                for key in ("gate_count", "width", "depth")
+                                if circuit_value.get(key) is not None
+                            }
+                        context_update = assistant_context_update(
+                            run_reference=summary_reference,
+                            evidence_references=summary["evidence_bindings"],
+                            backend=(
+                                str(backend_observation["value"])
+                                if backend_observation["status"] == "observed"
+                                else None
+                            ),
+                            shots=(
+                                int(shots_observation["value"])
+                                if shots_observation["status"] == "observed"
+                                and isinstance(shots_observation["value"], int)
+                                else int(summary["count_projection"]["observed_shots"])
+                            ),
+                            top_outcomes=summary["count_projection"]["top_outcomes"],
+                            warnings=summary["warnings"],
+                            limitations=summary["limitations"],
+                            circuit_metrics=circuit_metrics,
+                            freshness=str(summary["freshness"]["status"]),
+                            contract_revision=int(
+                                state["current_loop_contract"]["contract_revision"]
+                            ),
+                        )
                 except (RunSummaryError, CurrentLoopError, OSError, ValueError):
                     outcomes.append(
                         processing_outcome(
@@ -4783,6 +5250,18 @@ class CurrentLoopCoordinator:
                     key = f"{outcome['role']}:{outcome['content_digest']}"
                     value["artifact_processing_outcomes"][key] = deepcopy(outcome)
                 value["hosted_enrichment"] = deepcopy(hosted)
+                value["quiet_iteration_status"] = "assist_iteration_ready"
+                value["current_build_context_refresh"] = {
+                    "schema_id": "qcoder.current_loop.current_build_context_refresh.v1",
+                    "schema_version": 1,
+                    "source": "automatic_local_processing",
+                    "run_summary_reference": value.get("latest_run_summary_reference"),
+                    "raw_evidence_included": False,
+                }
+                if context_update is not None:
+                    value["assistant_context_updates"].append(deepcopy(context_update))
+                    value["assistant_context_updates"] = value["assistant_context_updates"][-32:]
+                    value["latest_assistant_context_update"] = deepcopy(context_update)
                 return value
 
             state = self.store.update(
@@ -4845,9 +5324,12 @@ class CurrentLoopCoordinator:
                     "checkpoint_kind": "none",
                     "customer_summary": (
                         "Authorized local artifacts were processed and exact bounded "
-                        "evidence was saved. Raw artifacts remained local."
+                        "evidence was saved. The latest permitted derived context is ready "
+                        "for ordinary IDE iteration; hosted enrichment and Build Review "
+                        "remain on request."
                     ),
                     "evidence_processing_complete": True,
+                    "assist_iteration_ready": True,
                     "hosted_enrichment_status": hosted["status"],
                 }
             )
@@ -4877,7 +5359,11 @@ class CurrentLoopCoordinator:
                         "successful_outcomes_persisted": True,
                     },
                     "hosted_enrichment": hosted,
+                    "hosted_enrichment_automatically_offered": False,
                     "recovery_contract": bounded_recovery,
+                    "assistant_context_update": deepcopy(context_update),
+                    "assist_iteration_ready": True,
+                    "customer_response_required": False,
                     "run_summary": {
                         "schema": run_summary_contract_snapshot(),
                         "automatic_preparation": "run_summary" in extracted_roles,
@@ -4885,6 +5371,8 @@ class CurrentLoopCoordinator:
                     },
                     "build_review": {
                         "optional": True,
+                        "on_request": True,
+                        "automatically_offered": False,
                         "decline_blocks_completion": False,
                         "may_request_later": True,
                     },
@@ -7482,36 +7970,54 @@ class CurrentLoopCoordinator:
         if phase == "activated" and state_status == "ready":
             protocol.update(
                 {
-                    "supported_next_action": "select_generation_posture_or_stop",
+                    "supported_next_action": "record_adaptive_intent_receipt",
                     "next_invocation": _invocation_template(
-                        "activate",
-                        required_flags=(
-                            "--posture",
-                            "--approve-posture",
-                            "--posture-provenance",
-                        ),
-                        reused_inputs=("canonical_request_baseline",),
-                        new_inputs=("explicit_generation_posture_authority",),
+                        "prepare-adaptive-intent",
+                        required_flags=("--fields-file",),
+                        new_inputs=("attributable_bounded_intent_fields",),
                         argument_values=(
                             {
-                                "flag": "--posture",
-                                "value_source": "explicit_bounded_customer_choice",
-                                "allowed_values": list(GENERATION_POSTURES),
+                                "flag": "--fields-file",
+                                "value_source": (
+                                    "qcoder_declared_mixed_provenance_intent_contract"
+                                ),
                             },
                         ),
                     ),
-                    "required_authority_input": _authority_input(
-                        "--approve-posture",
-                        "Transmit only an explicit attributed generation-posture decision.",
-                    ),
                     "permitted_input_source": (
-                        "explicit_customer_bounded_posture_choice_or_explicitly_accepted_"
-                        "supported_recommendation"
+                        "qcoder_declared_attributable_intent_fields_without_customer_approval"
                     ),
                 }
             )
             return protocol
         if phase == "intent_review" and state_status == "ready":
+            if (
+                isinstance(coordinator, Mapping)
+                and coordinator.get("effective_generation_posture") == "exploratory_first_pass"
+                and coordinator.get("adaptive_intent_receipt") is None
+            ):
+                protocol.update(
+                    {
+                        "supported_next_action": "record_adaptive_intent_receipt",
+                        "next_invocation": _invocation_template(
+                            "prepare-adaptive-intent",
+                            required_flags=("--fields-file",),
+                            new_inputs=("attributable_bounded_intent_fields",),
+                            argument_values=(
+                                {
+                                    "flag": "--fields-file",
+                                    "value_source": (
+                                        "qcoder_declared_mixed_provenance_intent_contract"
+                                    ),
+                                },
+                            ),
+                        ),
+                        "permitted_input_source": (
+                            "qcoder_declared_attributable_intent_fields_without_customer_approval"
+                        ),
+                    }
+                )
+                return protocol
             protocol.update(
                 {
                     "supported_next_action": "stage_exact_intent_checkpoint_input",
@@ -8317,7 +8823,7 @@ class CurrentLoopCoordinator:
         pending = coordinator.get("pending_checkpoint_input")
         if isinstance(pending, Mapping):
             result_details.update(self._checkpoint_input_display(pending))
-        return {
+        result = {
             "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
             "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
             "operation": operation,
@@ -8341,6 +8847,37 @@ class CurrentLoopCoordinator:
             ),
             **protocol,
         }
+        interaction_kind = self._interaction_kind(
+            operation=operation,
+            ok=ok,
+            state_status=str(coordinator["state_status"]),
+            checkpoint_kind=str(coordinator["checkpoint_kind"]),
+            category=category,
+        )
+        next_invocation = next(
+            (
+                value
+                for key, value in result.items()
+                if key.endswith("_invocation") and isinstance(value, Mapping)
+            ),
+            None,
+        )
+        result["customer_interaction"] = customer_interaction(
+            kind=interaction_kind,
+            concise_message=summary,
+            next_invocation=next_invocation,
+            activity_receipts=(
+                [result_details["activity_receipt"]]
+                if isinstance(result_details.get("activity_receipt"), Mapping)
+                else []
+            ),
+            summary_reference=(
+                str(state.get("latest_run_summary_reference"))
+                if state.get("latest_run_summary_reference") is not None
+                else None
+            ),
+        )
+        return result
 
     def _attach_executable_recovery_alternatives(
         self,
@@ -8518,7 +9055,7 @@ class CurrentLoopCoordinator:
         for name, template in rows.items():
             if name == "open_editor":
                 bounded_contract = {
-                    "schema_id": "qcoder.current_loop.contract_sidecar.v1",
+                    "schema_id": "qcoder.current_loop.contract_sidecar.v2",
                     "schema_version": 1,
                     "operation": "open_contract_editor",
                     "fields": [],
@@ -8655,7 +9192,7 @@ class CurrentLoopCoordinator:
             checkpoint_kind=checkpoint_kind,
             protocol=protocol,
         )
-        return {
+        result = {
             "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
             "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
             "operation": operation,
@@ -8675,6 +9212,45 @@ class CurrentLoopCoordinator:
             "assistant_reconstruction_performed": False,
             **protocol,
         }
+        result["customer_interaction"] = customer_interaction(
+            kind=self._interaction_kind(
+                operation=operation,
+                ok=ok,
+                state_status=state_status,
+                checkpoint_kind=checkpoint_kind,
+                category=category,
+            ),
+            concise_message=summary,
+        )
+        return result
+
+    @staticmethod
+    def _interaction_kind(
+        *,
+        operation: str,
+        ok: bool,
+        state_status: str,
+        checkpoint_kind: str,
+        category: str | None,
+    ) -> str:
+        if operation == "activate" and ok:
+            return "activation_receipt"
+        if operation == "help":
+            return "user_requested_help"
+        if not ok or category is not None:
+            return "blocker_or_recovery"
+        if checkpoint_kind in {"ide_authority", "artifact_review"}:
+            return "authority_request"
+        if state_status == "checkpoint_required":
+            return "material_decision_request"
+        if operation in {
+            "register_artifacts",
+            "process_authorized_artifacts",
+            "continue_unchanged",
+            "complete_instruction",
+        }:
+            return "activity_receipt"
+        return "no_customer_interaction_required"
 
     def _attach_operation_specific_invocations(
         self,

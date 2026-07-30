@@ -73,6 +73,7 @@ from qcoder.current_loop_run_summary import (
     evidence_view_contract_snapshot,
     run_summary_contract_snapshot,
 )
+from qcoder.current_loop_quiet_workflow import quiet_workflow_contract_snapshot
 from qcoder.current_loop_evidence_processing import (
     artifact_format_contract_snapshot,
     evidence_processing_contract_snapshot,
@@ -118,8 +119,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 9
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v9"
+CLIENT_BINDING_SCHEMA_VERSION = 10
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v10"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -141,8 +142,9 @@ in this workstyle.
 
 Active build: explicit wording equivalent to “Use qCoder for this build.” or explicit acceptance
 of a qCoder activation offer routes to the local coordinator first. Then follow
-coordinator-directed local and hosted actions. Generation posture is a later generation choice,
-not a workstyle route.
+coordinator-directed local and hosted actions. Under Assist, adaptive governance maps internally
+to exploratory first pass and is not a customer posture question. Blueprint-required governance
+remains an explicit Current Loop Contract setting.
 
 OPTIONAL LOCAL CONTRACT EDITOR
 The customer may manage the same canonical one-loop contract in the IDE or through qCoder's
@@ -197,14 +199,14 @@ received before activation, use the binding's exact fresh-active-build bootstrap
 stage the complete message through its declared exact UTF-8 stdin channel. Do not derive the
 activate subcommand or any flag from this prose. Never ask the customer to create a request file.
 Exact-message capture preserves that one complete message, activates qCoder under Assist, and
-returns a receipt. It grants no posture, IDE, raw-exposure, artifact-review, governing-change,
+returns a receipt. It grants no IDE, raw-exposure, governing-change,
 external-service, or execution authority. For review_required capture, use qCoder's returned
 complete capture and later authority-only invocation without resending content. Never use a later
-one-word “Yes” as original_request. Posture remains unset until generation becomes relevant.
+one-word “Yes” as original_request. Adaptive governance is applied by the Assist contract.
 In every mode, never use a later one-word “Yes” as original_request.
 Do not ask the user to repeat the task. In review_required mode, execute the exact authority-only
-invocation returned by qCoder. Do not resend or reconstruct the request. Posture remains separate
-from activation authority.
+invocation returned by qCoder. Do not resend or reconstruct the request. Material Blueprint
+decisions and action-specific authority remain separate from activation authority.
 
 CHECKPOINT PROTOCOL
 Conversational approval and canonical confirmation are distinct. After the user approves a
@@ -213,10 +215,9 @@ supported_next_action and next_invocation exactly; do not infer or reconstruct a
 chat history. Never repeat an identical invocation after an unchanged checkpoint without new
 authority or corrected input. If the same checkpoint remains after authority was transmitted,
 report awaiting_confirmation_fields and stop instead of searching for state. Workspace freshness
-is not intent. Ground posture in explicit wording, lineage, or an assistant recommendation the
-user explicitly accepts. Posture is a bounded enumerated authority decision: present only qCoder's
-supported values naturally, never infer a default, and transmit only the selected enum through the
-generated invocation. It does not use arbitrary checkpoint-input transport. Preserve exact
+is not intent. Follow the effective contract's adaptive or Blueprint-required governance; do not
+ask a routine posture question. A customer-requested switch uses qCoder's bounded contract
+control, with immediate narrowing and explicit broadening confirmation. Preserve exact
 user-stated decision answers. Exploratory first pass is not a full Generation Context Pack;
 Blueprint-guided generation stops at the decision_resolution checkpoint and uses the exact
 decision-disposition authority channel. A posture transition requires its separate explicit
@@ -251,7 +252,11 @@ next_loop_ready the completed build's governing-change branch is closed: use onl
 qCoder-managed start-next route or stop with no further action.
 
 IDE WORK AND ARTIFACT HANDOFF
-After IDE write/run authority, perform only the user-authorized development work. Retain exact
+After action-specific IDE write/run authority, perform only the user-authorized development work.
+When the exact current request asks to create, edit, run, or iterate, execute qCoder's complete
+record-IDE-authority invocation through the client's normal native permission card; do not add a
+separate chat ceremony. Native permission remains action-specific qCoder authority and never
+grants unrelated edits, external hardware, paid activity, raw exposure, or Blueprint change. Retain exact
 paths returned by your own write or modify operations; no directory orientation is needed before
 creating a new file. Register only those retained exact paths or paths the user explicitly
 selected, with truthful assistant_created, assistant_modified, or user_selected provenance.
@@ -272,8 +277,22 @@ glob, find, directory listing, Git status, repository map, or search result as t
 set. The Quick Demo requires no workspace discovery: retain the exact source and QASM paths
 returned by the two IDE write operations. Ordinary inspection of relevant non-qCoder project
 files may occur only under the user's development request and the IDE/client permission model;
-that inspection does not register a file or authorize qCoder review. After registration, present
-the exact visible candidate set for separate artifact-review authorization.
+that inspection does not register a file or authorize qCoder review. Under Assist, supported exact
+outputs attributable to a single-use operation receipt are enrolled and processed locally without
+a second artifact-review conversation. Pre-existing, unsupported, unattributed, or
+policy-disallowed artifacts retain exact visible-set approval.
+
+QUIET EVERYDAY ASSIST
+Routine qCoder-owned classifications, local evidence processing, Run Summary refresh, Current
+Build Context refresh, and share-safe derived assistant-context updates do not ask the customer a
+question. Use each customer_interaction envelope as the primary communication contract. An
+activity_receipt or no_customer_interaction_required result is non-blocking. Interrupt only for a
+material decision, authority, privacy or raw exposure, cost or external service, execution, or
+genuine blocker boundary. Hosted enrichment and Build Review are on request and are not
+automatically offered. Use the qCoder-managed current_build_facts composite view for grouped
+run/circuit questions. Use qCoder's bounded help operation for status or product-surface
+questions. An exact unchanged continuation or stop instruction uses qCoder's completion receipt
+without restaging.
 
 CURRENT LOOP CONTRACT
 Assist is the default one-loop participation preset after exact-message activation. Evidence only
@@ -383,6 +402,7 @@ def build_client_binding_descriptor(
             "contract_sidecar": sidecar_contract_snapshot(),
             "run_summary_contract": run_summary_contract_snapshot(),
             "evidence_view_contract": evidence_view_contract_snapshot(),
+            "quiet_everyday_workflow_contract": quiet_workflow_contract_snapshot(),
             "checkpoint_input_contract": {
                 "schema_id": CHECKPOINT_INPUT_SCHEMA_ID,
                 "schema_version": CHECKPOINT_INPUT_SCHEMA_VERSION,
@@ -445,6 +465,14 @@ def build_client_binding_descriptor(
             "browser_invokes_protected": False,
             "run_summary_is_blueprint": False,
             "build_review_optional": True,
+            "quiet_assist_default": True,
+            "routine_generation_posture_question": False,
+            "generation_governance": ["adaptive", "blueprint_required"],
+            "automatic_exact_output_enrollment_under_assist": True,
+            "automatic_local_run_context_update_under_assist": True,
+            "hosted_enrichment_on_request": True,
+            "build_review_on_request": True,
+            "customer_interaction_envelope_primary": True,
         }
     }
 

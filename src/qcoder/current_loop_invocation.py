@@ -129,12 +129,23 @@ _OPERATION_ROWS: tuple[dict[str, Any], ...] = (
     },
     {"operation": "abandon", "subcommand": "abandon", "transport": LOCAL_ONLY},
     {"operation": "contract_status", "subcommand": "contract-status", "transport": LOCAL_ONLY},
+    {"operation": "help", "subcommand": "help", "transport": LOCAL_ONLY},
+    {
+        "operation": "prepare_adaptive_intent",
+        "subcommand": "prepare-adaptive-intent",
+        "transport": LOCAL_ONLY,
+    },
     {
         "operation": "contract_set_preset",
         "subcommand": "contract-set-preset",
         "transport": LOCAL_ONLY,
     },
     {"operation": "contract_adjust", "subcommand": "contract-adjust", "transport": LOCAL_ONLY},
+    {
+        "operation": "contract_set_generation_governance",
+        "subcommand": "contract-set-generation-governance",
+        "transport": LOCAL_ONLY,
+    },
     {
         "operation": "contract_confirm_broadening",
         "subcommand": "contract-confirm-broadening",
@@ -154,6 +165,11 @@ _OPERATION_ROWS: tuple[dict[str, Any], ...] = (
         "subcommand": "decline-build-review",
         "transport": LOCAL_ONLY,
     },
+    {
+        "operation": "complete_instruction",
+        "subcommand": "complete-instruction",
+        "transport": LOCAL_ONLY,
+    },
 )
 
 _BY_SUBCOMMAND = {str(row["subcommand"]): row for row in _OPERATION_ROWS}
@@ -171,6 +187,8 @@ _BOOLEAN_FLAGS = frozenset(
         "--decline-proposal",
         "--explicit",
         "--request-stdin",
+        "--instruction-stdin",
+        "--stop",
         "--use-current-intent",
         "--use-current-seed",
     }

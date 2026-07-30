@@ -126,7 +126,7 @@ def test_every_local_control_field_has_complete_ownership_and_domain(
         assert invocation["schema_id"] == INVOCATION_CONTRACT_SCHEMA_ID
         assert invocation["bounded_control_input_contract"]["schema_id"] in {
             BOUNDED_CONTROL_INPUT_SCHEMA_ID,
-            "qcoder.current_loop.contract_sidecar.v1",
+            "qcoder.current_loop.contract_sidecar.v2",
             "qcoder.current_loop.evidence_view.v1",
             "qcoder.current_loop.build_review_choice.v1",
         }
@@ -323,7 +323,7 @@ def test_binding_v7_delivers_the_static_contract_and_customer_meanings() -> None
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     assert descriptor["contract_id"] == CLIENT_BINDING_CONTRACT_ID
-    assert descriptor["contract_id"].endswith(".v9")
+    assert descriptor["contract_id"].endswith(".v10")
     contract = descriptor["bounded_control_input_contract"]
     assert contract["schema_id"] == BOUNDED_CONTROL_INPUT_SCHEMA_ID
     assert contract["contract_digest"]

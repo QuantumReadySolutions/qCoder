@@ -249,7 +249,7 @@ def test_cross_field_invariants_fail_closed(tmp_path: Path) -> None:
     posture = _synthetic_result(
         coordinator,
         phase="activated",
-        state_status="ready",
+        state_status="checkpoint_required",
         checkpoint_kind="posture",
     )
     missing_source = deepcopy(posture)
@@ -261,6 +261,7 @@ def test_cross_field_invariants_fail_closed(tmp_path: Path) -> None:
         _validate_mutated(missing_source)
 
     posture_transport = deepcopy(posture)
+    posture_transport["supported_next_action"] = "select_generation_posture_or_stop"
     posture_transport["input_source_disposition"]["categories"].append("checkpoint_input_transport")
     with pytest.raises(
         CurrentLoopError,

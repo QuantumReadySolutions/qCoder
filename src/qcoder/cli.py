@@ -56,6 +56,7 @@ from qcoder.current_loop_contract import (
     ADJUSTMENT_VALUES_BY_DIMENSION,
     EVIDENCE_CATEGORIES,
     EVIDENCE_EXCLUSION_REASONS,
+    GENERATION_GOVERNANCE_VALUES,
     NAMED_PRESETS,
 )
 from qcoder.current_loop_event_receipts import (
@@ -63,6 +64,7 @@ from qcoder.current_loop_event_receipts import (
     SUPPORTED_OUTPUT_ROLES,
 )
 from qcoder.current_loop_run_summary import EVIDENCE_VIEW_IDS
+from qcoder.current_loop_quiet_workflow import HELP_TOPICS
 
 EXPLORER_BETA_DOCS_URL = "https://qcoder.ai/manual/student-beta/"
 OSS_DOCS_URL = "https://qcoder.ai/manual/oss/"
@@ -1086,6 +1088,13 @@ def _cmd_current_loop(argv: list[str]) -> int:
     )
 
     sub.add_parser("contract-status", help="Inspect the canonical effective one-loop contract.")
+    help_parser = sub.add_parser("help", help="Show bounded qCoder help grounded in local state.")
+    help_parser.add_argument("--topic", choices=HELP_TOPICS, required=True)
+    adaptive_intent = sub.add_parser(
+        "prepare-adaptive-intent",
+        help="Record one qCoder-owned mixed-provenance adaptive intent receipt.",
+    )
+    adaptive_intent.add_argument("--fields-file", required=True)
     contract_preset = sub.add_parser(
         "contract-set-preset", help="Select one bounded Current Loop Contract preset."
     )
@@ -1112,6 +1121,12 @@ def _cmd_current_loop(argv: list[str]) -> int:
         required=True,
     )
     contract_adjust.add_argument("--expected-contract-revision", type=int, required=True)
+    governance = sub.add_parser(
+        "contract-set-generation-governance",
+        help="Select adaptive or Blueprint-required generation governance.",
+    )
+    governance.add_argument("--governance", choices=GENERATION_GOVERNANCE_VALUES, required=True)
+    governance.add_argument("--expected-contract-revision", type=int, required=True)
     contract_confirm = sub.add_parser(
         "contract-confirm-broadening",
         help="Carry authority only for the current exact broadening proposal.",
@@ -1143,6 +1158,12 @@ def _cmd_current_loop(argv: list[str]) -> int:
     )
     evidence_view.add_argument("--view", choices=EVIDENCE_VIEW_IDS, required=True)
     evidence_view.add_argument("--run-reference", default=None)
+    complete_instruction_parser = sub.add_parser(
+        "complete-instruction",
+        help="Apply one exact unchanged continuation or stop instruction without restaging.",
+    )
+    complete_instruction_parser.add_argument("--instruction-stdin", action="store_true")
+    complete_instruction_parser.add_argument("--stop", action="store_true")
 
     prepare = sub.add_parser(
         "prepare-generation",
@@ -1791,6 +1812,14 @@ def _cmd_current_loop(argv: list[str]) -> int:
             )
         elif command == "contract-status":
             result = coordinator.contract_status()
+        elif command == "help":
+            result = coordinator.help(topic=args.topic)
+        elif command == "prepare-adaptive-intent":
+            fields_path = Path(args.fields_file).expanduser().absolute()
+            fields_value = json.loads(fields_path.read_text(encoding="utf-8"))
+            if not isinstance(fields_value, dict):
+                parser.error("prepare-adaptive-intent --fields-file must contain an object")
+            result = coordinator.prepare_adaptive_intent(fields=fields_value)
         elif command == "contract-set-preset":
             result = coordinator.contract_set_preset(
                 preset=args.preset,
@@ -1801,6 +1830,11 @@ def _cmd_current_loop(argv: list[str]) -> int:
                 category=args.category,
                 dimension=args.dimension,
                 value=args.value,
+                expected_contract_revision=args.expected_contract_revision,
+            )
+        elif command == "contract-set-generation-governance":
+            result = coordinator.contract_set_generation_governance(
+                governance=args.governance,
                 expected_contract_revision=args.expected_contract_revision,
             )
         elif command == "contract-confirm-broadening":
@@ -1831,6 +1865,20 @@ def _cmd_current_loop(argv: list[str]) -> int:
             result = coordinator.evidence_view(
                 view_id=args.view,
                 selected_run_reference=args.run_reference,
+            )
+        elif command == "complete-instruction":
+            if not args.instruction_stdin:
+                parser.error("complete-instruction requires --instruction-stdin")
+            raw_instruction = sys.stdin.buffer.read(65_537)
+            if len(raw_instruction) > 65_536:
+                parser.error("completion instruction exceeds 65536 bytes")
+            try:
+                exact_instruction = raw_instruction.decode("utf-8")
+            except UnicodeDecodeError:
+                parser.error("completion instruction must be UTF-8")
+            result = coordinator.complete_instruction(
+                exact_instruction=exact_instruction,
+                stop_loop=args.stop,
             )
         elif command == "prepare-generation":
             if not args.use_current_intent and (

@@ -23,6 +23,7 @@ from qcoder.current_loop_contract import (
     CONTRACT_SCHEMA_ID,
     contract_error,
     contract_snapshot,
+    migrate_contract_v1,
     new_contract,
 )
 
@@ -46,9 +47,10 @@ SELECTED_ARTIFACT_AUTHORIZATION_SCHEMA_ID = "qcoder.selected_artifact_authorizat
 LEGACY_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v1"
 OLDER_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v2"
 CONTRACT_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v3"
-PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v4"
-CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v5"
-CURRENT_LOOP_STATE_SCHEMA_VERSION = 5
+OLDER_PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v4"
+PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v5"
+CURRENT_LOOP_STATE_SCHEMA_ID = "qcoder.current_loop.local_state.v6"
+CURRENT_LOOP_STATE_SCHEMA_VERSION = 6
 
 LOOP_INSTANCE_RECORD_MAX_BYTES = 65_536
 NEXT_LOOP_SEED_MAX_BYTES = 65_536
@@ -762,7 +764,11 @@ def build_unchanged_continuation(
         raise CurrentLoopError(error)
     if explicit_user_action.get("confirmed") is not True or explicit_user_action.get(
         "provenance"
-    ) not in {"direct_user_action", "explicit_api_authority"}:
+    ) not in {
+        "direct_user_action",
+        "explicit_api_authority",
+        "current_loop_contract_assist",
+    }:
         raise CurrentLoopError("unchanged_continuation_explicit_action_required")
     statement = _bounded_text(
         explicit_user_action.get("statement"),
@@ -849,7 +855,12 @@ def unchanged_continuation_error(value: object) -> str | None:
     if (
         not isinstance(action, Mapping)
         or action.get("confirmed") is not True
-        or action.get("provenance") not in {"direct_user_action", "explicit_api_authority"}
+        or action.get("provenance")
+        not in {
+            "direct_user_action",
+            "explicit_api_authority",
+            "current_loop_contract_assist",
+        }
     ):
         return "unchanged_continuation_explicit_action_required"
     required_false = (
@@ -1398,11 +1409,10 @@ def _state_digest(value: Mapping[str, Any]) -> str:
 
 
 def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
-    """Atomically migrate one active v2/v3/v4 state into v5.
+    """Atomically migrate one active v2-v5 state into v6.
 
-    Version 5 adds qCoder-owned per-item processing outcomes, optional hosted
-    enrichment state, and bounded recovery references. Existing contract and
-    Run Summary content is preserved.
+    Version 6 adds quiet one-loop interaction state and Contract v2. Existing
+    evidence, receipts, and Run Summary content is preserved.
     """
 
     state = store.read()
@@ -1416,7 +1426,8 @@ def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
     if (schema_id, schema_version) not in {
         (OLDER_CURRENT_LOOP_STATE_SCHEMA_ID, 2),
         (CONTRACT_CURRENT_LOOP_STATE_SCHEMA_ID, 3),
-        (PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID, 4),
+        (OLDER_PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID, 4),
+        (PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID, 5),
     }:
         raise CurrentLoopError("current_loop_state_migration_unsupported")
     if state.get("state_kind") != "active_loop":
@@ -1441,18 +1452,27 @@ def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
     if schema_id in {OLDER_CURRENT_LOOP_STATE_SCHEMA_ID, CONTRACT_CURRENT_LOOP_STATE_SCHEMA_ID}:
         migrated["run_summary_index"] = {}
         migrated["latest_run_summary_reference"] = None
-    migrated["artifact_processing_outcomes"] = {}
-    migrated["hosted_enrichment"] = {
-        "schema_id": "qcoder.current_loop.hosted_enrichment_status.v1",
-        "schema_version": 1,
-        "status": "not_offered",
-        "provenance": None,
-        "attempts": 0,
-        "last_safe_category": None,
-        "local_evidence_preserved": True,
-        "run_summary_preserved": True,
-    }
-    migrated["recovery_actions"] = {}
+    if schema_id != PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID:
+        migrated["artifact_processing_outcomes"] = {}
+        migrated["hosted_enrichment"] = {
+            "schema_id": "qcoder.current_loop.hosted_enrichment_status.v1",
+            "schema_version": 1,
+            "status": "not_offered",
+            "provenance": None,
+            "attempts": 0,
+            "last_safe_category": None,
+            "local_evidence_preserved": True,
+            "run_summary_preserved": True,
+        }
+        migrated["recovery_actions"] = {}
+    contract = migrated.get("current_loop_contract")
+    if isinstance(contract, Mapping) and contract.get("schema_version") == 1:
+        migrated["current_loop_contract"] = migrate_contract_v1(contract)
+    migrated["assistant_context_updates"] = []
+    migrated["latest_assistant_context_update"] = None
+    migrated["completion_receipt"] = None
+    migrated["current_build_context_refresh"] = None
+    migrated["quiet_iteration_status"] = "not_ready"
     return store.replace(migrated, expected_revision=int(state["state_revision"]))
 
 
@@ -1473,8 +1493,12 @@ def current_loop_state_error(value: object) -> str | None:
             and value.get("schema_version") == 3
         )
         or (
-            value.get("schema_id") == PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID
+            value.get("schema_id") == OLDER_PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID
             and value.get("schema_version") == 4
+        )
+        or (
+            value.get("schema_id") == PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID
+            and value.get("schema_version") == 5
         )
     )
     current = (
@@ -1532,8 +1556,12 @@ def current_loop_state_error(value: object) -> str | None:
                     and value.get("schema_version") == 3
                 )
                 or (
-                    value.get("schema_id") == PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID
+                    value.get("schema_id") == OLDER_PROCESSING_CURRENT_LOOP_STATE_SCHEMA_ID
                     and value.get("schema_version") == 4
+                )
+                or (
+                    value.get("schema_id") == PREVIOUS_CURRENT_LOOP_STATE_SCHEMA_ID
+                    and value.get("schema_version") == 5
                 )
                 or (
                     value.get("schema_id") == OLDER_CURRENT_LOOP_STATE_SCHEMA_ID
@@ -1608,6 +1636,17 @@ def current_loop_state_error(value: object) -> str | None:
             return "current_loop_hosted_enrichment_invalid"
         if not isinstance(value.get("recovery_actions"), Mapping):
             return "current_loop_recovery_actions_invalid"
+        if not isinstance(value.get("assistant_context_updates"), list):
+            return "current_loop_assistant_context_updates_invalid"
+        latest_context = value.get("latest_assistant_context_update")
+        if latest_context is not None and not isinstance(latest_context, Mapping):
+            return "current_loop_assistant_context_update_invalid"
+        if value.get("completion_receipt") is not None and not isinstance(
+            value.get("completion_receipt"), Mapping
+        ):
+            return "current_loop_completion_receipt_invalid"
+        if value.get("quiet_iteration_status") not in {"not_ready", "assist_iteration_ready"}:
+            return "current_loop_quiet_iteration_status_invalid"
     if not isinstance(value.get("saved_artifacts"), Mapping):
         return "current_loop_saved_artifacts_invalid"
     if not isinstance(value.get("stage_freshness"), Mapping):
@@ -1788,6 +1827,11 @@ def activate_current_loop(
             "run_summary_preserved": True,
         },
         "recovery_actions": {},
+        "assistant_context_updates": [],
+        "latest_assistant_context_update": None,
+        "completion_receipt": None,
+        "current_build_context_refresh": None,
+        "quiet_iteration_status": "not_ready",
         "directory_scan_performed": False,
         "watcher_active": False,
         "upload_performed": False,

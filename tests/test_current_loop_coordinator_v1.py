@@ -572,9 +572,9 @@ def _activate_and_prepare(
 
 def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
     snapshot = coordinator_contract_snapshot()
-    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v11"
-    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v9"
-    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 11
+    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v12"
+    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v10"
+    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 12
     assert all(snapshot["checkpoint_result_protocol"].values())
     assert snapshot["permitted_input_source_taxonomy"] == {
         "schema_id": INPUT_SOURCE_DISPOSITION_SCHEMA_ID,
@@ -592,7 +592,8 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "approval_reuses_pending_capture": True,
         "new_request_with_approval_activates": ("exact_current_customer_message_mode_only"),
         "protected_call_before_activation": False,
-        "posture_authority_separate": True,
+        "adaptive_governance_from_contract": True,
+        "routine_posture_question": False,
     }
     assert snapshot["artifact_candidate_provenance"] == [
         "assistant_created",
@@ -619,7 +620,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("5ebd65ec32b3223eccdeeb7e0939af0d794324aa2820d78b6ff38be1f3ed2ffc")
+    assert contract_digest == ("67bfb1c52c0b2a03caa3f1fc3bf7e0c93ec480c855c441e2ecaf2de9afb2a658")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
@@ -2639,8 +2640,8 @@ def test_every_checkpoint_result_is_deterministically_actionable(tmp_path: Path)
             summary="Synthetic checkpoint contract test.",
         )
         _assert_actionable_checkpoint(result)
-        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v11"
-        assert result["schema_version"] == 11
+        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v12"
+        assert result["schema_version"] == 12
 
 
 @pytest.mark.parametrize(

@@ -41,6 +41,7 @@ EVIDENCE_VIEW_IDS = (
     "evidence_limitations",
     "concise_loop_summary",
     "full_run_summary",
+    "current_build_facts",
 )
 
 EVIDENCE_VIEW_MEANINGS = {
@@ -54,6 +55,10 @@ EVIDENCE_VIEW_MEANINGS = {
     "evidence_limitations": "Show missing, stale, excluded, or otherwise limited evidence.",
     "concise_loop_summary": "Show a concise projection of current-loop evidence.",
     "full_run_summary": "Show the complete bounded canonical Run Summary.",
+    "current_build_facts": (
+        "Show run results, simulator, shots, circuit gate count, width, depth, and limitations "
+        "through one qCoder-managed composite view."
+    ),
 }
 
 _EXECUTION_FIELD_SOURCES = {
@@ -543,7 +548,60 @@ def build_evidence_view(
     )
     answer: object
     status = "available"
-    if (
+    if view_id == "current_build_facts":
+        gate_count, gate_status = _circuit_metric(
+            circuit_manifestation,
+            "gate_count",
+            "Gate count is unavailable because no circuit manifestation is registered.",
+        )
+        width, width_status = _circuit_metric(
+            circuit_manifestation,
+            "width",
+            "Circuit width is unavailable because no circuit manifestation is registered.",
+        )
+        depth, depth_status = _circuit_metric(
+            circuit_manifestation,
+            "depth",
+            "Circuit depth is unavailable because no circuit manifestation is registered.",
+        )
+        if selected is None:
+            run = {
+                "status": selection["selection"],
+                "top_results": None,
+                "backend_or_simulator": None,
+                "shots": None,
+            }
+            status = (
+                "selection_required"
+                if selection["selection"] == "ambiguous_explicit_selection_required"
+                else "incomplete"
+            )
+        else:
+            backend = selected["execution_observations"]["backend"]
+            shots = selected["execution_observations"]["shots"]
+            run = {
+                "status": selected["freshness"]["status"],
+                "run_reference": selected["artifact_ref"],
+                "top_results": deepcopy(selected["count_projection"]["top_outcomes"]),
+                "backend_or_simulator": (
+                    backend["value"] if backend["status"] == "observed" else None
+                ),
+                "shots": (
+                    shots["value"]
+                    if shots["status"] == "observed"
+                    else selected["count_projection"]["observed_shots"]
+                ),
+            }
+        answer = {
+            "run": run,
+            "circuit": {
+                "gate_count": gate_count if gate_count is not None else gate_status,
+                "width": width if width is not None else width_status,
+                "depth": depth if depth is not None else depth_status,
+            },
+            "limitations": list(evidence_limitations),
+        }
+    elif (
         view_id
         in {
             "top_results",

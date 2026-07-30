@@ -13,8 +13,9 @@ import json
 from typing import Any, Mapping
 
 
-CONTRACT_SCHEMA_ID = "qcoder.current_loop.contract.v1"
-CONTRACT_SCHEMA_VERSION = 1
+PREVIOUS_CONTRACT_SCHEMA_ID = "qcoder.current_loop.contract.v1"
+CONTRACT_SCHEMA_ID = "qcoder.current_loop.contract.v2"
+CONTRACT_SCHEMA_VERSION = 2
 CONTRACT_MAX_HISTORY = 64
 CONTRACT_MAX_EXCLUSIONS = 128
 CONTRACT_MAX_TOMBSTONES = 128
@@ -23,10 +24,20 @@ NAMED_PRESETS = ("evidence_only", "assist")
 PRESETS = (*NAMED_PRESETS, "custom")
 PRESET_PROVENANCE = (
     "activation_default",
+    "contract_default",
+    "qcoder_classified",
+    "customer_selected_contract_setting",
     "explicit_customer_selection",
     "customer_confirmed_broadening",
     "customer_requested_narrowing",
     "migrated_local_state_v2",
+)
+GENERATION_GOVERNANCE_VALUES = ("adaptive", "blueprint_required")
+GENERATION_GOVERNANCE_PROVENANCE = (
+    "contract_default",
+    "qcoder_classified",
+    "customer_selected_contract_setting",
+    "customer_confirmed_broadening",
 )
 EVIDENCE_CATEGORIES = (
     "request_baseline",
@@ -171,6 +182,57 @@ def policy_summary(preset: str) -> str:
     return "The active bounded Custom policy applies; all execution authority remains separate."
 
 
+def quiet_communication_policy(
+    *, preset: str, policy: Mapping[str, Mapping[str, Any]] | None = None
+) -> dict[str, Any]:
+    result_policy = (policy or {}).get("result_manifestation", {})
+    automatic_local = preset == "assist" or (
+        preset == "custom"
+        and result_policy.get("collect") == "enabled"
+        and result_policy.get("derive") == "enabled"
+    )
+    return {
+        "routine_activity": "concise_non_blocking_receipt",
+        "qcoder_owned_classifications_ask_customer": False,
+        "exact_operation_output_registration": "automatic" if automatic_local else "on_request",
+        "local_processing": "automatic" if automatic_local else "on_request",
+        "hosted_enrichment": "on_request",
+        "build_review": "on_request",
+        "unchanged_iteration_confirmation_required": False,
+        "interruptions": [
+            "material_blueprint_decision",
+            "authority_boundary",
+            "privacy_or_raw_exposure",
+            "cost_or_external_service",
+            "execution",
+            "genuine_blocker",
+        ],
+        "help_and_status_on_request": True,
+    }
+
+
+def iteration_context_policy(
+    *, preset: str, policy: Mapping[str, Mapping[str, Any]] | None = None
+) -> dict[str, Any]:
+    result_policy = (policy or {}).get("result_manifestation", {})
+    automatic_local = preset == "assist" or (
+        preset == "custom"
+        and result_policy.get("collect") == "enabled"
+        and result_policy.get("derive") == "enabled"
+    )
+    standing_derived = preset == "assist" or (
+        preset == "custom" and result_policy.get("assistant_derived_exposure") == "standing"
+    )
+    return {
+        "automatic_local_processing_after_authorized_run": automatic_local,
+        "automatic_run_summary_refresh": automatic_local,
+        "automatic_current_build_context_refresh": automatic_local,
+        "standing_share_safe_derived_result_context": standing_derived,
+        "raw_result_exposure": False,
+        "cross_loop_carryover": False,
+    }
+
+
 def new_contract(
     *,
     baseline_digest: str,
@@ -196,7 +258,6 @@ def new_contract(
             "apply_assist",
         ],
         "authority_exclusions": [
-            "generation_posture",
             "material_blueprint_decision",
             "ide_write_or_run",
             "raw_exposure",
@@ -213,6 +274,11 @@ def new_contract(
         "contract_revision": 1,
         "effective_preset": "assist",
         "preset_provenance": "activation_default",
+        "generation_governance": "adaptive",
+        "generation_governance_provenance": "contract_default",
+        "effective_internal_generation_posture": "exploratory_first_pass",
+        "quiet_communication_policy": quiet_communication_policy(preset="assist"),
+        "iteration_context_policy": iteration_context_policy(preset="assist"),
         "effective_policy": policy,
         "effective_policy_digest": policy_digest(policy),
         "activation_receipt": receipt,
@@ -231,6 +297,90 @@ def new_contract(
     if error:
         raise CurrentLoopContractError(error)
     return contract
+
+
+def migrate_contract_v1(contract: Mapping[str, Any]) -> dict[str, Any]:
+    """Upgrade one canonical v1 contract without broadening its evidence policy."""
+
+    if (
+        contract.get("schema_id") != PREVIOUS_CONTRACT_SCHEMA_ID
+        or contract.get("schema_version") != 1
+    ):
+        raise CurrentLoopContractError("current_loop_contract_migration_unsupported")
+    result = deepcopy(dict(contract))
+    result["schema_id"] = CONTRACT_SCHEMA_ID
+    result["schema_version"] = CONTRACT_SCHEMA_VERSION
+    result["generation_governance"] = "adaptive"
+    result["generation_governance_provenance"] = "contract_default"
+    result["effective_internal_generation_posture"] = "exploratory_first_pass"
+    result["quiet_communication_policy"] = quiet_communication_policy(
+        preset=str(result["effective_preset"])
+    )
+    result["iteration_context_policy"] = iteration_context_policy(
+        preset=str(result["effective_preset"])
+    )
+    receipt = deepcopy(dict(result["activation_receipt"]))
+    receipt["contract_schema_id"] = CONTRACT_SCHEMA_ID
+    receipt["contract_schema_version"] = CONTRACT_SCHEMA_VERSION
+    receipt.pop("receipt_digest", None)
+    receipt["receipt_digest"] = digest(receipt)
+    result["activation_receipt"] = receipt
+    validate_contract(result)
+    return result
+
+
+def set_generation_governance(
+    contract: Mapping[str, Any],
+    *,
+    governance: str,
+    expected_contract_revision: int,
+    provenance: str,
+) -> dict[str, Any]:
+    """Apply narrowing immediately and stage broadening for explicit approval."""
+
+    validate_contract(contract)
+    if expected_contract_revision != contract["contract_revision"]:
+        raise CurrentLoopContractError("contract_revision_stale")
+    if governance not in GENERATION_GOVERNANCE_VALUES:
+        raise CurrentLoopContractError("contract_generation_governance_invalid")
+    if provenance not in GENERATION_GOVERNANCE_PROVENANCE:
+        raise CurrentLoopContractError("contract_generation_governance_provenance_invalid")
+    current = str(contract["generation_governance"])
+    if current == governance:
+        return {"disposition": "unchanged", "contract": deepcopy(dict(contract)), "proposal": None}
+    if current == "blueprint_required" and governance == "adaptive":
+        proposal = {
+            "schema_id": "qcoder.current_loop.contract_broadening.v1",
+            "schema_version": 1,
+            "proposal_revision": int(contract["contract_revision"]) + 1,
+            "expected_contract_revision": contract["contract_revision"],
+            "proposed_generation_governance": governance,
+            "change_kind": "broadening",
+            "approval_required": True,
+            "raw_policy_retransmission_required": False,
+        }
+        proposal["proposal_digest"] = digest(proposal)
+        result = deepcopy(dict(contract))
+        result["pending_broadening_proposal"] = proposal
+        return {"disposition": "broadening", "contract": result, "proposal": proposal}
+    result = deepcopy(dict(contract))
+    result["contract_revision"] += 1
+    result["generation_governance"] = governance
+    result["generation_governance_provenance"] = provenance
+    result["effective_internal_generation_posture"] = (
+        "exploratory_first_pass" if governance == "adaptive" else "blueprint_guided"
+    )
+    result["pending_broadening_proposal"] = None
+    result["change_history"] = _bounded_history(
+        result["change_history"],
+        {
+            "contract_revision": result["contract_revision"],
+            "change_kind": "narrowing",
+            "generation_governance": governance,
+            "provenance": provenance,
+        },
+    )
+    return {"disposition": "narrowing", "contract": result, "proposal": None}
 
 
 def _policy_rank(value: Any) -> int:
@@ -287,6 +437,8 @@ def _apply_policy(
     result["effective_policy_digest"] = policy_digest(policy)
     result["effective_preset"] = preset
     result["preset_provenance"] = provenance
+    result["quiet_communication_policy"] = quiet_communication_policy(preset=preset, policy=policy)
+    result["iteration_context_policy"] = iteration_context_policy(preset=preset, policy=policy)
     result["pending_broadening_proposal"] = None
     if change_kind == "narrowing":
         result["dependent_views_stale"] = True
@@ -436,6 +588,26 @@ def confirm_broadening(
     supplied_digest = check.pop("proposal_digest", None)
     if supplied_digest != digest(check):
         raise CurrentLoopContractError("contract_broadening_proposal_digest_mismatch")
+    proposed_governance = proposal.get("proposed_generation_governance")
+    if proposed_governance is not None:
+        if proposed_governance not in GENERATION_GOVERNANCE_VALUES:
+            raise CurrentLoopContractError("contract_generation_governance_invalid")
+        result = deepcopy(dict(contract))
+        result["contract_revision"] += 1
+        result["generation_governance"] = proposed_governance
+        result["generation_governance_provenance"] = "customer_confirmed_broadening"
+        result["effective_internal_generation_posture"] = "exploratory_first_pass"
+        result["pending_broadening_proposal"] = None
+        result["change_history"] = _bounded_history(
+            result["change_history"],
+            {
+                "contract_revision": result["contract_revision"],
+                "change_kind": "broadening",
+                "generation_governance": proposed_governance,
+                "provenance": "customer_confirmed_broadening",
+            },
+        )
+        return result
     return _apply_policy(
         contract,
         policy=proposal["proposed_policy"],
@@ -591,6 +763,31 @@ def contract_error(value: object) -> str | None:
         return "current_loop_contract_preset_invalid"
     if value.get("preset_provenance") not in PRESET_PROVENANCE:
         return "current_loop_contract_provenance_invalid"
+    if value.get("generation_governance") not in GENERATION_GOVERNANCE_VALUES:
+        return "current_loop_contract_generation_governance_invalid"
+    if value.get("generation_governance_provenance") not in GENERATION_GOVERNANCE_PROVENANCE:
+        return "current_loop_contract_generation_governance_provenance_invalid"
+    expected_posture = (
+        "exploratory_first_pass"
+        if value.get("generation_governance") == "adaptive"
+        else "blueprint_guided"
+    )
+    if value.get("effective_internal_generation_posture") != expected_posture:
+        return "current_loop_contract_generation_posture_mapping_invalid"
+    communication = value.get("quiet_communication_policy")
+    if not isinstance(communication, Mapping):
+        return "current_loop_contract_communication_policy_invalid"
+    if communication.get("hosted_enrichment") != "on_request":
+        return "current_loop_contract_communication_policy_invalid"
+    if communication.get("build_review") != "on_request":
+        return "current_loop_contract_communication_policy_invalid"
+    iteration = value.get("iteration_context_policy")
+    if not isinstance(iteration, Mapping):
+        return "current_loop_contract_iteration_policy_invalid"
+    if iteration.get("raw_result_exposure") is not False:
+        return "current_loop_contract_iteration_policy_invalid"
+    if iteration.get("cross_loop_carryover") is not False:
+        return "current_loop_contract_iteration_policy_invalid"
     policy = value.get("effective_policy")
     if not isinstance(policy, Mapping):
         return "current_loop_contract_policy_invalid"
@@ -640,6 +837,13 @@ def contract_snapshot() -> dict[str, Any]:
         "canonical_serialization": "json",
         "yaml_authoritative": False,
         "cross_loop_inheritance": False,
+        "generation_governance": list(GENERATION_GOVERNANCE_VALUES),
+        "assist_default_generation_governance": "adaptive",
+        "adaptive_internal_posture": "exploratory_first_pass",
+        "blueprint_required_internal_posture": "blueprint_guided",
+        "quiet_everyday_behavior_is_assist_default": True,
+        "hosted_enrichment": "on_request",
+        "build_review": "on_request",
     }
     payload["contract_digest"] = digest(payload)
     return payload

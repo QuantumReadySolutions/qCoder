@@ -93,14 +93,14 @@ def test_sidecar_contract_is_loopback_capability_bound_and_local_only() -> None:
     assert "QCODER_BASE_URL" not in environment
 
 
-def test_binding_v8_delivers_sidecar_run_summary_and_evidence_domains(
+def test_binding_v10_delivers_sidecar_run_summary_and_evidence_domains(
     tmp_path: Path,
 ) -> None:
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     assert descriptor["contract_id"] == CLIENT_BINDING_CONTRACT_ID
-    assert descriptor["contract_id"].endswith(".v9")
+    assert descriptor["contract_id"].endswith(".v10")
     assert descriptor["contract_sidecar"]["schema_id"] == SIDECAR_SCHEMA_ID
     assert descriptor["run_summary_contract"]["schema_id"] == ("qcoder.current_loop.run_summary.v1")
     assert descriptor["evidence_view_contract"]["schema_id"] == (

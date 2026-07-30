@@ -24,15 +24,18 @@ from qcoder.current_loop_bounded_control import (
     bounded_control_contract_snapshot,
     bounded_control_contracts,
 )
-from qcoder.current_loop_contract import policy_summary
+from qcoder.current_loop_contract import (
+    GENERATION_GOVERNANCE_VALUES,
+    policy_summary,
+)
 from qcoder.current_loop_run_summary import (
     evidence_view_contract_snapshot,
     run_summary_contract_snapshot,
 )
 
 
-SIDECAR_SCHEMA_ID = "qcoder.current_loop.contract_sidecar.v1"
-SIDECAR_SCHEMA_VERSION = 1
+SIDECAR_SCHEMA_ID = "qcoder.current_loop.contract_sidecar.v2"
+SIDECAR_SCHEMA_VERSION = 2
 SIDECAR_CAPABILITY_HEADER = "X-QCoder-Sidecar-Capability"
 SIDECAR_SESSION_HEADER = "X-QCoder-Sidecar-Session"
 SIDECAR_MAX_REQUEST_BYTES = 65_536
@@ -42,6 +45,7 @@ MINIMUM_CAPABILITY_BITS = 256
 _MUTATION_ACTIONS = frozenset(
     {
         "set_preset",
+        "set_generation_governance",
         "adjust",
         "confirm_broadening",
         "exclude_evidence",
@@ -68,6 +72,15 @@ _HTML = """<!doctype html>
 <button data-preset="evidence_only">Evidence only</button>
 <button id="custom">Custom</button>
 <button id="stop">Stop qCoder for this build</button></section>
+<section aria-labelledby="governance"><h2 id="governance">Generation governance</h2>
+<p>Adaptive keeps ordinary work quiet. Blueprint required confirms material choices first.</p>
+<button data-governance="adaptive">Adaptive</button>
+<button data-governance="blueprint_required">Blueprint required</button></section>
+<section><h2>Everyday Assist behavior</h2><ul>
+<li>Exact authorized outputs are collected and processed locally.</li>
+<li>Share-safe derived run context may update the connected assistant.</li>
+<li>Hosted enrichment and Build Review are on request.</li>
+</ul></section>
 <section id="custom-controls" hidden><h2>Custom controls</h2><div id="selection-graph"></div></section>
 <section><h2>Evidence and views</h2><div id="evidence"></div><div id="views"></div></section>
 <details><summary>Advanced canonical details</summary><pre id="advanced"></pre></details>
@@ -149,6 +162,8 @@ _JS = r"""(() => {
   }
   document.querySelectorAll("[data-preset]").forEach(button =>
     button.addEventListener("click", () => action("set_preset", {preset:button.dataset.preset})));
+  document.querySelectorAll("[data-governance]").forEach(button =>
+    button.addEventListener("click", () => action("set_generation_governance", {governance:button.dataset.governance})));
   document.getElementById("custom").addEventListener("click", () =>
     document.getElementById("custom-controls").hidden = false);
   document.getElementById("stop").addEventListener("click", () => {
@@ -190,6 +205,7 @@ def sidecar_contract_snapshot() -> dict[str, Any]:
         "accepted_domains": {
             "bounded_controls": bounded_control_contract_snapshot(),
             "evidence_views": evidence_view_contract_snapshot(),
+            "generation_governance": list(GENERATION_GOVERNANCE_VALUES),
         },
         "request_requires": [
             "loop_bound_capability",
@@ -276,6 +292,19 @@ class SidecarSession:
             "contract_revision": int(contract["contract_revision"]),
             "state_revision": int(state["state_revision"]),
             "effective_preset": contract["effective_preset"],
+            "generation_governance": contract["generation_governance"],
+            "generation_governance_options": [
+                {
+                    "value": "adaptive",
+                    "customer_meaning": "Adaptive — proceed quietly unless a material decision is required.",
+                },
+                {
+                    "value": "blueprint_required",
+                    "customer_meaning": "Blueprint required — confirm material choices before generation.",
+                },
+            ],
+            "quiet_everyday_behavior": deepcopy(contract["quiet_communication_policy"]),
+            "iteration_context_policy": deepcopy(contract["iteration_context_policy"]),
             "effective_policy_summary": policy_summary(contract["effective_preset"]),
             "selection_graph": controls["contract_adjust"]["valid_selection_graph"]["categories"],
             "preset_options": controls["contract_set_preset"]["fields"][0]["accepted_values"],
@@ -331,6 +360,11 @@ class SidecarSession:
         if action == "set_preset":
             result = self.coordinator.contract_set_preset(
                 preset=str(payload.get("preset") or ""),
+                expected_contract_revision=expected_contract_revision,
+            )
+        elif action == "set_generation_governance":
+            result = self.coordinator.contract_set_generation_governance(
+                governance=str(payload.get("governance") or ""),
                 expected_contract_revision=expected_contract_revision,
             )
         elif action == "adjust":

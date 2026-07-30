@@ -127,7 +127,7 @@ def test_adjustment_is_bounded_and_raw_assistant_exposure_ceiling_fails() -> Non
         )
 
 
-def test_exact_message_activation_creates_assist_receipt_and_defers_posture(
+def test_exact_message_activation_creates_quiet_assist_receipt_and_adaptive_governance(
     tmp_path: Path,
 ) -> None:
     coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
@@ -138,16 +138,18 @@ def test_exact_message_activation_creates_assist_receipt_and_defers_posture(
         request_transport="stdin",
     )
     assert result["ok"] is True
-    assert result["phase"] == "activated"
+    assert result["phase"] == "intent_review"
     assert result["details"]["assist_ready"] is True
-    assert result["details"]["posture_deferred"] is True
+    assert result["details"]["posture_deferred"] is False
+    assert result["details"]["posture_question_required"] is False
+    assert result["details"]["generation_governance"] == "adaptive"
     assert result["details"]["original_request"] == REQUEST
     receipt = result["details"]["activation_receipt"]
     assert receipt["preset"] == "assist"
     assert receipt["authority_exclusions"]
     state = coordinator.store.read()
     assert state["schema_id"] == CURRENT_LOOP_STATE_SCHEMA_ID
-    assert state["generation_posture"] is None
+    assert state["generation_posture"] == "exploratory_first_pass"
     assert state["current_loop_contract"]["schema_id"] == CONTRACT_SCHEMA_ID
     assert state["current_loop_contract"]["cross_loop_inheritance"] is False
     assert state["automatic_reopen"] is False
@@ -213,7 +215,7 @@ def test_v2_active_state_migrates_atomically_without_inheritance(tmp_path: Path)
     assert contract_error(migrated["current_loop_contract"]) is None
 
 
-def test_v3_state_migrates_to_v5_without_contract_or_summary_inheritance(
+def test_v3_state_migrates_to_v6_without_contract_or_summary_inheritance(
     tmp_path: Path,
 ) -> None:
     activated = activate_current_loop(
@@ -234,7 +236,7 @@ def test_v3_state_migrates_to_v5_without_contract_or_summary_inheritance(
     previous["state_digest"] = _state_digest(previous)
     store.replace(previous, expected_revision=current["state_revision"])
     migrated = migrate_current_loop_state(store)
-    assert migrated["schema_id"] == "qcoder.current_loop.local_state.v5"
+    assert migrated["schema_id"] == "qcoder.current_loop.local_state.v6"
     assert migrated["current_loop_contract"] == previous["current_loop_contract"]
     assert migrated["run_summary_index"] == {}
     assert migrated["latest_run_summary_reference"] is None
