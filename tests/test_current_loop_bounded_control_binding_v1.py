@@ -111,6 +111,9 @@ def test_every_local_control_field_has_complete_ownership_and_domain(
     serialized = activated["bounded_contract_controls"]
     assert set(serialized) == {
         "inspect",
+        "review_customer_json",
+        "apply_customer_json",
+        "reset_to_preset",
         "set_preset",
         "adjust",
         "confirm_broadening",
@@ -126,7 +129,8 @@ def test_every_local_control_field_has_complete_ownership_and_domain(
         assert invocation["schema_id"] == INVOCATION_CONTRACT_SCHEMA_ID
         assert invocation["bounded_control_input_contract"]["schema_id"] in {
             BOUNDED_CONTROL_INPUT_SCHEMA_ID,
-            "qcoder.current_loop.contract_sidecar.v2",
+            "qcoder.current_loop.contract_management.v1",
+            "qcoder.current_loop.contract_sidecar.v3",
             "qcoder.current_loop.evidence_view.v1",
             "qcoder.current_loop.build_review_choice.v1",
         }
@@ -323,7 +327,7 @@ def test_binding_v7_delivers_the_static_contract_and_customer_meanings() -> None
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     assert descriptor["contract_id"] == CLIENT_BINDING_CONTRACT_ID
-    assert descriptor["contract_id"].endswith(".v13")
+    assert descriptor["contract_id"].endswith(".v14")
     contract = descriptor["bounded_control_input_contract"]
     assert contract["schema_id"] == BOUNDED_CONTROL_INPUT_SCHEMA_ID
     assert contract["contract_digest"]

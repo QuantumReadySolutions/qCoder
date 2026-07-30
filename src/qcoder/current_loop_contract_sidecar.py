@@ -7,18 +7,19 @@ hosted transport, credential, discovery, execution, or project-edit endpoint.
 
 from __future__ import annotations
 
-from copy import deepcopy
-from hashlib import sha256
-from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
-from pathlib import Path
 import secrets
 import subprocess
 import threading
 import time
-from typing import Any, Mapping
+from collections.abc import Mapping
+from copy import deepcopy
+from hashlib import sha256
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any
 
 from qcoder.current_loop import CurrentLoopError
 from qcoder.current_loop_bounded_control import (
@@ -29,15 +30,23 @@ from qcoder.current_loop_contract import (
     GENERATION_GOVERNANCE_VALUES,
     policy_summary,
 )
+from qcoder.current_loop_contract_management import (
+    ContractManagementError,
+    contract_management_snapshot,
+    customer_contract_document,
+    effective_contract_document,
+    parse_customer_contract_json,
+    reset_customer_contract_document,
+    review_customer_contract_document,
+)
 from qcoder.current_loop_run_summary import (
     evidence_view_contract_snapshot,
     run_summary_contract_snapshot,
 )
 from qcoder.current_loop_vocabulary import vocabulary_snapshot
 
-
-SIDECAR_SCHEMA_ID = "qcoder.current_loop.contract_sidecar.v2"
-SIDECAR_SCHEMA_VERSION = 2
+SIDECAR_SCHEMA_ID = "qcoder.current_loop.contract_sidecar.v3"
+SIDECAR_SCHEMA_VERSION = 3
 SIDECAR_CAPABILITY_HEADER = "X-QCoder-Sidecar-Capability"
 SIDECAR_SESSION_HEADER = "X-QCoder-Sidecar-Session"
 SIDECAR_MAX_REQUEST_BYTES = 65_536
@@ -50,6 +59,9 @@ _MUTATION_ACTIONS = frozenset(
         "set_generation_governance",
         "adjust",
         "confirm_broadening",
+        "review_document",
+        "apply_document",
+        "reset_to_preset",
         "exclude_evidence",
         "restore_evidence",
         "delete_evidence",
@@ -66,35 +78,87 @@ _HTML = """<!doctype html>
 <title>How qCoder should help with this build</title>
 <link rel="stylesheet" href="/app.css">
 </head><body>
-<main>
+<header><div><p class="eyebrow">qCoder Explorer · Current build only</p>
 <h1>How qCoder should help with this build</h1>
-<p id="summary">Loading the current one-loop contract…</p>
-<section aria-labelledby="presets"><h2 id="presets">Choose a participation level</h2>
-<button data-preset="assist">Assist</button>
-<button data-preset="evidence_only">Evidence only</button>
-<button id="custom">Custom</button>
-<button id="stop">Stop qCoder for this build</button></section>
-<section aria-labelledby="governance"><h2 id="governance">Generation governance</h2>
-<p>Adaptive keeps ordinary work quiet. Blueprint required confirms material choices first.</p>
+<p id="summary">Loading the current one-loop contract…</p></div>
+<div class="status-card" aria-label="Current contract status">
+<span id="active-status" class="badge">Loading</span>
+<strong id="preset-status">—</strong><span id="revision-status">Revision —</span></div></header>
+<main><output id="notice" aria-live="polite"></output>
+<section aria-labelledby="presets"><p class="eyebrow">Participation</p>
+<h2 id="presets">Choose a participation level</h2>
+<p>Presets initialize the same one-loop contract. Custom changes stay bounded by qCoder.</p>
+<div class="button-grid">
+<button data-preset="assist"><strong>Assist</strong><span>Quiet everyday help</span></button>
+<button data-preset="evidence_only"><strong>Evidence only</strong><span>Local evidence, less standing help</span></button>
+<button id="custom"><strong>Custom</strong><span>Review granular controls</span></button>
+<button id="stop" class="danger-button"><strong>Stop qCoder</strong><span>Close only this build loop</span></button>
+</div></section>
+<section aria-labelledby="everyday"><p class="eyebrow">Everyday behavior</p>
+<h2 id="everyday">Quiet by default</h2><div class="feature-grid">
+<div><strong>Exact outputs</strong><p>Collect exact outputs from authorized IDE work.</p></div>
+<div><strong>Local analysis</strong><p>Derive source, circuit, and run context locally.</p></div>
+<div><strong>Connected assistant</strong><p>Share only selected derived context when permitted.</p></div>
+<div><strong>Optional review</strong><p>Hosted enrichment and Build Review stay on request.</p></div>
+</div></section>
+<section aria-labelledby="governance"><p class="eyebrow">Generation governance</p>
+<h2 id="governance">When qCoder should pause</h2>
+<p>Adaptive keeps ordinary work moving. Blueprint required confirms material choices first.</p>
+<div class="segmented" role="group" aria-label="Generation governance">
 <button data-governance="adaptive">Adaptive</button>
-<button data-governance="blueprint_required">Blueprint required</button></section>
-<section><h2>Everyday Assist behavior</h2><ul>
-<li>Exact authorized outputs are collected and processed locally.</li>
-<li>Share-safe derived run context may update the connected assistant.</li>
-<li>Hosted enrichment and Build Review are on request.</li>
-</ul></section>
-<section id="custom-controls" hidden><h2>Custom controls</h2><div id="selection-graph"></div></section>
-<section><h2>Evidence and views</h2><div id="evidence"></div><div id="views"></div></section>
-<details><summary>Advanced canonical details</summary><pre id="advanced"></pre></details>
-<p><button id="return">Return to the IDE</button></p>
-<output id="notice" aria-live="polite"></output>
+<button data-governance="blueprint_required">Blueprint required</button></div></section>
+<section id="custom-controls" hidden aria-labelledby="advanced-policy">
+<p class="eyebrow">Advanced policy</p><h2 id="advanced-policy">Granular controls</h2>
+<p>Choose only supported combinations from qCoder's canonical policy domain.</p>
+<div id="selection-graph" class="control-row"></div></section>
+<section aria-labelledby="json-heading"><p class="eyebrow">Contract JSON</p>
+<h2 id="json-heading">Inspect or edit the bounded customer document</h2>
+<div class="tabs" role="tablist" aria-label="Contract JSON views">
+<button role="tab" data-panel="effective-panel" aria-selected="true">Effective JSON</button>
+<button role="tab" data-panel="edit-panel" aria-selected="false">Edit JSON</button>
+<button role="tab" data-panel="review-panel" aria-selected="false">Review Changes</button></div>
+<div id="effective-panel" class="panel" role="tabpanel">
+<p class="hint">Read-only canonical customer view.</p>
+<pre id="effective-json" tabindex="0"></pre><button id="copy-effective">Copy effective JSON</button></div>
+<div id="edit-panel" class="panel" role="tabpanel" hidden>
+<label for="editable-json">Customer-editable JSON</label>
+<textarea id="editable-json" spellcheck="false" rows="22"></textarea><div class="actions">
+<button id="reset-draft">Reset draft</button>
+<button id="validate-draft" class="primary">Validate and review</button></div>
+<p class="hint">Drafts are not stored in cookies, browser storage, or server logs.</p></div>
+<div id="review-panel" class="panel" role="tabpanel" hidden>
+<div id="review-summary">Validate a draft to review its effect.</div>
+<pre id="review-json" tabindex="0"></pre><div id="review-actions" class="actions"></div></div>
+</section>
+<section aria-labelledby="evidence-heading"><p class="eyebrow">Local evidence</p>
+<h2 id="evidence-heading">Evidence and views</h2>
+<div id="evidence"></div><div id="views" class="actions"></div></section>
+<details><summary>Advanced read-only details</summary><pre id="advanced"></pre></details>
+<footer><p>Changes here are visible immediately in the IDE. The browser is optional.</p>
+<button id="return">Return to IDE</button></footer>
 </main><script src="/app.js" defer></script></body></html>"""
 
-_CSS = """body{font:16px system-ui,sans-serif;max-width:76rem;margin:2rem auto;padding:0 1rem;color:#18212b;background:#fafbfc}
-main{background:white;border:1px solid #d8dee6;border-radius:12px;padding:1.5rem}
-button{margin:.3rem;padding:.65rem .85rem;border:1px solid #667789;border-radius:7px;background:#f5f7fa}
-button:hover{background:#e9eef5}pre{overflow:auto;background:#f5f7fa;padding:1rem}
-#notice{display:block;margin-top:1rem;font-weight:600}.danger{color:#8b1e1e}"""
+_CSS = """*{box-sizing:border-box}body{margin:0;font:16px/1.5 system-ui,-apple-system,sans-serif;color:#16202a;background:#f1f5f8}
+header,main{max-width:78rem;margin:auto}header{display:flex;justify-content:space-between;gap:2rem;padding:3rem 1.25rem 1.5rem}
+h1{font-size:clamp(2rem,4vw,3.4rem);line-height:1.08;margin:.2rem 0 1rem;letter-spacing:-.035em}h2{margin:.15rem 0 .5rem;font-size:1.45rem}
+.eyebrow{margin:0;text-transform:uppercase;letter-spacing:.12em;font-size:.75rem;font-weight:750;color:#355d79}
+.status-card{min-width:13rem;align-self:center;background:#fff;border:1px solid #ccd9e2;border-radius:16px;padding:1rem;display:grid;gap:.35rem;box-shadow:0 8px 30px #27455d12}
+.badge{width:max-content;border-radius:999px;background:#dff5ea;color:#12603c;padding:.2rem .6rem;font-size:.78rem;font-weight:750}
+main{background:#fff;border:1px solid #d4dfe7;border-radius:20px 20px 0 0;box-shadow:0 16px 50px #18384f14;overflow:hidden}
+section,details,footer{padding:1.6rem 2rem;border-top:1px solid #e3eaf0}main>section:first-of-type{border-top:0}
+button,select,textarea{font:inherit}button{border:1px solid #8aa0b0;border-radius:10px;background:#f8fafc;color:#17232d;padding:.7rem .9rem;cursor:pointer;text-align:left}
+button:hover{background:#edf4f8}button:focus-visible,select:focus-visible,textarea:focus-visible,pre:focus-visible{outline:3px solid #1477a8;outline-offset:2px}
+button.primary{background:#126b92;color:#fff;border-color:#126b92}.danger-button{border-color:#bc7777;background:#fff8f8}
+.button-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem}.button-grid button{display:grid;gap:.2rem;min-height:5.5rem}.button-grid span{font-size:.86rem;color:#526675}
+.feature-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.8rem}.feature-grid div{background:#f7fafc;border-radius:12px;padding:1rem}.feature-grid p{margin:.35rem 0 0;color:#506372}
+.segmented,.actions,.control-row{display:flex;gap:.6rem;flex-wrap:wrap}.control-row select{min-width:13rem;padding:.65rem;border:1px solid #8aa0b0;border-radius:9px}
+.tabs{display:flex;gap:.25rem;border-bottom:1px solid #ccd9e2;margin-top:1rem}.tabs button{border-radius:8px 8px 0 0;border-bottom:0}.tabs button[aria-selected=true]{background:#e8f2f7;font-weight:700}
+.panel{padding:1rem 0}pre,textarea{width:100%;overflow:auto;background:#101820;color:#e8f2f7;border:1px solid #223647;border-radius:10px;padding:1rem;font:13px/1.55 ui-monospace,SFMono-Regular,monospace;tab-size:2}
+textarea{resize:vertical;min-height:24rem}label{display:block;font-weight:700;margin-bottom:.45rem}.hint{color:#5a6d7b;font-size:.9rem}
+#notice{display:none;margin:0;padding:1rem 2rem;background:#e9f5fb;border-bottom:1px solid #c9dce8;font-weight:650}#notice:not(:empty){display:block}.danger{color:#7b2020;background:#fff0f0!important}
+details summary{cursor:pointer;font-weight:700}footer{display:flex;justify-content:space-between;align-items:center;background:#f8fafc}
+@media(max-width:780px){header{display:block;padding-top:1.5rem}.status-card{margin-top:1rem}.button-grid,.feature-grid{grid-template-columns:1fr 1fr}section,details,footer{padding:1.25rem}footer{display:block}}
+@media(max-width:480px){.button-grid,.feature-grid{grid-template-columns:1fr}.control-row{display:grid}.control-row select{width:100%}}"""
 
 _JS = r"""(() => {
   const capability = decodeURIComponent(location.hash.slice(1));
@@ -117,18 +181,27 @@ _JS = r"""(() => {
     options.forEach(item => { const option=document.createElement("option"); option.value=item.value; option.textContent=item.customer_meaning; select.append(option); });
     return select;
   }
+  function showPanel(id) {
+    document.querySelectorAll(".panel").forEach(panel=>panel.hidden=panel.id!==id);
+    document.querySelectorAll("[role=tab]").forEach(tab=>tab.setAttribute("aria-selected",String(tab.dataset.panel===id)));
+  }
   function render(value) {
     snapshot = value;
     document.getElementById("summary").textContent = value.effective_policy_summary;
+    document.getElementById("active-status").textContent = "Active";
+    document.getElementById("preset-status").textContent = value.effective_preset.replaceAll("_"," ");
+    document.getElementById("revision-status").textContent = `Revision ${value.contract_revision}`;
+    document.getElementById("effective-json").textContent = JSON.stringify(value.effective_contract_json, null, 2);
+    document.getElementById("editable-json").value = JSON.stringify(value.editable_customer_contract_json, null, 2);
     document.getElementById("advanced").textContent = JSON.stringify(value.advanced, null, 2);
     const graph=document.getElementById("selection-graph"); graph.replaceChildren();
     const category=makeSelect(value.selection_graph,"Evidence category");
     const dimension=document.createElement("select"); dimension.setAttribute("aria-label","Participation dimension");
     const policyValue=document.createElement("select"); policyValue.setAttribute("aria-label","Policy value");
-    function dimensions(){ const row=value.selection_graph.find(item=>item.value===category.value); dimension.replaceChildren(); row.dimensions.forEach(item=>{const option=document.createElement("option"); option.value=item.value; option.textContent=item.customer_meaning; dimension.append(option);}); values(); }
-    function values(){ const row=value.selection_graph.find(item=>item.value===category.value).dimensions.find(item=>item.value===dimension.value); policyValue.replaceChildren(); row.accepted_values.forEach(item=>{const option=document.createElement("option"); option.value=item.value; option.textContent=item.customer_meaning; policyValue.append(option);});}
-    category.addEventListener("change",dimensions); dimension.addEventListener("change",values);
-    const apply=document.createElement("button"); apply.textContent="Apply bounded change"; apply.addEventListener("click",()=>action("adjust",{category:category.value,dimension:dimension.value,value:policyValue.value}));
+    function dimensions(){ dimension.replaceChildren(); value.dimension_options.forEach(item=>{const option=document.createElement("option"); option.value=item.value; option.textContent=item.customer_meaning; dimension.append(option);}); values(); }
+    function values(){ const row=value.dimension_options.find(item=>item.value===dimension.value); policyValue.replaceChildren(); row.accepted_values.forEach(item=>{const option=document.createElement("option"); option.value=item; option.textContent=item.replaceAll("_"," "); policyValue.append(option);});}
+    dimension.addEventListener("change",values);
+    const apply=document.createElement("button"); apply.textContent="Review granular change"; apply.addEventListener("click",()=>action("adjust",{category:category.value,dimension:dimension.value,value:policyValue.value}));
     graph.append(category,dimension,policyValue,apply); dimensions();
     const evidence=document.getElementById("evidence"); evidence.replaceChildren();
     if (!value.evidence_references.length) evidence.textContent="No eligible qCoder evidence is registered.";
@@ -142,32 +215,70 @@ _JS = r"""(() => {
       evidence.append(select,button);
     });
     if (value.pending_broadening) {
-      const confirm=document.createElement("button"); confirm.textContent="Confirm the displayed broader contract"; confirm.addEventListener("click",()=>action("confirm_broadening",{explicit_authority:true})); graph.append(confirm);
+      const pending=document.createElement("p"); pending.textContent=value.pending_broadening.customer_summary;
+      const confirm=document.createElement("button"); confirm.textContent="Confirm the displayed broader contract"; confirm.addEventListener("click",()=>action("confirm_broadening",{explicit_authority:true}));
+      graph.prepend(pending,confirm);
     }
     const views=document.getElementById("views"); views.replaceChildren();
     value.evidence_views.forEach(item=>{const button=document.createElement("button"); button.textContent=item.customer_meaning; button.addEventListener("click",()=>action("evidence_view",{view_id:item.value})); views.append(button);});
   }
   async function refresh(){ render(await api("/api/snapshot")); }
-  async function action(action, payload={}) {
+  async function action(actionName, payload={}) {
     try {
       const result = await api("/api/action", {
         method:"POST",
-        body:JSON.stringify({action, payload, expected_contract_revision:snapshot.contract_revision})
+        body:JSON.stringify({action:actionName, payload, expected_contract_revision:snapshot.contract_revision})
       });
       document.getElementById("notice").textContent = result.summary;
+      document.getElementById("notice").className = "";
       if (!result.loop_closed) await refresh();
+      return result;
     } catch (error) {
       document.getElementById("notice").textContent = `Refresh required: ${error.message}`;
       document.getElementById("notice").className = "danger";
       await refresh();
+      throw error;
     }
+  }
+  async function reviewDraft() {
+    try {
+      const result=await api("/api/action",{method:"POST",body:JSON.stringify({
+        action:"review_document",
+        payload:{document_json:document.getElementById("editable-json").value},
+        expected_contract_revision:snapshot.contract_revision
+      })});
+      const review=result.details.contract_review;
+      document.getElementById("review-summary").textContent=review.customer_summary||result.summary;
+      document.getElementById("review-json").textContent=JSON.stringify({classification:review.classification,changes:review.changes,choices:review.choices},null,2);
+      const actions=document.getElementById("review-actions"); actions.replaceChildren();
+      (review.choices||[]).forEach(choice=>{
+        const button=document.createElement("button"); button.textContent=choice.customer_meaning;
+        button.addEventListener("click",()=>applyDraft(choice.value));
+        actions.append(button);
+      });
+      showPanel("review-panel");
+    } catch(error) {
+      document.getElementById("notice").textContent=`Draft not valid: ${error.message}`;
+      document.getElementById("notice").className="danger";
+    }
+  }
+  async function applyDraft(choice) {
+    await action("apply_document",{
+      document_json:document.getElementById("editable-json").value,
+      choice,
+      explicit_authority:false
+    });
   }
   document.querySelectorAll("[data-preset]").forEach(button =>
     button.addEventListener("click", () => action("set_preset", {preset:button.dataset.preset})));
   document.querySelectorAll("[data-governance]").forEach(button =>
     button.addEventListener("click", () => action("set_generation_governance", {governance:button.dataset.governance})));
+  document.querySelectorAll("[role=tab]").forEach(tab=>tab.addEventListener("click",()=>showPanel(tab.dataset.panel)));
   document.getElementById("custom").addEventListener("click", () =>
     document.getElementById("custom-controls").hidden = false);
+  document.getElementById("reset-draft").addEventListener("click",()=>{document.getElementById("editable-json").value=JSON.stringify(snapshot.editable_customer_contract_json,null,2);});
+  document.getElementById("validate-draft").addEventListener("click",reviewDraft);
+  document.getElementById("copy-effective").addEventListener("click",async()=>{await navigator.clipboard.writeText(JSON.stringify(snapshot.effective_contract_json,null,2)); document.getElementById("notice").textContent="Effective JSON copied.";});
   document.getElementById("stop").addEventListener("click", () => {
     if (confirm("Stop qCoder for this build? This closes only the active loop.")) action("stop_loop", {explicit_authority:true});
   });
@@ -180,6 +291,33 @@ def _digest(value: object) -> str:
     return sha256(
         json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
+
+
+def _safe_request_json(raw: bytes) -> dict[str, Any]:
+    """Parse a sidecar envelope without duplicate or prototype-pollution keys."""
+
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("sidecar_request_utf8_invalid") from exc
+
+    def pairs(values: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, item in values:
+            if key in result:
+                raise ValueError("sidecar_request_duplicate_key")
+            if key in {"__proto__", "constructor", "prototype"}:
+                raise ValueError("sidecar_request_unsafe_key")
+            result[key] = item
+        return result
+
+    try:
+        value = json.loads(text, object_pairs_hook=pairs)
+    except json.JSONDecodeError as exc:
+        raise ValueError("sidecar_request_invalid") from exc
+    if not isinstance(value, Mapping):
+        raise TypeError("sidecar_request_invalid")
+    return deepcopy(dict(value))
 
 
 def sidecar_contract_snapshot() -> dict[str, Any]:
@@ -206,6 +344,7 @@ def sidecar_contract_snapshot() -> dict[str, Any]:
         "operations": sorted(_ALL_ACTIONS),
         "accepted_domains": {
             "bounded_controls": bounded_control_contract_snapshot(),
+            "contract_management": contract_management_snapshot(),
             "evidence_views": evidence_view_contract_snapshot(),
             "generation_governance": list(GENERATION_GOVERNANCE_VALUES),
             "canonical_evidence_vocabulary": vocabulary_snapshot(),
@@ -218,6 +357,11 @@ def sidecar_contract_snapshot() -> dict[str, Any]:
             "expected_contract_revision_for_mutation",
         ],
         "canonical_replacement_contract_accepted": False,
+        "customer_editable_document_accepted": True,
+        "raw_state_document_accepted": False,
+        "duplicate_json_keys_rejected": True,
+        "prototype_pollution_keys_rejected": True,
+        "json_values_rendered_as_text": True,
         "hosted_operation_endpoint": False,
         "protected_operation_endpoint": False,
         "project_edit_endpoint": False,
@@ -283,6 +427,9 @@ class SidecarSession:
     def snapshot(self) -> dict[str, Any]:
         state = self.validate_live_binding()
         contract = state["current_loop_contract"]
+        management = contract_management_snapshot()
+        effective_document = effective_contract_document(contract)
+        editable_document = customer_contract_document(contract)
         controls = bounded_control_contracts(
             state, artifact_directory=self.coordinator.artifact_directory
         )
@@ -300,6 +447,7 @@ class SidecarSession:
             "loop_label": self.loop_ref[-8:],
             "contract_revision": int(contract["contract_revision"]),
             "state_revision": int(state["state_revision"]),
+            "qcoder_status": "active",
             "effective_preset": contract["effective_preset"],
             "generation_governance": contract["generation_governance"],
             "generation_governance_options": [
@@ -315,9 +463,31 @@ class SidecarSession:
             "quiet_everyday_behavior": deepcopy(contract["quiet_communication_policy"]),
             "iteration_context_policy": deepcopy(contract["iteration_context_policy"]),
             "effective_policy_summary": policy_summary(contract["effective_preset"]),
-            "selection_graph": controls["contract_adjust"]["valid_selection_graph"]["categories"],
-            "preset_options": controls["contract_set_preset"]["fields"][0]["accepted_values"],
-            "pending_broadening": deepcopy(contract["pending_broadening_proposal"]),
+            "selection_graph": management["customer_document_schema"]["customer_settings"][
+                "evidence_categories"
+            ]["categories"],
+            "dimension_options": management["customer_document_schema"]["customer_settings"][
+                "evidence_categories"
+            ]["dimensions"],
+            "preset_options": [
+                {
+                    "value": "assist",
+                    "customer_meaning": "Assist — quiet everyday help for this build.",
+                },
+                {
+                    "value": "evidence_only",
+                    "customer_meaning": "Evidence only — retain bounded local evidence.",
+                },
+                {
+                    "value": "custom",
+                    "customer_meaning": "Custom — validated granular settings.",
+                },
+            ],
+            "pending_broadening": effective_document["pending_broadening"],
+            "last_contract_change_receipt": effective_document["last_contract_change_receipt"],
+            "effective_contract_json": effective_document,
+            "editable_customer_contract_json": editable_document,
+            "contract_management": management,
             "evidence_references": list(unique.values()),
             "evidence_controls": {
                 name: deepcopy(controls[operation])
@@ -366,27 +536,117 @@ class SidecarSession:
             raise ValueError("sidecar_contract_revision_stale")
         if action not in _ALL_ACTIONS:
             raise ValueError("sidecar_action_unsupported")
+        contract = state["current_loop_contract"]
+
+        def apply_document(
+            document: Mapping[str, Any] | str | bytes,
+            *,
+            supplied_choice: str | None = None,
+            explicit_authority: bool = False,
+        ) -> dict[str, Any]:
+            parsed = (
+                parse_customer_contract_json(document)
+                if isinstance(document, (str, bytes))
+                else deepcopy(dict(document))
+            )
+            review = review_customer_contract_document(contract, parsed)
+            if review.get("valid") is not True:
+                return self.coordinator.contract_review_customer_document(document=parsed)
+            classification = str(review["classification"])
+            default_choice = {
+                "narrowing": "apply_narrowing",
+                "broadening": "create_broadening_proposal",
+                "neutral": "cancel",
+            }.get(classification)
+            choice = supplied_choice or default_choice
+            if choice is None:
+                return self.coordinator.contract_review_customer_document(document=parsed)
+            return self.coordinator.contract_apply_customer_document(
+                document=parsed,
+                choice=choice,
+                explicit_authority=explicit_authority,
+                surface="browser",
+            )
+
         if action == "set_preset":
-            result = self.coordinator.contract_set_preset(
+            document = reset_customer_contract_document(
+                contract,
                 preset=str(payload.get("preset") or ""),
-                expected_contract_revision=expected_contract_revision,
+            )
+            result = apply_document(
+                document,
+                supplied_choice=(
+                    str(payload["choice"]) if payload.get("choice") is not None else None
+                ),
+                explicit_authority=payload.get("explicit_authority") is True,
             )
         elif action == "set_generation_governance":
-            result = self.coordinator.contract_set_generation_governance(
-                governance=str(payload.get("governance") or ""),
-                expected_contract_revision=expected_contract_revision,
+            document = customer_contract_document(contract)
+            document["customer_settings"]["generation_governance"] = str(
+                payload.get("governance") or ""
+            )
+            result = apply_document(
+                document,
+                supplied_choice=(
+                    str(payload["choice"]) if payload.get("choice") is not None else None
+                ),
+                explicit_authority=payload.get("explicit_authority") is True,
             )
         elif action == "adjust":
-            result = self.coordinator.contract_adjust(
-                category=str(payload.get("category") or ""),
-                dimension=str(payload.get("dimension") or ""),
-                value=str(payload.get("value") or ""),
-                expected_contract_revision=expected_contract_revision,
+            document = customer_contract_document(contract)
+            dimensions = {
+                "collect": "collect",
+                "derive": "local_derivation",
+                "recommend": "recommendations",
+                "prepare": "bounded_non_material_preparation",
+                "request_application_or_execution": ("request_application_or_execution_ceiling"),
+                "assistant_derived_exposure": "derived_assistant_exposure",
+                "assistant_raw_exposure": "raw_assistant_exposure",
+            }
+            category = str(payload.get("category") or "")
+            dimension = dimensions.get(str(payload.get("dimension") or ""))
+            if category not in document["customer_settings"]["evidence_categories"]:
+                raise ValueError("contract_category_invalid")
+            if dimension is None:
+                raise ValueError("contract_dimension_invalid")
+            document["customer_settings"]["evidence_categories"][category][dimension] = str(
+                payload.get("value") or ""
+            )
+            document["customer_settings"]["preset"] = "custom"
+            result = apply_document(
+                document,
+                supplied_choice=(
+                    str(payload["choice"]) if payload.get("choice") is not None else None
+                ),
+                explicit_authority=payload.get("explicit_authority") is True,
+            )
+        elif action == "review_document":
+            result = self.coordinator.contract_review_customer_document(
+                document=str(payload.get("document_json") or "")
+            )
+        elif action == "apply_document":
+            result = apply_document(
+                str(payload.get("document_json") or ""),
+                supplied_choice=str(payload.get("choice") or ""),
+                explicit_authority=payload.get("explicit_authority") is True,
+            )
+        elif action == "reset_to_preset":
+            document = reset_customer_contract_document(
+                contract,
+                preset=str(payload.get("preset") or ""),
+            )
+            result = apply_document(
+                document,
+                supplied_choice=(
+                    str(payload["choice"]) if payload.get("choice") is not None else None
+                ),
+                explicit_authority=payload.get("explicit_authority") is True,
             )
         elif action == "confirm_broadening":
             result = self.coordinator.contract_confirm_broadening(
                 expected_contract_revision=expected_contract_revision,
                 explicit_authority=payload.get("explicit_authority") is True,
+                surface="browser",
             )
         elif action == "exclude_evidence":
             result = self.coordinator.evidence_exclude(
@@ -425,12 +685,23 @@ class SidecarSession:
         return {
             "ok": bool(result.get("ok")),
             "category": result.get("category"),
+            "error_category": result.get("category"),
             "summary": str(result.get("customer_summary") or result.get("summary") or ""),
             "details": deepcopy(result.get("details", {})),
             "loop_closed": self.closed,
             "hosted_operation_invoked": False,
             "protected_operation_invoked": False,
             "canonical_contract_replacement_accepted": False,
+            "shared_contract_management_service": action
+            in {
+                "set_preset",
+                "set_generation_governance",
+                "adjust",
+                "review_document",
+                "apply_document",
+                "reset_to_preset",
+                "confirm_broadening",
+            },
         }
 
 
@@ -445,7 +716,7 @@ class _SidecarServer(ThreadingHTTPServer):
 
 class _SidecarHandler(BaseHTTPRequestHandler):
     server: _SidecarServer
-    server_version = "qCoderContractSidecar/1"
+    server_version = "qCoderContractSidecar/3"
     sys_version = ""
 
     def log_message(self, _format: str, *_args: object) -> None:
@@ -463,6 +734,11 @@ class _SidecarHandler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+        )
 
     def _send(self, status: int, body: bytes, *, content_type: str) -> None:
         self.send_response(status)
@@ -519,7 +795,7 @@ class _SidecarHandler(BaseHTTPRequestHandler):
             return str(exc)
         return None
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if self.path == "/":
             if not self._validate_host():
                 self._api_error("sidecar_host_invalid", HTTPStatus.FORBIDDEN)
@@ -558,13 +834,21 @@ class _SidecarHandler(BaseHTTPRequestHandler):
         except (ValueError, OSError) as exc:
             self._api_error(str(exc))
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         if self.path != "/api/action":
             self._api_error("sidecar_route_not_found", HTTPStatus.NOT_FOUND)
             return
         error = self._validate_api(mutation=True)
         if error:
             self._api_error(error, HTTPStatus.FORBIDDEN)
+            return
+        content_type = self.headers.get("Content-Type", "")
+        media_type = content_type.split(";", 1)[0].strip().lower()
+        if media_type != "application/json":
+            self._api_error(
+                "sidecar_content_type_invalid",
+                HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+            )
             return
         length_text = self.headers.get("Content-Length")
         if not length_text or not length_text.isdecimal():
@@ -575,16 +859,16 @@ class _SidecarHandler(BaseHTTPRequestHandler):
             self._api_error("sidecar_request_too_large", HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
             return
         try:
-            value = json.loads(self.rfile.read(length).decode("utf-8"))
+            value = _safe_request_json(self.rfile.read(length))
             if not isinstance(value, Mapping) or not isinstance(value.get("payload"), Mapping):
-                raise ValueError("sidecar_request_invalid")
+                raise TypeError("sidecar_request_invalid")
             result = self.server.session.action(
                 action=str(value.get("action") or ""),
                 payload=value["payload"],
                 expected_contract_revision=int(value["expected_contract_revision"]),
             )
             self._json(HTTPStatus.OK if result["ok"] else HTTPStatus.CONFLICT, result)
-        except (KeyError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        except (KeyError, TypeError, ValueError, ContractManagementError) as exc:
             self._api_error(str(exc))
 
 
@@ -640,7 +924,7 @@ def launch_sidecar_process(
         "--parent-pid",
         "0",
     ]
-    process = subprocess.Popen(  # noqa: S603
+    process = subprocess.Popen(
         command,
         cwd=Path(workspace).expanduser().absolute(),
         env=_sanitized_environment(),

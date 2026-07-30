@@ -627,7 +627,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("f472f4121f4bd348819903e7d6c1677b9269951327c98689fbaacf4fab6fae04")
+    assert contract_digest == ("8cfad9a1997ad3ed9c84d0b86b46680ca12da0a8eb8e5a85f11b5c9ff91cb7bf")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
@@ -655,6 +655,37 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "contract_raw_exposure_ceiling",
         "contract_revision_stale",
         "current_loop_contract_policy_prohibited",
+        "customer_contract_broadening_authority_required",
+        "customer_contract_broadening_proposal_digest_mismatch",
+        "customer_contract_broadening_proposal_kind_invalid",
+        "customer_contract_broadening_proposal_missing",
+        "customer_contract_broadening_proposal_stale",
+        "customer_contract_category_inventory_invalid",
+        "customer_contract_category_shape_invalid",
+        "customer_contract_change_choice_invalid",
+        "customer_contract_change_path_invalid",
+        "customer_contract_change_set_too_large",
+        "customer_contract_document_field_missing",
+        "customer_contract_document_object_required",
+        "customer_contract_document_revision_stale",
+        "customer_contract_document_schema_invalid",
+        "customer_contract_document_settings_invalid",
+        "customer_contract_document_unknown_field",
+        "customer_contract_json_depth_exceeded",
+        "customer_contract_json_duplicate_key",
+        "customer_contract_json_string_too_large",
+        "customer_contract_json_syntax_invalid",
+        "customer_contract_json_too_large",
+        "customer_contract_json_type_invalid",
+        "customer_contract_json_unsafe_control",
+        "customer_contract_json_unsafe_key",
+        "customer_contract_json_utf8_invalid",
+        "customer_contract_mixed_choice_required",
+        "customer_contract_qcoder_owned_field_changed",
+        "customer_contract_reset_preset_invalid",
+        "customer_contract_review_invalid",
+        "customer_contract_surface_invalid",
+        "customer_contract_value_invalid",
         "governing_blueprint_unavailable",
         "ide_write_or_run_denied",
         "local_state_corrupt",

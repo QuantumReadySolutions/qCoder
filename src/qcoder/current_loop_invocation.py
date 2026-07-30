@@ -136,6 +136,21 @@ _OPERATION_ROWS: tuple[dict[str, Any], ...] = (
     },
     {"operation": "abandon", "subcommand": "abandon", "transport": LOCAL_ONLY},
     {"operation": "contract_status", "subcommand": "contract-status", "transport": LOCAL_ONLY},
+    {
+        "operation": "contract_review_customer_document",
+        "subcommand": "contract-review-document",
+        "transport": LOCAL_ONLY,
+    },
+    {
+        "operation": "contract_apply_customer_document",
+        "subcommand": "contract-apply-document",
+        "transport": LOCAL_ONLY,
+    },
+    {
+        "operation": "contract_reset_to_preset",
+        "subcommand": "contract-reset-preset",
+        "transport": LOCAL_ONLY,
+    },
     {"operation": "help", "subcommand": "help", "transport": LOCAL_ONLY},
     {
         "operation": "prepare_adaptive_intent",
@@ -195,6 +210,7 @@ _BOOLEAN_FLAGS = frozenset(
         "--explicit",
         "--request-stdin",
         "--instruction-stdin",
+        "--document-stdin",
         "--stop",
         "--use-current-intent",
         "--use-current-seed",
@@ -358,6 +374,8 @@ def build_operation_invocation(
         input_channel = "exact_request_stdin"
     elif any("instruction-stdin" in str(item) for item in required_flags):
         input_channel = "exact_current_customer_instruction_stdin"
+    elif any("document-stdin" in str(item) for item in required_flags):
+        input_channel = "bounded_customer_contract_document_stdin"
     elif subcommand == "prepare-adaptive-intent":
         input_channel = "qcoder_owned_single_use_json_file"
     elif dynamic_arguments or required_flags:

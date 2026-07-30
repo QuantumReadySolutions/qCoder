@@ -74,6 +74,33 @@ def _request(
     return response.status, value, response_headers
 
 
+def _raw_action_request(
+    port: int,
+    *,
+    session: SidecarSession,
+    body: bytes,
+    content_type: str,
+) -> tuple[int, dict]:
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+    connection.request(
+        "POST",
+        "/api/action",
+        body=body,
+        headers={
+            "Host": f"127.0.0.1:{port}",
+            SIDECAR_CAPABILITY_HEADER: session.capability,
+            SIDECAR_SESSION_HEADER: session.session_id,
+            "Origin": f"http://127.0.0.1:{port}",
+            "Sec-Fetch-Site": "same-origin",
+            "Content-Type": content_type,
+        },
+    )
+    response = connection.getresponse()
+    payload = json.loads(response.read().decode("utf-8"))
+    connection.close()
+    return response.status, payload
+
+
 def test_sidecar_contract_is_loopback_capability_bound_and_local_only() -> None:
     contract = sidecar_contract_snapshot()
     assert contract["schema_id"] == SIDECAR_SCHEMA_ID
@@ -100,7 +127,7 @@ def test_binding_v10_delivers_sidecar_run_summary_and_evidence_domains(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     assert descriptor["contract_id"] == CLIENT_BINDING_CONTRACT_ID
-    assert descriptor["contract_id"].endswith(".v13")
+    assert descriptor["contract_id"].endswith(".v14")
     assert descriptor["contract_sidecar"]["schema_id"] == SIDECAR_SCHEMA_ID
     assert descriptor["run_summary_contract"]["schema_id"] == ("qcoder.current_loop.run_summary.v2")
     assert descriptor["evidence_view_contract"]["schema_id"] == (
@@ -144,6 +171,8 @@ def test_sidecar_headers_capability_origin_and_cas(tmp_path: Path) -> None:
         assert headers["x-frame-options"] == "DENY"
         assert headers["referrer-policy"] == "no-referrer"
         assert headers["cache-control"] == "no-store"
+        assert headers["cross-origin-resource-policy"] == "same-origin"
+        assert "payment=()" in headers["permissions-policy"]
         assert "access-control-allow-origin" not in headers
 
         status, snapshot, _headers = _request(port, "GET", "/api/snapshot", session=session)
@@ -226,6 +255,61 @@ def test_sidecar_headers_capability_origin_and_cas(tmp_path: Path) -> None:
             },
         )
         assert cross_site == 403
+    finally:
+        session.closed = True
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=3)
+
+
+def test_sidecar_json_editor_rejects_unsafe_transport_before_action(
+    tmp_path: Path,
+) -> None:
+    coordinator = _active(tmp_path)
+    server, session, thread = start_in_process_sidecar(
+        workspace=tmp_path,
+        coordinator=coordinator,
+        idle_timeout_seconds=60,
+    )
+    try:
+        port = server.server_port
+        state_revision = coordinator.store.read()["state_revision"]
+        revision = coordinator.store.read()["current_loop_contract"]["contract_revision"]
+        revision_bytes = str(revision).encode("ascii")
+        cases = (
+            (
+                b'{"action":"evidence_view","payload":{},'
+                b'"expected_contract_revision":' + revision_bytes + b"}",
+                "text/plain",
+                415,
+                "sidecar_content_type_invalid",
+            ),
+            (
+                b'{"action":"evidence_view","action":"stop_loop","payload":{},'
+                b'"expected_contract_revision":' + revision_bytes + b"}",
+                "application/json",
+                400,
+                "sidecar_request_duplicate_key",
+            ),
+            (
+                b'{"action":"evidence_view","payload":{"__proto__":{}},'
+                b'"expected_contract_revision":' + revision_bytes + b"}",
+                "application/json",
+                400,
+                "sidecar_request_unsafe_key",
+            ),
+        )
+        for body, content_type, expected_status, expected_category in cases:
+            status, payload = _raw_action_request(
+                port,
+                session=session,
+                body=body,
+                content_type=content_type,
+            )
+            assert status == expected_status
+            assert payload["error_category"] == expected_category
+            assert payload["raw_content_echoed"] is False
+        assert coordinator.store.read()["state_revision"] == state_revision
     finally:
         session.closed = True
         server.shutdown()

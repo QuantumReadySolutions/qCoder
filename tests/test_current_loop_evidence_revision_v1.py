@@ -23,6 +23,11 @@ from qcoder.current_loop import (
     migrate_current_loop_state,
 )
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
+from qcoder.current_loop_contract_management import (
+    customer_contract_document,
+    reset_customer_contract_document,
+)
+from qcoder.current_loop_contract_sidecar import SidecarSession
 from qcoder.current_loop_derivation import (
     derive_pending_snapshot,
     promote_derivation_snapshot,
@@ -184,7 +189,7 @@ def test_canonical_vocabulary_binding_and_state_v9_are_identical(tmp_path: Path)
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     vocabulary = vocabulary_snapshot()
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v13"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v14"
     assert binding["canonical_current_loop_vocabulary"] == vocabulary
     assert (
         binding["contract_sidecar"]["accepted_domains"]["canonical_evidence_vocabulary"]
@@ -484,6 +489,118 @@ def test_worst_case_three_changing_roles_stay_inside_registration_headroom(
         <= 5
         for role in LOGICAL_ROLES
     )
+
+
+def test_contract_management_metadata_preserves_worst_case_evidence_headroom(
+    tmp_path: Path,
+) -> None:
+    coordinator = _coordinator(tmp_path)
+    for iteration in range(1, 13):
+        candidates = _write_iteration(tmp_path, iteration=iteration)
+        Path(candidates[0]["path"]).write_text(
+            "from qiskit import QuantumCircuit\n"
+            f"ITERATION = {iteration}\n"
+            "circuit = QuantumCircuit(2, 2)\n",
+            encoding="utf-8",
+        )
+        Path(candidates[1]["path"]).write_text(
+            'OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[2];\ncreg c[2];\n'
+            f"// iteration {iteration}\n"
+            "h q[0];\ncx q[0],q[1];\nmeasure q -> c;\n",
+            encoding="utf-8",
+        )
+        assert _run_iteration(coordinator, candidates, iteration=iteration)["ok"] is True
+
+    narrowed = reset_customer_contract_document(
+        coordinator.store.read()["current_loop_contract"],
+        preset="evidence_only",
+    )
+    applied = coordinator.contract_apply_customer_document(
+        document=narrowed,
+        choice="apply_narrowing",
+        explicit_authority=False,
+    )
+    assert applied["ok"] is True
+    broadened = reset_customer_contract_document(
+        coordinator.store.read()["current_loop_contract"],
+        preset="assist",
+    )
+    proposed = coordinator.contract_apply_customer_document(
+        document=broadened,
+        choice="create_broadening_proposal",
+        explicit_authority=False,
+    )
+    assert proposed["ok"] is True
+    state_bytes = len(canonical_bytes(coordinator.store.read()))
+    assert state_bytes <= CURRENT_LOOP_STATE_MAX_BYTES
+    assert CURRENT_LOOP_STATE_MAX_BYTES - state_bytes >= 8_192
+
+
+def test_cross_surface_contract_changes_govern_future_evidence_updates(
+    tmp_path: Path,
+) -> None:
+    coordinator = _coordinator(tmp_path)
+    sidecar = SidecarSession(workspace=tmp_path, coordinator=coordinator)
+    first = _run_iteration(
+        coordinator,
+        _write_iteration(tmp_path, iteration=1),
+        iteration=1,
+    )
+    assert first["details"]["assistant_context_update"] is not None
+
+    narrow = customer_contract_document(coordinator.store.read()["current_loop_contract"])
+    narrow["customer_settings"]["preset"] = "custom"
+    narrow["customer_settings"]["evidence_categories"]["result_manifestation"][
+        "derived_assistant_exposure"
+    ] = "disabled"
+    narrowed = coordinator.contract_apply_customer_document(
+        document=narrow,
+        choice="apply_narrowing",
+        explicit_authority=False,
+        surface="ide",
+    )
+    assert narrowed["ok"] is True
+    narrowed_revision = coordinator.store.read()["current_loop_contract"]["contract_revision"]
+    assert sidecar.snapshot()["contract_revision"] == narrowed_revision
+
+    second = _run_iteration(
+        coordinator,
+        _write_iteration(tmp_path, iteration=2),
+        iteration=2,
+    )
+    assert second["details"]["assistant_context_update"] is None
+    assert second["details"]["run_summary_reference"] is not None
+
+    broaden = customer_contract_document(coordinator.store.read()["current_loop_contract"])
+    broaden["customer_settings"]["evidence_categories"]["result_manifestation"][
+        "derived_assistant_exposure"
+    ] = "standing"
+    proposed = sidecar.action(
+        action="apply_document",
+        payload={
+            "document_json": json.dumps(broaden, sort_keys=True),
+            "choice": "create_broadening_proposal",
+        },
+        expected_contract_revision=narrowed_revision,
+    )
+    assert proposed["ok"] is True
+    assert coordinator.store.read()["current_loop_contract"]["contract_revision"] == (
+        narrowed_revision
+    )
+    confirmed = coordinator.contract_confirm_broadening(
+        expected_contract_revision=narrowed_revision,
+        explicit_authority=True,
+        surface="ide",
+    )
+    assert confirmed["ok"] is True
+
+    third = _run_iteration(
+        coordinator,
+        _write_iteration(tmp_path, iteration=3),
+        iteration=3,
+    )
+    assert third["details"]["assistant_context_update"] is not None
+    assert third["details"]["assistant_context_update"]["raw_artifacts_remain_local"] is True
 
 
 def test_generation_mixing_validator_rejects_wrong_result_parent(tmp_path: Path) -> None:

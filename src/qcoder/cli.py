@@ -1088,6 +1088,45 @@ def _cmd_current_loop(argv: list[str]) -> int:
     )
 
     sub.add_parser("contract-status", help="Inspect the canonical effective one-loop contract.")
+    contract_review_document = sub.add_parser(
+        "contract-review-document",
+        help="Validate one bounded customer contract document from exact UTF-8 stdin.",
+    )
+    contract_review_document.add_argument("--document-stdin", action="store_true", required=True)
+    contract_apply_document = sub.add_parser(
+        "contract-apply-document",
+        help="Apply one previously reviewable bounded customer contract document.",
+    )
+    contract_apply_document.add_argument("--document-stdin", action="store_true", required=True)
+    contract_apply_document.add_argument(
+        "--choice",
+        choices=(
+            "apply_narrowing",
+            "create_broadening_proposal",
+            "apply_narrowing_subset",
+            "confirm_complete_change_set",
+            "cancel",
+        ),
+        required=True,
+    )
+    contract_apply_document.add_argument("--approve", action="store_true")
+    contract_reset = sub.add_parser(
+        "contract-reset-preset",
+        help="Compile one named preset through the shared contract-management service.",
+    )
+    contract_reset.add_argument("--preset", choices=NAMED_PRESETS, required=True)
+    contract_reset.add_argument(
+        "--choice",
+        choices=(
+            "apply_narrowing",
+            "create_broadening_proposal",
+            "apply_narrowing_subset",
+            "confirm_complete_change_set",
+            "cancel",
+        ),
+        required=True,
+    )
+    contract_reset.add_argument("--approve", action="store_true")
     help_parser = sub.add_parser("help", help="Show bounded qCoder help grounded in local state.")
     help_parser.add_argument("--topic", choices=HELP_TOPICS, required=True)
     adaptive_intent = sub.add_parser(
@@ -1822,6 +1861,26 @@ def _cmd_current_loop(argv: list[str]) -> int:
             )
         elif command == "contract-status":
             result = coordinator.contract_status()
+        elif command in {"contract-review-document", "contract-apply-document"}:
+            raw_document = sys.stdin.buffer.read(65_537)
+            if len(raw_document) > 65_536:
+                parser.error("customer contract document exceeds 65536 bytes")
+            if command == "contract-review-document":
+                result = coordinator.contract_review_customer_document(document=raw_document)
+            else:
+                result = coordinator.contract_apply_customer_document(
+                    document=raw_document,
+                    choice=args.choice,
+                    explicit_authority=args.approve,
+                    surface="ide",
+                )
+        elif command == "contract-reset-preset":
+            result = coordinator.contract_reset_to_preset(
+                preset=args.preset,
+                choice=args.choice,
+                explicit_authority=args.approve,
+                surface="ide",
+            )
         elif command == "help":
             result = coordinator.help(topic=args.topic)
         elif command == "prepare-adaptive-intent":

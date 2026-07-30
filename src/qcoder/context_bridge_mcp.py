@@ -73,6 +73,7 @@ from qcoder.current_loop_adaptive_intent import (
     adaptive_intent_contract_snapshot,
 )
 from qcoder.current_loop_contract_sidecar import sidecar_contract_snapshot
+from qcoder.current_loop_contract_management import contract_management_snapshot
 from qcoder.current_loop_run_summary import (
     evidence_view_contract_snapshot,
     run_summary_contract_snapshot,
@@ -133,8 +134,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 13
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v13"
+CLIENT_BINDING_SCHEMA_VERSION = 14
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v14"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -163,10 +164,14 @@ remains an explicit Current Loop Contract setting.
 OPTIONAL LOCAL CONTRACT EDITOR
 The customer may manage the same canonical one-loop contract in the IDE or through qCoder's
 optional loopback editor. Open it only through the complete local invocation supplied by qCoder.
-The assistant never edits policy JSON or reconstructs the policy. Browser and IDE controls use
-the same qCoder-owned bounded domains and compare-and-swap revisions. Narrowing is immediate;
-broadening remains a proposal followed by separate explicit confirmation. The browser is not an
-IDE, cannot execute code, cannot invoke Protected, and is never required for ordinary IDE use.
+The assistant never edits policy JSON. It never reconstructs policy or writes .qcoder. Browser
+and IDE controls use the same qCoder-owned contract-management service, bounded domains, diffs,
+classification, and compare-and-swap revisions. Effective JSON is read-only. The separate
+customer-editable JSON document contains only bounded customer settings and qCoder-prebound
+schema and revision fields. Narrowing is immediate; broadening remains an exact proposal followed
+by separate authority-only confirmation. Mixed changes are never silently partially applied.
+The browser is not an IDE, cannot execute code, cannot invoke Protected, and is never required
+for ordinary IDE use. A polished customer CLI is not required.
 
 RUN EVIDENCE AND BUILD REVIEW
 Use only qCoder's bounded evidence-view domain for natural questions about top results, circuit
@@ -351,9 +356,13 @@ derivation recovery, never consume another receipt, and never scan for replaceme
 CURRENT LOOP CONTRACT
 Assist is the default one-loop participation preset after exact-message activation. Evidence only
 narrows standing recommendation, preparation, and assistant exposure. Custom is a fully compiled
-bounded policy. Off means no active loop. Use only qCoder-supplied contract status, preset,
-bounded-adjustment, broadening-confirmation, exclusion, restoration, and deletion invocations.
-Never edit JSON or YAML, reconstruct policy, or decide whether a change broadens authority.
+bounded policy. Off means no active loop. Use only qCoder-supplied contract inspection,
+customer-language change, validated customer-document, preset, bounded-adjustment,
+broadening-confirmation, exclusion, restoration, and deletion invocations. Never edit canonical
+state JSON or YAML, reconstruct policy, or decide whether a change broadens authority. When the
+customer asks to show JSON, clearly distinguish qCoder's read-only effective JSON from the
+bounded customer-editable document. qCoder, not the assistant, validates, normalizes, diffs, and
+classifies every change. One coherent customer request may create one multi-field change set.
 Narrowing applies immediately; broadening requires a qCoder proposal and separate authority-only
 confirmation. For every bounded local control, consume the complete versioned input contract in
 the current result. Select only advertised machine values and valid combinations, use only
@@ -461,6 +470,7 @@ def build_client_binding_descriptor(
             "freshness_and_currency_contract": freshness_contract_snapshot(),
             "bounded_retention_contract": retention_contract_snapshot(),
             "evidence_recovery_contract": recovery_contract_snapshot(),
+            "contract_management": contract_management_snapshot(),
             "contract_sidecar": sidecar_contract_snapshot(),
             "run_summary_contract": run_summary_contract_snapshot(),
             "evidence_view_contract": evidence_view_contract_snapshot(),
@@ -526,6 +536,12 @@ def build_client_binding_descriptor(
             "manual_active_build_tool_sequencing_prohibited": True,
             "browser_editor_optional": True,
             "browser_and_ide_share_canonical_contract": True,
+            "browser_and_ide_share_contract_management_service": True,
+            "effective_contract_json_read_only": True,
+            "customer_editable_contract_json_bounded": True,
+            "contract_change_classification_qcoder_owned": True,
+            "mixed_contract_change_silently_partially_applied": False,
+            "polished_customer_cli_required": False,
             "browser_invokes_protected": False,
             "run_summary_is_blueprint": False,
             "build_review_optional": True,

@@ -156,6 +156,9 @@ def test_exact_message_activation_creates_quiet_assist_receipt_and_adaptive_gove
     controls = result["bounded_contract_controls"]
     assert set(controls) == {
         "inspect",
+        "review_customer_json",
+        "apply_customer_json",
+        "reset_to_preset",
         "set_preset",
         "adjust",
         "confirm_broadening",

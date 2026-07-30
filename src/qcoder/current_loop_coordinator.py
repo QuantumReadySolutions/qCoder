@@ -106,17 +106,36 @@ from qcoder.current_loop_bootstrap import (
     PRE_RESULT_ENTRY_INVENTORY_SCHEMA_ID,
 )
 from qcoder.current_loop_contract import (
+    ADJUSTMENT_DIMENSIONS,
+    ADJUSTMENT_VALUES_BY_DIMENSION,
+    EVIDENCE_CATEGORIES,
+    GENERATION_GOVERNANCE_VALUES,
+    NAMED_PRESETS,
     CurrentLoopContractError,
-    adjust as adjust_contract,
     confirm_broadening,
     contract_snapshot,
     exclude_evidence as contract_exclude_evidence,
     permits as contract_permits,
     record_deletion as contract_record_deletion,
     restore_evidence as contract_restore_evidence,
-    set_generation_governance,
-    set_preset as set_contract_preset,
     validate_contract,
+)
+from qcoder.current_loop_contract_management import (
+    CONTRACT_CHANGE_SET_SCHEMA_ID,
+    CONTRACT_DIFF_SCHEMA_ID,
+    CONTRACT_MANAGEMENT_SCHEMA_ID,
+    CONTRACT_VALIDATION_SCHEMA_ID,
+    CUSTOMER_CONTRACT_DOCUMENT_SCHEMA_ID,
+    EFFECTIVE_CONTRACT_DOCUMENT_SCHEMA_ID,
+    ContractManagementError,
+    apply_customer_contract_review,
+    confirm_customer_contract_broadening,
+    contract_management_snapshot,
+    customer_contract_document,
+    effective_contract_document,
+    parse_customer_contract_json,
+    reset_customer_contract_document,
+    review_customer_contract_document,
 )
 from qcoder.current_loop_bounded_control import (
     BOUNDED_CONTROL_INPUT_SCHEMA_ID,
@@ -871,6 +890,54 @@ _RECOVERY = {
     ),
 }
 
+_CONTRACT_MANAGEMENT_RECOVERY_CATEGORIES = frozenset(
+    {
+        "customer_contract_json_duplicate_key",
+        "customer_contract_json_unsafe_key",
+        "customer_contract_json_unsafe_control",
+        "customer_contract_json_syntax_invalid",
+        "customer_contract_json_too_large",
+        "customer_contract_json_depth_exceeded",
+        "customer_contract_json_string_too_large",
+        "customer_contract_json_utf8_invalid",
+        "customer_contract_json_type_invalid",
+        "customer_contract_document_object_required",
+        "customer_contract_document_schema_invalid",
+        "customer_contract_document_revision_stale",
+        "customer_contract_document_unknown_field",
+        "customer_contract_document_field_missing",
+        "customer_contract_document_settings_invalid",
+        "customer_contract_category_inventory_invalid",
+        "customer_contract_category_shape_invalid",
+        "customer_contract_value_invalid",
+        "customer_contract_qcoder_owned_field_changed",
+        "customer_contract_change_set_too_large",
+        "customer_contract_change_path_invalid",
+        "customer_contract_review_invalid",
+        "customer_contract_change_choice_invalid",
+        "customer_contract_mixed_choice_required",
+        "customer_contract_broadening_authority_required",
+        "customer_contract_broadening_proposal_missing",
+        "customer_contract_broadening_proposal_kind_invalid",
+        "customer_contract_broadening_proposal_stale",
+        "customer_contract_broadening_proposal_digest_mismatch",
+        "customer_contract_reset_preset_invalid",
+        "customer_contract_surface_invalid",
+    }
+)
+for _contract_management_category in _CONTRACT_MANAGEMENT_RECOVERY_CATEGORIES:
+    _RECOVERY[_contract_management_category] = (
+        "The bounded customer contract input was rejected safely.",
+        (
+            "Refresh the current qCoder contract document, correct only the displayed "
+            "bounded setting, and use the newly generated validation or apply invocation."
+        ),
+        True,
+        False,
+        True,
+        False,
+    )
+
 _ERROR_ALIASES = {
     "current_loop_not_active": "loop_not_activated",
     "current_loop_already_active": "loop_already_active",
@@ -1273,6 +1340,12 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "adaptive_intent_fields_document": ADAPTIVE_INTENT_DOCUMENT_SCHEMA_ID,
             "invocation_lifecycle": INVOCATION_LIFECYCLE_SCHEMA_ID,
             "current_loop_contract": contract_snapshot()["schema_id"],
+            "contract_management": CONTRACT_MANAGEMENT_SCHEMA_ID,
+            "effective_contract_document": EFFECTIVE_CONTRACT_DOCUMENT_SCHEMA_ID,
+            "customer_contract_document": CUSTOMER_CONTRACT_DOCUMENT_SCHEMA_ID,
+            "contract_change_set": CONTRACT_CHANGE_SET_SCHEMA_ID,
+            "contract_diff": CONTRACT_DIFF_SCHEMA_ID,
+            "contract_validation": CONTRACT_VALIDATION_SCHEMA_ID,
             "operation_receipt": event_receipt_snapshot()["schema_id"],
             "recovery": RECOVERY_SCHEMA_ID,
             "artifact_format_contract": ARTIFACT_FORMAT_CONTRACT_SCHEMA_ID,
@@ -1308,6 +1381,7 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
         "parent_error_taxonomy": parent_error_taxonomy_snapshot(),
         "operation_transport_inventory": operation_transport_inventory(),
         "current_loop_contract": contract_snapshot(),
+        "contract_management": contract_management_snapshot(),
         "operation_receipt": event_receipt_snapshot(),
         "recovery_contract": {
             "schema_id": RECOVERY_SCHEMA_ID,
@@ -1434,6 +1508,9 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "attach_to_loop",
             "abandon",
             "contract_status",
+            "contract_review_customer_document",
+            "contract_apply_customer_document",
+            "contract_reset_to_preset",
             "contract_set_preset",
             "contract_adjust",
             "contract_confirm_broadening",
@@ -3674,21 +3751,313 @@ class CurrentLoopCoordinator:
         started = self.clock()
         try:
             state = self.store.read()
-            validate_contract(state["current_loop_contract"])
+            contract = state["current_loop_contract"]
+            validate_contract(contract)
+            effective = effective_contract_document(contract)
+            editable = customer_contract_document(contract)
             return self._result(
                 operation="contract_status",
                 ok=True,
                 state=state,
-                summary="The effective one-loop participation contract is shown.",
+                summary=(
+                    "The Current Loop Contract for this build is shown in customer language. "
+                    "The effective JSON is read-only; the separate customer document contains "
+                    "only bounded editable settings."
+                ),
                 elapsed=self.clock() - started,
                 details={
-                    "current_loop_contract": deepcopy(state["current_loop_contract"]),
+                    # Compatibility name now carries the safe effective projection,
+                    # never the raw embedded state contract.
+                    "current_loop_contract": effective,
+                    "effective_contract_json": effective,
+                    "editable_customer_contract_json": editable,
+                    "contract_management": contract_management_snapshot(),
+                    "current_contract_revision": contract["contract_revision"],
+                    "pending_broadening": effective["pending_broadening"],
+                    "last_contract_change_receipt": effective["last_contract_change_receipt"],
+                    "raw_state_included": False,
                     "raw_policy_editing_permitted": False,
                     "yaml_authoritative": False,
                 },
             )
-        except (CurrentLoopError, CurrentLoopContractError) as exc:
+        except (CurrentLoopError, CurrentLoopContractError, ContractManagementError) as exc:
             return self._exception_result("contract_status", exc, started)
+
+    def contract_review_customer_document(
+        self,
+        *,
+        document: Mapping[str, Any] | str | bytes,
+    ) -> dict[str, Any]:
+        """Validate and diff one bounded customer JSON draft without mutation."""
+
+        started = self.clock()
+        try:
+            state = self.store.read()
+            parsed = (
+                parse_customer_contract_json(document)
+                if isinstance(document, (str, bytes))
+                else deepcopy(dict(document))
+            )
+            review = review_customer_contract_document(
+                state["current_loop_contract"],
+                parsed,
+            )
+            if not review["valid"]:
+                return self._contract_document_rejection(
+                    operation="contract_review_customer_document",
+                    state=state,
+                    category=str(review["validation"]["error_category"]),
+                    validation=review["validation"],
+                    started=started,
+                )
+            return self._result(
+                operation="contract_review_customer_document",
+                ok=True,
+                state=state,
+                summary=str(
+                    review.get("customer_summary")
+                    or review.get("validation", {}).get(
+                        "customer_message",
+                        "The customer contract draft could not be validated.",
+                    )
+                ),
+                elapsed=self.clock() - started,
+                details={
+                    "contract_review": review,
+                    "state_mutated": False,
+                    "browser_or_ide_classified_change": False,
+                    "qcoder_service_classified_change": True,
+                },
+            )
+        except ContractManagementError as exc:
+            try:
+                state = self.store.read()
+            except CurrentLoopError:
+                return self._exception_result("contract_review_customer_document", exc, started)
+            return self._contract_document_rejection(
+                operation="contract_review_customer_document",
+                state=state,
+                category=exc.category,
+                validation={
+                    "schema_id": CONTRACT_VALIDATION_SCHEMA_ID,
+                    "schema_version": 1,
+                    "valid": False,
+                    "error_category": exc.category,
+                    "error_location": exc.safe_details["contract_validation_error_location"],
+                    "raw_document_echoed": False,
+                },
+                started=started,
+            )
+        except (CurrentLoopError, CurrentLoopContractError) as exc:
+            return self._exception_result("contract_review_customer_document", exc, started)
+
+    def _contract_document_rejection(
+        self,
+        *,
+        operation: str,
+        state: Mapping[str, Any],
+        category: str,
+        validation: Mapping[str, Any],
+        started: float,
+    ) -> dict[str, Any]:
+        """Return non-destructive executable recovery for one draft rejection."""
+
+        result = self._result(
+            operation=operation,
+            ok=False,
+            state=state,
+            summary=(
+                "The bounded customer contract draft was rejected safely. Refresh the "
+                "current document, correct the displayed field, and validate it again."
+            ),
+            elapsed=self.clock() - started,
+            category=category,
+            details={
+                "contract_validation": deepcopy(dict(validation)),
+                "prior_valid_contract_preserved": True,
+                "prior_valid_authority_preserved": True,
+                "prior_valid_evidence_preserved": True,
+                "state_mutated": False,
+                "raw_document_echoed": False,
+            },
+        )
+        controls = result["bounded_contract_controls"]
+        alternatives = [
+            {
+                "action": "refresh_contract_document",
+                "customer_meaning": "Refresh the effective and editable contract JSON.",
+                "invocation": controls["inspect"],
+            },
+            {
+                "action": "retry_contract_validation",
+                "customer_meaning": "Validate one corrected bounded customer document.",
+                "invocation": controls["review_customer_json"],
+            },
+        ]
+        result["details"]["recovery_contract"] = {
+            "schema_id": RECOVERY_SCHEMA_ID,
+            "schema_version": RECOVERY_SCHEMA_VERSION,
+            "strategy": "restage_with_construction",
+            "safe_error_category": category,
+            "conversation_may_continue": True,
+            "assistant_should_stop": False,
+            "prior_valid_authority_preserved": True,
+            "prior_valid_evidence_preserved": True,
+            "alternatives": alternatives,
+            "zero_non_executable_alternatives": True,
+        }
+        result["supported_next_action"] = "refresh_contract_document"
+        result["next_invocation"] = controls["inspect"]
+        result["conversation_may_continue"] = True
+        result["assistant_should_stop"] = False
+        return result
+
+    def contract_apply_customer_document(
+        self,
+        *,
+        document: Mapping[str, Any] | str | bytes,
+        choice: str,
+        explicit_authority: bool,
+        surface: str = "ide",
+    ) -> dict[str, Any]:
+        """Apply one reviewed document through the shared management service."""
+
+        started = self.clock()
+        try:
+            if surface not in {"ide", "browser"}:
+                raise ContractManagementError("customer_contract_surface_invalid")
+            state = self.store.read()
+            parsed = (
+                parse_customer_contract_json(document)
+                if isinstance(document, (str, bytes))
+                else deepcopy(dict(document))
+            )
+            review = review_customer_contract_document(
+                state["current_loop_contract"],
+                parsed,
+            )
+            if not review["valid"]:
+                raise ContractManagementError(
+                    str(review["validation"]["error_category"]),
+                    field_path=review["validation"]["error_location"].get("field_path"),
+                )
+            outcome = apply_customer_contract_review(
+                state["current_loop_contract"],
+                review,
+                choice=choice,
+                surface=surface,
+                explicit_authority=explicit_authority,
+            )
+            disposition = str(outcome["disposition"])
+            changed = disposition != "cancelled"
+            updated = (
+                self._replace_contract(
+                    outcome["contract"],
+                    cancel_pending_for_narrowing=(
+                        disposition
+                        in {
+                            "narrowing_applied",
+                            "narrowing_applied_broadening_proposed",
+                        }
+                    ),
+                )
+                if changed
+                else state
+            )
+            contract = updated["current_loop_contract"]
+            coordinator = self._coordinator_state(updated)
+            coordinator["effective_generation_posture"] = contract[
+                "effective_internal_generation_posture"
+            ]
+            if changed:
+                self._replace_coordinator(coordinator)
+                updated = self.store.read()
+            requires_confirmation = disposition in {
+                "broadening_proposed",
+                "narrowing_applied_broadening_proposed",
+                "mixed_change_proposed",
+            }
+            summary = {
+                "narrowing_applied": "The narrower Current Loop Contract is effective now.",
+                "broadening_proposed": (
+                    "The broader settings are a proposal and require explicit confirmation."
+                ),
+                "narrowing_applied_broadening_proposed": (
+                    "The narrower subset is effective now. The broader subset remains one "
+                    "separate proposal."
+                ),
+                "mixed_change_proposed": (
+                    "The complete mixed change set is one exact proposal awaiting "
+                    "authority-only confirmation."
+                ),
+                "cancelled": "The contract draft was cancelled without changing the loop.",
+            }[disposition]
+            return self._result(
+                operation="contract_apply_customer_document",
+                ok=True,
+                state=updated,
+                summary=summary,
+                elapsed=self.clock() - started,
+                category=("contract_broadening_proposed" if requires_confirmation else None),
+                details={
+                    "disposition": disposition,
+                    "contract_review": review,
+                    "pending_proposal": deepcopy(outcome["proposal"]),
+                    "contract_change_receipt": deepcopy(outcome["receipt"]),
+                    "effective_contract_json": effective_contract_document(contract),
+                    "editable_customer_contract_json": customer_contract_document(contract),
+                    "requires_explicit_customer_confirmation": requires_confirmation,
+                    "raw_json_retransmission_required": False,
+                    "same_management_service_as_browser": True,
+                },
+            )
+        except (CurrentLoopError, CurrentLoopConflict, CurrentLoopContractError) as exc:
+            return self._exception_result("contract_apply_customer_document", exc, started)
+        except ContractManagementError as exc:
+            try:
+                state = self.store.read()
+            except CurrentLoopError:
+                return self._exception_result("contract_apply_customer_document", exc, started)
+            return self._contract_document_rejection(
+                operation="contract_apply_customer_document",
+                state=state,
+                category=exc.category,
+                validation={
+                    "schema_id": CONTRACT_VALIDATION_SCHEMA_ID,
+                    "schema_version": 1,
+                    "valid": False,
+                    "error_category": exc.category,
+                    "error_location": exc.safe_details["contract_validation_error_location"],
+                    "raw_document_echoed": False,
+                },
+                started=started,
+            )
+
+    def contract_reset_to_preset(
+        self,
+        *,
+        preset: str,
+        choice: str,
+        explicit_authority: bool,
+        surface: str = "ide",
+    ) -> dict[str, Any]:
+        """Compile one preset through the same complete-document path."""
+
+        started = self.clock()
+        try:
+            state = self.store.read()
+            document = reset_customer_contract_document(
+                state["current_loop_contract"],
+                preset=preset,
+            )
+            return self.contract_apply_customer_document(
+                document=document,
+                choice=choice,
+                explicit_authority=explicit_authority,
+                surface=surface,
+            )
+        except (CurrentLoopError, ContractManagementError) as exc:
+            return self._exception_result("contract_reset_to_preset", exc, started)
 
     def _adaptive_intent_contract(
         self,
@@ -3920,6 +4289,21 @@ class CurrentLoopCoordinator:
             ]
             actions = [
                 {
+                    "customer_meaning": "Show me the qCoder contract.",
+                    "route": "contract_status",
+                },
+                {
+                    "customer_meaning": "Show me the contract JSON.",
+                    "route": "contract_status:effective_and_editable_json",
+                },
+                {
+                    "customer_meaning": (
+                        "Stop sharing derived run results with the connected assistant, "
+                        "but keep them local."
+                    ),
+                    "route": "contract_adjust:qcoder_classified_change",
+                },
+                {
                     "customer_meaning": "Open qCoder settings for this build.",
                     "route": "open_contract_editor",
                 },
@@ -3960,7 +4344,7 @@ class CurrentLoopCoordinator:
                 ),
                 supported_actions=actions,
             )
-            return self._result(
+            result = self._result(
                 operation="help",
                 ok=True,
                 state=state,
@@ -3968,6 +4352,14 @@ class CurrentLoopCoordinator:
                 elapsed=self.clock() - started,
                 details={"help": projection, "commands_exposed": False},
             )
+            result["details"]["contract_management"] = {
+                "effective_contract": effective_contract_document(contract),
+                "pending_broadening": effective_contract_document(contract)["pending_broadening"],
+                "examples": [item["customer_meaning"] for item in actions[:4]],
+                "browser_editor_optional": True,
+                "internal_command_choreography_exposed": False,
+            }
+            return result
         except (CurrentLoopError, CurrentLoopContractError, ValueError) as exc:
             return self._exception_result("help", exc, started)
 
@@ -4358,39 +4750,40 @@ class CurrentLoopCoordinator:
         started = self.clock()
         try:
             state = self.store.read()
-            outcome = set_contract_preset(
+            if preset not in NAMED_PRESETS:
+                raise CurrentLoopContractError("contract_preset_invalid")
+            if expected_contract_revision != state["current_loop_contract"]["contract_revision"]:
+                raise ContractManagementError("customer_contract_document_revision_stale")
+            document = reset_customer_contract_document(
                 state["current_loop_contract"],
                 preset=preset,
-                expected_contract_revision=expected_contract_revision,
-                provenance=(
-                    "customer_requested_narrowing"
-                    if preset == "evidence_only"
-                    else "explicit_customer_selection"
-                ),
             )
-            updated = self._replace_contract(
-                outcome["contract"],
-                cancel_pending_for_narrowing=outcome["disposition"] == "narrowing",
+            review = review_customer_contract_document(
+                state["current_loop_contract"],
+                document,
             )
-            broadening = outcome["disposition"] == "broadening"
-            return self._result(
-                operation="contract_set_preset",
-                ok=True,
-                state=updated,
-                summary=(
-                    "The broader contract is proposed and requires explicit approval."
-                    if broadening
-                    else "The narrower contract is effective immediately."
-                ),
-                elapsed=self.clock() - started,
-                category="contract_broadening_proposed" if broadening else None,
-                details={
-                    "disposition": outcome["disposition"],
-                    "pending_proposal": deepcopy(outcome["proposal"]),
-                    "current_loop_contract": deepcopy(outcome["contract"]),
-                    "previously_exposed_information_recallable": False,
-                },
+            choice = {
+                "narrowing": "apply_narrowing",
+                "broadening": "create_broadening_proposal",
+                "neutral": "cancel",
+            }.get(str(review["classification"]))
+            if choice is None:
+                raise ContractManagementError("customer_contract_mixed_choice_required")
+            result = self.contract_apply_customer_document(
+                document=document,
+                choice=choice,
+                explicit_authority=False,
+                surface="ide",
             )
+            result["operation"] = "contract_set_preset"
+            management_disposition = result["details"].get("disposition")
+            result["details"]["management_disposition"] = management_disposition
+            result["details"]["disposition"] = {
+                "narrowing_applied": "narrowing",
+                "broadening_proposed": "broadening",
+                "cancelled": "unchanged",
+            }.get(management_disposition, management_disposition)
+            return result
         except CurrentLoopContractError as exc:
             if exc.category == "contract_preset_invalid":
                 return self._bounded_control_rejection(
@@ -4401,7 +4794,7 @@ class CurrentLoopCoordinator:
                     started=started,
                 )
             return self._exception_result("contract_set_preset", exc, started)
-        except (CurrentLoopError, CurrentLoopConflict) as exc:
+        except (CurrentLoopError, CurrentLoopConflict, ContractManagementError) as exc:
             return self._exception_result("contract_set_preset", exc, started)
 
     def contract_adjust(
@@ -4415,36 +4808,58 @@ class CurrentLoopCoordinator:
         started = self.clock()
         try:
             state = self.store.read()
-            outcome = adjust_contract(
+            if expected_contract_revision != state["current_loop_contract"]["contract_revision"]:
+                raise ContractManagementError("customer_contract_document_revision_stale")
+            if category not in EVIDENCE_CATEGORIES:
+                raise CurrentLoopContractError("contract_category_invalid")
+            if dimension not in ADJUSTMENT_DIMENSIONS:
+                raise CurrentLoopContractError("contract_dimension_invalid")
+            if dimension == "assistant_raw_exposure" and value != "disabled":
+                raise CurrentLoopContractError("contract_raw_exposure_ceiling")
+            if value not in ADJUSTMENT_VALUES_BY_DIMENSION[dimension]:
+                raise CurrentLoopContractError("contract_adjustment_value_invalid")
+            document = customer_contract_document(state["current_loop_contract"])
+            dimension_map = {
+                "collect": "collect",
+                "derive": "local_derivation",
+                "recommend": "recommendations",
+                "prepare": "bounded_non_material_preparation",
+                "request_application_or_execution": ("request_application_or_execution_ceiling"),
+                "assistant_derived_exposure": "derived_assistant_exposure",
+                "assistant_raw_exposure": "raw_assistant_exposure",
+            }
+            customer_dimension = dimension_map.get(dimension)
+            assert customer_dimension is not None
+            document["customer_settings"]["evidence_categories"][category][customer_dimension] = (
+                value
+            )
+            document["customer_settings"]["preset"] = "custom"
+            review = review_customer_contract_document(
                 state["current_loop_contract"],
-                category=category,
-                dimension=dimension,
-                value=value,
-                expected_contract_revision=expected_contract_revision,
-                provenance="explicit_customer_selection",
+                document,
             )
-            updated = self._replace_contract(
-                outcome["contract"],
-                cancel_pending_for_narrowing=outcome["disposition"] == "narrowing",
+            choice = {
+                "narrowing": "apply_narrowing",
+                "broadening": "create_broadening_proposal",
+                "neutral": "cancel",
+            }.get(str(review["classification"]))
+            if choice is None:
+                raise ContractManagementError("customer_contract_mixed_choice_required")
+            result = self.contract_apply_customer_document(
+                document=document,
+                choice=choice,
+                explicit_authority=False,
+                surface="ide",
             )
-            broadening = outcome["disposition"] == "broadening"
-            return self._result(
-                operation="contract_adjust",
-                ok=True,
-                state=updated,
-                summary=(
-                    "The broader bounded change awaits explicit approval."
-                    if broadening
-                    else "The bounded narrowing is effective immediately."
-                ),
-                elapsed=self.clock() - started,
-                category="contract_broadening_proposed" if broadening else None,
-                details={
-                    "disposition": outcome["disposition"],
-                    "pending_proposal": deepcopy(outcome["proposal"]),
-                    "current_loop_contract": deepcopy(outcome["contract"]),
-                },
-            )
+            result["operation"] = "contract_adjust"
+            management_disposition = result["details"].get("disposition")
+            result["details"]["management_disposition"] = management_disposition
+            result["details"]["disposition"] = {
+                "narrowing_applied": "narrowing",
+                "broadening_proposed": "broadening",
+                "cancelled": "unchanged",
+            }.get(management_disposition, management_disposition)
+            return result
         except CurrentLoopContractError as exc:
             field_name = {
                 "contract_category_invalid": "category",
@@ -4465,7 +4880,7 @@ class CurrentLoopCoordinator:
                     started=started,
                 )
             return self._exception_result("contract_adjust", exc, started)
-        except (CurrentLoopError, CurrentLoopConflict) as exc:
+        except (CurrentLoopError, CurrentLoopConflict, ContractManagementError) as exc:
             return self._exception_result("contract_adjust", exc, started)
 
     def contract_set_generation_governance(
@@ -4477,46 +4892,44 @@ class CurrentLoopCoordinator:
         started = self.clock()
         try:
             state = self.store.read()
-            outcome = set_generation_governance(
+            if governance not in GENERATION_GOVERNANCE_VALUES:
+                raise CurrentLoopContractError("contract_generation_governance_invalid")
+            if expected_contract_revision != state["current_loop_contract"]["contract_revision"]:
+                raise ContractManagementError("customer_contract_document_revision_stale")
+            document = customer_contract_document(state["current_loop_contract"])
+            document["customer_settings"]["generation_governance"] = governance
+            review = review_customer_contract_document(
                 state["current_loop_contract"],
-                governance=governance,
-                expected_contract_revision=expected_contract_revision,
-                provenance="customer_selected_contract_setting",
+                document,
             )
-            updated = self._replace_contract(
-                outcome["contract"],
-                cancel_pending_for_narrowing=outcome["disposition"] == "narrowing",
+            choice = {
+                "narrowing": "apply_narrowing",
+                "broadening": "create_broadening_proposal",
+                "neutral": "cancel",
+            }.get(str(review["classification"]))
+            if choice is None:
+                raise ContractManagementError("customer_contract_mixed_choice_required")
+            result = self.contract_apply_customer_document(
+                document=document,
+                choice=choice,
+                explicit_authority=False,
+                surface="ide",
             )
-            broadening = outcome["disposition"] == "broadening"
-            coordinator = self._coordinator_state(updated)
-            if not broadening:
-                coordinator["effective_generation_posture"] = outcome["contract"][
-                    "effective_internal_generation_posture"
-                ]
-                self._replace_coordinator(coordinator)
-                updated = self.store.read()
-            return self._result(
-                operation="contract_set_generation_governance",
-                ok=True,
-                state=updated,
-                summary=(
-                    "Adaptive generation is proposed and requires explicit approval."
-                    if broadening
-                    else "Blueprint-required generation is effective immediately."
-                ),
-                elapsed=self.clock() - started,
-                category="contract_broadening_proposed" if broadening else None,
-                details={
-                    "disposition": outcome["disposition"],
-                    "pending_proposal": deepcopy(outcome["proposal"]),
-                    "generation_governance": governance,
-                    "internal_posture": outcome["contract"][
-                        "effective_internal_generation_posture"
-                    ],
-                    "customer_posture_question_required": False,
-                },
-            )
-        except CurrentLoopContractError as exc:
+            result["operation"] = "contract_set_generation_governance"
+            management_disposition = result["details"].get("disposition")
+            result["details"]["management_disposition"] = management_disposition
+            result["details"]["disposition"] = {
+                "narrowing_applied": "narrowing",
+                "broadening_proposed": "broadening",
+                "cancelled": "unchanged",
+            }.get(management_disposition, management_disposition)
+            result["details"]["generation_governance"] = governance
+            result["details"]["internal_posture"] = self.store.read()["current_loop_contract"][
+                "effective_internal_generation_posture"
+            ]
+            result["details"]["customer_posture_question_required"] = False
+            return result
+        except (CurrentLoopContractError, ContractManagementError) as exc:
             return self._bounded_control_rejection(
                 operation="contract_set_generation_governance",
                 category=exc.category,
@@ -4528,17 +4941,43 @@ class CurrentLoopCoordinator:
             return self._exception_result("contract_set_generation_governance", exc, started)
 
     def contract_confirm_broadening(
-        self, *, expected_contract_revision: int, explicit_authority: bool
+        self,
+        *,
+        expected_contract_revision: int,
+        explicit_authority: bool,
+        surface: str = "ide",
     ) -> dict[str, Any]:
         started = self.clock()
         try:
             state = self.store.read()
-            contract = confirm_broadening(
-                state["current_loop_contract"],
-                expected_contract_revision=expected_contract_revision,
-                explicit_authority=explicit_authority,
-            )
+            pending = state["current_loop_contract"].get("pending_broadening_proposal")
+            if (
+                isinstance(pending, Mapping)
+                and pending.get("schema_id")
+                == "qcoder.current_loop.contract_management_broadening.v1"
+            ):
+                outcome = confirm_customer_contract_broadening(
+                    state["current_loop_contract"],
+                    expected_contract_revision=expected_contract_revision,
+                    explicit_authority=explicit_authority,
+                    surface=surface,
+                )
+                contract = outcome["contract"]
+                receipt = outcome["receipt"]
+            else:
+                contract = confirm_broadening(
+                    state["current_loop_contract"],
+                    expected_contract_revision=expected_contract_revision,
+                    explicit_authority=explicit_authority,
+                )
+                receipt = None
             updated = self._replace_contract(contract)
+            coordinator = self._coordinator_state(updated)
+            coordinator["effective_generation_posture"] = contract[
+                "effective_internal_generation_posture"
+            ]
+            self._replace_coordinator(coordinator)
+            updated = self.store.read()
             return self._result(
                 operation="contract_confirm_broadening",
                 ok=True,
@@ -4546,12 +4985,19 @@ class CurrentLoopCoordinator:
                 summary="The explicitly approved broader contract is effective.",
                 elapsed=self.clock() - started,
                 details={
-                    "current_loop_contract": deepcopy(contract),
+                    "effective_contract_json": effective_contract_document(contract),
+                    "editable_customer_contract_json": customer_contract_document(contract),
+                    "contract_change_receipt": deepcopy(receipt),
                     "authority_only": True,
                     "raw_policy_retransmitted": False,
                 },
             )
-        except (CurrentLoopError, CurrentLoopConflict, CurrentLoopContractError) as exc:
+        except (
+            CurrentLoopError,
+            CurrentLoopConflict,
+            CurrentLoopContractError,
+            ContractManagementError,
+        ) as exc:
             return self._exception_result("contract_confirm_broadening", exc, started)
 
     def _evidence_descriptor(
@@ -10123,6 +10569,22 @@ class CurrentLoopCoordinator:
         )
         rows = {
             "inspect": _invocation_template("contract-status"),
+            "review_customer_json": _invocation_template(
+                "contract-review-document",
+                required_flags=("--document-stdin",),
+                new_inputs=("qcoder_bound_customer_contract_document",),
+            ),
+            "apply_customer_json": _invocation_template(
+                "contract-apply-document",
+                required_flags=("--document-stdin", "--choice"),
+                reused_inputs=("validated_qcoder_bound_customer_contract_document",),
+                new_inputs=("qcoder_advertised_change_choice",),
+            ),
+            "reset_to_preset": _invocation_template(
+                "contract-reset-preset",
+                required_flags=("--preset", "--choice"),
+                new_inputs=("bounded_preset_and_qcoder_advertised_change_choice",),
+            ),
             "set_preset": _invocation_template(
                 "contract-set-preset",
                 required_flags=("--preset", "--expected-contract-revision"),
@@ -10188,6 +10650,9 @@ class CurrentLoopCoordinator:
         }
         contract_operations = {
             "inspect": "contract_status",
+            "review_customer_json": "contract_review_customer_document",
+            "apply_customer_json": "contract_apply_customer_document",
+            "reset_to_preset": "contract_reset_to_preset",
             "set_preset": "contract_set_preset",
             "adjust": "contract_adjust",
             "confirm_broadening": "contract_confirm_broadening",
@@ -10203,12 +10668,77 @@ class CurrentLoopCoordinator:
         for name, template in rows.items():
             if name == "open_editor":
                 bounded_contract = {
-                    "schema_id": "qcoder.current_loop.contract_sidecar.v2",
-                    "schema_version": 1,
+                    "schema_id": "qcoder.current_loop.contract_sidecar.v3",
+                    "schema_version": 3,
                     "operation": "open_contract_editor",
                     "fields": [],
                     "browser_optional": True,
                     "hosted_operation_permitted": False,
+                }
+            elif name in {
+                "review_customer_json",
+                "apply_customer_json",
+                "reset_to_preset",
+            }:
+                management = contract_management_snapshot()
+                fields: list[dict[str, Any]] = []
+                if name in {"review_customer_json", "apply_customer_json"}:
+                    fields.append(
+                        {
+                            "name": "document_stdin",
+                            "flag": "--document-stdin",
+                            "ownership": "qcoder_bound_customer_document_transport",
+                            "required": True,
+                            "json_type": "boolean",
+                            "fixed_value": True,
+                            "maximum_utf8_bytes": 65_536,
+                        }
+                    )
+                if name == "reset_to_preset":
+                    fields.append(
+                        {
+                            "name": "preset",
+                            "flag": "--preset",
+                            "ownership": "customer_selected_from_qcoder_domain",
+                            "required": True,
+                            "json_type": "string",
+                            "accepted_values": [
+                                {
+                                    "value": value,
+                                    "customer_meaning": value.replace("_", " ").title(),
+                                }
+                                for value in ("assist", "evidence_only")
+                            ],
+                        }
+                    )
+                if name in {"apply_customer_json", "reset_to_preset"}:
+                    fields.append(
+                        {
+                            "name": "choice",
+                            "flag": "--choice",
+                            "ownership": "customer_selected_from_qcoder_review",
+                            "required": True,
+                            "json_type": "string",
+                            "accepted_values": [
+                                "apply_narrowing",
+                                "create_broadening_proposal",
+                                "apply_narrowing_subset",
+                                "confirm_complete_change_set",
+                                "cancel",
+                            ],
+                        }
+                    )
+                bounded_contract = {
+                    "schema_id": management["schema_id"],
+                    "schema_version": management["schema_version"],
+                    "operation": contract_operations[name],
+                    "fields": fields,
+                    "customer_document_schema_reference": (
+                        management["customer_document_schema"]["schema_id"]
+                    ),
+                    "customer_document_contract_digest": management["contract_digest"],
+                    "full_domain_in_binding": True,
+                    "assistant_edits_canonical_state": False,
                 }
             elif name == "evidence_view":
                 view_contract = evidence_view_contract_snapshot()
@@ -11159,6 +11689,7 @@ class CurrentLoopCoordinator:
                 exc,
                 (
                     CheckpointInputStructuralError,
+                    ContractManagementError,
                     EvidenceProcessingError,
                     EventReceiptError,
                 ),
@@ -11171,6 +11702,7 @@ class CurrentLoopCoordinator:
                 CurrentLoopError,
                 CurrentLoopConflict,
                 CurrentLoopContractError,
+                ContractManagementError,
                 CheckpointInputStructuralError,
                 EvidenceProcessingError,
                 EventReceiptError,
@@ -11187,6 +11719,7 @@ class CurrentLoopCoordinator:
                     CurrentLoopError,
                     CurrentLoopConflict,
                     CurrentLoopContractError,
+                    ContractManagementError,
                     CheckpointInputStructuralError,
                     EventReceiptError,
                 ),
@@ -11205,6 +11738,7 @@ class CurrentLoopCoordinator:
                     (
                         CurrentLoopError,
                         CurrentLoopContractError,
+                        ContractManagementError,
                         CheckpointInputStructuralError,
                         EvidenceProcessingError,
                     ),
