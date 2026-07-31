@@ -49,6 +49,27 @@ should govern the next iteration. qCoder does not independently generate the Pyt
 compile the circuit, execute the run, recover hidden intent, prove correctness, or automatically
 adopt a blueprint decision.
 
+The everyday path is Quiet Assist: the customer explicitly activates qCoder for one build, the
+Current Loop Contract governs exact authorized output collection and local derivation, and qCoder
+interrupts only for material decisions or separate authority boundaries. Adaptive generation is
+the default; Blueprint-required governance is available. Evidence revisions, snapshots, and
+current or prior Run Summaries are bounded to that active loop and are purged on close. The
+optional local contract editor uses the same canonical contract as the IDE. Narrowing applies
+immediately; broadening requires explicit confirmation.
+
+### Connected-client qualification
+
+- **Cursor Desktop:** candidate full active Current Loop support, subject to exact final-candidate
+  proof before public activation.
+- **Cursor terminal/CLI:** connection and Desktop parity are distinct; full active-loop support is
+  not claimed.
+- **Codex CLI and Claude Code:** only exact-release bounded capabilities may be claimed after their
+  separate client proofs; full active-loop support is not claimed here.
+- **Generic MCP clients:** no support claim.
+
+Connection alone is not qualification. One-call help and direct contract or completion routes do
+not add persistent memory, project history, repository discovery, or automatic IDE authority.
+
 ## Context Bridge inventory
 
 The `0.6.0a3` release candidate preserves the existing eight Evidence Review operations and adds

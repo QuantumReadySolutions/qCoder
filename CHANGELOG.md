@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.6.0a3
+
+- Add Quiet Assist for one explicitly activated Explorer build, governed by one Current Loop
+  Contract with Adaptive generation by default and an optional Blueprint-required mode.
+- Enroll exact outputs from customer-authorized IDE operations without repository scanning or
+  watching, and retain immutable same-path evidence revisions, coherent snapshots, and current or
+  prior Run Summaries only within the active loop.
+- Let customers inspect and narrow the contract from the IDE or optional loop-bound local web
+  editor; broader participation requires explicit confirmation. Effective JSON is read-only and
+  the customer-editable document is bounded.
+- Add grounded one-call help, direct generation-governance controls, direct receipt-style loop
+  completion, and deterministic recovery for stale receipts and correctable local inputs.
+- Preserve Circuit Workbench as a distinct selected-evidence surface and Build Review as an
+  optional on-request review. Neither is required for ordinary Quiet Assist work.
+- Preserve exactly twelve Context Bridge tools and the unchanged Protected boundary. Native IDE
+  write and execution authority remains separate from qCoder evidence collection; qCoder does not
+  execute merely because it collects evidence.
+- Qualify the full active Current Loop candidate for Cursor Desktop through native certification.
+  Cursor terminal/CLI does not inherit Desktop qualification, and Codex CLI and Claude Code retain
+  only separately proved bounded claims. Generic MCP compatibility is not claimed.
+- Keep raw artifacts local by default and carry no Explorer contract, evidence, or project history
+  into a future loop. qCoder does not scan or watch repositories, and sampled counts do not by
+  themselves prove correctness or entanglement. Missing execution settings are not inferred.
+
+This entry describes the intended public `0.6.0a3` content. The
+`0.6.0a3+wi0418.releaseintegration1` package is a private integration candidate, not final public
+bytes and not a publication decision.
+
 ## 0.6.0a2+wi0419.explorercontract1binding1
 
 - Complete the client-visible bounded-control domains, valid-selection graph,
