@@ -24,9 +24,8 @@
   into a future loop. qCoder does not scan or watch repositories, and sampled counts do not by
   themselves prove correctness or entanglement. Missing execution settings are not inferred.
 
-This entry describes the intended public `0.6.0a3` content. The
-`0.6.0a3+wi0418.releaseintegration1` package is a private integration candidate, not final public
-bytes and not a publication decision.
+This entry describes the held plain `0.6.0a3` candidate. Its frozen artifacts remain unpublished;
+their creation is not a publication or release decision.
 
 ## 0.6.0a2+wi0419.explorercontract1binding1
 
