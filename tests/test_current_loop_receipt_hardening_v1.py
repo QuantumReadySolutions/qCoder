@@ -693,6 +693,29 @@ def test_material_authority_change_never_offers_causal_continuation(
     assert failed["details"]["recovery_contract"].get("same_already_authorized_action") is not True
 
 
+def test_loop_closure_and_replacement_invalidate_the_old_receipt(tmp_path: Path) -> None:
+    coordinator = _active(tmp_path)
+    receipt = _issue(coordinator)
+    closed = coordinator.abandon(explicit_authority=True)
+    assert closed["ok"] is True
+    replacement = _active(tmp_path)
+    replacement_state = replacement.store.read()
+    assert replacement_state["loop_ref"] != receipt["loop_ref"]
+    with pytest.raises(EventReceiptError, match="operation_receipt_loop_mismatch"):
+        validate_operation_receipt(
+            receipt,
+            loop_ref=str(replacement_state["loop_ref"]),
+            workspace_binding=str(replacement_state["workspace_root"]),
+            current_state_revision=int(replacement_state["state_revision"]),
+            current_contract_revision=int(
+                replacement_state["current_loop_contract"]["contract_revision"]
+            ),
+            role="source",
+            current_time=replacement.clock(),
+        )
+    assert receipt["receipt_id"] not in replacement_state["operation_receipts"]
+
+
 def _stale_only_recovery(
     tmp_path: Path,
 ) -> tuple[CurrentLoopCoordinator, dict[str, Any], dict[str, Any], dict[str, Any]]:
