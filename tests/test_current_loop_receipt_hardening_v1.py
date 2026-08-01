@@ -202,6 +202,51 @@ def test_contract_editor_projection_is_authoritative_state_neutral(
     _assert_receipt_valid(coordinator, receipt)
 
 
+def test_pending_checkpoint_expected_revision_remains_exact_across_pure_reads(
+    tmp_path: Path,
+) -> None:
+    coordinator = _active(tmp_path)
+    state = coordinator.store.read()
+
+    def seed_pending_checkpoint(value: dict[str, Any]) -> Mapping[str, Any]:
+        value["coordinator"]["pending_checkpoint_input"] = {
+            "schema_id": "qcoder.current_loop.checkpoint_input.v1",
+            "schema_version": 1,
+            "status": "pending",
+            "content_digest": "a" * 64,
+            "semantic_contract_schema_id": "synthetic-focused-proof",
+            "semantic_contract_schema_version": 1,
+            "semantic_contract_digest": "b" * 64,
+            "operation": "prepare_generation",
+            "checkpoint_kind": "intent_review",
+            "phase": "activated",
+            "expected_state_revision": int(value["state_revision"]) + 1,
+            "fields": [],
+        }
+        return value
+
+    coordinator.store.update(
+        seed_pending_checkpoint,
+        expected_revision=int(state["state_revision"]),
+    )
+    receipt = _issue(coordinator)
+    issued = coordinator.store.read()
+    expected = issued["coordinator"]["pending_checkpoint_input"][
+        "expected_state_revision"
+    ]
+    assert expected == issued["state_revision"] == receipt["issued_state_revision"]
+    before = canonical_bytes(issued)
+    for _ in range(25):
+        assert coordinator.status()["ok"] is True
+        assert coordinator.contract_status()["ok"] is True
+    after = coordinator.store.read()
+    assert canonical_bytes(after) == before
+    assert after["coordinator"]["pending_checkpoint_input"][
+        "expected_state_revision"
+    ] == expected
+    _assert_receipt_valid(coordinator, receipt)
+
+
 def test_status_resume_branch_remains_authoritative_mutation(tmp_path: Path) -> None:
     coordinator = _active(tmp_path)
     receipt = _issue(coordinator)
