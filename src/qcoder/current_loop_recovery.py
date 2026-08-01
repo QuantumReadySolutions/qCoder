@@ -12,8 +12,8 @@ from typing import Any
 from qcoder.current_loop_invocation import build_operation_invocation
 from qcoder.current_loop_vocabulary import recovery_actions_for
 
-RECOVERY_SCHEMA_ID = "qcoder.current_loop.recovery.v4"
-RECOVERY_SCHEMA_VERSION = 4
+RECOVERY_SCHEMA_ID = "qcoder.current_loop.recovery.v5"
+RECOVERY_SCHEMA_VERSION = 5
 
 _ACTION_OPERATIONS = {
     "retry_registration": ("execute_recovery_action", "execute-recovery-action"),
@@ -125,6 +125,14 @@ def recovery_contract_snapshot() -> dict[str, Any]:
         "substring_routing_permitted": False,
         "every_advertised_action_executable": True,
         "assistant_reconstruction_permitted": False,
+        "retry_registration_causal_continuation": {
+            "same_action_binding_required": True,
+            "one_attempt": True,
+            "material_change_blocks": True,
+            "second_customer_approval_for_stale_only_receipt": False,
+            "native_ide_permission_separate": True,
+            "internal_choreography_customer_visible": False,
+        },
     }
     payload["contract_digest"] = _digest(payload)
     return payload

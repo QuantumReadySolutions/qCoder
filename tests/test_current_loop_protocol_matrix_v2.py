@@ -211,7 +211,9 @@ def test_posture_checkpoint_is_bounded_enumerated_and_status_reemits_it(
     assert status["next_invocation"]["subcommand"] == posture["next_invocation"]["subcommand"]
     assert (
         status["next_invocation"]["operation_specific_invocation"]["state_binding"]["revision"]
-        > posture["next_invocation"]["operation_specific_invocation"]["state_binding"]["revision"]
+        == posture["next_invocation"]["operation_specific_invocation"]["state_binding"][
+            "revision"
+        ]
     )
     assert (
         status["next_invocation"]["operation_specific_invocation"]["transport_classification"]

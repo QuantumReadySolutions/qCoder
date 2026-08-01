@@ -137,7 +137,7 @@ See the synthetic [`Algorithm Blueprint walkthrough`](examples/09_algorithm_blue
 Install:
 
 ```bash
-python -m pip install "qcoder==0.6.0a4"
+python -m pip install "qcoder==0.6.0a5"
 ```
 
 Analyze a circuit:

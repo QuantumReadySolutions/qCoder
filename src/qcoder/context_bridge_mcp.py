@@ -134,8 +134,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 16
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v16"
+CLIENT_BINDING_SCHEMA_VERSION = 17
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v17"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -313,6 +313,13 @@ source, result, or Run Summary evidence. Optional hosted enrichment is a later, 
 generated hosted invocation and may be skipped without closing the evidence branch or loop.
 Every recovery alternative is executable through its own qCoder-generated invocation. Status
 refresh only refreshes recovery state and never executes a selected recovery action.
+When qCoder marks retry_registration as an exact causal continuation, execute its one prebound
+continuation attempt without asking for a second semantic customer approval. That continuation
+may register only the identical active-loop artifact set, bytes, paths, destination, operation,
+role and format ceilings, contract, workspace, phase, checkpoint eligibility, execution boundary,
+and exposure boundary. Any material difference or a second commit conflict is a blocker. Never
+display the recovery reference, receipt identity, revisions, digests, structured argv, command,
+or JSON choreography to the customer. This does not approve or bypass any native IDE permission.
 Never inspect .qcoder, and exclude .qcoder from every ordinary project inspection. Do not use a
 glob, find, directory listing, Git status, repository map, or search result as the qCoder review
 set. The Quick Demo requires no workspace discovery: retain the exact source and QASM paths

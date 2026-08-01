@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from hashlib import sha256
@@ -122,6 +123,53 @@ def _exact_path(
     return path, external
 
 
+def registration_continuation_binding(
+    *,
+    candidates: Sequence[Mapping[str, Any]],
+    workspace_root: Path,
+) -> dict[str, Any]:
+    """Seal exact same-action inputs without creating a registration effect."""
+
+    if not candidates:
+        raise CurrentLoopError("selected_artifact_set_invalid")
+    roles_seen: set[str] = set()
+    items: list[dict[str, Any]] = []
+    for candidate in candidates:
+        role = candidate.get("role")
+        if role not in LOGICAL_ROLES or role in roles_seen:
+            raise CurrentLoopError("artifact_candidate_role_invalid")
+        roles_seen.add(str(role))
+        path, external = _exact_path(candidate, workspace_root=workspace_root)
+        raw = path.read_bytes()
+        if len(raw) > MAX_LOCAL_FILE_BYTES:
+            raise CurrentLoopError("artifact_candidate_file_too_large")
+        items.append(
+            {
+                "role": str(role),
+                "exact_path": str(path),
+                "path_digest": sha256(str(path).encode()).hexdigest(),
+                "content_digest": sha256(raw).hexdigest(),
+                "size_bytes": len(raw),
+                "detected_format": detect_exact_artifact_format(path, str(role)),
+                "event_disposition": _event_disposition(candidate),
+                "external": external,
+                "destination": "active_loop_canonical_evidence_registry",
+            }
+        )
+    items.sort(key=lambda item: item["role"])
+    result = {
+        "artifact_set": items,
+        "artifact_count": len(items),
+        "requested_destination": "active_loop_canonical_evidence_registry",
+        "directory_scan_performed": False,
+        "git_discovery_performed": False,
+        "glob_performed": False,
+        "watcher_active": False,
+    }
+    result["binding_digest"] = _canonical_digest(result)
+    return result
+
+
 def prepare_registration_transaction(
     *,
     state: Mapping[str, Any],
@@ -131,6 +179,7 @@ def prepare_registration_transaction(
     authorization_source: str,
     enrollment_authority: str,
     collect_permitted_roles: Sequence[str],
+    current_time: float | None = None,
 ) -> dict[str, Any]:
     """Validate every exact candidate with no durable success effects."""
 
@@ -157,6 +206,7 @@ def prepare_registration_transaction(
     roles_seen: set[str] = set()
     prepared: list[dict[str, Any]] = []
     format_outcomes: list[dict[str, Any]] = []
+    validation_time = time.monotonic() if current_time is None else current_time
     for candidate in candidates:
         role = candidate.get("role")
         if role not in LOGICAL_ROLES or role in roles_seen:
@@ -208,6 +258,7 @@ def prepare_registration_transaction(
                 current_contract_revision=int(state["current_loop_contract"]["contract_revision"]),
                 role=str(role),
                 detected_format=detected_format,
+                current_time=validation_time,
             )
         path_digest = sha256(str(path).encode()).hexdigest()
         revision_id = (
@@ -324,6 +375,20 @@ def commit_registration_transaction(
     receipt = (
         state.get("operation_receipts", {}).get(receipt_id) if isinstance(receipt_id, str) else None
     )
+    causal_rebind = transaction.get("causal_receipt_rebind")
+    receipt_for_consumption = receipt
+    if isinstance(causal_rebind, Mapping):
+        rebound = causal_rebind.get("rebound_receipt")
+        if (
+            not isinstance(receipt, Mapping)
+            or not isinstance(rebound, Mapping)
+            or receipt.get("status") != "issued"
+            or receipt.get("receipt_digest")
+            != causal_rebind.get("original_receipt_digest")
+            or rebound.get("receipt_id") != receipt_id
+        ):
+            raise CurrentLoopError("operation_receipt_replay_rejected")
+        receipt_for_consumption = rebound
     registered = [
         item["revision"]
         for item in transaction["prepared_revisions"]
@@ -346,9 +411,9 @@ def commit_registration_transaction(
     ]
     consumed = None
     activity = None
-    if isinstance(receipt, Mapping):
+    if isinstance(receipt_for_consumption, Mapping):
         consumed, activity = consume_operation_receipt(
-            receipt,
+            receipt_for_consumption,
             registered_artifacts=activity_items,
             consumed_state_revision=expected + 1,
         )
@@ -502,7 +567,15 @@ def commit_registration_transaction(
                 value["latest_assistant_context_update"] = deepcopy(pending_context_update)
         if isinstance(receipt_id, str):
             current = value["operation_receipts"].get(receipt_id)
-            if not isinstance(current, Mapping) or current.get("status") != "issued":
+            if (
+                not isinstance(current, Mapping)
+                or current.get("status") != "issued"
+                or (
+                    isinstance(causal_rebind, Mapping)
+                    and current.get("receipt_digest")
+                    != causal_rebind.get("original_receipt_digest")
+                )
+            ):
                 raise CurrentLoopError("operation_receipt_replay_rejected")
             value["operation_receipts"][receipt_id] = deepcopy(consumed)
         value["activity_receipts"].append(deepcopy(activity))
@@ -542,6 +615,8 @@ def registration_contract_snapshot() -> dict[str, Any]:
         "legacy_provenance_is_boundary_only": True,
         "persisted_bare_provenance_field": False,
         "receipt_consumed_only_in_atomic_commit": True,
+        "causal_rebind_issued_state_persisted_before_commit": False,
+        "causal_rebind_consumed_with_registration_in_same_commit": True,
         "successful_activity_only_in_atomic_commit": True,
         "directory_discovery_permitted": False,
         "git_discovery_permitted": False,

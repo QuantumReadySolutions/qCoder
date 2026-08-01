@@ -1,11 +1,29 @@
 # Changelog
 
+## 0.6.0a5
+
+- Carry forward the corrected public distribution metadata from `0.6.0a4`, the unpublished
+  superseded metadata-correction candidate, and add bounded first-build receipt hardening.
+- Make ordinary status, contract status, help, bounded-control, contract-review, no-op contract,
+  and evidence projections revision-neutral while preserving genuine derivation-resume mutations.
+- Issue each operation receipt and its final coordinator state in one compare-and-swap commit,
+  bind the receipt to the final post-commit revision, enforce exact revision and time expiry, and
+  retain atomic single-use registration and replay rejection.
+- Allow one machine-directed causal continuation for the exact same already-authorized artifact
+  registration when only internal receipt freshness changed; any material authority, artifact,
+  path, destination, workspace, phase, checkpoint, execution, or exposure change blocks it.
+- Advance the connected-assistant binding from v16 to v17 for those machine semantics while
+  preserving exactly twelve tools and adding no product capability, tier, entitlement, tool,
+  authority category, client qualification, Account interface, or Protected operation.
+
 ## 0.6.0a4
 
 - Correct package-facing publication status, customer terminology, client qualification copy,
   and installation identity after `0.6.0a3` was published with stale distribution metadata.
 - Preserve the exact `0.6.0a3` runtime behavior, schemas, binding v16, twelve-tool inventory,
   dependencies, privacy boundaries, and client/workstyle boundaries.
+- This was an unpublished superseded metadata-correction candidate; it was never the published
+  replacement for `0.6.0a3`.
 
 ## 0.6.0a3
 
@@ -32,9 +50,11 @@
   into a future loop. qCoder does not scan or watch repositories, and sampled counts do not by
   themselves prove correctness or entanglement. Missing execution settings are not inferred.
 
-The exact tested `0.6.0a3` artifacts were published, but their public description retained stale
-release-candidate wording. Version `0.6.0a4` supersedes that package with metadata-only corrections;
-the `0.6.0a3` package bytes remain the runtime-valid artifacts that were published.
+The exact tested `0.6.0a3` artifacts were published and their runtime bytes were valid, but their
+immutable public distribution metadata was inaccurate and retained stale release-candidate
+wording. Version `0.6.0a4` was an unpublished superseded metadata-correction candidate. Version
+`0.6.0a5` carries the metadata-only corrections plus the bounded receipt hardening above; the
+`0.6.0a3` package bytes remain the runtime-valid artifacts that were published.
 
 ## 0.6.0a2+wi0419.explorercontract1binding1
 

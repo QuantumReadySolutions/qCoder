@@ -627,7 +627,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("bd26ac196bf52b13eb75df9cace2c6597f5f90d9031cd57beed6792615d395ab")
+    assert contract_digest == ("b876bd6398f7ae8356379e3da23457c95253e64cfaad6cb942ad802e5aafd243")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
@@ -638,10 +638,11 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "artifact_candidate_provenance_conflict",
         "artifact_format_unsupported",
         "authorization_declined",
-        "authorization_partial",
-        "canonical_artifact_modified",
-        "canonical_parent_set_incomplete",
-        "circuit_format_unsupported",
+            "authorization_partial",
+            "canonical_artifact_modified",
+            "canonical_parent_set_incomplete",
+            "causal_continuation_blocked",
+            "circuit_format_unsupported",
         "client_state_conflict",
         "contract_adjustment_value_invalid",
         "contract_broadening_proposal_stale",
@@ -909,7 +910,9 @@ def test_awaiting_local_artifacts_protocol_is_actionable_and_restarts(
     assert status["next_invocation"]["subcommand"] == authority["next_invocation"]["subcommand"]
     assert (
         status["next_invocation"]["operation_specific_invocation"]["state_binding"]["revision"]
-        > authority["next_invocation"]["operation_specific_invocation"]["state_binding"]["revision"]
+        == authority["next_invocation"]["operation_specific_invocation"]["state_binding"][
+            "revision"
+        ]
     )
     assert (
         status["next_invocation"]["operation_specific_invocation"]["transport_classification"]
@@ -2487,7 +2490,7 @@ def test_current_loop_cli_executes_both_generation_paths(
     assert guided["checkpoint_kind"] == "ide_write_or_run"
 
 
-def test_performance_counts_public_coordinator_operations_not_state_writes(
+def test_pure_read_performance_is_ephemeral_not_authoritative_state(
     tmp_path: Path,
 ) -> None:
     coordinator, _workspace = _coordinator(tmp_path, PublicBuilderTransport())
@@ -2500,7 +2503,8 @@ def test_performance_counts_public_coordinator_operations_not_state_writes(
     assert coordinator.private_performance_snapshot()["coordinator_calls"] == 1
     status = coordinator.status()
     assert status["ok"] is True
-    assert coordinator.private_performance_snapshot()["coordinator_calls"] == 2
+    assert coordinator.private_performance_snapshot()["coordinator_calls"] == 1
+    assert status["performance_diagnostics"]["persisted"] is False
 
 
 def test_abandon_without_authority_does_not_advance_or_complete_loop(

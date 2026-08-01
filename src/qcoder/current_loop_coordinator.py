@@ -149,12 +149,13 @@ from qcoder.current_loop_event_receipts import (
     consume_operation_receipt,
     event_receipt_snapshot,
     issue_operation_receipt,
-    supersede_operation_receipt,
+    rebind_operation_receipt_for_causal_continuation,
     validate_operation_receipt,
 )
 from qcoder.current_loop_registration import (
     commit_registration_transaction,
     prepare_registration_transaction,
+    registration_continuation_binding,
     registration_contract_snapshot,
 )
 from qcoder.current_loop_derivation import (
@@ -246,8 +247,8 @@ OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
     }
 )
 COORDINATOR_STATE_SCHEMA_VERSION = 13
-RECOVERY_SCHEMA_ID = "qcoder.current_loop.recovery.v4"
-RECOVERY_SCHEMA_VERSION = 4
+RECOVERY_SCHEMA_ID = "qcoder.current_loop.recovery.v5"
+RECOVERY_SCHEMA_VERSION = 5
 CONSEQUENCE_PROJECTION_SCHEMA_ID = "qcoder.current_loop.consequence_projection.v1"
 PERFORMANCE_SCHEMA_ID = "qcoder.current_loop.private_performance.v1"
 INPUT_SOURCE_DISPOSITION_SCHEMA_ID = "qcoder.current_loop.permitted_input_source_disposition.v1"
@@ -325,6 +326,18 @@ SAFE_TYPED_CURRENT_LOOP_CATEGORIES = frozenset(
         "checkpoint_input_replay",
         "checkpoint_input_state_revision_stale",
         "checkpoint_input_text_control_invalid",
+        "operation_receipt_clock_invalid",
+        "operation_receipt_contract_stale",
+        "operation_receipt_digest_mismatch",
+        "operation_receipt_expired",
+        "operation_receipt_expiry_invalid",
+        "operation_receipt_format_not_authorized",
+        "operation_receipt_invalid",
+        "operation_receipt_replay_rejected",
+        "operation_receipt_revision_invalid",
+        "operation_receipt_role_not_authorized",
+        "operation_receipt_workspace_mismatch",
+        "operation_receipt_loop_mismatch",
     }
 )
 
@@ -653,6 +666,15 @@ _RECOVERY = {
         "fallback is required while the original IDE authority remains trustworthy.",
         True,
         False,
+        True,
+        False,
+    ),
+    "causal_continuation_blocked": (
+        "The one bounded continuation attempt was stopped because the authorized action no "
+        "longer matched current authoritative state.",
+        "Review the material change before requesting any new action-specific authority.",
+        False,
+        True,
         True,
         False,
     ),
@@ -1412,6 +1434,7 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
                 "refresh_revision",
                 "bounded_alternative",
                 "rebind_event_receipt",
+                "causal_continuation",
                 "skip",
                 "abandon_step",
                 "stop_loop",
@@ -1937,6 +1960,7 @@ _ACTION_INPUT_SOURCE_CATEGORIES = {
     ),
     "stop_and_present_checkpoint": ("authority_only_approval",),
     "refresh_bounded_recovery": ("qcoder_managed_canonical_reference",),
+    "continue_same_authorized_registration": ("qcoder_managed_canonical_reference",),
     "return_to_iteration_ready": ("qcoder_managed_canonical_reference",),
 }
 
@@ -1970,6 +1994,9 @@ def _default_permitted_input_source(action: str) -> str:
         ),
         "stop_and_present_checkpoint": "explicit_user_checkpoint_authority",
         "refresh_bounded_recovery": "fresh_qcoder_coordinator_result",
+        "continue_same_authorized_registration": (
+            "current_qcoder_owned_same_action_recovery_reference"
+        ),
         "return_to_iteration_ready": "current_qcoder_owned_recovery_reference",
     }
     source = defaults.get(action)
@@ -2336,6 +2363,7 @@ class CurrentLoopCoordinator:
                 if isinstance(active_recovery, Mapping)
                 else None
             ),
+            persist_performance=resumed_pending_derivation,
         )
 
     def stage_checkpoint_input(
@@ -3799,6 +3827,7 @@ class CurrentLoopCoordinator:
                     "raw_policy_editing_permitted": False,
                     "yaml_authoritative": False,
                 },
+                persist_performance=False,
             )
         except (CurrentLoopError, CurrentLoopContractError, ContractManagementError) as exc:
             return self._exception_result("contract_status", exc, started)
@@ -3848,6 +3877,7 @@ class CurrentLoopCoordinator:
                     "browser_or_ide_classified_change": False,
                     "qcoder_service_classified_change": True,
                 },
+                persist_performance=False,
             )
         except ContractManagementError as exc:
             try:
@@ -3900,6 +3930,7 @@ class CurrentLoopCoordinator:
                 "state_mutated": False,
                 "raw_document_echoed": False,
             },
+            persist_performance=False,
         )
         controls = result["bounded_contract_controls"]
         alternatives = [
@@ -4030,6 +4061,7 @@ class CurrentLoopCoordinator:
                     "raw_json_retransmission_required": False,
                     "same_management_service_as_browser": True,
                 },
+                persist_performance=changed,
             )
         except (CurrentLoopError, CurrentLoopConflict, CurrentLoopContractError) as exc:
             return self._exception_result("contract_apply_customer_document", exc, started)
@@ -4836,6 +4868,7 @@ class CurrentLoopCoordinator:
         destination: str = "connected_assistant",
     ) -> dict[str, Any]:
         started = self.clock()
+        resumed_pending_derivation = False
         try:
             if view_id not in EVIDENCE_VIEW_IDS:
                 return self._bounded_control_rejection(
@@ -4851,6 +4884,7 @@ class CurrentLoopCoordinator:
                 and state["current_loop_contract"].get("effective_preset") != "assist"
             ):
                 state = self._prepare_run_summary_on_request(state)
+                resumed_pending_derivation = True
             all_summaries = {
                 reference: read_run_summary(descriptor)
                 for reference, descriptor in state.get("run_summary_index", {}).items()
@@ -4972,6 +5006,7 @@ class CurrentLoopCoordinator:
                     "arbitrary_query_text_accepted": False,
                     "project_file_discovery_performed": False,
                 },
+                persist_performance=resumed_pending_derivation,
             )
         except (
             CurrentLoopError,
@@ -5783,42 +5818,8 @@ class CurrentLoopCoordinator:
             )
             if quiet_iteration and exact_iteration_instruction is None:
                 raise CurrentLoopError("ordinary_iteration_instruction_required")
-            iteration_receipt = (
-                iteration_authority_receipt(
-                    exact_instruction=exact_iteration_instruction,
-                    loop_ref=str(state["loop_ref"]),
-                    workspace_binding=str(state["workspace_root"]),
-                    state_revision=int(state["state_revision"]),
-                    contract_revision=int(state["current_loop_contract"]["contract_revision"]),
-                    action_category=operation_category,
-                )
-                if quiet_iteration and exact_iteration_instruction is not None
-                else None
-            )
-            receipt = issue_operation_receipt(
-                loop_ref=str(state["loop_ref"]),
-                workspace_binding=str(state["workspace_root"]),
-                state_revision=int(state["state_revision"]),
-                contract_revision=int(state["current_loop_contract"]["contract_revision"]),
-                operation_category=operation_category,
-                output_role_ceiling=output_role_ceiling,
-            )
-
-            def receipt_mutator(value: dict[str, Any]) -> Mapping[str, Any]:
-                value["operation_receipts"][receipt["receipt_id"]] = receipt
-                if iteration_receipt is not None:
-                    value["iteration_authority_receipts"].append(deepcopy(iteration_receipt))
-                    value["iteration_authority_receipts"] = value["iteration_authority_receipts"][
-                        -32:
-                    ]
-                    value["latest_iteration_authority_receipt"] = deepcopy(iteration_receipt)
-                return value
-
-            state = self.store.update(
-                receipt_mutator,
-                expected_revision=int(state["state_revision"]),
-            )
-            coordinator = self._coordinator_state(state)
+            expected_revision = int(state["state_revision"])
+            final_revision = expected_revision + 1
             coordinator.update(
                 {
                     "phase": "awaiting_local_artifacts",
@@ -5835,11 +5836,102 @@ class CurrentLoopCoordinator:
             coordinator["authority_separation"]["ide_write_or_run"] = (
                 "action_specific_native_permission_recorded_by_qcoder"
             )
-            self._replace_coordinator(coordinator)
+            committed_receipt_id: str | None = None
+            committed_iteration_receipt: dict[str, Any] | None = None
+
+            def issue_authority(value: dict[str, Any]) -> Mapping[str, Any]:
+                nonlocal committed_receipt_id, committed_iteration_receipt
+                issued = issue_operation_receipt(
+                    loop_ref=str(value["loop_ref"]),
+                    workspace_binding=str(value["workspace_root"]),
+                    state_revision=final_revision,
+                    contract_revision=int(value["current_loop_contract"]["contract_revision"]),
+                    operation_category=operation_category,
+                    output_role_ceiling=output_role_ceiling,
+                    issued_at=self.clock(),
+                    authority_binding={
+                        "schema_id": "qcoder.current_loop.operation_authority_binding.v1",
+                        "phase": coordinator["phase"],
+                        "checkpoint_kind": coordinator["checkpoint_kind"],
+                        "effective_contract_digest": value["current_loop_contract"].get(
+                            "effective_policy_digest"
+                        ),
+                        "requested_operation": operation_category,
+                        "requested_destination": "active_loop_canonical_evidence_registry",
+                        "execution_requested": operation_category == "ide_execute",
+                        "hosted_activity_requested": False,
+                        "raw_exposure_requested": False,
+                    },
+                )
+                committed_receipt_id = str(issued["receipt_id"])
+                value["operation_receipts"][committed_receipt_id] = deepcopy(issued)
+                if quiet_iteration and exact_iteration_instruction is not None:
+                    committed_iteration_receipt = iteration_authority_receipt(
+                        exact_instruction=exact_iteration_instruction,
+                        loop_ref=str(value["loop_ref"]),
+                        workspace_binding=str(value["workspace_root"]),
+                        state_revision=final_revision,
+                        contract_revision=int(
+                            value["current_loop_contract"]["contract_revision"]
+                        ),
+                        action_category=operation_category,
+                    )
+                    value["iteration_authority_receipts"].append(
+                        deepcopy(committed_iteration_receipt)
+                    )
+                    value["iteration_authority_receipts"] = value[
+                        "iteration_authority_receipts"
+                    ][-32:]
+                    value["latest_iteration_authority_receipt"] = deepcopy(
+                        committed_iteration_receipt
+                    )
+                coordinator["performance"]["coordinator_calls"] += 1
+                coordinator["performance"]["coordinator_seconds"] += max(
+                    0.0, self.clock() - started
+                )
+                pending = coordinator.get("pending_checkpoint_input")
+                if isinstance(pending, dict) and pending.get("status") == "pending":
+                    pending["expected_state_revision"] = final_revision
+                value["coordinator"] = deepcopy(coordinator)
+                value["next_operation"] = (
+                    _PHASE_TRANSITIONS[coordinator["phase"]][0]
+                    if _PHASE_TRANSITIONS[coordinator["phase"]]
+                    else None
+                )
+                return value
+
+            try:
+                state = self.store.update(issue_authority, expected_revision=expected_revision)
+            except OSError as exc:
+                # An atomic replace can become visible before a later durability or
+                # permission syscall reports failure. Reconcile that one ambiguous
+                # boundary: return the fully committed receipt when it is observable,
+                # and otherwise fail without inventing or repairing authority.
+                observed = self.store.read()
+                observed_receipt = (
+                    observed.get("operation_receipts", {}).get(committed_receipt_id)
+                    if committed_receipt_id is not None
+                    else None
+                )
+                if (
+                    not isinstance(observed_receipt, Mapping)
+                    or observed.get("state_revision") != final_revision
+                    or observed_receipt.get("issued_state_revision") != final_revision
+                    or observed_receipt.get("status") != "issued"
+                ):
+                    raise CurrentLoopError(
+                        "operation_receipt_issuance_incomplete"
+                    ) from exc
+                state = observed
+            if state["state_revision"] != final_revision or committed_receipt_id is None:
+                raise CurrentLoopError("operation_receipt_issuance_incomplete")
+            receipt = deepcopy(state["operation_receipts"][committed_receipt_id])
+            if receipt.get("issued_state_revision") != state["state_revision"]:
+                raise CurrentLoopError("operation_receipt_revision_invalid")
             return self._result(
                 operation="record_ide_authority",
                 ok=True,
-                state=self.store.read(),
+                state=state,
                 summary=coordinator["customer_summary"],
                 elapsed=self.clock() - started,
                 details={
@@ -5862,22 +5954,39 @@ class CurrentLoopCoordinator:
                     "candidate_discovery_permitted": False,
                     "qcoder_local_state_access_permitted": False,
                     "operation_receipt": deepcopy(receipt),
-                    "iteration_authority_receipt": deepcopy(iteration_receipt),
+                    "iteration_authority_receipt": deepcopy(committed_iteration_receipt),
                     "ordinary_iteration": quiet_iteration,
                     "exact_iteration_instruction_provenance": (
-                        "user_stated" if iteration_receipt is not None else None
+                        "user_stated" if committed_iteration_receipt is not None else None
                     ),
-                    "build_review_implicitly_deferred": (iteration_receipt is not None),
+                    "build_review_implicitly_deferred": (
+                        committed_iteration_receipt is not None
+                    ),
                     "governing_blueprint_unchanged": True,
                     "continuation_artifact_created": False,
                 },
+                persist_performance=False,
             )
-        except (
-            CurrentLoopError,
-            CurrentLoopConflict,
-            EventReceiptError,
-            ValueError,
-        ) as exc:
+        except CurrentLoopConflict:
+            current = self.store.read()
+            return self._result(
+                operation="record_ide_authority",
+                ok=False,
+                category="client_state_conflict",
+                state=current,
+                summary=(
+                    "Another authoritative update won the issuance race. No receipt was "
+                    "returned for this attempt."
+                ),
+                elapsed=self.clock() - started,
+                details={
+                    "operation_receipt_returned": False,
+                    "partial_receipt_persisted": False,
+                    "concurrent_update_overwritten": False,
+                },
+                persist_performance=False,
+            )
+        except (CurrentLoopError, EventReceiptError, ValueError) as exc:
             return self._exception_result("record_ide_authority", exc, started)
 
     def register_artifacts(
@@ -5927,44 +6036,174 @@ class CurrentLoopCoordinator:
                         authorization_source="operation_receipt",
                         enrollment_authority="current_loop_contract_assist",
                         collect_permitted_roles=permitted_roles,
+                        current_time=self.clock(),
                     )
                     registration = commit_registration_transaction(
                         store=self.store,
                         transaction=transaction,
                     )
+                except CurrentLoopConflict:
+                    current = self.store.read()
+                    current_receipt = current.get("operation_receipts", {}).get(
+                        operation_receipt_id
+                    )
+                    replayed = (
+                        isinstance(current_receipt, Mapping)
+                        and current_receipt.get("status") != "issued"
+                    )
+                    return self._result(
+                        operation="register_artifacts",
+                        ok=False,
+                        category=(
+                            "operation_receipt_replay_rejected"
+                            if replayed
+                            else "client_state_conflict"
+                        ),
+                        state=current,
+                        summary=(
+                            "The operation receipt was already consumed by a competing "
+                            "registration."
+                            if replayed
+                            else "Another authoritative update won the registration race."
+                        ),
+                        elapsed=self.clock() - started,
+                        details={
+                            "operation_receipt_consumed_by_this_attempt": False,
+                            "canonical_registration_changed_by_this_attempt": False,
+                            "competing_update_overwritten": False,
+                        },
+                        persist_performance=False,
+                    )
                 except (
                     CurrentLoopError,
-                    CurrentLoopConflict,
                     EventReceiptError,
                     EvidenceProcessingError,
                     OSError,
                     ValueError,
                 ) as exc:
+                    error_category = str(
+                        getattr(exc, "category", "unknown_local_internal")
+                    )
+                    receipt_recovery_context: dict[str, Any] = {
+                        "operation_receipt_id": operation_receipt_id,
+                        "candidates": [
+                            {
+                                key: deepcopy(item.get(key))
+                                for key in (
+                                    "path",
+                                    "role",
+                                    "artifact_type",
+                                    "provenance",
+                                    "event_disposition",
+                                    "explicit_external",
+                                    "related_circuit_ref",
+                                )
+                                if item.get(key) is not None
+                            }
+                            for item in normalized
+                        ],
+                        "causal_continuation_eligible": False,
+                    }
+                    original_receipt = state.get("operation_receipts", {}).get(
+                        operation_receipt_id
+                    )
+                    authority_binding = (
+                        original_receipt.get("authority_binding")
+                        if isinstance(original_receipt, Mapping)
+                        else None
+                    )
+                    current_coordinator = self._coordinator_state(state)
+                    causal_base_unchanged = bool(
+                        error_category == "operation_receipt_stale"
+                        and isinstance(original_receipt, Mapping)
+                        and isinstance(authority_binding, Mapping)
+                        and original_receipt.get("status") == "issued"
+                        and original_receipt.get("loop_ref") == state.get("loop_ref")
+                        and original_receipt.get("workspace_binding")
+                        == state.get("workspace_root")
+                        and original_receipt.get("issued_contract_revision")
+                        == state["current_loop_contract"].get("contract_revision")
+                        and authority_binding.get("effective_contract_digest")
+                        == state["current_loop_contract"].get("effective_policy_digest")
+                        and authority_binding.get("phase")
+                        == current_coordinator.get("phase")
+                        and authority_binding.get("checkpoint_kind")
+                        == current_coordinator.get("checkpoint_kind")
+                    )
+                    if causal_base_unchanged:
+                        exact_binding = registration_continuation_binding(
+                            candidates=normalized,
+                            workspace_root=self.workspace_root,
+                        )
+                        causal_binding = {
+                            "schema_id": (
+                                "qcoder.current_loop.registration_causal_continuation.v1"
+                            ),
+                            "active_loop": state["loop_ref"],
+                            "workspace_binding": state["workspace_root"],
+                            "artifact_binding": exact_binding,
+                            "operation": original_receipt.get("operation_category"),
+                            "role_ceiling": deepcopy(
+                                original_receipt.get("authorized_output_role_ceiling")
+                            ),
+                            "format_ceiling": deepcopy(
+                                original_receipt.get("authorized_output_format_ceiling")
+                            ),
+                            "contract_revision": state["current_loop_contract"][
+                                "contract_revision"
+                            ],
+                            "effective_contract_digest": state["current_loop_contract"].get(
+                                "effective_policy_digest"
+                            ),
+                            "originating_phase": (
+                                authority_binding.get("phase")
+                                if isinstance(authority_binding, Mapping)
+                                else None
+                            ),
+                            "originating_checkpoint": (
+                                authority_binding.get("checkpoint_kind")
+                                if isinstance(authority_binding, Mapping)
+                                else None
+                            ),
+                            "requested_destination": (
+                                "active_loop_canonical_evidence_registry"
+                            ),
+                            "execution_requested": (
+                                original_receipt.get("operation_category") == "ide_execute"
+                            ),
+                            "hosted_activity_requested": False,
+                            "raw_exposure_requested": False,
+                            "native_permission_already_recorded": True,
+                        }
+                        causal_binding["binding_digest"] = sha256(
+                            json.dumps(
+                                causal_binding,
+                                ensure_ascii=True,
+                                separators=(",", ":"),
+                                sort_keys=True,
+                            ).encode()
+                        ).hexdigest()
+                        receipt_recovery_context.update(
+                            {
+                                "original_receipt_digest": original_receipt.get(
+                                    "receipt_digest"
+                                ),
+                                "causal_action_binding": causal_binding,
+                                "causal_continuation_eligible": True,
+                                "continuation_attempted": False,
+                            }
+                        )
                     raise CurrentLoopError(
-                        str(getattr(exc, "category", "unknown_local_internal")),
+                        error_category,
                         safe_details={
-                            "receipt_recovery_context": {
-                                "operation_receipt_id": operation_receipt_id,
-                                "candidates": [
-                                    {
-                                        key: deepcopy(item.get(key))
-                                        for key in (
-                                            "path",
-                                            "role",
-                                            "artifact_type",
-                                            "provenance",
-                                            "event_disposition",
-                                            "explicit_external",
-                                            "related_circuit_ref",
-                                        )
-                                        if item.get(key) is not None
-                                    }
-                                    for item in normalized
-                                ],
-                            },
+                            "receipt_recovery_context": receipt_recovery_context,
                             "input_digests": [
-                                sha256(str(item["path"]).encode()).hexdigest()
-                                for item in normalized
+                                str(item["content_digest"])
+                                for item in receipt_recovery_context.get(
+                                    "causal_action_binding", {}
+                                )
+                                .get("artifact_binding", {})
+                                .get("artifact_set", [])
                             ],
                             "operation_receipt_status": "issued",
                             "successful_activity_receipt_appended": False,
@@ -6100,6 +6339,7 @@ class CurrentLoopCoordinator:
                         current_state_revision=int(state["state_revision"]),
                         role=str(item["role"]),
                         detected_format=str(item["detected_format"]),
+                        current_time=self.clock(),
                     )
                     if not contract_permits(
                         state["current_loop_contract"],
@@ -7369,61 +7609,168 @@ class CurrentLoopCoordinator:
             recovery_registration_details: dict[str, Any] | None = None
             if action == "retry_registration":
                 context = active.get("receipt_recovery_context")
-                if not isinstance(context, Mapping):
-                    raise EvidenceProcessingError(
-                        "recovery_receipt_context_unavailable",
-                        origin="contract_or_authority",
-                    )
-                original_id = context.get("operation_receipt_id")
-                original = state.get("operation_receipts", {}).get(original_id)
-                candidates = context.get("candidates")
-                if not isinstance(original, Mapping) or original.get("status") != "issued":
-                    raise EvidenceProcessingError(
-                        "recovery_receipt_authority_unavailable",
-                        origin="contract_or_authority",
-                    )
-                if not isinstance(candidates, list) or not candidates:
-                    raise EvidenceProcessingError(
-                        "recovery_candidate_context_unavailable",
-                        origin="contract_or_authority",
-                    )
-                successor = issue_operation_receipt(
-                    loop_ref=str(state["loop_ref"]),
-                    workspace_binding=str(state["workspace_root"]),
-                    state_revision=int(state["state_revision"]) + 1,
-                    contract_revision=int(state["current_loop_contract"]["contract_revision"]),
-                    operation_category=str(original["operation_category"]),
-                    output_role_ceiling=list(original["authorized_output_role_ceiling"]),
-                )
-                superseded = supersede_operation_receipt(
-                    original,
-                    successor_receipt_id=str(successor["receipt_id"]),
-                    superseded_state_revision=int(state["state_revision"]) + 1,
-                )
+                try:
+                    if (
+                        not isinstance(context, Mapping)
+                        or context.get("causal_continuation_eligible") is not True
+                        or context.get("continuation_attempted") is True
+                    ):
+                        raise CurrentLoopError("causal_continuation_context_invalid")
+                    expected_action = context.get("causal_action_binding")
+                    candidates = context.get("candidates")
+                    if not isinstance(expected_action, Mapping):
+                        raise CurrentLoopError("causal_continuation_context_invalid")
+                    if not isinstance(candidates, list) or not candidates:
+                        raise CurrentLoopError("causal_continuation_context_invalid")
+                    if (
+                        coordinator.get("phase") != expected_action.get("originating_phase")
+                        or coordinator.get("checkpoint_kind") != "privacy_or_trust"
+                    ):
+                        raise CurrentLoopError("causal_continuation_phase_changed")
 
-                def rebind_receipt(value: dict[str, Any]) -> Mapping[str, Any]:
-                    value["operation_receipts"][str(original_id)] = deepcopy(superseded)
-                    value["operation_receipts"][str(successor["receipt_id"])] = deepcopy(successor)
-                    return value
+                    def mark_continuation_attempt(value: dict[str, Any]) -> Mapping[str, Any]:
+                        current_coordinator = value.get("coordinator")
+                        current_active = (
+                            current_coordinator.get("active_recovery")
+                            if isinstance(current_coordinator, Mapping)
+                            else None
+                        )
+                        current_context = (
+                            current_active.get("receipt_recovery_context")
+                            if isinstance(current_active, Mapping)
+                            else None
+                        )
+                        if (
+                            not isinstance(current_coordinator, dict)
+                            or not isinstance(current_active, dict)
+                            or current_active.get("reference") != recovery_reference
+                            or not isinstance(current_context, dict)
+                            or current_context.get("continuation_attempted") is True
+                        ):
+                            raise CurrentLoopError("causal_continuation_already_attempted")
+                        current_context["continuation_attempted"] = True
+                        current_context["continuation_attempt_limit"] = 1
+                        return value
 
-                state = self.store.update(
-                    rebind_receipt,
-                    expected_revision=int(state["state_revision"]),
-                )
-                permitted_roles = [str(item["role"]) for item in candidates]
-                transaction = prepare_registration_transaction(
-                    state=state,
-                    candidates=[deepcopy(dict(item)) for item in candidates],
-                    workspace_root=self.workspace_root,
-                    operation_receipt_id=str(successor["receipt_id"]),
-                    authorization_source="operation_receipt",
-                    enrollment_authority="current_loop_contract_assist",
-                    collect_permitted_roles=permitted_roles,
-                )
-                registration = commit_registration_transaction(
-                    store=self.store,
-                    transaction=transaction,
-                )
+                    state = self.store.update(
+                        mark_continuation_attempt,
+                        expected_revision=int(state["state_revision"]),
+                    )
+                    coordinator = self._coordinator_state(state)
+                    active = coordinator.get("active_recovery")
+                    context = (
+                        active.get("receipt_recovery_context")
+                        if isinstance(active, Mapping)
+                        else None
+                    )
+                    if not isinstance(context, Mapping):
+                        raise CurrentLoopError("causal_continuation_context_invalid")
+                    original_id = context.get("operation_receipt_id")
+                    original = state.get("operation_receipts", {}).get(original_id)
+                    if (
+                        not isinstance(original, Mapping)
+                        or original.get("status") != "issued"
+                        or original.get("receipt_digest")
+                        != context.get("original_receipt_digest")
+                    ):
+                        raise CurrentLoopError("causal_continuation_authority_changed")
+                    exact_binding = registration_continuation_binding(
+                        candidates=[deepcopy(dict(item)) for item in candidates],
+                        workspace_root=self.workspace_root,
+                    )
+                    authority_binding = original.get("authority_binding")
+                    current_action = {
+                        "schema_id": "qcoder.current_loop.registration_causal_continuation.v1",
+                        "active_loop": state["loop_ref"],
+                        "workspace_binding": state["workspace_root"],
+                        "artifact_binding": exact_binding,
+                        "operation": original.get("operation_category"),
+                        "role_ceiling": deepcopy(
+                            original.get("authorized_output_role_ceiling")
+                        ),
+                        "format_ceiling": deepcopy(
+                            original.get("authorized_output_format_ceiling")
+                        ),
+                        "contract_revision": state["current_loop_contract"][
+                            "contract_revision"
+                        ],
+                        "effective_contract_digest": state["current_loop_contract"].get(
+                            "effective_policy_digest"
+                        ),
+                        "originating_phase": (
+                            authority_binding.get("phase")
+                            if isinstance(authority_binding, Mapping)
+                            else None
+                        ),
+                        "originating_checkpoint": (
+                            authority_binding.get("checkpoint_kind")
+                            if isinstance(authority_binding, Mapping)
+                            else None
+                        ),
+                        "requested_destination": (
+                            "active_loop_canonical_evidence_registry"
+                        ),
+                        "execution_requested": (
+                            original.get("operation_category") == "ide_execute"
+                        ),
+                        "hosted_activity_requested": False,
+                        "raw_exposure_requested": False,
+                        "native_permission_already_recorded": True,
+                    }
+                    current_action["binding_digest"] = sha256(
+                        json.dumps(
+                            current_action,
+                            ensure_ascii=True,
+                            separators=(",", ":"),
+                            sort_keys=True,
+                        ).encode()
+                    ).hexdigest()
+                    if current_action != expected_action:
+                        raise CurrentLoopError("causal_continuation_material_change")
+                    continuation_time = self.clock()
+                    rebound = rebind_operation_receipt_for_causal_continuation(
+                        original,
+                        current_state_revision=int(state["state_revision"]),
+                        current_time=continuation_time,
+                    )
+                    synthetic_state = deepcopy(state)
+                    synthetic_state["operation_receipts"][str(original_id)] = deepcopy(rebound)
+                    permitted_roles = [str(item["role"]) for item in candidates]
+                    transaction = prepare_registration_transaction(
+                        state=synthetic_state,
+                        candidates=[deepcopy(dict(item)) for item in candidates],
+                        workspace_root=self.workspace_root,
+                        operation_receipt_id=str(original_id),
+                        authorization_source="operation_receipt",
+                        enrollment_authority="current_loop_contract_assist",
+                        collect_permitted_roles=permitted_roles,
+                        current_time=continuation_time,
+                    )
+                    transaction["causal_receipt_rebind"] = {
+                        "original_receipt_digest": original["receipt_digest"],
+                        "rebound_receipt": deepcopy(rebound),
+                    }
+                    registration = commit_registration_transaction(
+                        store=self.store,
+                        transaction=transaction,
+                    )
+                except (
+                    CurrentLoopError,
+                    CurrentLoopConflict,
+                    EventReceiptError,
+                    EvidenceProcessingError,
+                    OSError,
+                    ValueError,
+                ) as exc:
+                    raise CurrentLoopError(
+                        "causal_continuation_blocked",
+                        safe_details={
+                            "one_continuation_attempt_exhausted": True,
+                            "material_change_or_commit_conflict_detected": True,
+                            "retry_loop_permitted": False,
+                            "new_authority_silently_requested": False,
+                        },
+                    ) from exc
                 state = self.store.read()
                 derivation = derive_pending_snapshot(
                     state=state,
@@ -7440,13 +7787,16 @@ class CurrentLoopCoordinator:
                 coordinator["evidence_processing_complete"] = True
                 coordinator["assist_iteration_ready"] = True
                 summary = (
-                    "qCoder rebound the issued IDE authority to a bounded successor "
-                    "receipt, registered the corrected exact paths, and resumed local processing."
+                    "qCoder continued registration for the exact already-authorized artifacts "
+                    "without requesting broader authority."
                 )
                 recovery_registration_details = {
-                    "original_receipt_status": "superseded",
-                    "successor_receipt_status": "consumed",
-                    "successor_receipt_id": successor["receipt_id"],
+                    "causal_continuation": True,
+                    "receipt_transition": "issued_to_consumed_in_registration_commit",
+                    "issued_rebound_persisted_before_registration": False,
+                    "authority_broadened": False,
+                    "expiry_extended": False,
+                    "native_ide_permission_auto_approved": False,
                     "registration": registration,
                     "promotion": promotion,
                     "customer_artifact_review_required": False,
@@ -10715,6 +11065,7 @@ class CurrentLoopCoordinator:
         checkpoint_protocol: Mapping[str, Any] | None = None,
         performance_parts: Mapping[str, float] | None = None,
         persist_performance: bool = True,
+        causal_continuation: bool = False,
     ) -> dict[str, Any]:
         result_build_started = time.perf_counter()
         coordinator = self._coordinator_state(state)
@@ -10767,6 +11118,7 @@ class CurrentLoopCoordinator:
             checkpoint_kind=str(coordinator["checkpoint_kind"]),
             coordinator=coordinator,
             protocol=protocol,
+            initialize_inputs=persist_performance,
         )
         self._validate_protocol_disposition(
             phase=coordinator["phase"],
@@ -10869,6 +11221,7 @@ class CurrentLoopCoordinator:
             state_status=str(coordinator["state_status"]),
             checkpoint_kind=str(coordinator["checkpoint_kind"]),
             category=category,
+            causal_continuation=causal_continuation,
         )
         next_invocation = next(
             (
@@ -10881,7 +11234,7 @@ class CurrentLoopCoordinator:
         result["customer_interaction"] = customer_interaction(
             kind=interaction_kind,
             concise_message=summary,
-            next_invocation=next_invocation,
+            next_invocation=None if causal_continuation else next_invocation,
             activity_receipts=(
                 [result_details["activity_receipt"]]
                 if isinstance(result_details.get("activity_receipt"), Mapping)
@@ -10917,23 +11270,25 @@ class CurrentLoopCoordinator:
             interaction=result["customer_interaction"],
             phase=str(coordinator["phase"]),
             state_status=str(coordinator["state_status"]),
-            contract_revision=contract_revision,
+            contract_revision=None if causal_continuation else contract_revision,
             effective_contract_digest=(
                 str(contract.get("effective_policy_digest"))
-                if isinstance(contract, Mapping)
+                if not causal_continuation and isinstance(contract, Mapping)
                 else None
             ),
             evidence_summary_reference=(
                 str(state.get("latest_run_summary_reference"))
-                if state.get("latest_run_summary_reference") is not None
+                if not causal_continuation
+                and state.get("latest_run_summary_reference") is not None
                 else None
             ),
             primary_next_invocation=(
                 protocol.get("next_invocation")
-                if isinstance(protocol.get("next_invocation"), Mapping)
+                if not causal_continuation
+                and isinstance(protocol.get("next_invocation"), Mapping)
                 else None
             ),
-            help_invocation=generic_help_invocation,
+            help_invocation=None if causal_continuation else generic_help_invocation,
             help_available=True,
             controls=control_envelope,
         )
@@ -11412,6 +11767,7 @@ class CurrentLoopCoordinator:
             checkpoint_kind=checkpoint_kind,
             coordinator=None,
             protocol=protocol,
+            initialize_inputs=False,
         )
         self._validate_protocol_disposition(
             phase=phase,
@@ -11496,7 +11852,10 @@ class CurrentLoopCoordinator:
         state_status: str,
         checkpoint_kind: str,
         category: str | None,
+        causal_continuation: bool = False,
     ) -> str:
+        if causal_continuation:
+            return "no_customer_interaction_required"
         if operation == "activate" and ok:
             return "activation_receipt"
         if operation == "help":
@@ -11523,6 +11882,7 @@ class CurrentLoopCoordinator:
         checkpoint_kind: str,
         coordinator: Mapping[str, Any] | None,
         protocol: Mapping[str, Any],
+        initialize_inputs: bool = True,
     ) -> dict[str, Any]:
         """Bind every actionable template to qCoder-owned runtime routing."""
 
@@ -11550,7 +11910,10 @@ class CurrentLoopCoordinator:
                 )
             )
             if operation == "prepare_adaptive_intent":
-                adaptive_contract = self._adaptive_intent_contract(state, initialize=True)
+                adaptive_contract = self._adaptive_intent_contract(
+                    state,
+                    initialize=initialize_inputs,
+                )
                 invocation["input_contract_kind"] = ADAPTIVE_INTENT_INPUT_CONTRACT_KIND
                 invocation["adaptive_intent_input_contract"] = adaptive_contract
                 fixed = (
@@ -12017,9 +12380,25 @@ class CurrentLoopCoordinator:
             status = "checkpoint_required"
         supplied_details = deepcopy(dict(details or {}))
         internal_receipt_context = supplied_details.pop("receipt_recovery_context", None)
+        internal_input_digests = supplied_details.pop("input_digests", [])
+        causal_continuation = (
+            normalized == "operation_receipt_stale"
+            and isinstance(internal_receipt_context, Mapping)
+            and internal_receipt_context.get("causal_continuation_eligible") is True
+        )
+        customer_summary = (
+            "Continue registering the same already-authorized build artifacts. No new files, "
+            "execution, network access, hosted activity, or broader authority is requested."
+            if causal_continuation
+            else recovery[0]
+        )
         payload = {
-            "message": recovery[0],
-            "supported_next_action": recovery[1],
+            "message": customer_summary,
+            "supported_next_action": (
+                "continue_same_authorized_registration"
+                if causal_continuation
+                else recovery[1]
+            ),
             "conversation_may_continue": recovery[2],
             "reauthorization_required": recovery[3],
             "local_state_intact": recovery[4],
@@ -12061,7 +12440,9 @@ class CurrentLoopCoordinator:
             "unsupported_schema",
         }
         strategy = (
-            "rebind_event_receipt"
+            "causal_continuation"
+            if causal_continuation
+            else "rebind_event_receipt"
             if isinstance(internal_receipt_context, Mapping)
             and normalized in receipt_rebind_categories
             else "qcoder_corrects"
@@ -12080,7 +12461,9 @@ class CurrentLoopCoordinator:
             else "restage_with_construction"
         )
         selected_alternatives = list(
-            alternatives
+            ("retry_registration",)
+            if causal_continuation
+            else alternatives
             or (
                 ("retry_registration", "stop_loop")
                 if strategy == "rebind_event_receipt"
@@ -12107,7 +12490,7 @@ class CurrentLoopCoordinator:
         )
         input_digests = [
             str(value)
-            for value in (details or {}).get("input_digests", [])
+            for value in internal_input_digests
             if isinstance(value, str)
         ]
         fingerprint = recovery_fingerprint(
@@ -12125,7 +12508,8 @@ class CurrentLoopCoordinator:
             "prior_valid_evidence_preserved": recovery[4],
             "permitted_input_source": (
                 "qcoder_owned_prebound_value"
-                if strategy in {"qcoder_corrects", "rebind_event_receipt"}
+                if strategy
+                in {"qcoder_corrects", "rebind_event_receipt", "causal_continuation"}
                 else "fresh_coordinator_result"
             ),
             "customer_review_required": recovery[3],
@@ -12137,6 +12521,22 @@ class CurrentLoopCoordinator:
             "deterministic_failure": deterministic,
             "convergence_fingerprint": fingerprint,
         }
+        if causal_continuation:
+            payload["reauthorization_required"] = False
+            payload["recovery_contract"].update(
+                {
+                    "customer_review_required": False,
+                    "same_already_authorized_action": True,
+                    "one_continuation_attempt": True,
+                    "authority_category_preserved": True,
+                    "role_and_format_ceilings_preserved": True,
+                    "artifact_set_and_digests_preserved": True,
+                    "path_and_destination_preserved": True,
+                    "execution_or_exposure_broadened": False,
+                    "native_ide_permission_auto_approved": False,
+                    "customer_facing_internal_choreography": False,
+                }
+            )
         recovery_protocol = (
             {
                 "supported_next_action": "refresh_bounded_recovery",
@@ -12194,6 +12594,8 @@ class CurrentLoopCoordinator:
                 "customer_summary": recovery[0],
             }
         )
+        if normalized == "causal_continuation_blocked":
+            coordinator["active_recovery"] = None
         if recoverable:
             coordinator["active_recovery"] = {
                 "schema_id": RECOVERY_SCHEMA_ID,
@@ -12208,6 +12610,32 @@ class CurrentLoopCoordinator:
                 "origin": origin,
                 "receipt_recovery_context": deepcopy(internal_receipt_context),
             }
+            if causal_continuation:
+                recovery_protocol = {
+                    "supported_next_action": "continue_same_authorized_registration",
+                    "next_invocation": _invocation_template(
+                        "execute-recovery-action",
+                        required_flags=(
+                            "--recovery-reference",
+                            "--action",
+                            "--expected-contract-revision",
+                        ),
+                        fixed_argument_values={
+                            "--recovery-reference": recovery_reference,
+                            "--action": "retry_registration",
+                            "--expected-contract-revision": int(
+                                state["current_loop_contract"]["contract_revision"]
+                            ),
+                        },
+                        reused_inputs=("current_qcoder_owned_recovery_reference",),
+                    ),
+                    "required_authority_input": None,
+                    "awaiting_confirmation_fields": [],
+                    "confirmation_transmission_state": "not_applicable",
+                    "identical_repeat_prohibited": True,
+                    "permitted_input_source": "current_qcoder_owned_recovery_reference",
+                    "no_action_reason": None,
+                }
             if "return_to_iteration_ready" in selected_alternatives:
                 recovery_protocol = {
                     "supported_next_action": "return_to_iteration_ready",
@@ -12240,10 +12668,12 @@ class CurrentLoopCoordinator:
             ok=False,
             category=normalized,
             state=self.store.read(),
-            summary=recovery[0],
+            summary=customer_summary,
             elapsed=elapsed,
             details=payload,
             checkpoint_protocol=recovery_protocol,
+            persist_performance=not causal_continuation,
+            causal_continuation=causal_continuation,
         )
 
     def _exception_result(self, operation: str, exc: Exception, started: float) -> dict[str, Any]:
