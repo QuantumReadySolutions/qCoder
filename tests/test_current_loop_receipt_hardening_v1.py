@@ -10,6 +10,7 @@ from typing import Any, Callable, Mapping
 import pytest
 
 import qcoder.current_loop_coordinator as coordinator_module
+import qcoder.current_loop_contract_sidecar as sidecar_module
 from qcoder.current_loop import CurrentLoopConflict, canonical_bytes
 from qcoder.current_loop_contract import adjust
 from qcoder.current_loop_contract_management import customer_contract_document
@@ -124,6 +125,25 @@ def test_single_repeated_mixed_and_concurrent_pure_reads_are_revision_neutral(
             choice="cancel",
             explicit_authority=False,
         ),
+        lambda: coordinator.contract_reset_to_preset(
+            preset="assist",
+            choice="cancel",
+            explicit_authority=False,
+        ),
+        lambda: coordinator.contract_set_preset(
+            preset="assist",
+            expected_contract_revision=int(contract_document["expected_contract_revision"]),
+        ),
+        lambda: coordinator.contract_adjust(
+            category="python_manifestation",
+            dimension="collect",
+            value="enabled",
+            expected_contract_revision=int(contract_document["expected_contract_revision"]),
+        ),
+        lambda: coordinator.contract_set_generation_governance(
+            governance="adaptive",
+            expected_contract_revision=int(contract_document["expected_contract_revision"]),
+        ),
         lambda: coordinator.evidence_view(view_id="current_build_facts"),
     )
     for projection in projections:
@@ -158,6 +178,28 @@ def test_single_repeated_mixed_and_concurrent_pure_reads_are_revision_neutral(
         operation_receipt_id=str(receipt["receipt_id"]),
     )
     assert registered["ok"] is True
+
+
+def test_contract_editor_projection_is_authoritative_state_neutral(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    coordinator = _active(tmp_path)
+    receipt = _issue(coordinator)
+    before = canonical_bytes(coordinator.store.read())
+    monkeypatch.setattr(
+        sidecar_module,
+        "launch_sidecar_process",
+        lambda **_kwargs: {
+            "local_only": True,
+            "automatic_browser_opened": False,
+            "synthetic_test_session": True,
+        },
+    )
+    result = coordinator.open_contract_editor()
+    assert result["ok"] is True
+    assert canonical_bytes(coordinator.store.read()) == before
+    _assert_receipt_valid(coordinator, receipt)
 
 
 def test_status_resume_branch_remains_authoritative_mutation(tmp_path: Path) -> None:

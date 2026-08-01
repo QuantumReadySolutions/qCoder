@@ -4834,6 +4834,7 @@ class CurrentLoopCoordinator:
                     "browser_optional": True,
                     "automatic_browser_opened": False,
                 },
+                persist_performance=False,
             )
         except (CurrentLoopError, CurrentLoopConflict, RuntimeError, OSError) as exc:
             return self._exception_result("open_contract_editor", exc, started)
