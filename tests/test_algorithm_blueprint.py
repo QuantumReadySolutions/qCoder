@@ -354,7 +354,7 @@ def test_package_help_and_examples_keep_capabilities_and_boundaries_distinct(
     assert "machine-local" in normalized
     assert "not a connected context bridge integration" in normalized
     assert "do not prove algorithm identity" in normalized
-    assert "does not claim publication or public rollout" in normalized
+    assert "does not claim publication or public rollout" not in normalized
     assert "qft" not in example.lower()
     assert "phase estimation" not in example.lower()
     assert "vqe" not in example.lower()

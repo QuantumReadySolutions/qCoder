@@ -1,9 +1,17 @@
 # Changelog
 
+## 0.6.0a4
+
+- Correct package-facing publication status, customer terminology, client qualification copy,
+  and installation identity after `0.6.0a3` was published with stale distribution metadata.
+- Preserve the exact `0.6.0a3` runtime behavior, schemas, binding v16, twelve-tool inventory,
+  dependencies, privacy boundaries, and client/workstyle boundaries.
+
 ## 0.6.0a3
 
-- Add Quiet Assist for one explicitly activated Explorer build, governed by one Current Loop
-  Contract with Adaptive generation by default and an optional Blueprint-required mode.
+- Add Assist with quiet operation for one explicitly activated Explorer build, governed by one
+  Current Loop Contract with Adaptive generation by default and an optional Blueprint-required
+  mode.
 - Enroll exact outputs from customer-authorized IDE operations without repository scanning or
   watching, and retain immutable same-path evidence revisions, coherent snapshots, and current or
   prior Run Summaries only within the active loop.
@@ -13,7 +21,7 @@
 - Add grounded one-call help, direct generation-governance controls, direct receipt-style loop
   completion, and deterministic recovery for stale receipts and correctable local inputs.
 - Preserve Circuit Workbench as a distinct selected-evidence surface and Build Review as an
-  optional on-request review. Neither is required for ordinary Quiet Assist work.
+  optional on-request review. Neither is required for ordinary Assist work.
 - Preserve exactly twelve Context Bridge tools and the unchanged Protected boundary. Native IDE
   write and execution authority remains separate from qCoder evidence collection; qCoder does not
   execute merely because it collects evidence.
@@ -24,8 +32,9 @@
   into a future loop. qCoder does not scan or watch repositories, and sampled counts do not by
   themselves prove correctness or entanglement. Missing execution settings are not inferred.
 
-This entry describes the held plain `0.6.0a3` candidate. Its frozen artifacts remain unpublished;
-their creation is not a publication or release decision.
+The exact tested `0.6.0a3` artifacts were published, but their public description retained stale
+release-candidate wording. Version `0.6.0a4` supersedes that package with metadata-only corrections;
+the `0.6.0a3` package bytes remain the runtime-valid artifacts that were published.
 
 ## 0.6.0a2+wi0419.explorercontract1binding1
 

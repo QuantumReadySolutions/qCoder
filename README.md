@@ -19,12 +19,8 @@ The current public local path is **qCoder OSS**. OSS commands run locally and do
 
 ## Current product boundaries
 
-The `0.6.0a3` release candidate combines **OSS local commands**, Explorer compatibility commands,
-and the Context Bridge adapter for eligible Explorer users. Pro is not launched and is not a
-current public product path.
-
-This source is the held, unpublished `0.6.0a3` release candidate. Public installation remains
-unavailable until a separate package-publication decision.
+qCoder combines **OSS local commands**, Explorer compatibility commands, and the Context Bridge
+adapter for eligible Explorer users. Pro is not launched and is not a current public product path.
 
 - **OSS commands** (`analyze`, `batch`, `context`, `review`) are Apache-2.0, local-first/offline, and useful without an account or token. They do not upload data, call a qCoder hosted service, or run QPU/simulator jobs.
 - **Explorer Beta commands** (`qcoder explorer status`, `qcoder explorer demo`, `qcoder explorer evidence`) are account-backed checks for Explorer Beta status, built-in guided evidence samples, and derived-context guided evidence for user-owned OpenQASM 2 artifacts. The older `qcoder student ...` commands remain available as beta compatibility aliases.
@@ -49,18 +45,17 @@ should govern the next iteration. qCoder does not independently generate the Pyt
 compile the circuit, execute the run, recover hidden intent, prove correctness, or automatically
 adopt a blueprint decision.
 
-The everyday path is Quiet Assist: the customer explicitly activates qCoder for one build, the
-Current Loop Contract governs exact authorized output collection and local derivation, and qCoder
-interrupts only for material decisions or separate authority boundaries. Adaptive generation is
-the default; Blueprint-required governance is available. Evidence revisions, snapshots, and
-current or prior Run Summaries are bounded to that active loop and are purged on close. The
-optional local contract editor uses the same canonical contract as the IDE. Narrowing applies
-immediately; broadening requires explicit confirmation.
+The everyday path uses Assist with quiet operation: the customer explicitly activates qCoder for
+one build, the Current Loop Contract governs exact authorized output collection and local
+derivation, and qCoder interrupts only for material decisions or separate authority boundaries.
+Adaptive generation is the default; Blueprint-required governance is available. Evidence
+revisions, snapshots, and current or prior Run Summaries are bounded to that active loop and are
+purged on close. The optional local contract editor uses the same canonical contract as the IDE.
+Narrowing applies immediately; broadening requires explicit confirmation.
 
 ### Connected-client qualification
 
-- **Cursor Desktop:** candidate full active Current Loop support, subject to exact final-candidate
-  proof before public activation.
+- **Cursor Desktop:** full active Current Loop support.
 - **Cursor terminal/CLI:** connection and Desktop parity are distinct; full active-loop support is
   not claimed.
 - **Codex CLI and Claude Code:** only exact-release bounded capabilities may be claimed after their
@@ -72,8 +67,8 @@ not add persistent memory, project history, repository discovery, or automatic I
 
 ## Context Bridge inventory
 
-The `0.6.0a3` release candidate preserves the existing eight Evidence Review operations and adds
-four Algorithm Blueprint operations, for exactly twelve Context Bridge capability tools:
+qCoder preserves the existing eight Evidence Review operations and adds four Algorithm Blueprint
+operations, for exactly twelve Context Bridge capability tools:
 
 - `get_guided_evidence_context`
 - `create_prompt_context`
@@ -135,15 +130,14 @@ prove algorithm identity, correctness, completeness, executability, or runtime b
 does not scan a repository, import or execute selected source, generate code, edit files, invoke a
 simulator/backend/QPU, retain artifacts, or retrieve prior artifacts.
 
-See the synthetic [`Algorithm Blueprint walkthrough`](examples/09_algorithm_blueprint.md). This
-release-candidate documentation does not claim publication or public rollout.
+See the synthetic [`Algorithm Blueprint walkthrough`](examples/09_algorithm_blueprint.md).
 
 ## Quick start
 
 Install:
 
 ```bash
-python -m pip install "qcoder==0.6.0a3"
+python -m pip install "qcoder==0.6.0a4"
 ```
 
 Analyze a circuit:
