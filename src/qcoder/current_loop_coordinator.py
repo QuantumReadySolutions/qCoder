@@ -11266,6 +11266,8 @@ class CurrentLoopCoordinator:
                 else ()
             ),
         )
+        if causal_continuation:
+            result["customer_interaction"].pop("interaction_digest", None)
         result["customer_envelope"] = customer_envelope(
             operation=operation,
             interaction=result["customer_interaction"],
@@ -11293,6 +11295,12 @@ class CurrentLoopCoordinator:
             help_available=True,
             controls=control_envelope,
         )
+        if causal_continuation:
+            result["customer_envelope"]["contract_summary_reference"] = None
+            result["customer_envelope"]["machine_block"] = {
+                "full_machine_controls_available_in_coordinator_result": True,
+            }
+            result["customer_envelope"].pop("envelope_digest", None)
         serialization_started = time.perf_counter()
         projected_size = len(json.dumps(result, indent=2, sort_keys=True).encode())
         serialization_seconds = time.perf_counter() - serialization_started

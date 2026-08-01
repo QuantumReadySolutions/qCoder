@@ -677,18 +677,30 @@ def test_causal_recovery_continues_same_action_once_without_customer_or_native_a
 ) -> None:
     coordinator, receipt, _candidate, failed = _stale_only_recovery(tmp_path)
     envelope = failed["customer_envelope"]
-    serialized_customer = json.dumps(envelope, sort_keys=True)
+    serialized_customer = json.dumps(
+        {
+            "customer_interaction": failed["customer_interaction"],
+            "customer_envelope": envelope,
+        },
+        sort_keys=True,
+    )
     assert envelope["requires_customer_response"] is False
     assert envelope["interaction_kind"] == "no_customer_interaction_required"
     assert envelope["primary_next_invocation"] is None
-    assert envelope["contract_summary_reference"] == {
-        "contract_revision": None,
-        "effective_contract_digest": None,
+    assert envelope["contract_summary_reference"] is None
+    assert envelope["machine_block"] == {
+        "full_machine_controls_available_in_coordinator_result": True,
     }
+    assert "envelope_digest" not in envelope
+    assert "interaction_digest" not in failed["customer_interaction"]
     assert "recovery-" not in serialized_customer
     assert str(receipt["receipt_id"]) not in serialized_customer
     assert "structured_argv" not in serialized_customer
     assert "expected_revision" not in serialized_customer
+    assert "state_revision" not in serialized_customer
+    assert "contract_revision" not in serialized_customer
+    assert "controls_digest" not in serialized_customer
+    assert "reference_digest" not in serialized_customer
     assert "native" not in serialized_customer.lower()
     assert failed["details"]["recovery_contract"]["native_ide_permission_auto_approved"] is False
     assert failed["details"]["recovery_contract"]["one_continuation_attempt"] is True
