@@ -7875,9 +7875,9 @@ class CurrentLoopCoordinator:
             category="unsupported_recovery_schema",
             state=state,
             summary=(
-                "This saved recovery action belongs to an unsupported or incomplete runtime "
-                "schema. No action was executed; use the current runtime's ordinary supported "
-                "next step or restart the active loop."
+                "This saved recovery action is not compatible with the current runtime. "
+                "No action was executed. Explicitly abandon the active loop before restarting "
+                "it under the current runtime."
             ),
             elapsed=max(0.0, self.clock() - started),
             details={
@@ -7886,6 +7886,8 @@ class CurrentLoopCoordinator:
                 "recovery_action_executed": False,
                 "authoritative_state_mutated": False,
                 "legacy_authority_reinterpreted": False,
+                "supported_next_action": "explicit_abandon_active_loop",
+                "explicit_abandon_authority_required": True,
             },
             persist_performance=False,
         )
@@ -7927,9 +7929,24 @@ class CurrentLoopCoordinator:
                     origin="contract_or_authority",
                 )
             if action == "stop_loop":
-                raise EvidenceProcessingError(
-                    "recovery_stop_requires_abandon_invocation",
-                    origin="contract_or_authority",
+                return self._result(
+                    operation="execute_recovery_action",
+                    ok=False,
+                    category="recovery_stop_requires_abandon_invocation",
+                    state=state,
+                    summary=(
+                        "Stopping the active loop requires the ordinary explicit abandon "
+                        "action. No saved recovery action was executed."
+                    ),
+                    elapsed=max(0.0, self.clock() - started),
+                    details={
+                        "supported_next_action": "explicit_abandon_active_loop",
+                        "explicit_abandon_authority_required": True,
+                        "recovery_schema_gate_passed": True,
+                        "recovery_action_executed": False,
+                        "alternate_gate_bypass": False,
+                    },
+                    persist_performance=False,
                 )
             if action == "retry_hosted_enrichment":
                 raise EvidenceProcessingError(
@@ -9101,20 +9118,6 @@ class CurrentLoopCoordinator:
                 )
             except (CurrentLoopError, CurrentLoopConflict) as exc:
                 return self._exception_result("abandon", exc, started)
-        if isinstance(current_state, Mapping):
-            active_recovery = self._coordinator_state(current_state).get("active_recovery")
-            if active_recovery is not None:
-                schema_error = _active_recovery_schema_error(
-                    active_recovery,
-                    selected_action="stop_loop",
-                )
-                if schema_error is not None:
-                    return self._recovery_schema_gate_result(
-                        operation="abandon",
-                        state=current_state,
-                        reason=schema_error,
-                        started=started,
-                    )
         if not explicit_authority:
             return self._checkpoint_result(
                 operation="abandon",
@@ -9124,6 +9127,9 @@ class CurrentLoopCoordinator:
                 elapsed=self.clock() - started,
             )
         try:
+            # Explicit abandonment discards the complete active loop. It does not
+            # execute, interpret, migrate, or reuse active recovery semantics, so
+            # recovery-schema compatibility is deliberately not a prerequisite.
             state = self.store.read()
             complete_current_loop(
                 store=self.store,

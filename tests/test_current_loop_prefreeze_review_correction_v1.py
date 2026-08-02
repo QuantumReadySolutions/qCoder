@@ -584,16 +584,13 @@ def test_all_recovery_action_paths_gate_unsupported_or_malformed_schema(
         remove_field=remove_field,
     )
     before = canonical_bytes(coordinator.store.read())
-    if action == "stop_loop":
-        rejected = coordinator.abandon(explicit_authority=True)
-    else:
-        rejected = coordinator.execute_recovery_action(
-            recovery_reference=str(active["reference"]),
-            action=action,
-            expected_contract_revision=int(
-                coordinator.store.read()["current_loop_contract"]["contract_revision"]
-            ),
-        )
+    rejected = coordinator.execute_recovery_action(
+        recovery_reference=str(active["reference"]),
+        action=action,
+        expected_contract_revision=int(
+            coordinator.store.read()["current_loop_contract"]["contract_revision"]
+        ),
+    )
     assert rejected["category"] == "unsupported_recovery_schema"
     assert rejected["details"]["legacy_authority_reinterpreted"] is False
     assert canonical_bytes(coordinator.store.read()) == before
