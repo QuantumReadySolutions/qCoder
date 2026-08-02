@@ -15,6 +15,13 @@
 - Advance the connected-assistant binding from v16 to v17 for those machine semantics while
   preserving exactly twelve tools and adding no product capability, tier, entitlement, tool,
   authority category, client qualification, Account interface, or Protected operation.
+- Correct recovery advertisement so every emitted action has an executable handler, retain
+  `retry_registration` only for an unchanged stale receipt, gate every active recovery action on
+  the v5 schema, and recheck monotonic expiry inside the canonical registration CAS.
+- qCoder 0.6.0a5 changes receipt and recovery machine semantics. Users should finish or restart an
+  active qCoder loop before upgrading. An outstanding pre-v4 operation receipt cannot be reused;
+  the IDE must provide a fresh authority grant for the new runtime, which fails closed instead of
+  silently reinterpreting old authority data.
 
 ## 0.6.0a4
 

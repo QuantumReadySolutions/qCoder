@@ -8,7 +8,7 @@ from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from qcoder.current_loop import (
     MAX_LOCAL_FILE_BYTES,
@@ -20,6 +20,7 @@ from qcoder.current_loop_event_receipts import (
     ACTIVITY_RECEIPT_SCHEMA_VERSION,
     consume_operation_receipt,
     validate_operation_receipt,
+    validate_operation_receipt_lifecycle,
 )
 from qcoder.current_loop_evidence_processing import (
     ARTIFACT_FORMAT_CONTRACT_SCHEMA_ID,
@@ -362,6 +363,7 @@ def commit_registration_transaction(
     *,
     store: CurrentLoopStore,
     transaction: Mapping[str, Any],
+    clock: Callable[[], float] = time.monotonic,
 ) -> dict[str, Any]:
     """Commit revisions, heads, activity, receipt, and pending marker in one CAS."""
 
@@ -409,15 +411,8 @@ def commit_registration_transaction(
         }
         for item in transaction["prepared_revisions"]
     ]
-    consumed = None
-    activity = None
-    if isinstance(receipt_for_consumption, Mapping):
-        consumed, activity = consume_operation_receipt(
-            receipt_for_consumption,
-            registered_artifacts=activity_items,
-            consumed_state_revision=expected + 1,
-        )
-    else:
+    activity: dict[str, Any] | None = None
+    if not isinstance(receipt_for_consumption, Mapping):
         activity = {
             "schema_id": ACTIVITY_RECEIPT_SCHEMA_ID,
             "schema_version": ACTIVITY_RECEIPT_SCHEMA_VERSION,
@@ -507,6 +502,36 @@ def commit_registration_transaction(
         )
 
     def mutator(value: dict[str, Any]) -> Mapping[str, Any]:
+        nonlocal activity
+        consumed: dict[str, Any] | None = None
+        if isinstance(receipt_id, str):
+            current = value["operation_receipts"].get(receipt_id)
+            if not isinstance(current, Mapping):
+                raise CurrentLoopError("operation_receipt_replay_rejected")
+            commit_time = clock()
+            # This lifecycle check executes under CurrentLoopStore.update's CAS
+            # lock. It therefore governs the canonical registration
+            # linearization point, rather than only transaction preparation.
+            validate_operation_receipt_lifecycle(current, current_time=commit_time)
+            current_for_consumption: Mapping[str, Any] = current
+            if isinstance(causal_rebind, Mapping):
+                rebound = causal_rebind.get("rebound_receipt")
+                if (
+                    not isinstance(rebound, Mapping)
+                    or current.get("receipt_digest")
+                    != causal_rebind.get("original_receipt_digest")
+                    or rebound.get("receipt_id") != receipt_id
+                ):
+                    raise CurrentLoopError("operation_receipt_replay_rejected")
+                validate_operation_receipt_lifecycle(rebound, current_time=commit_time)
+                current_for_consumption = rebound
+            consumed, activity = consume_operation_receipt(
+                current_for_consumption,
+                registered_artifacts=activity_items,
+                consumed_state_revision=expected + 1,
+            )
+        if not isinstance(activity, Mapping):
+            raise CurrentLoopError("registration_activity_receipt_missing")
         registry = value["evidence_registry"]
         if registry.get("role_heads") != state["evidence_registry"].get("role_heads"):
             raise CurrentLoopError("client_state_conflict")
@@ -577,6 +602,8 @@ def commit_registration_transaction(
                 )
             ):
                 raise CurrentLoopError("operation_receipt_replay_rejected")
+            if not isinstance(consumed, Mapping):
+                raise CurrentLoopError("operation_receipt_consumption_missing")
             value["operation_receipts"][receipt_id] = deepcopy(consumed)
         value["activity_receipts"].append(deepcopy(activity))
         return value

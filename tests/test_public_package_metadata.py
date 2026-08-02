@@ -29,6 +29,11 @@ def test_public_readme_is_release_truthful_and_keeps_client_boundaries() -> None
     assert "**Generic MCP clients:** no support claim." in readme
     assert "does not scan repositories" in readme
     assert "does not independently generate the Python" in readme
+    assert "0.6.0a5 changes the operation-receipt and recovery machine semantics" in readme
+    assert "Finish or restart an active qCoder loop before upgrading" in readme
+    assert "outstanding pre-v4 operation receipt cannot be reused" in readme
+    assert "IDE must provide a fresh authority grant for the new runtime" in readme
+    assert "fails closed instead of silently reinterpreting old authority data" in readme
 
 
 def test_changelog_records_published_superseded_history_without_runtime_claim() -> None:
@@ -45,3 +50,7 @@ def test_changelog_records_published_superseded_history_without_runtime_claim() 
     assert "0.6.0a4` was published" not in lowered
     assert "0.6.0a4` artifacts were published" not in lowered
     assert "quiet assist" not in lowered
+    assert "finish or restart an active qcoder loop before upgrading" in lowered
+    assert "outstanding pre-v4 operation receipt cannot be reused" in lowered
+    assert "ide must provide a fresh authority grant for the new runtime" in lowered
+    assert "fails closed instead of silently reinterpreting old authority data" in lowered

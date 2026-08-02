@@ -895,7 +895,12 @@ def test_causal_registration_commit_race_blocks_without_ghost_rebound(
     active = coordinator._coordinator_state(state)["active_recovery"]
     original_commit = coordinator_module.commit_registration_transaction
 
-    def raced_commit(*, store: Any, transaction: Mapping[str, Any]) -> dict[str, Any]:
+    def raced_commit(
+        *,
+        store: Any,
+        transaction: Mapping[str, Any],
+        clock: Callable[[], float],
+    ) -> dict[str, Any]:
         current = store.read()
 
         def real_authority_mutation(value: dict[str, Any]) -> Mapping[str, Any]:
@@ -904,7 +909,7 @@ def test_causal_registration_commit_race_blocks_without_ghost_rebound(
             return value
 
         store.update(real_authority_mutation, expected_revision=int(current["state_revision"]))
-        return original_commit(store=store, transaction=transaction)
+        return original_commit(store=store, transaction=transaction, clock=clock)
 
     monkeypatch.setattr(coordinator_module, "commit_registration_transaction", raced_commit)
     blocked = coordinator.execute_recovery_action(

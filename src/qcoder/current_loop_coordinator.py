@@ -151,6 +151,7 @@ from qcoder.current_loop_event_receipts import (
     issue_operation_receipt,
     rebind_operation_receipt_for_causal_continuation,
     validate_operation_receipt,
+    validate_operation_receipt_lifecycle,
 )
 from qcoder.current_loop_registration import (
     commit_registration_transaction,
@@ -180,7 +181,12 @@ from qcoder.current_loop_result_envelope import (
     performance_diagnostics,
 )
 from qcoder.current_loop_retention import retention_contract_snapshot
-from qcoder.current_loop_recovery import recovery_contract_snapshot
+from qcoder.current_loop_recovery import (
+    advertised_recovery_actions,
+    recovery_action_handler,
+    recovery_contract_snapshot,
+    recovery_strategy_for,
+)
 from qcoder.current_loop_vocabulary import vocabulary_snapshot
 from qcoder.current_loop_evidence_processing import (
     ARTIFACT_FORMAT_CONTRACT_SCHEMA_ID,
@@ -338,6 +344,26 @@ SAFE_TYPED_CURRENT_LOOP_CATEGORIES = frozenset(
         "operation_receipt_role_not_authorized",
         "operation_receipt_workspace_mismatch",
         "operation_receipt_loop_mismatch",
+    }
+)
+ADDITIONAL_TYPED_RECOVERY_CATEGORIES = frozenset(
+    {
+        "checkpoint_input_binding_mismatch",
+        "checkpoint_input_checkpoint_mismatch",
+        "checkpoint_input_operation_invalid",
+        "checkpoint_input_operation_mismatch",
+        "checkpoint_input_schema_invalid",
+        "deterministic_retry_requires_changed_input",
+        "hosted_enrichment_not_available",
+        "local_evidence_processing_required",
+        "local_sidecar_hosted_operation_prohibited",
+        "operation_receipt_category_invalid",
+        "operation_receipt_role_ceiling_invalid",
+        "recovery_action_not_permitted",
+        "recovery_hosted_retry_requires_hosted_invocation",
+        "recovery_reference_stale",
+        "recovery_stop_requires_abandon_invocation",
+        "result_artifact_invalid",
     }
 )
 
@@ -992,6 +1018,143 @@ _ERROR_ALIASES = {
     "next_loop_seed_mismatch": "seed_incomplete",
     "context_bridge_unreachable": "protected_service_unavailable",
 }
+
+
+def recovery_action_executability_matrix() -> list[dict[str, Any]]:
+    """Return the exhaustive category/strategy advertisement contract."""
+
+    categories = sorted(
+        set(_RECOVERY)
+        | set(SAFE_TYPED_CURRENT_LOOP_CATEGORIES)
+        | set(ADDITIONAL_TYPED_RECOVERY_CATEGORIES)
+        | {
+            "protected_authority_missing",
+            "causal_continuation_blocked",
+        }
+    )
+    rows: list[dict[str, Any]] = []
+    for category in categories:
+        variants: list[dict[str, Any]] = (
+            []
+            if category in {"protected_operation_rejected", "protected_authority_missing"}
+            else [
+                {
+                    "variant": "ordinary_failure",
+                    "origin": "contract_or_authority",
+                    "causal_continuation_eligible": False,
+                    "requested_actions": None,
+                    "deterministic": True,
+                }
+            ]
+        )
+        if category == "operation_receipt_stale":
+            variants.append(
+                {
+                    "variant": "unchanged_stale_receipt",
+                    "origin": "contract_or_authority",
+                    "causal_continuation_eligible": True,
+                    "requested_actions": None,
+                    "deterministic": True,
+                }
+            )
+        if category in {
+            "protected_service_unavailable",
+            "protected_operation_rejected",
+            "protected_authority_missing",
+        }:
+            variants.append(
+                {
+                    "variant": "hosted_failure",
+                    "origin": "hosted_transport",
+                    "causal_continuation_eligible": False,
+                    "requested_actions": (
+                        "retry_hosted_enrichment",
+                        "skip_hosted_enrichment",
+                        "stop_loop",
+                    ),
+                    "deterministic": False,
+                }
+            )
+        if category == "circuit_format_unsupported":
+            variants.append(
+                {
+                    "variant": "nonblocking_circuit_processing",
+                    "origin": "local_circuit_derivation",
+                    "causal_continuation_eligible": False,
+                    "requested_actions": (
+                        "continue_with_limitations",
+                        "provide_supported_circuit_artifact",
+                        "skip_current_artifact_derivation",
+                        "stop_loop",
+                    ),
+                    "deterministic": True,
+                }
+            )
+        for variant in variants:
+            causal = bool(variant["causal_continuation_eligible"])
+            strategy = recovery_strategy_for(
+                category,
+                receipt_context_present=category in {
+                    "operation_receipt_invalid",
+                    "operation_receipt_digest_mismatch",
+                    "operation_receipt_revision_invalid",
+                    "operation_receipt_stale",
+                    "operation_receipt_contract_stale",
+                    "operation_receipt_role_not_authorized",
+                    "operation_receipt_format_not_authorized",
+                    "operation_receipt_sensitive_output_requires_selection",
+                    "artifact_candidate_provenance_conflict",
+                    "artifact_candidate_role_invalid",
+                    "artifact_candidate_file_required",
+                    "artifact_candidate_path_invalid",
+                },
+                causal_continuation_eligible=causal,
+            )
+            actions = advertised_recovery_actions(
+                category=category,
+                strategy=strategy,
+                origin=str(variant["origin"]),
+                causal_continuation_eligible=causal,
+                deterministic=bool(variant["deterministic"]),
+                active_loop_nonterminal=(
+                    _RECOVERY.get(category, _RECOVERY["unknown_local_internal"])[2] is True
+                    and category
+                    not in {
+                        "loop_not_activated",
+                        "local_state_corrupt",
+                        "reconstruction_attempt_refused",
+                        "causal_continuation_blocked",
+                    }
+                ),
+                requested_actions=variant["requested_actions"],
+            )
+            action_contracts = []
+            for action in actions:
+                handler = recovery_action_handler(action)
+                if not isinstance(handler, Mapping):
+                    raise AssertionError(f"unbound recovery action: {action}")
+                action_contracts.append(
+                    {
+                        "action": action,
+                        "handler": handler["handler"],
+                        "executable_in_advertised_state": True,
+                        "result": "terminal" if handler["terminal"] else "non_terminal",
+                        "ordinary_supported_next_step": handler[
+                            "ordinary_supported_next_step"
+                        ],
+                    }
+                )
+            rows.append(
+                {
+                    "category": category,
+                    "variant": variant["variant"],
+                    "strategy": strategy,
+                    "causal_continuation_eligible": causal,
+                    "advertised_alternatives": list(actions),
+                    "actions": action_contracts,
+                }
+            )
+    return rows
 
 _POSTURE_CUES = {
     "exploratory_first_pass": (
@@ -2030,6 +2193,167 @@ def _bounded_values_for_action(action: str) -> dict[str, list[str]]:
             "next_loop_action": ["start_next", "stop"],
         }
     return {}
+
+
+def _active_recovery_schema_error(
+    active: object,
+    *,
+    selected_action: str,
+) -> str | None:
+    """Fail closed before any v5 recovery action can mutate state."""
+
+    if not isinstance(active, Mapping):
+        return "active_recovery_missing"
+    if (
+        active.get("schema_id") != RECOVERY_SCHEMA_ID
+        or active.get("schema_version") != RECOVERY_SCHEMA_VERSION
+    ):
+        return "active_recovery_schema_unsupported"
+    required = {
+        "category": str,
+        "strategy": str,
+        "reference": str,
+        "fingerprint": str,
+        "occurrence_count": int,
+        "deterministic": bool,
+        "alternatives": list,
+        "origin": str,
+    }
+    if any(not isinstance(active.get(field), kind) for field, kind in required.items()):
+        return "active_recovery_schema_malformed"
+    alternatives = active.get("alternatives")
+    if not isinstance(alternatives, list) or any(
+        not isinstance(item, str) for item in alternatives
+    ):
+        return "active_recovery_schema_malformed"
+    if selected_action not in alternatives:
+        return "recovery_action_not_permitted"
+    if selected_action == "retry_registration":
+        context = active.get("receipt_recovery_context")
+        if not isinstance(context, Mapping):
+            return "active_recovery_action_fields_missing"
+        required_context = {
+            "operation_receipt_id": str,
+            "candidates": list,
+            "original_receipt_digest": str,
+            "causal_action_binding": Mapping,
+            "causal_continuation_eligible": bool,
+            "continuation_attempted": bool,
+        }
+        if any(
+            not isinstance(context.get(field), kind)
+            for field, kind in required_context.items()
+        ):
+            return "active_recovery_action_fields_missing"
+        if (
+            active.get("category") != "operation_receipt_stale"
+            or active.get("strategy") != "causal_continuation"
+            or context.get("causal_continuation_eligible") is not True
+            or context.get("continuation_attempted") is not False
+        ):
+            return "active_recovery_action_fields_invalid"
+    return None
+
+
+def _causal_registration_action(
+    *,
+    state: Mapping[str, Any],
+    receipt: Mapping[str, Any],
+    candidates: Sequence[Mapping[str, Any]],
+    workspace_root: Path,
+) -> dict[str, Any]:
+    exact_binding = registration_continuation_binding(
+        candidates=[deepcopy(dict(item)) for item in candidates],
+        workspace_root=workspace_root,
+    )
+    authority_binding = receipt.get("authority_binding")
+    action = {
+        "schema_id": "qcoder.current_loop.registration_causal_continuation.v1",
+        "active_loop": state["loop_ref"],
+        "workspace_binding": state["workspace_root"],
+        "artifact_binding": exact_binding,
+        "operation": receipt.get("operation_category"),
+        "role_ceiling": deepcopy(receipt.get("authorized_output_role_ceiling")),
+        "format_ceiling": deepcopy(receipt.get("authorized_output_format_ceiling")),
+        "contract_revision": state["current_loop_contract"]["contract_revision"],
+        "effective_contract_digest": state["current_loop_contract"].get(
+            "effective_policy_digest"
+        ),
+        "originating_phase": (
+            authority_binding.get("phase") if isinstance(authority_binding, Mapping) else None
+        ),
+        "originating_checkpoint": (
+            authority_binding.get("checkpoint_kind")
+            if isinstance(authority_binding, Mapping)
+            else None
+        ),
+        "requested_destination": "active_loop_canonical_evidence_registry",
+        "execution_requested": receipt.get("operation_category") == "ide_execute",
+        "hosted_activity_requested": False,
+        "raw_exposure_requested": False,
+        "native_permission_already_recorded": True,
+    }
+    action["binding_digest"] = sha256(
+        json.dumps(
+            action,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+    return action
+
+
+def _causal_continuation_is_executable(
+    *,
+    state: Mapping[str, Any],
+    coordinator: Mapping[str, Any],
+    context: object,
+    workspace_root: Path,
+    current_time: float,
+    recovery_checkpoint_active: bool,
+) -> bool:
+    try:
+        if (
+            not isinstance(context, Mapping)
+            or context.get("causal_continuation_eligible") is not True
+            or context.get("continuation_attempted") is not False
+        ):
+            return False
+        receipt_id = context.get("operation_receipt_id")
+        candidates = context.get("candidates")
+        expected_action = context.get("causal_action_binding")
+        receipt = state.get("operation_receipts", {}).get(receipt_id)
+        if (
+            not isinstance(receipt_id, str)
+            or not isinstance(candidates, list)
+            or not candidates
+            or not all(isinstance(item, Mapping) for item in candidates)
+            or not isinstance(expected_action, Mapping)
+            or not isinstance(receipt, Mapping)
+            or receipt.get("status") != "issued"
+            or receipt.get("receipt_digest") != context.get("original_receipt_digest")
+        ):
+            return False
+        validate_operation_receipt_lifecycle(receipt, current_time=current_time)
+        if coordinator.get("phase") != expected_action.get("originating_phase"):
+            return False
+        expected_checkpoint = (
+            "privacy_or_trust"
+            if recovery_checkpoint_active
+            else expected_action.get("originating_checkpoint")
+        )
+        if coordinator.get("checkpoint_kind") != expected_checkpoint:
+            return False
+        current_action = _causal_registration_action(
+            state=state,
+            receipt=receipt,
+            candidates=[deepcopy(dict(item)) for item in candidates],
+            workspace_root=workspace_root,
+        )
+        return current_action == dict(expected_action)
+    except (CurrentLoopError, EventReceiptError, OSError, RuntimeError, ValueError):
+        return False
 
 
 class CurrentLoopCoordinator:
@@ -6042,6 +6366,7 @@ class CurrentLoopCoordinator:
                     registration = commit_registration_transaction(
                         store=self.store,
                         transaction=transaction,
+                        clock=self.clock,
                     )
                 except CurrentLoopConflict:
                     current = self.store.read()
@@ -6132,58 +6457,12 @@ class CurrentLoopCoordinator:
                         == current_coordinator.get("checkpoint_kind")
                     )
                     if causal_base_unchanged:
-                        exact_binding = registration_continuation_binding(
+                        causal_binding = _causal_registration_action(
+                            state=state,
+                            receipt=original_receipt,
                             candidates=normalized,
                             workspace_root=self.workspace_root,
                         )
-                        causal_binding = {
-                            "schema_id": (
-                                "qcoder.current_loop.registration_causal_continuation.v1"
-                            ),
-                            "active_loop": state["loop_ref"],
-                            "workspace_binding": state["workspace_root"],
-                            "artifact_binding": exact_binding,
-                            "operation": original_receipt.get("operation_category"),
-                            "role_ceiling": deepcopy(
-                                original_receipt.get("authorized_output_role_ceiling")
-                            ),
-                            "format_ceiling": deepcopy(
-                                original_receipt.get("authorized_output_format_ceiling")
-                            ),
-                            "contract_revision": state["current_loop_contract"][
-                                "contract_revision"
-                            ],
-                            "effective_contract_digest": state["current_loop_contract"].get(
-                                "effective_policy_digest"
-                            ),
-                            "originating_phase": (
-                                authority_binding.get("phase")
-                                if isinstance(authority_binding, Mapping)
-                                else None
-                            ),
-                            "originating_checkpoint": (
-                                authority_binding.get("checkpoint_kind")
-                                if isinstance(authority_binding, Mapping)
-                                else None
-                            ),
-                            "requested_destination": (
-                                "active_loop_canonical_evidence_registry"
-                            ),
-                            "execution_requested": (
-                                original_receipt.get("operation_category") == "ide_execute"
-                            ),
-                            "hosted_activity_requested": False,
-                            "raw_exposure_requested": False,
-                            "native_permission_already_recorded": True,
-                        }
-                        causal_binding["binding_digest"] = sha256(
-                            json.dumps(
-                                causal_binding,
-                                ensure_ascii=True,
-                                separators=(",", ":"),
-                                sort_keys=True,
-                            ).encode()
-                        ).hexdigest()
                         receipt_recovery_context.update(
                             {
                                 "original_receipt_digest": original_receipt.get(
@@ -6770,7 +7049,11 @@ class CurrentLoopCoordinator:
                     enrollment_authority="direct_customer_selection",
                     collect_permitted_roles=permitted_roles,
                 )
-                commit_registration_transaction(store=self.store, transaction=transaction)
+                commit_registration_transaction(
+                    store=self.store,
+                    transaction=transaction,
+                    clock=self.clock,
+                )
                 state = self.store.read()
             derivation = derive_pending_snapshot(
                 state=state,
@@ -7406,6 +7689,19 @@ class CurrentLoopCoordinator:
                 {"evidence_processing", "current_build_review"},
             )
             coordinator = self._coordinator_state(state)
+            active_recovery = coordinator.get("active_recovery")
+            if active_recovery is not None:
+                schema_error = _active_recovery_schema_error(
+                    active_recovery,
+                    selected_action="retry_hosted_enrichment",
+                )
+                if schema_error is not None:
+                    return self._recovery_schema_gate_result(
+                        operation="enrich_authorized_evidence",
+                        state=state,
+                        reason=schema_error,
+                        started=started,
+                    )
             if coordinator.get("evidence_processing_complete") is not True:
                 raise EvidenceProcessingError(
                     "local_evidence_processing_required",
@@ -7565,6 +7861,35 @@ class CurrentLoopCoordinator:
         except (CurrentLoopError, CurrentLoopConflict, EvidenceProcessingError) as exc:
             return self._exception_result("enrich_authorized_evidence", exc, started)
 
+    def _recovery_schema_gate_result(
+        self,
+        *,
+        operation: str,
+        state: Mapping[str, Any],
+        reason: str,
+        started: float,
+    ) -> dict[str, Any]:
+        return self._result(
+            operation=operation,
+            ok=False,
+            category="unsupported_recovery_schema",
+            state=state,
+            summary=(
+                "This saved recovery action belongs to an unsupported or incomplete runtime "
+                "schema. No action was executed; use the current runtime's ordinary supported "
+                "next step or restart the active loop."
+            ),
+            elapsed=max(0.0, self.clock() - started),
+            details={
+                "active_recovery_schema_supported": False,
+                "schema_gate_reason": reason,
+                "recovery_action_executed": False,
+                "authoritative_state_mutated": False,
+                "legacy_authority_reinterpreted": False,
+            },
+            persist_performance=False,
+        )
+
     def execute_recovery_action(
         self,
         *,
@@ -7585,17 +7910,21 @@ class CurrentLoopCoordinator:
                 raise CurrentLoopError("contract_revision_stale")
             coordinator = self._coordinator_state(state)
             active = coordinator.get("active_recovery")
+            schema_error = _active_recovery_schema_error(
+                active,
+                selected_action=action,
+            )
+            if schema_error is not None:
+                return self._recovery_schema_gate_result(
+                    operation="execute_recovery_action",
+                    state=state,
+                    reason=schema_error,
+                    started=started,
+                )
             if not isinstance(active, Mapping) or active.get("reference") != recovery_reference:
                 raise EvidenceProcessingError(
                     "recovery_reference_stale",
                     origin="contract_or_authority",
-                )
-            alternatives = active.get("alternatives")
-            if not isinstance(alternatives, list) or action not in alternatives:
-                raise EvidenceProcessingError(
-                    "recovery_action_not_permitted",
-                    origin="contract_or_authority",
-                    safe_details={"advertised_actions": list(alternatives or [])},
                 )
             if action == "stop_loop":
                 raise EvidenceProcessingError(
@@ -7610,6 +7939,7 @@ class CurrentLoopCoordinator:
             recovery_registration_details: dict[str, Any] | None = None
             if action == "retry_registration":
                 context = active.get("receipt_recovery_context")
+                continuation_attempt_committed = False
                 try:
                     if (
                         not isinstance(context, Mapping)
@@ -7657,6 +7987,7 @@ class CurrentLoopCoordinator:
                         mark_continuation_attempt,
                         expected_revision=int(state["state_revision"]),
                     )
+                    continuation_attempt_committed = True
                     coordinator = self._coordinator_state(state)
                     active = coordinator.get("active_recovery")
                     context = (
@@ -7675,57 +8006,12 @@ class CurrentLoopCoordinator:
                         != context.get("original_receipt_digest")
                     ):
                         raise CurrentLoopError("causal_continuation_authority_changed")
-                    exact_binding = registration_continuation_binding(
+                    current_action = _causal_registration_action(
+                        state=state,
+                        receipt=original,
                         candidates=[deepcopy(dict(item)) for item in candidates],
                         workspace_root=self.workspace_root,
                     )
-                    authority_binding = original.get("authority_binding")
-                    current_action = {
-                        "schema_id": "qcoder.current_loop.registration_causal_continuation.v1",
-                        "active_loop": state["loop_ref"],
-                        "workspace_binding": state["workspace_root"],
-                        "artifact_binding": exact_binding,
-                        "operation": original.get("operation_category"),
-                        "role_ceiling": deepcopy(
-                            original.get("authorized_output_role_ceiling")
-                        ),
-                        "format_ceiling": deepcopy(
-                            original.get("authorized_output_format_ceiling")
-                        ),
-                        "contract_revision": state["current_loop_contract"][
-                            "contract_revision"
-                        ],
-                        "effective_contract_digest": state["current_loop_contract"].get(
-                            "effective_policy_digest"
-                        ),
-                        "originating_phase": (
-                            authority_binding.get("phase")
-                            if isinstance(authority_binding, Mapping)
-                            else None
-                        ),
-                        "originating_checkpoint": (
-                            authority_binding.get("checkpoint_kind")
-                            if isinstance(authority_binding, Mapping)
-                            else None
-                        ),
-                        "requested_destination": (
-                            "active_loop_canonical_evidence_registry"
-                        ),
-                        "execution_requested": (
-                            original.get("operation_category") == "ide_execute"
-                        ),
-                        "hosted_activity_requested": False,
-                        "raw_exposure_requested": False,
-                        "native_permission_already_recorded": True,
-                    }
-                    current_action["binding_digest"] = sha256(
-                        json.dumps(
-                            current_action,
-                            ensure_ascii=True,
-                            separators=(",", ":"),
-                            sort_keys=True,
-                        ).encode()
-                    ).hexdigest()
                     if current_action != expected_action:
                         raise CurrentLoopError("causal_continuation_material_change")
                     continuation_time = self.clock()
@@ -7754,6 +8040,7 @@ class CurrentLoopCoordinator:
                     registration = commit_registration_transaction(
                         store=self.store,
                         transaction=transaction,
+                        clock=self.clock,
                     )
                 except (
                     CurrentLoopError,
@@ -7766,7 +8053,12 @@ class CurrentLoopCoordinator:
                     raise CurrentLoopError(
                         "causal_continuation_blocked",
                         safe_details={
-                            "one_continuation_attempt_exhausted": True,
+                            "one_continuation_attempt_exhausted": (
+                                continuation_attempt_committed
+                            ),
+                            "continuation_attempt_consumed": (
+                                continuation_attempt_committed
+                            ),
                             "material_change_or_commit_conflict_detected": True,
                             "retry_loop_permitted": False,
                             "new_authority_silently_requested": False,
@@ -7921,6 +8213,19 @@ class CurrentLoopCoordinator:
                 "decline_build_review",
                 {"evidence_processing", "current_build_review", "continuation_choice"},
             )
+            active_recovery = self._coordinator_state(state).get("active_recovery")
+            if active_recovery is not None:
+                schema_error = _active_recovery_schema_error(
+                    active_recovery,
+                    selected_action="decline_build_review",
+                )
+                if schema_error is not None:
+                    return self._recovery_schema_gate_result(
+                        operation="decline_build_review",
+                        state=state,
+                        reason=schema_error,
+                        started=started,
+                    )
             if explicit_authority is not True:
                 return self._checkpoint_result(
                     operation="decline_build_review",
@@ -8796,6 +9101,20 @@ class CurrentLoopCoordinator:
                 )
             except (CurrentLoopError, CurrentLoopConflict) as exc:
                 return self._exception_result("abandon", exc, started)
+        if isinstance(current_state, Mapping):
+            active_recovery = self._coordinator_state(current_state).get("active_recovery")
+            if active_recovery is not None:
+                schema_error = _active_recovery_schema_error(
+                    active_recovery,
+                    selected_action="stop_loop",
+                )
+                if schema_error is not None:
+                    return self._recovery_schema_gate_result(
+                        operation="abandon",
+                        state=current_state,
+                        reason=schema_error,
+                        started=started,
+                    )
         if not explicit_authority:
             return self._checkpoint_result(
                 operation="abandon",
@@ -10081,7 +10400,12 @@ class CurrentLoopCoordinator:
             raise CurrentLoopError("current_loop_state_corrupt")
         return result
 
-    def _replace_coordinator(self, coordinator: Mapping[str, Any]) -> None:
+    def _replace_coordinator(
+        self,
+        coordinator: Mapping[str, Any],
+        *,
+        precommit_validator: Callable[[Mapping[str, Any]], None] | None = None,
+    ) -> None:
         phase = coordinator.get("phase")
         if phase not in PHASES:
             raise CurrentLoopError("coordinator_phase_invalid")
@@ -10103,6 +10427,8 @@ class CurrentLoopCoordinator:
             performance["user_visible_checkpoints"] += 1
 
         def mutator(value: dict[str, Any]) -> Mapping[str, Any]:
+            if precommit_validator is not None:
+                precommit_validator(value)
             value["coordinator"] = updated
             value["next_operation"] = (
                 _PHASE_TRANSITIONS[updated["phase"]][0]
@@ -12390,10 +12716,25 @@ class CurrentLoopCoordinator:
         supplied_details = deepcopy(dict(details or {}))
         internal_receipt_context = supplied_details.pop("receipt_recovery_context", None)
         internal_input_digests = supplied_details.pop("input_digests", [])
+        try:
+            state: Mapping[str, Any] | None = self.store.read()
+        except CurrentLoopError:
+            state = None
+        state_coordinator = (
+            self._coordinator_state(state) if isinstance(state, Mapping) else None
+        )
         causal_continuation = (
             normalized == "operation_receipt_stale"
-            and isinstance(internal_receipt_context, Mapping)
-            and internal_receipt_context.get("causal_continuation_eligible") is True
+            and isinstance(state, Mapping)
+            and isinstance(state_coordinator, Mapping)
+            and _causal_continuation_is_executable(
+                state=state,
+                coordinator=state_coordinator,
+                context=internal_receipt_context,
+                workspace_root=self.workspace_root,
+                current_time=self.clock(),
+                recovery_checkpoint_active=False,
+            )
         )
         customer_summary = (
             "Continue registering the same already-authorized build artifacts. No new files, "
@@ -12422,79 +12763,25 @@ class CurrentLoopCoordinator:
             protected_call_attempted=protected_call_attempted,
             protected_non_success=protected_non_success,
         )
-        receipt_rebind_categories = {
-            "operation_receipt_invalid",
-            "operation_receipt_digest_mismatch",
-            "operation_receipt_revision_invalid",
-            "operation_receipt_stale",
-            "operation_receipt_contract_stale",
-            "operation_receipt_role_not_authorized",
-            "operation_receipt_format_not_authorized",
-            "operation_receipt_sensitive_output_requires_selection",
-            "artifact_candidate_provenance_conflict",
-            "artifact_candidate_role_invalid",
-            "artifact_candidate_file_required",
-            "artifact_candidate_path_invalid",
-        }
-        bounded_alternative_categories = {
-            "artifact_format_unsupported",
-            "circuit_format_unsupported",
-            "current_loop_contract_policy_prohibited",
-            "governing_blueprint_unavailable",
-            "canonical_parent_set_incomplete",
-            "parent_reference_stale",
-            "parent_digest_mismatch",
-            "parent_artifact_missing",
-            "unsupported_iteration_route",
-            "unsupported_schema",
-        }
-        strategy = (
-            "causal_continuation"
-            if causal_continuation
-            else "rebind_event_receipt"
-            if isinstance(internal_receipt_context, Mapping)
-            and normalized in receipt_rebind_categories
-            else "qcoder_corrects"
-            if normalized
-            in {
-                "checkpoint_input_required_field_missing",
-                "profile_id_missing",
-                "classification_missing",
-            }
-            else "refresh_revision"
-            if normalized == "client_state_conflict"
-            else "rebind_event_receipt"
-            if normalized in receipt_rebind_categories
-            else "bounded_alternative"
-            if normalized in bounded_alternative_categories
-            else "restage_with_construction"
+        strategy = recovery_strategy_for(
+            normalized,
+            receipt_context_present=isinstance(internal_receipt_context, Mapping),
+            causal_continuation_eligible=causal_continuation,
         )
         selected_alternatives = list(
-            ("retry_registration",)
-            if causal_continuation
-            else alternatives
-            or (
-                ("retry_registration", "stop_loop")
-                if strategy == "rebind_event_receipt"
-                else (
-                    "continue_with_limitations",
-                    "provide_supported_circuit_artifact",
-                    "stop_loop",
-                )
-                if normalized in {"artifact_format_unsupported", "circuit_format_unsupported"}
-                else ("retry_hosted_enrichment", "skip_hosted_enrichment", "stop_loop")
-                if origin in {"hosted_transport", "hosted_operation"}
-                else ("return_to_iteration_ready", "stop_loop")
-                if normalized
-                in {
-                    "governing_blueprint_unavailable",
-                    "canonical_parent_set_incomplete",
-                    "parent_reference_stale",
-                    "parent_digest_mismatch",
-                    "parent_artifact_missing",
-                    "unsupported_iteration_route",
-                }
-                else ("abandon_step", "stop_loop")
+            advertised_recovery_actions(
+                category=normalized,
+                strategy=strategy,
+                origin=origin,
+                causal_continuation_eligible=causal_continuation,
+                deterministic=deterministic,
+                active_loop_nonterminal=(
+                    recoverable
+                    and normalized != "causal_continuation_blocked"
+                    and isinstance(state_coordinator, Mapping)
+                    and state_coordinator.get("phase") not in {"completed", "abandoned"}
+                ),
+                requested_actions=alternatives,
             )
         )
         input_digests = [
@@ -12563,9 +12850,7 @@ class CurrentLoopCoordinator:
             if recoverable
             else None
         )
-        try:
-            state = self.store.read()
-        except CurrentLoopError:
+        if not isinstance(state, Mapping):
             return self._result_without_state(
                 operation=operation,
                 ok=False,
@@ -12671,7 +12956,78 @@ class CurrentLoopCoordinator:
                     "permitted_input_source": "current_qcoder_owned_recovery_reference",
                     "no_action_reason": None,
                 }
-        self._replace_coordinator(coordinator)
+        precommit_validator: Callable[[Mapping[str, Any]], None] | None = None
+        if causal_continuation:
+
+            def validate_causal_advertisement(value: Mapping[str, Any]) -> None:
+                receipt_id = (
+                    internal_receipt_context.get("operation_receipt_id")
+                    if isinstance(internal_receipt_context, Mapping)
+                    else None
+                )
+                receipt = value.get("operation_receipts", {}).get(receipt_id)
+                if not isinstance(receipt, Mapping):
+                    raise CurrentLoopError("causal_continuation_advertisement_invalid")
+                validation_time = self.clock()
+                validate_operation_receipt_lifecycle(
+                    receipt,
+                    current_time=validation_time,
+                )
+                if not _causal_continuation_is_executable(
+                    state=value,
+                    coordinator=self._coordinator_state(value),
+                    context=internal_receipt_context,
+                    workspace_root=self.workspace_root,
+                    current_time=validation_time,
+                    recovery_checkpoint_active=False,
+                ):
+                    raise CurrentLoopError("causal_continuation_advertisement_invalid")
+
+            precommit_validator = validate_causal_advertisement
+        try:
+            self._replace_coordinator(
+                coordinator,
+                precommit_validator=precommit_validator,
+            )
+        except EventReceiptError as exc:
+            if not causal_continuation:
+                raise
+            fallback_details = deepcopy(dict(details or {}))
+            fallback_context = fallback_details.get("receipt_recovery_context")
+            if isinstance(fallback_context, dict):
+                fallback_context["causal_continuation_eligible"] = False
+            return self._recovery_result(
+                operation=operation,
+                category=exc.category,
+                phase=phase,
+                elapsed=elapsed,
+                details=fallback_details,
+                origin=origin,
+                deterministic=deterministic,
+                protected_call_attempted=protected_call_attempted,
+                protected_non_success=protected_non_success,
+            )
+        except CurrentLoopError as exc:
+            if not (
+                causal_continuation
+                and exc.category == "causal_continuation_advertisement_invalid"
+            ):
+                raise
+            fallback_details = deepcopy(dict(details or {}))
+            fallback_context = fallback_details.get("receipt_recovery_context")
+            if isinstance(fallback_context, dict):
+                fallback_context["causal_continuation_eligible"] = False
+            return self._recovery_result(
+                operation=operation,
+                category=normalized,
+                phase=phase,
+                elapsed=elapsed,
+                details=fallback_details,
+                origin=origin,
+                deterministic=deterministic,
+                protected_call_attempted=protected_call_attempted,
+                protected_non_success=protected_non_success,
+            )
         return self._result(
             operation=operation,
             ok=False,

@@ -132,6 +132,19 @@ def _validate_integrity_and_lifecycle(
         raise EventReceiptError("operation_receipt_expired")
 
 
+def validate_operation_receipt_lifecycle(
+    receipt: Mapping[str, Any],
+    *,
+    current_time: float | None = None,
+) -> None:
+    """Validate stored receipt integrity, status, and monotonic lifetime."""
+
+    _validate_integrity_and_lifecycle(
+        receipt,
+        current_time=(time.monotonic() if current_time is None else current_time),
+    )
+
+
 def validate_operation_receipt(
     receipt: Mapping[str, Any],
     *,
@@ -143,7 +156,7 @@ def validate_operation_receipt(
     detected_format: str | None = None,
     current_time: float | None = None,
 ) -> None:
-    _validate_integrity_and_lifecycle(
+    validate_operation_receipt_lifecycle(
         receipt,
         current_time=(time.monotonic() if current_time is None else current_time),
     )
@@ -183,7 +196,7 @@ def rebind_operation_receipt_for_causal_continuation(
     or extend the original expiry.
     """
 
-    _validate_integrity_and_lifecycle(receipt, current_time=current_time)
+    validate_operation_receipt_lifecycle(receipt, current_time=current_time)
     if not isinstance(current_state_revision, int) or current_state_revision < 1:
         raise EventReceiptError("operation_receipt_revision_invalid")
     rebound = deepcopy(dict(receipt))

@@ -53,6 +53,15 @@ revisions, snapshots, and current or prior Run Summaries are bounded to that act
 purged on close. The optional local contract editor uses the same canonical contract as the IDE.
 Narrowing applies immediately; broadening requires explicit confirmation.
 
+### Upgrading an active Current Loop
+
+qCoder 0.6.0a5 changes the operation-receipt and recovery machine semantics. Finish or restart an
+active qCoder loop before upgrading. An outstanding pre-v4 operation receipt cannot be reused by
+0.6.0a5; when an old receipt is outstanding, the IDE must provide a fresh authority grant for the
+new runtime before the operation is attempted again. qCoder fails closed instead of silently
+reinterpreting old authority data. This is a local active-loop compatibility boundary, not a
+migration of project history or server-side persistence.
+
 ### Connected-client qualification
 
 - **Cursor Desktop:** full active Current Loop support.

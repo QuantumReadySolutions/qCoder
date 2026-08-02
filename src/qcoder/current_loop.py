@@ -1389,10 +1389,26 @@ class CurrentLoopStore:
         *,
         expected_revision: int,
     ) -> dict[str, Any]:
-        current = self.read()
-        if current["state_revision"] != expected_revision:
-            raise CurrentLoopConflict("concurrent_state_update")
-        return self.replace(mutator(deepcopy(current)), expected_revision=expected_revision)
+        # Run the mutator while holding the same lock that linearizes the CAS.
+        # This lets lifecycle predicates that must be true at commit time (for
+        # example operation-receipt expiry) be checked immediately before the
+        # authoritative candidate state is constructed and written.
+        with self.lock():
+            current = self.read()
+            if current["state_revision"] != expected_revision:
+                raise CurrentLoopConflict("concurrent_state_update")
+            result = deepcopy(dict(mutator(deepcopy(current))))
+            result["state_revision"] = expected_revision + 1
+            result["state_digest"] = _state_digest(result)
+            error = current_loop_state_error(result)
+            if error:
+                raise CurrentLoopError(error)
+            _atomic_write_bytes(
+                self.state_path,
+                canonical_bytes(result),
+                maximum_bytes=CURRENT_LOOP_STATE_MAX_BYTES,
+            )
+        return result
 
     def delete_state(self, *, explicit_authority: bool) -> dict[str, Any]:
         if explicit_authority is not True:
