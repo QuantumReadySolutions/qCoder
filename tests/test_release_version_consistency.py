@@ -10,7 +10,7 @@ from qcoder import __version__
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts/verify-release-version.py"
-EXPECTED_VERSION = "0.6.0a5"
+EXPECTED_VERSION = "0.6.0a6"
 
 
 def _load_verifier():
@@ -21,7 +21,7 @@ def _load_verifier():
     return module
 
 
-def test_source_version_identity_is_prefreeze_receipt_hardening() -> None:
+def test_source_version_identity_is_prefreeze_cross_client_hardening() -> None:
     verifier = _load_verifier()
     versions = verifier.source_versions(REPO_ROOT)
     assert versions == {
@@ -47,7 +47,7 @@ def test_release_identity_agrees_without_building_package_artifacts(
         customer_roots=[REPO_ROOT],
     )
     assert result["version"] == EXPECTED_VERSION
-    assert result["public_version"] == "0.6.0a5"
+    assert result["public_version"] == "0.6.0a6"
     assert result["private_candidate_identity"] is False
     assert result["old_candidate_identity_absent"] is True
 

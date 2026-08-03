@@ -22,14 +22,14 @@ def test_public_readme_is_release_truthful_and_keeps_client_boundaries() -> None
         "candidate full active current loop support",
     ):
         assert forbidden not in lowered
-    assert 'python -m pip install "qcoder==0.6.0a5"' in readme
+    assert 'python -m pip install "qcoder==0.6.0a6"' in readme
     assert "**Cursor Desktop:** full active Current Loop support." in readme
     assert "**Cursor terminal/CLI:**" in readme
     assert "full active-loop support is not claimed" in readme
     assert "**Generic MCP clients:** no support claim." in readme
     assert "does not scan repositories" in readme
     assert "does not independently generate the Python" in readme
-    assert "0.6.0a5 changes the operation-receipt and recovery machine semantics" in readme
+    assert "0.6.0a6 is a proposed quality-hardening source release" in readme
     assert "Finish or restart an active qCoder loop before upgrading" in readme
     assert "outstanding pre-v4 operation receipt cannot be reused" in readme
     assert "IDE must provide a fresh authority grant for the new runtime" in readme
@@ -39,7 +39,9 @@ def test_public_readme_is_release_truthful_and_keeps_client_boundaries() -> None
 def test_changelog_records_published_superseded_history_without_runtime_claim() -> None:
     changelog = _normalized(ROOT / "CHANGELOG.md")
     lowered = changelog.lower()
+    assert "## 0.6.0a6" in changelog
     assert "## 0.6.0a5" in changelog
+    assert "0.6.0a6` is a proposed pre-freeze source candidate" in changelog
     assert "after `0.6.0a3` was published with stale distribution metadata" in changelog
     assert "metadata-only corrections" in changelog
     assert "unpublished superseded metadata-correction candidate" in changelog

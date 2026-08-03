@@ -55,12 +55,14 @@ Narrowing applies immediately; broadening requires explicit confirmation.
 
 ### Upgrading an active Current Loop
 
-qCoder 0.6.0a5 changes the operation-receipt and recovery machine semantics. Finish or restart an
-active qCoder loop before upgrading. An outstanding pre-v4 operation receipt cannot be reused by
-0.6.0a5; when an old receipt is outstanding, the IDE must provide a fresh authority grant for the
-new runtime before the operation is attempted again. qCoder fails closed instead of silently
-reinterpreting old authority data. This is a local active-loop compatibility boundary, not a
-migration of project history or server-side persistence.
+qCoder 0.6.0a6 is a proposed quality-hardening source release that advances its connected-assistant,
+adaptive-intent input, result, and vocabulary machine contracts. Finish or restart an active qCoder
+loop before upgrading. An outstanding pre-v4 operation receipt cannot be reused. When an old receipt
+is outstanding, the IDE must provide a fresh authority grant for the new runtime; an active loop
+bound to an older connected-assistant contract should likewise be restarted.
+qCoder fails closed instead of silently reinterpreting old authority data. This is a local active-loop
+compatibility boundary, not a migration of project history or server-side persistence. The published
+0.6.0a5 release remains the public baseline until 0.6.0a6 is independently reviewed and published.
 
 ### Connected-client qualification
 
@@ -146,7 +148,7 @@ See the synthetic [`Algorithm Blueprint walkthrough`](examples/09_algorithm_blue
 Install:
 
 ```bash
-python -m pip install "qcoder==0.6.0a5"
+python -m pip install "qcoder==0.6.0a6"
 ```
 
 Analyze a circuit:

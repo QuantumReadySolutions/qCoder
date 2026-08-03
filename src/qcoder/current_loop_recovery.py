@@ -3,32 +3,13 @@
 from __future__ import annotations
 
 import json
-import sys
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from hashlib import sha256
 from typing import Any
 
-from qcoder.current_loop_invocation import build_operation_invocation
-from qcoder.current_loop_vocabulary import recovery_actions_for
-
 RECOVERY_SCHEMA_ID = "qcoder.current_loop.recovery.v5"
 RECOVERY_SCHEMA_VERSION = 5
-
-_ACTION_OPERATIONS = {
-    "retry_registration": ("execute_recovery_action", "execute-recovery-action"),
-    "correct_candidate": ("execute_recovery_action", "execute-recovery-action"),
-    "retry_local_derivation": (
-        "process_authorized_artifacts",
-        "process-authorized-artifacts",
-    ),
-    "resume_pending_derivation": (
-        "process_authorized_artifacts",
-        "process-authorized-artifacts",
-    ),
-    "restore_evidence": ("execute_recovery_action", "execute-recovery-action"),
-    "stop_loop": ("abandon", "abandon"),
-}
 
 RECEIPT_REBIND_CATEGORIES = frozenset(
     {
@@ -221,6 +202,107 @@ def recovery_action_handler(action: str) -> dict[str, Any] | None:
     return deepcopy(dict(contract)) if isinstance(contract, Mapping) else None
 
 
+def runtime_recovery_action_inventory() -> dict[str, dict[str, Any]]:
+    """Return the sole live action/handler inventory used by recovery emission."""
+
+    return {
+        action: deepcopy(dict(contract))
+        for action, contract in sorted(_RUNTIME_ACTION_HANDLERS.items())
+    }
+
+
+def resolve_live_recovery_policy(
+    *,
+    category: str,
+    presentation: Sequence[Any],
+    receipt_context_present: bool,
+    causal_continuation_eligible: bool,
+    origin: str,
+    deterministic: bool,
+    active_loop_nonterminal: bool,
+    requested_actions: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Resolve one authoritative live recovery policy row.
+
+    Category presentation is data, while this resolver is the only authority for
+    strategy, advertisement, executability, authority ceiling, continuation, and
+    supported-next-action semantics.
+    """
+
+    if len(presentation) != 6:
+        raise ValueError("recovery_presentation_invalid")
+    summary, next_action, conversation, reauthorize, state_intact, certification = (
+        presentation
+    )
+    strategy = recovery_strategy_for(
+        category,
+        receipt_context_present=receipt_context_present,
+        causal_continuation_eligible=causal_continuation_eligible,
+    )
+    actions = advertised_recovery_actions(
+        category=category,
+        strategy=strategy,
+        origin=origin,
+        causal_continuation_eligible=causal_continuation_eligible,
+        deterministic=deterministic,
+        active_loop_nonterminal=active_loop_nonterminal,
+        requested_actions=requested_actions,
+    )
+    action_contracts: list[dict[str, Any]] = []
+    for action in actions:
+        handler = recovery_action_handler(action)
+        if handler is None:
+            raise AssertionError(f"unbound recovery action: {action}")
+        action_contracts.append(
+            {
+                "action": action,
+                **handler,
+                "executable_in_advertised_state": True,
+                "availability": (
+                    "conditional_hosted_service"
+                    if action == "retry_hosted_enrichment"
+                    else "local_bounded"
+                ),
+            }
+        )
+    causal = strategy == "causal_continuation" and causal_continuation_eligible
+    return {
+        "category": category,
+        "strategy": strategy,
+        "customer_safe_summary": (
+            "Continue registering the same already-authorized build artifacts. No new files, "
+            "execution, network access, hosted activity, or broader authority is requested."
+            if causal
+            else str(summary)
+        ),
+        "supported_next_action": (
+            "continue_same_authorized_registration" if causal else str(next_action)
+        ),
+        "conversation_may_continue": bool(conversation),
+        "reauthorization_required": False if causal else bool(reauthorize),
+        "local_state_intact": bool(state_intact),
+        "certification_fallback_available": bool(certification),
+        "causal_continuation_eligible": causal,
+        "authority_ceiling": (
+            "exact_prior_action_only"
+            if causal
+            else "fresh_action_specific_authority_required"
+            if reauthorize
+            else "no_authority_broadening"
+        ),
+        "hosted_action_availability": (
+            "conditional"
+            if any(
+                row["availability"] == "conditional_hosted_service"
+                for row in action_contracts
+            )
+            else "not_advertised"
+        ),
+        "advertised_actions": list(actions),
+        "action_contracts": action_contracts,
+    }
+
+
 def runtime_recovery_action_contract_truthful() -> bool:
     """Derive the public truth bit from the same handler inventory used by emission."""
 
@@ -279,91 +361,12 @@ def _digest(value: object) -> str:
     ).hexdigest()
 
 
-def evidence_recovery(
-    *,
-    category: str,
-    state: Mapping[str, Any],
-    operation: str,
-    safe_arguments: Mapping[str, Any] | None = None,
-    allowed_actions: Sequence[str] | None = None,
-    runtime_executable: str = sys.executable,
-    checkpoint: str = "privacy_or_trust",
-) -> dict[str, Any]:
-    actions = tuple(allowed_actions or recovery_actions_for(category))
-    generated = []
-    for action in actions:
-        target = _ACTION_OPERATIONS.get(action)
-        if target is None:
-            continue
-        target_operation, subcommand = target
-        fixed: dict[str, Any] = {}
-        required: list[str] = []
-        if subcommand == "abandon":
-            required = ["--approve"]
-            fixed = {"--approve": True}
-        invocation_reference = (
-            f"recovery-{_digest({'category': category, 'operation': operation})[:24]}"
-        )
-        if subcommand == "execute-recovery-action":
-            required = [
-                "--recovery-reference",
-                "--action",
-                "--expected-contract-revision",
-            ]
-            fixed = {
-                "--recovery-reference": invocation_reference,
-                "--action": action,
-                "--expected-contract-revision": int(
-                    state["current_loop_contract"]["contract_revision"]
-                ),
-            }
-        invocation = build_operation_invocation(
-            {
-                "subcommand": subcommand,
-                "required_flags": required,
-                "fixed_argument_values": fixed,
-            },
-            executable=runtime_executable,
-            workspace=str(state["workspace_root"]),
-            base_url="",
-            token_file="",
-            state_revision=int(state["state_revision"]),
-            loop_ref=str(state["loop_ref"]),
-            checkpoint=checkpoint,
-        )
-        generated.append(
-            {
-                "action": action,
-                "operation": target_operation,
-                "invocation": invocation,
-                "executable": True,
-            }
-        )
-    result = {
-        "schema_id": RECOVERY_SCHEMA_ID,
-        "schema_version": RECOVERY_SCHEMA_VERSION,
-        "category": category,
-        "originating_operation": operation,
-        "loop_ref": state["loop_ref"],
-        "workspace_binding": state["workspace_root"],
-        "state_revision": state["state_revision"],
-        "contract_revision": state["current_loop_contract"]["contract_revision"],
-        "actions": generated,
-        "conversation_may_continue": bool(generated),
-        "assistant_should_stop": not bool(generated),
-        "primary_next_invocation": (deepcopy(generated[0]["invocation"]) if generated else None),
-        "canonical_state_reconstructed_by_assistant": False,
-        "substring_routing_used": False,
-    }
-    result["recovery_digest"] = _digest(result)
-    return result
-
-
 def recovery_contract_snapshot() -> dict[str, Any]:
     payload = {
         "schema_id": RECOVERY_SCHEMA_ID,
         "schema_version": RECOVERY_SCHEMA_VERSION,
-        "category_mapping": "qcoder.current_loop.vocabulary.v1",
+        "live_policy_source": "qcoder.current_loop_recovery.resolve_live_recovery_policy",
+        "action_handler_inventory": runtime_recovery_action_inventory(),
         "substring_routing_permitted": False,
         "every_advertised_action_executable": runtime_recovery_action_contract_truthful(),
         "assistant_reconstruction_permitted": False,

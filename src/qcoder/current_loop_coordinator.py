@@ -182,10 +182,8 @@ from qcoder.current_loop_result_envelope import (
 )
 from qcoder.current_loop_retention import retention_contract_snapshot
 from qcoder.current_loop_recovery import (
-    advertised_recovery_actions,
-    recovery_action_handler,
     recovery_contract_snapshot,
-    recovery_strategy_for,
+    resolve_live_recovery_policy,
 )
 from qcoder.current_loop_vocabulary import vocabulary_snapshot
 from qcoder.current_loop_evidence_processing import (
@@ -234,8 +232,94 @@ from qcoder.current_loop_iteration import (
 )
 from qcoder.context_loop import CONTEXT_LOOP_GATE
 
-COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v16"
-COORDINATOR_RESULT_SCHEMA_VERSION = 16
+COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v17"
+COORDINATOR_RESULT_SCHEMA_VERSION = 17
+
+RESULT_SEMANTIC_CLASSES = (
+    "pure_observation",
+    "checkpoint_production",
+    "authoritative_mutation",
+    "schema_failure",
+    "unsupported_action",
+    "authority_denial",
+    "lifecycle_or_expiry_failure",
+    "recoverable_state",
+    "terminal_state",
+)
+_VERIFIED_PURE_OBSERVATION_OPERATIONS = frozenset(
+    {
+        "status",
+        "contract_status",
+        "bounded_control_catalog",
+        "help",
+        "preview_contract_adjustment",
+        "validate_customer_contract_json",
+    }
+)
+_UNSUPPORTED_ACTION_CATEGORIES = frozenset(
+    {
+        "recovery_action_not_permitted",
+        "unsupported_recovery_action",
+        "unsupported_iteration_route",
+    }
+)
+
+
+def result_semantic_classification(
+    *,
+    operation: str,
+    ok: bool,
+    category: str | None,
+    phase: str,
+    state_status: str,
+    persist_performance: bool,
+) -> str:
+    """Classify a machine result without changing any established field meaning."""
+
+    normalized = category or ""
+    if phase in {"completed", "abandoned"} or state_status in {"completed", "abandoned"}:
+        return "terminal_state"
+    if normalized in _UNSUPPORTED_ACTION_CATEGORIES:
+        return "unsupported_action"
+    if normalized and (
+        "schema" in normalized
+        or "json" in normalized
+        or normalized.startswith("adaptive_intent_")
+        or normalized.startswith("checkpoint_input_")
+    ):
+        return "schema_failure"
+    if normalized and (
+        normalized.endswith("_denied")
+        or normalized in {
+            "authorization_declined",
+            "protected_authority_missing",
+            "current_loop_delete_authority_required",
+            "explicit_authority_required",
+        }
+    ):
+        return "authority_denial"
+    if normalized and (
+        "expired" in normalized
+        or "clock" in normalized
+        or normalized
+        in {
+            "operation_receipt_consumed",
+            "operation_receipt_replayed",
+            "operation_receipt_stale",
+            "causal_continuation_blocked",
+        }
+    ):
+        return "lifecycle_or_expiry_failure"
+    if not ok:
+        return "recoverable_state"
+    if (
+        not persist_performance
+        and operation in _VERIFIED_PURE_OBSERVATION_OPERATIONS
+    ):
+        return "pure_observation"
+    if state_status == "checkpoint_required":
+        return "checkpoint_production"
+    return "authoritative_mutation"
 COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v13"
 PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v12"
 OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
@@ -487,7 +571,7 @@ EXPLORATORY_FIXED_PROHIBITIONS = (
     "Do not evolve the Working Blueprint without explicit confirmation.",
 )
 
-_RECOVERY = {
+_RECOVERY_PRESENTATION = {
     "circuit_format_unsupported": (
         "The exact circuit artifact is not a locally supported structural-analysis format.",
         "Continue with the available evidence, provide an exact OpenQASM 2 artifact under "
@@ -988,7 +1072,7 @@ _CONTRACT_MANAGEMENT_RECOVERY_CATEGORIES = frozenset(
     }
 )
 for _contract_management_category in _CONTRACT_MANAGEMENT_RECOVERY_CATEGORIES:
-    _RECOVERY[_contract_management_category] = (
+    _RECOVERY_PRESENTATION[_contract_management_category] = (
         "The bounded customer contract input was rejected safely.",
         (
             "Refresh the current qCoder contract document, correct only the displayed "
@@ -1024,7 +1108,7 @@ def recovery_action_executability_matrix() -> list[dict[str, Any]]:
     """Return the exhaustive category/strategy advertisement contract."""
 
     categories = sorted(
-        set(_RECOVERY)
+        set(_RECOVERY_PRESENTATION)
         | set(SAFE_TYPED_CURRENT_LOOP_CATEGORIES)
         | set(ADDITIONAL_TYPED_RECOVERY_CATEGORIES)
         | {
@@ -1092,8 +1176,24 @@ def recovery_action_executability_matrix() -> list[dict[str, Any]]:
             )
         for variant in variants:
             causal = bool(variant["causal_continuation_eligible"])
-            strategy = recovery_strategy_for(
-                category,
+            active_loop_nonterminal = (
+                _RECOVERY_PRESENTATION.get(
+                    category, _RECOVERY_PRESENTATION["unknown_local_internal"]
+                )[2]
+                is True
+                and category
+                not in {
+                    "loop_not_activated",
+                    "local_state_corrupt",
+                    "reconstruction_attempt_refused",
+                    "causal_continuation_blocked",
+                }
+            )
+            policy = resolve_live_recovery_policy(
+                category=category,
+                presentation=_RECOVERY_PRESENTATION.get(
+                    category, _RECOVERY_PRESENTATION["unknown_local_internal"]
+                ),
                 receipt_context_present=category in {
                     "operation_receipt_invalid",
                     "operation_receipt_digest_mismatch",
@@ -1109,48 +1209,33 @@ def recovery_action_executability_matrix() -> list[dict[str, Any]]:
                     "artifact_candidate_path_invalid",
                 },
                 causal_continuation_eligible=causal,
-            )
-            actions = advertised_recovery_actions(
-                category=category,
-                strategy=strategy,
                 origin=str(variant["origin"]),
-                causal_continuation_eligible=causal,
                 deterministic=bool(variant["deterministic"]),
-                active_loop_nonterminal=(
-                    _RECOVERY.get(category, _RECOVERY["unknown_local_internal"])[2] is True
-                    and category
-                    not in {
-                        "loop_not_activated",
-                        "local_state_corrupt",
-                        "reconstruction_attempt_refused",
-                        "causal_continuation_blocked",
-                    }
-                ),
+                active_loop_nonterminal=active_loop_nonterminal,
                 requested_actions=variant["requested_actions"],
             )
-            action_contracts = []
-            for action in actions:
-                handler = recovery_action_handler(action)
-                if not isinstance(handler, Mapping):
-                    raise AssertionError(f"unbound recovery action: {action}")
-                action_contracts.append(
-                    {
-                        "action": action,
-                        "handler": handler["handler"],
-                        "executable_in_advertised_state": True,
-                        "result": "terminal" if handler["terminal"] else "non_terminal",
-                        "ordinary_supported_next_step": handler[
-                            "ordinary_supported_next_step"
-                        ],
-                    }
-                )
+            action_contracts = [
+                {
+                    "action": row["action"],
+                    "handler": row["handler"],
+                    "executable_in_advertised_state": row[
+                        "executable_in_advertised_state"
+                    ],
+                    "availability": row["availability"],
+                    "result": "terminal" if row["terminal"] else "non_terminal",
+                    "ordinary_supported_next_step": row["ordinary_supported_next_step"],
+                }
+                for row in policy["action_contracts"]
+            ]
             rows.append(
                 {
                     "category": category,
                     "variant": variant["variant"],
-                    "strategy": strategy,
+                    "strategy": policy["strategy"],
                     "causal_continuation_eligible": causal,
-                    "advertised_alternatives": list(actions),
+                    "authority_ceiling": policy["authority_ceiling"],
+                    "hosted_action_availability": policy["hosted_action_availability"],
+                    "advertised_alternatives": policy["advertised_actions"],
                     "actions": action_contracts,
                 }
             )
@@ -1694,7 +1779,7 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "registered_and_presentation_currentness_separate": True,
         },
         "workspace_state_is_intent": False,
-        "recovery_categories": sorted(_RECOVERY),
+        "recovery_categories": sorted(_RECOVERY_PRESENTATION),
         "high_level_operations": [
             "status",
             "activate",
@@ -4593,9 +4678,9 @@ class CurrentLoopCoordinator:
             category=exc.category,
             state=state,
             summary=(
-                "The adaptive-intent machine document was rejected safely. qCoder supplied "
-                "a fresh single-use document and complete local invocation; prior activation, "
-                "contract, Request Baseline, authority, and evidence remain intact."
+                "qCoder could not preserve the requested build intent without changing or "
+                "guessing customer meaning. The current build and its prior evidence remain "
+                "intact; continue only through the refreshed supported next step."
             ),
             elapsed=self.clock() - started,
             details={
@@ -11525,6 +11610,14 @@ class CurrentLoopCoordinator:
             "operation": operation,
             "ok": ok,
             "category": category,
+            "result_semantic_classification": result_semantic_classification(
+                operation=operation,
+                ok=ok,
+                category=category,
+                phase=str(coordinator["phase"]),
+                state_status=str(coordinator["state_status"]),
+                persist_performance=persist_performance,
+            ),
             "phase": coordinator["phase"],
             "state_status": coordinator["state_status"],
             "checkpoint_kind": coordinator["checkpoint_kind"],
@@ -12122,6 +12215,14 @@ class CurrentLoopCoordinator:
             "operation": operation,
             "ok": ok,
             "category": category,
+            "result_semantic_classification": result_semantic_classification(
+                operation=operation,
+                ok=ok,
+                category=category,
+                phase=phase,
+                state_status=state_status,
+                persist_performance=False,
+            ),
             "phase": phase,
             "state_status": state_status,
             "checkpoint_kind": checkpoint_kind,
@@ -12690,9 +12791,9 @@ class CurrentLoopCoordinator:
         protected_non_success: bool = False,
     ) -> dict[str, Any]:
         normalized = _ERROR_ALIASES.get(category, category)
-        recovery = _RECOVERY.get(
+        recovery = _RECOVERY_PRESENTATION.get(
             normalized,
-            _RECOVERY["unknown_local_internal"],
+            _RECOVERY_PRESENTATION["unknown_local_internal"],
         )
         status = (
             "conflict"
@@ -12742,23 +12843,32 @@ class CurrentLoopCoordinator:
                 recovery_checkpoint_active=False,
             )
         )
-        customer_summary = (
-            "Continue registering the same already-authorized build artifacts. No new files, "
-            "execution, network access, hosted activity, or broader authority is requested."
-            if causal_continuation
-            else recovery[0]
+        active_loop_nonterminal = (
+            recoverable
+            and normalized != "causal_continuation_blocked"
+            and isinstance(state_coordinator, Mapping)
+            and state_coordinator.get("phase") not in {"completed", "abandoned"}
         )
+        policy = resolve_live_recovery_policy(
+            category=normalized,
+            presentation=recovery,
+            receipt_context_present=isinstance(internal_receipt_context, Mapping),
+            causal_continuation_eligible=causal_continuation,
+            origin=origin,
+            deterministic=deterministic,
+            active_loop_nonterminal=active_loop_nonterminal,
+            requested_actions=alternatives,
+        )
+        customer_summary = str(policy["customer_safe_summary"])
         payload = {
             "message": customer_summary,
-            "supported_next_action": (
-                "continue_same_authorized_registration"
-                if causal_continuation
-                else recovery[1]
-            ),
-            "conversation_may_continue": recovery[2],
-            "reauthorization_required": recovery[3],
-            "local_state_intact": recovery[4],
-            "certification_fallback_available": recovery[5],
+            "supported_next_action": policy["supported_next_action"],
+            "conversation_may_continue": policy["conversation_may_continue"],
+            "reauthorization_required": policy["reauthorization_required"],
+            "local_state_intact": policy["local_state_intact"],
+            "certification_fallback_available": policy[
+                "certification_fallback_available"
+            ],
             **supplied_details,
         }
         payload["assistant_should_stop"] = not recoverable
@@ -12769,27 +12879,8 @@ class CurrentLoopCoordinator:
             protected_call_attempted=protected_call_attempted,
             protected_non_success=protected_non_success,
         )
-        strategy = recovery_strategy_for(
-            normalized,
-            receipt_context_present=isinstance(internal_receipt_context, Mapping),
-            causal_continuation_eligible=causal_continuation,
-        )
-        selected_alternatives = list(
-            advertised_recovery_actions(
-                category=normalized,
-                strategy=strategy,
-                origin=origin,
-                causal_continuation_eligible=causal_continuation,
-                deterministic=deterministic,
-                active_loop_nonterminal=(
-                    recoverable
-                    and normalized != "causal_continuation_blocked"
-                    and isinstance(state_coordinator, Mapping)
-                    and state_coordinator.get("phase") not in {"completed", "abandoned"}
-                ),
-                requested_actions=alternatives,
-            )
-        )
+        strategy = str(policy["strategy"])
+        selected_alternatives = list(policy["advertised_actions"])
         input_digests = [
             str(value)
             for value in internal_input_digests
@@ -12806,21 +12897,23 @@ class CurrentLoopCoordinator:
             "schema_version": RECOVERY_SCHEMA_VERSION,
             "strategy": strategy,
             "safe_error_category": normalized,
-            "prior_valid_authority_preserved": recovery[4],
-            "prior_valid_evidence_preserved": recovery[4],
+            "prior_valid_authority_preserved": policy["local_state_intact"],
+            "prior_valid_evidence_preserved": policy["local_state_intact"],
             "permitted_input_source": (
                 "qcoder_owned_prebound_value"
                 if strategy
                 in {"qcoder_corrects", "rebind_event_receipt", "causal_continuation"}
                 else "fresh_coordinator_result"
             ),
-            "customer_review_required": recovery[3],
+            "customer_review_required": policy["reauthorization_required"],
             "hosted_operation_permitted": False,
             "alternatives": selected_alternatives,
             "state_and_contract_binding_required": True,
             "complete_next_invocation_required": True,
             "refresh_executes_selected_action": False,
             "deterministic_failure": deterministic,
+            "authority_ceiling": policy["authority_ceiling"],
+            "hosted_action_availability": policy["hosted_action_availability"],
             "convergence_fingerprint": fingerprint,
         }
         if causal_continuation:
@@ -12865,9 +12958,9 @@ class CurrentLoopCoordinator:
                 state_status=status,
                 checkpoint_kind=_recovery_checkpoint_kind(
                     normalized,
-                    reauthorization_required=recovery[3],
+                    reauthorization_required=bool(policy["reauthorization_required"]),
                 ),
-                summary=recovery[0],
+                summary=customer_summary,
                 details=payload,
                 checkpoint_protocol=recovery_protocol,
             )
@@ -12889,8 +12982,10 @@ class CurrentLoopCoordinator:
                 "state_status": status,
                 "checkpoint_kind": _recovery_checkpoint_kind(
                     normalized,
-                    reauthorization_required=recovery[3],
+                    reauthorization_required=bool(policy["reauthorization_required"]),
                 ),
+                # Persist the compact category summary; the causal continuation
+                # result itself carries the complete customer-safe explanation.
                 "customer_summary": recovery[0],
             }
         )
@@ -13070,7 +13165,7 @@ class CurrentLoopCoordinator:
         ):
             category = "unknown_local_internal"
         if (
-            category not in _RECOVERY
+            category not in _RECOVERY_PRESENTATION
             and category not in SAFE_TYPED_CURRENT_LOOP_CATEGORIES
             and not isinstance(
                 exc,

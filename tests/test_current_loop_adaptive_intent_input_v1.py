@@ -18,6 +18,7 @@ from qcoder.current_loop_adaptive_intent import (
     adaptive_intent_completeness_matrix,
     adaptive_intent_contract_snapshot,
     build_adaptive_intent_input_contract,
+    canonicalize_adaptive_intent_document,
     consume_fields_file,
 )
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
@@ -87,7 +88,7 @@ def test_binding_v11_publishes_dedicated_complete_adaptive_intent_contract() -> 
     binding = build_client_binding_descriptor(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v17"
+    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v18"
     contract = binding["adaptive_intent_input_contract"]
     assert contract["schema_id"] == ADAPTIVE_INTENT_INPUT_SCHEMA_ID
     assert set(contract["profiles"]) == {"generic_qiskit", "grover_search", "qaoa"}
@@ -424,7 +425,7 @@ def test_invalid_utf8_missing_file_replay_and_single_use_cleanup(tmp_path: Path)
     (
         (b"{", "adaptive_intent_json_invalid"),
         (b"[]", "adaptive_intent_document_type_invalid"),
-        (b'{ "x": 1 }', "adaptive_intent_serialization_invalid"),
+        (b'{ "x": 1 }', "adaptive_intent_fixed_payload_mismatch"),
         (b"x" * 131_073, "adaptive_intent_file_oversize"),
     ),
 )
@@ -455,6 +456,70 @@ def test_primary_interaction_envelope_is_compact(tmp_path: Path) -> None:
     assert len(json.dumps(envelope)) < 8_000
     result = coordinator.prepare_adaptive_intent(fields_file=_fill_required(contract))
     assert len(json.dumps(result["customer_interaction"])) < 8_000
+
+
+def test_bell_first_submission_normalizes_transport_without_semantic_reapproval(
+    tmp_path: Path,
+) -> None:
+    coordinator, _, contract = _activate(tmp_path)
+    before = coordinator.store.read()
+    request_baseline = deepcopy(before["saved_artifacts"]["request_baseline"])
+    path = _fill_required(contract)
+    document = json.loads(path.read_text(encoding="utf-8"))
+    reordered = {name: document[name] for name in reversed(tuple(document))}
+    path.write_text(json.dumps(reordered, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    result = coordinator.prepare_adaptive_intent(fields_file=path)
+
+    assert result["ok"] is True
+    assert result["customer_interaction"]["requires_customer_response"] is False
+    assert result["checkpoint_kind"] == "none"
+    assert result["next_invocation"]["operation_specific_invocation"]["operation"] == (
+        "record_ide_authority"
+    )
+    assert coordinator.store.read()["saved_artifacts"]["request_baseline"] == request_baseline
+    assert "JSON" not in result["customer_summary"]
+    assert "schema" not in result["customer_summary"].casefold()
+
+
+def test_equivalent_transport_orders_have_one_canonical_serialization(
+    tmp_path: Path,
+) -> None:
+    _, _, contract = _activate(tmp_path)
+    path = _fill_required(contract)
+    document = json.loads(path.read_text(encoding="utf-8"))
+    text_a = json.dumps(document, ensure_ascii=False, indent=4)
+    text_b = json.dumps(
+        {name: document[name] for name in reversed(tuple(document))},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    parsed_a, canonical_a = canonicalize_adaptive_intent_document(text_a)
+    parsed_b, canonical_b = canonicalize_adaptive_intent_document(text_b)
+    assert parsed_a == parsed_b
+    assert canonical_a == canonical_b
+    assert canonical_a == json.dumps(
+        document,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+
+
+def test_duplicate_key_is_semantic_conflict_not_silent_last_value(
+    tmp_path: Path,
+) -> None:
+    coordinator, _, contract = _activate(tmp_path)
+    path = _fill_required(contract)
+    text = path.read_text(encoding="utf-8")
+    prefix = '{"schema_id":"qcoder.current_loop.adaptive_intent_fields_document.v1",'
+    assert text.startswith('{"checkpoint"')
+    path.write_text(prefix + text[1:], encoding="utf-8")
+    result = coordinator.prepare_adaptive_intent(fields_file=path)
+    assert result["ok"] is False
+    assert result["category"] == "adaptive_intent_semantic_conflict"
+    assert "JSON" not in result["customer_summary"]
+    assert "schema" not in result["customer_summary"].casefold()
 
 
 def test_black_box_executes_only_delivered_contract_and_exact_invocation(
