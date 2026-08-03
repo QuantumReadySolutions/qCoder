@@ -10,7 +10,7 @@ from qcoder import __version__
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts/verify-release-version.py"
-EXPECTED_VERSION = "0.6.0a6"
+EXPECTED_VERSION = "0.6.0a7"
 
 
 def _load_verifier():
@@ -40,6 +40,11 @@ def test_release_identity_agrees_without_building_package_artifacts(
     sdist = tmp_path / f"qcoder-{EXPECTED_VERSION}.tar.gz"
     monkeypatch.setattr(verifier, "wheel_version", lambda _path: EXPECTED_VERSION)
     monkeypatch.setattr(verifier, "sdist_version", lambda _path: EXPECTED_VERSION)
+    monkeypatch.setattr(
+        verifier,
+        "customer_pin_versions",
+        lambda _roots: {"candidate-source-identity": [EXPECTED_VERSION]},
+    )
     result = verifier.verify_release_version(
         source_root=REPO_ROOT,
         wheel=wheel,
@@ -47,7 +52,7 @@ def test_release_identity_agrees_without_building_package_artifacts(
         customer_roots=[REPO_ROOT],
     )
     assert result["version"] == EXPECTED_VERSION
-    assert result["public_version"] == "0.6.0a6"
+    assert result["public_version"] == "0.6.0a7"
     assert result["private_candidate_identity"] is False
     assert result["old_candidate_identity_absent"] is True
 

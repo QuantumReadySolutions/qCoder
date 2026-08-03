@@ -259,6 +259,7 @@ _VERIFIED_PURE_OBSERVATION_OPERATIONS = frozenset(
 _UNSUPPORTED_ACTION_CATEGORIES = frozenset(
     {
         "recovery_action_not_permitted",
+        "unsupported_action",
         "unsupported_recovery_action",
         "unsupported_iteration_route",
     }
@@ -7954,19 +7955,32 @@ class CurrentLoopCoordinator:
         reason: str,
         started: float,
     ) -> dict[str, Any]:
+        action_not_permitted = reason == "recovery_action_not_permitted"
         return self._result(
             operation=operation,
             ok=False,
-            category="unsupported_recovery_schema",
+            category=(
+                "unsupported_action"
+                if action_not_permitted
+                else "unsupported_recovery_schema"
+            ),
             state=state,
             summary=(
-                "This saved recovery action is not compatible with the current runtime. "
-                "No action was executed. Explicitly abandon the active loop before restarting "
-                "it under the current runtime."
+                (
+                    "The selected recovery action is not available from this saved recovery "
+                    "state. No action was executed. Use an advertised recovery action or "
+                    "explicitly abandon the active loop."
+                )
+                if action_not_permitted
+                else (
+                    "This saved recovery action is not compatible with the current runtime. "
+                    "No action was executed. Explicitly abandon the active loop before "
+                    "restarting it under the current runtime."
+                )
             ),
             elapsed=max(0.0, self.clock() - started),
             details={
-                "active_recovery_schema_supported": False,
+                "active_recovery_schema_supported": action_not_permitted,
                 "schema_gate_reason": reason,
                 "recovery_action_executed": False,
                 "authoritative_state_mutated": False,

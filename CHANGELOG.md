@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0a7
+
+- Correct the real coordinator recovery-action result path so selecting an action that is not
+  permitted by an otherwise valid v5 recovery document emits `unsupported_action` with the
+  `unsupported_action` semantic class rather than mislabeling the result as a schema failure.
+- Preserve the v18 connected-assistant binding, v5 recovery schema, v17 coordinator-result schema,
+  recovery policy, advertised actions, authority and lifecycle rules, retained state shape, and
+  exactly twelve Context Bridge capability tools.
+- qCoder `0.6.0a7` is a proposed source correction candidate. It is not published, accepted,
+  deployed, the current public release, or publicly installable.
+
 ## 0.6.0a6
 
 - Propose client-independent quality hardening over the published `0.6.0a5` baseline without
@@ -19,9 +30,9 @@
 - Advance the connected-assistant binding from v17 to v18, adaptive-intent input from v1 to v2,
   coordinator result from v16 to v17, and current-loop vocabulary from v1 to v2. Receipt v4,
   recovery v5, coordinator state v13, and exactly twelve tools remain unchanged.
-- qCoder `0.6.0a6` is a proposed pre-freeze source candidate and is not yet published. Finish or
-  restart an active qCoder loop before upgrading across this binding boundary; qCoder fails closed
-  rather than reinterpreting incompatible active machine state.
+- qCoder `0.6.0a6` was frozen and then rejected as an unpublished candidate after exact-wheel
+  verification exposed a recovery-action result-semantic contradiction. Its frozen artifacts are
+  retained and must not be rebuilt or relabeled as a correction candidate.
 
 ## 0.6.0a5
 
@@ -83,7 +94,9 @@
 The exact tested `0.6.0a3` artifacts were published and their runtime bytes were valid, but their
 immutable public distribution metadata was inaccurate and retained stale release-candidate
 wording. Version `0.6.0a4` was an unpublished superseded metadata-correction candidate. Version
-`0.6.0a5` carries the metadata-only corrections plus the bounded receipt hardening above; the
+`0.6.0a5` carries the metadata-only corrections plus the bounded receipt hardening above and
+remains the current official public release. Version `0.6.0a6` is a frozen, rejected, unpublished
+candidate. Version `0.6.0a7` is the proposed source correction candidate and is not published. The
 `0.6.0a3` package bytes remain the runtime-valid artifacts that were published.
 
 ## 0.6.0a2+wi0419.explorercontract1binding1

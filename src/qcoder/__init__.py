@@ -1,3 +1,3 @@
 __all__ = []
-__version__ = "0.6.0a6"
+__version__ = "0.6.0a7"
 file = __file__
