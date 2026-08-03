@@ -1,0 +1,11 @@
+{
+  "schema": "qcoder.release_version_source.v1",
+  "source_version": "0.6.0a7",
+  "source_posture": "unpublished_candidate",
+  "current_public_version": "0.6.0a5",
+  "published": false,
+  "publicly_installable": false,
+  "intervening_unpublished_versions": [
+    "0.6.0a6"
+  ]
+}
