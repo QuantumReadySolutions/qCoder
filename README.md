@@ -55,15 +55,18 @@ Narrowing applies immediately; broadening requires explicit confirmation.
 
 ### Upgrading an active Current Loop
 
-qCoder 0.6.0a7 is a proposed source correction candidate for the recovery-action result semantics
-declared by the existing connected-assistant contract. It is not published, accepted, deployed,
-the current public release, or publicly installable. Version 0.6.0a6 remains a frozen, rejected,
-unpublished candidate and must not be rebuilt or relabeled. The published 0.6.0a5 release remains
-the current official public release. Finish or restart an active qCoder loop before upgrading once
-a corrected release is published. An outstanding pre-v4 operation receipt cannot be reused. When
-an old receipt is outstanding, the IDE must provide a fresh authority grant for the new runtime.
-qCoder fails closed instead of silently reinterpreting old authority data. This is a local
-active-loop compatibility boundary, not a migration of project history or server-side persistence.
+qCoder 0.6.0a8 is an unpublished source candidate that preserves the exact reviewed 0.6.0a7
+runtime and corrects only version and release-history metadata. It is not published, accepted,
+qualified, deployed, the current public release, or publicly installable. Version 0.6.0a7 was
+frozen, terminally rejected, retained, and unpublished because of an immutable candidate-control
+truthfulness defect. Version 0.6.0a6 remains frozen, rejected, retained, and unpublished. Neither
+candidate may be rebuilt, replaced, relabeled, or used as a customer installation pin. The
+published 0.6.0a5 release remains the current official public release. Finish or restart an active
+qCoder loop before upgrading once a corrected release is published. An outstanding pre-v4
+operation receipt cannot be reused. When an old receipt is outstanding, the IDE must provide a
+fresh authority grant for the new runtime. qCoder fails closed instead of silently reinterpreting
+old authority data. This is a local active-loop compatibility boundary, not a migration of project
+history or server-side persistence.
 
 ### Connected-client qualification
 

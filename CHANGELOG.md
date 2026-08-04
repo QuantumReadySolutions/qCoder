@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0a8
+
+- Advance only the package/source version and release-history metadata from the exact reviewed
+  `0.6.0a7` source. Runtime modules, recovery semantics, contracts, schemas, tools, prompts,
+  dependencies, entry points, licensing, authority behavior, and persisted state remain unchanged.
+- Record that `0.6.0a7` was frozen, terminally rejected, retained, and unpublished because its
+  immutable candidate control contained a truthfulness defect. The rejected candidate bytes remain
+  retained and must not be rebuilt, replaced, relabeled, or presented as the current lifecycle.
+- qCoder `0.6.0a8` is an unpublished source candidate only. It is not accepted, qualified,
+  published, deployed, publicly installable, or the current public release.
+
 ## 0.6.0a7
 
 - Correct the real coordinator recovery-action result path so selecting an action that is not
@@ -8,8 +19,9 @@
 - Preserve the v18 connected-assistant binding, v5 recovery schema, v17 coordinator-result schema,
   recovery policy, advertised actions, authority and lifecycle rules, retained state shape, and
   exactly twelve Context Bridge capability tools.
-- qCoder `0.6.0a7` is a proposed source correction candidate. It is not published, accepted,
-  deployed, the current public release, or publicly installable.
+- qCoder `0.6.0a7` was frozen and then terminally rejected as an unpublished candidate because its
+  immutable candidate control contained a truthfulness defect. Its frozen artifacts are retained
+  and must not be rebuilt, replaced, or relabeled.
 
 ## 0.6.0a6
 
@@ -96,8 +108,9 @@ immutable public distribution metadata was inaccurate and retained stale release
 wording. Version `0.6.0a4` was an unpublished superseded metadata-correction candidate. Version
 `0.6.0a5` carries the metadata-only corrections plus the bounded receipt hardening above and
 remains the current official public release. Version `0.6.0a6` is a frozen, rejected, unpublished
-candidate. Version `0.6.0a7` is the proposed source correction candidate and is not published. The
-`0.6.0a3` package bytes remain the runtime-valid artifacts that were published.
+candidate. Version `0.6.0a7` was frozen, terminally rejected, retained, and unpublished because of
+an immutable candidate-control truthfulness defect. Version `0.6.0a8` is an unpublished source
+candidate only. The `0.6.0a3` package bytes remain the runtime-valid artifacts that were published.
 
 ## 0.6.0a2+wi0419.explorercontract1binding1
 

@@ -14,7 +14,7 @@ import zipfile
 
 OLD_CANDIDATE_VERSION = "0.6.0a1"
 RELEASE_METADATA_FILENAME = "release-version.json"
-RELEASE_METADATA_SCHEMA = "qcoder.release_version_source.v1"
+RELEASE_METADATA_SCHEMA = "qcoder.release_version_source.v2"
 UNPUBLISHED_CANDIDATE = "unpublished_candidate"
 SUPPORTED_POSTURES = frozenset({UNPUBLISHED_CANDIDATE})
 PRIVATE_CANDIDATE_PATTERN = re.compile(
@@ -30,6 +30,38 @@ QCODER_ALPHA_VERSION_PATTERN = re.compile(
     r"(?P<patch>0|[1-9][0-9]*)a"
     r"(?P<serial>0|[1-9][0-9]*)$"
 )
+RELEASE_HISTORY_FIELDS = {
+    "version",
+    "lifecycle",
+    "frozen",
+    "retention",
+    "terminal",
+    "published",
+    "publicly_installable",
+    "rejection_reason",
+}
+REQUIRED_INTERVENING_RELEASE_HISTORY = {
+    "0.6.0a6": {
+        "version": "0.6.0a6",
+        "lifecycle": "rejected",
+        "frozen": True,
+        "retention": "retained",
+        "terminal": True,
+        "published": False,
+        "publicly_installable": False,
+        "rejection_reason": "recovery_action_result_semantic_mismatch",
+    },
+    "0.6.0a7": {
+        "version": "0.6.0a7",
+        "lifecycle": "rejected",
+        "frozen": True,
+        "retention": "retained",
+        "terminal": True,
+        "published": False,
+        "publicly_installable": False,
+        "rejection_reason": "immutable_candidate_control_truthfulness_defect",
+    },
+}
 
 
 def _metadata_version(text: str) -> str:
@@ -73,6 +105,7 @@ def release_metadata(source_root: Path) -> dict[str, object]:
         "published",
         "publicly_installable",
         "intervening_unpublished_versions",
+        "intervening_release_history",
     }
     if set(data) != required:
         raise ValueError("release_metadata_fields_invalid")
@@ -95,6 +128,16 @@ def release_metadata(source_root: Path) -> dict[str, object]:
         raise ValueError("release_metadata_intervening_versions_invalid")
     if len(intervening) != len(set(intervening)):
         raise ValueError("release_metadata_intervening_versions_duplicated")
+    history = data["intervening_release_history"]
+    if not isinstance(history, list) or not all(isinstance(item, dict) for item in history):
+        raise ValueError("release_metadata_intervening_history_invalid")
+    if any(set(item) != RELEASE_HISTORY_FIELDS for item in history):
+        raise ValueError("release_metadata_intervening_history_fields_invalid")
+    history_versions = [item["version"] for item in history]
+    if not all(isinstance(value, str) for value in history_versions):
+        raise ValueError("release_metadata_intervening_history_version_invalid")
+    if len(history_versions) != len(set(history_versions)):
+        raise ValueError("release_metadata_intervening_history_duplicated")
     return data
 
 
@@ -213,6 +256,23 @@ def verify_release_version(
             "intervening_unpublished_versions_mismatch:"
             f"expected={expected_intervening}:declared={declared_intervening}"
         )
+    declared_history = list(metadata["intervening_release_history"])
+    history_versions = [str(item["version"]) for item in declared_history]
+    if history_versions != declared_intervening:
+        raise ValueError(
+            "intervening_release_history_versions_mismatch:"
+            f"expected={declared_intervening}:declared={history_versions}"
+        )
+    for item in declared_history:
+        version = str(item["version"])
+        required = REQUIRED_INTERVENING_RELEASE_HISTORY.get(version)
+        if required is None:
+            raise ValueError(f"intervening_release_history_unknown:{version}")
+        if item != required:
+            raise ValueError(
+                f"intervening_release_history_mismatch:{version}:"
+                f"expected={required}:declared={item}"
+            )
     if not pins:
         raise ValueError("customer_package_pin_missing")
     candidate_pin_occurrences = [
@@ -256,6 +316,8 @@ def verify_release_version(
         "intervening_unpublished_pin_occurrences": [],
         "rejected_or_unpublished_pin_occurrences": [],
         "forbidden_customer_pin_versions": [*declared_intervening, expected],
+        "intervening_release_history": declared_history,
+        "intervening_release_history_valid": True,
         "artifact_versions_checked": wheel is not None,
         "old_candidate_identity_absent": True,
     }

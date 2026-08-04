@@ -13,9 +13,32 @@ from qcoder import __version__
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts/verify-release-version.py"
-EXPECTED_VERSION = "0.6.0a7"
+EXPECTED_VERSION = "0.6.0a8"
 EXPECTED_PUBLIC_VERSION = "0.6.0a5"
 EXPECTED_POSTURE = "unpublished_candidate"
+EXPECTED_INTERVENING_VERSIONS = ["0.6.0a6", "0.6.0a7"]
+EXPECTED_RELEASE_HISTORY = [
+    {
+        "version": "0.6.0a6",
+        "lifecycle": "rejected",
+        "frozen": True,
+        "retention": "retained",
+        "terminal": True,
+        "published": False,
+        "publicly_installable": False,
+        "rejection_reason": "recovery_action_result_semantic_mismatch",
+    },
+    {
+        "version": "0.6.0a7",
+        "lifecycle": "rejected",
+        "frozen": True,
+        "retention": "retained",
+        "terminal": True,
+        "published": False,
+        "publicly_installable": False,
+        "rejection_reason": "immutable_candidate_control_truthfulness_defect",
+    },
+]
 
 
 def _load_verifier():
@@ -26,7 +49,7 @@ def _load_verifier():
     return module
 
 
-def test_source_version_identity_is_a7_unpublished_correction_candidate() -> None:
+def test_source_version_identity_is_a8_unpublished_successor_candidate() -> None:
     verifier = _load_verifier()
     versions = verifier.source_versions(REPO_ROOT)
     assert versions == {
@@ -37,7 +60,7 @@ def test_source_version_identity_is_a7_unpublished_correction_candidate() -> Non
     assert __version__ == EXPECTED_VERSION
 
 
-def test_real_repository_release_identity_and_customer_pin_scan() -> None:
+def _run_real_repository_verifier(cwd: Path) -> tuple[bytes, dict[str, object]]:
     completed = subprocess.run(
         [
             sys.executable,
@@ -47,13 +70,18 @@ def test_real_repository_release_identity_and_customer_pin_scan() -> None:
             "--customer-root",
             str(REPO_ROOT),
         ],
-        cwd=REPO_ROOT,
+        cwd=cwd,
         check=False,
         capture_output=True,
         text=True,
     )
     assert completed.returncode == 0, completed.stderr or completed.stdout
     result = json.loads(completed.stdout)
+    return completed.stdout.encode("utf-8"), result
+
+
+def test_real_repository_release_identity_and_customer_pin_scan() -> None:
+    _, result = _run_real_repository_verifier(REPO_ROOT)
     assert result["source_version"] == EXPECTED_VERSION
     assert result["source_posture"] == EXPECTED_POSTURE
     assert result["current_public_version"] == EXPECTED_PUBLIC_VERSION
@@ -62,12 +90,29 @@ def test_real_repository_release_identity_and_customer_pin_scan() -> None:
     assert result["candidate_pin_occurrences"] == []
     assert result["intervening_unpublished_pin_occurrences"] == []
     assert result["rejected_or_unpublished_pin_occurrences"] == []
-    assert result["forbidden_customer_pin_versions"] == ["0.6.0a6", "0.6.0a7"]
+    assert result["forbidden_customer_pin_versions"] == [
+        "0.6.0a6",
+        "0.6.0a7",
+        "0.6.0a8",
+    ]
+    assert result["intervening_release_history"] == EXPECTED_RELEASE_HISTORY
+    assert result["intervening_release_history_valid"] is True
     assert result["customer_pins"] == {"README.md": [EXPECTED_PUBLIC_VERSION]}
     assert result["result"] == "pass"
     assert result["private_candidate_identity"] is False
     assert result["old_candidate_identity_absent"] is True
     assert result["artifact_versions_checked"] is False
+
+
+def test_real_repository_verifier_is_working_directory_independent(tmp_path: Path) -> None:
+    first = _run_real_repository_verifier(REPO_ROOT)
+    second_root = tmp_path / "caller-a"
+    third_root = tmp_path / "different-parent" / "caller-b"
+    second_root.mkdir()
+    third_root.mkdir(parents=True)
+    second = _run_real_repository_verifier(second_root)
+    third = _run_real_repository_verifier(third_root)
+    assert first == second == third
 
 
 def _write_candidate_fixture(
@@ -81,6 +126,7 @@ def _write_candidate_fixture(
     published: bool = False,
     publicly_installable: bool = False,
     intervening_versions: list[str] | None = None,
+    release_history: list[dict[str, object]] | None = None,
     customer_pin: str | None = EXPECTED_PUBLIC_VERSION,
 ) -> None:
     (root / "src/qcoder").mkdir(parents=True)
@@ -93,14 +139,21 @@ def _write_candidate_fixture(
         encoding="utf-8",
     )
     metadata = {
-        "schema": "qcoder.release_version_source.v1",
+        "schema": "qcoder.release_version_source.v2",
         "source_version": metadata_version,
         "source_posture": posture,
         "current_public_version": current_public_version,
         "published": published,
         "publicly_installable": publicly_installable,
         "intervening_unpublished_versions": (
-            ["0.6.0a6"] if intervening_versions is None else intervening_versions
+            EXPECTED_INTERVENING_VERSIONS
+            if intervening_versions is None
+            else intervening_versions
+        ),
+        "intervening_release_history": (
+            [dict(item) for item in EXPECTED_RELEASE_HISTORY]
+            if release_history is None
+            else release_history
         ),
     }
     (root / "release-version.json").write_text(
@@ -124,6 +177,7 @@ def test_synthetic_unpublished_candidate_posture_passes(tmp_path: Path) -> None:
     assert result["source_version"] == EXPECTED_VERSION
     assert result["current_public_version"] == EXPECTED_PUBLIC_VERSION
     assert result["detected_customer_pin_versions"] == [EXPECTED_PUBLIC_VERSION]
+    assert result["intervening_release_history"] == EXPECTED_RELEASE_HISTORY
 
 
 @pytest.mark.parametrize(
@@ -131,6 +185,7 @@ def test_synthetic_unpublished_candidate_posture_passes(tmp_path: Path) -> None:
     [
         (EXPECTED_VERSION, "unpublished_candidate_customer_pin"),
         ("0.6.0a6", "unpublished_intervening_customer_pin"),
+        ("0.6.0a7", "unpublished_intervening_customer_pin"),
         ("0.6.0a4", "customer_package_pin_mismatch"),
     ],
 )
@@ -185,9 +240,10 @@ def test_unpublished_candidate_cannot_equal_public_version(tmp_path: Path) -> No
 def test_public_version_cannot_be_newer_than_source(tmp_path: Path) -> None:
     _write_candidate_fixture(
         tmp_path,
-        current_public_version="0.6.0a8",
+        current_public_version="0.6.0a9",
         intervening_versions=[],
-        customer_pin="0.6.0a8",
+        release_history=[],
+        customer_pin="0.6.0a9",
     )
     with pytest.raises(ValueError, match="candidate_not_newer_than_current_public_version"):
         _verify_fixture(tmp_path)
@@ -206,8 +262,16 @@ def test_unsupported_release_posture_fails(tmp_path: Path) -> None:
 
 
 def test_intervening_unpublished_inventory_must_be_complete(tmp_path: Path) -> None:
-    _write_candidate_fixture(tmp_path, intervening_versions=[])
+    _write_candidate_fixture(tmp_path, intervening_versions=[], release_history=[])
     with pytest.raises(ValueError, match="intervening_unpublished_versions_mismatch"):
+        _verify_fixture(tmp_path)
+
+
+def test_a7_terminal_rejection_history_must_remain_exact(tmp_path: Path) -> None:
+    changed_history = [dict(item) for item in EXPECTED_RELEASE_HISTORY]
+    changed_history[1]["rejection_reason"] = "contradictory_reason"
+    _write_candidate_fixture(tmp_path, release_history=changed_history)
+    with pytest.raises(ValueError, match="intervening_release_history_mismatch:0.6.0a7"):
         _verify_fixture(tmp_path)
 
 
@@ -219,6 +283,7 @@ def test_old_candidate_identity_fails(tmp_path: Path) -> None:
         metadata_version="0.6.0a1",
         current_public_version="0.6.0a0",
         intervening_versions=[],
+        release_history=[],
         customer_pin="0.6.0a0",
     )
     with pytest.raises(ValueError, match="candidate_reuses_0.6.0a1"):

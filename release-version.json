@@ -1,11 +1,34 @@
 {
-  "schema": "qcoder.release_version_source.v1",
-  "source_version": "0.6.0a7",
+  "schema": "qcoder.release_version_source.v2",
+  "source_version": "0.6.0a8",
   "source_posture": "unpublished_candidate",
   "current_public_version": "0.6.0a5",
   "published": false,
   "publicly_installable": false,
   "intervening_unpublished_versions": [
-    "0.6.0a6"
+    "0.6.0a6",
+    "0.6.0a7"
+  ],
+  "intervening_release_history": [
+    {
+      "version": "0.6.0a6",
+      "lifecycle": "rejected",
+      "frozen": true,
+      "retention": "retained",
+      "terminal": true,
+      "published": false,
+      "publicly_installable": false,
+      "rejection_reason": "recovery_action_result_semantic_mismatch"
+    },
+    {
+      "version": "0.6.0a7",
+      "lifecycle": "rejected",
+      "frozen": true,
+      "retention": "retained",
+      "terminal": true,
+      "published": false,
+      "publicly_installable": false,
+      "rejection_reason": "immutable_candidate_control_truthfulness_defect"
+    }
   ]
 }
