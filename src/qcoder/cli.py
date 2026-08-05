@@ -13,34 +13,6 @@ from qcoder.core.share_safe import (
     render_share_safe_note,
     render_share_safe_provenance,
 )
-from qcoder.explorer.derived_evidence import (
-    ExplorerDerivedEvidenceRequestError,
-    build_derived_evidence_request_from_context_json,
-    build_derived_evidence_request_from_qasm,
-)
-from qcoder.pro_preview.config import (
-    DEFAULT_PRO_API_URL,
-    ProPreviewConfigError,
-    load_local_config,
-    resolve_api_url,
-    resolve_token,
-    store_local_bootstrap_config,
-)
-from qcoder.pro_preview.client import ProServiceClient, ProServiceClientError
-from qcoder.pro_preview.client import (
-    PreviewClientNetworkError,
-    call_builtin_review_demo,
-    call_student_custom_guided_evidence,
-    call_student_guided_evidence,
-    resolve_preview_client_config,
-    summarize_demo_payload,
-)
-from qcoder.pro_preview.errors import ProPreviewManifestError
-from qcoder.pro_preview.manifest import (
-    build_workflow_manifest,
-    sanitize_manifest_for_submit,
-    write_workflow_manifest,
-)
 from qcoder.tools.batch import analyze_qasm_dir_to_jsonl
 from qcoder.algorithm_blueprint import (
     extract_selected_python_file_evidence,
@@ -72,15 +44,24 @@ EXPLORER_BETA_DOCS_URL = "https://qcoder.ai/manual/student-beta/"
 OSS_DOCS_URL = "https://qcoder.ai/manual/oss/"
 _CURRENT_LOOP_REQUEST_MAX_CODEPOINTS = REQUEST_BASELINE_MAX_CODEPOINTS
 _CURRENT_LOOP_REQUEST_MAX_UTF8_BYTES = REQUEST_BASELINE_MAX_UTF8_BYTES
+# Retained as lazy test seams for the archived Pro command path. Keeping these
+# names unbound to client classes until `_cmd_pro` runs prevents an OSS-local
+# command from importing connected-client modules merely by loading the CLI.
+ProServiceClient = None
+ProServiceClientError = None
 
 
 def _is_non_default_service_url(value: str | None) -> bool:
+    from qcoder.pro_preview.config import DEFAULT_PRO_API_URL
+
     if not value:
         return False
     return value.strip() != DEFAULT_PRO_API_URL
 
 
 def _build_pro_bootstrap_payload(status: str) -> dict[str, object]:
+    from qcoder.pro_preview.config import resolve_api_url, resolve_token
+
     token = resolve_token()
     api_url = resolve_api_url()
     configured = token.present
@@ -472,6 +453,13 @@ def _run_pro_preview_demo_check(
     label: str = "qCoder Pro Preview demo",
     error_prefix: str = "qcoder pro preview",
 ) -> int:
+    from qcoder.pro_preview.client import (
+        PreviewClientNetworkError,
+        call_builtin_review_demo,
+        resolve_preview_client_config,
+        summarize_demo_payload,
+    )
+
     try:
         config = resolve_preview_client_config(
             base_url_override=base_url_override,
@@ -726,6 +714,12 @@ def _run_student_builtin_review_check(
     compatibility_alias: bool = False,
     command_prefix: str = "qcoder explorer",
 ) -> int:
+    from qcoder.pro_preview.client import (
+        PreviewClientNetworkError,
+        call_builtin_review_demo,
+        resolve_preview_client_config,
+    )
+
     try:
         config = resolve_preview_client_config(
             base_url_override=base_url_override,
@@ -801,6 +795,18 @@ def _run_student_evidence_check(
     out_md: str | None = None,
     share_safe: bool = False,
 ) -> int:
+    from qcoder.explorer.derived_evidence import (
+        ExplorerDerivedEvidenceRequestError,
+        build_derived_evidence_request_from_context_json,
+        build_derived_evidence_request_from_qasm,
+    )
+    from qcoder.pro_preview.client import (
+        PreviewClientNetworkError,
+        call_student_custom_guided_evidence,
+        call_student_guided_evidence,
+        resolve_preview_client_config,
+    )
+
     request_payload: dict[str, object] | None = None
     if qasm_path and context_json_path:
         print(f"{command_label}: choose only one of --qasm or --context-json", file=sys.stderr)
@@ -2484,6 +2490,29 @@ def _cmd_blueprint(argv: list[str]) -> int:
 
 
 def _cmd_pro(argv: list[str]) -> int:
+    global ProServiceClient, ProServiceClientError
+
+    from qcoder.pro_preview import client as pro_preview_client
+    from qcoder.pro_preview.config import (
+        DEFAULT_PRO_API_URL,
+        ProPreviewConfigError,
+        load_local_config,
+        resolve_api_url,
+        resolve_token,
+        store_local_bootstrap_config,
+    )
+    from qcoder.pro_preview.errors import ProPreviewManifestError
+    from qcoder.pro_preview.manifest import (
+        build_workflow_manifest,
+        sanitize_manifest_for_submit,
+        write_workflow_manifest,
+    )
+
+    if ProServiceClient is None:
+        ProServiceClient = pro_preview_client.ProServiceClient
+    if ProServiceClientError is None:
+        ProServiceClientError = pro_preview_client.ProServiceClientError
+
     p = argparse.ArgumentParser(
         prog="qcoder pro",
         add_help=True,

@@ -4,6 +4,8 @@ import io
 import json
 from pathlib import Path
 import socket
+import subprocess
+import sys
 from contextlib import redirect_stderr, redirect_stdout
 
 import pytest
@@ -408,6 +410,33 @@ def test_no_network_is_used_and_no_protected_module_is_imported(
     assert "context_bridge" not in source_text
     assert "urllib" not in source_text
     assert "requests" not in source_text
+
+
+def test_cli_local_evidence_does_not_eagerly_import_connected_client_modules(
+    tmp_path: Path,
+) -> None:
+    qasm = _qasm2(tmp_path / "bell.qasm")
+    source_root = Path(__file__).resolve().parents[1] / "src"
+    probe = (
+        "import json,sys; "
+        f"sys.path.insert(0,{str(source_root)!r}); "
+        "from qcoder.cli import main; "
+        f"rc=main(['review','local-evidence',{str(qasm)!r}]); "
+        "blocked=sorted(name for name in sys.modules "
+        "if name.startswith('qcoder.pro_preview') "
+        "or name == 'qcoder.explorer.derived_evidence'); "
+        "print(json.dumps({'rc':rc,'blocked':blocked})); "
+        "raise SystemExit(0 if rc == 0 and not blocked else 1)"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert '"blocked": []' in completed.stdout
 
 
 def test_guidance_is_visibly_separate_and_preserves_caveats(tmp_path: Path) -> None:
