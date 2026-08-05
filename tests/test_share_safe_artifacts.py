@@ -94,6 +94,10 @@ def _assert_share_safe_payload(payload: dict[str, Any], *, forbidden_path: str, 
         ("home_relative", "~/project/secret/file.qasm"),
         ("linux_home", "/home/rob/project/secret/file.qasm"),
         ("wsl_mount", "/mnt/c/Users/Robert/secret/file.qasm"),
+        ("linux_data", "/data/project/secret/file.py"),
+        ("linux_opt", "/opt/app/secret/file.qasm"),
+        ("linux_srv", "/srv/work/secret/result.json"),
+        ("relative", "project/secret/file.py"),
     ],
 )
 def test_share_safe_redacts_cross_platform_free_text_paths(label: str, path_text: str) -> None:
@@ -112,6 +116,41 @@ def test_share_safe_redacts_cross_platform_free_text_paths(label: str, path_text
     assert payload["local_paths_included"] is False
     assert "absolute_path" in payload["redactions_applied"]
     assert contains_local_path(path_text) is True
+
+
+def test_share_safe_redacts_nested_known_path_fields_and_command_paths() -> None:
+    payload = make_share_safe_payload(
+        {
+            "selected_source": "/data/project/file.py",
+            "nested": {
+                "provenance": {
+                    "customer_path": "/opt/app/file.qasm",
+                    "logical_source_label": "project/source.py",
+                },
+                "supported_next_actions": [
+                    {"command": "qcoder review local-evidence /srv/work/result.json"},
+                    {"command": r"qcoder review local-evidence C:\work\result.json"},
+                ],
+            },
+            "public_url": "https://qcoder.ai/manual/client-support/",
+            "schema_id": "qcoder.current_loop.help.v2",
+            "qasm_expression": "pi/2",
+        }
+    )
+    serialized = json.dumps(payload, sort_keys=True)
+
+    for value in (
+        "/data/project/file.py",
+        "/opt/app/file.qasm",
+        "project/source.py",
+        "/srv/work/result.json",
+        r"C:\work\result.json",
+    ):
+        assert value not in serialized
+    assert payload["local_paths_included"] is False
+    assert payload["public_url"] == "https://qcoder.ai/manual/client-support/"
+    assert payload["schema_id"] == "qcoder.current_loop.help.v2"
+    assert payload["qasm_expression"] == "pi/2"
 
 
 def test_share_safe_metadata_reports_unremoved_path_conservatively() -> None:

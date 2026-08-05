@@ -25,6 +25,8 @@ COMPLETION_RECEIPT_SCHEMA_ID = "qcoder.current_loop.completion_receipt.v2"
 COMPLETION_RECEIPT_SCHEMA_VERSION = 2
 HELP_SCHEMA_ID = "qcoder.current_loop.help.v2"
 HELP_SCHEMA_VERSION = 2
+HELP_PROJECTION_CURRENT_LOOP = "current_loop"
+HELP_PROJECTION_OSS_LOCAL_EVIDENCE = "oss_local_evidence"
 INTENT_RECEIPT_SCHEMA_ID = "qcoder.current_loop.intent_receipt.v1"
 INTENT_RECEIPT_SCHEMA_VERSION = 1
 
@@ -56,11 +58,107 @@ HELP_TOPICS = (
     "product_surfaces",
 )
 
+HELP_V2_COMMON_REQUIRED_FIELDS = (
+    "schema_id",
+    "schema_version",
+    "topic",
+    "projection_type",
+    "supported_customer_actions",
+    "commands_exposed",
+    "json_choreography_exposed",
+    "state_reconstructed_from_transcript",
+    "help_digest",
+)
+HELP_V2_PROJECTION_REQUIRED_FIELDS = {
+    HELP_PROJECTION_CURRENT_LOOP: (
+        "loop_active",
+        "phase",
+        "evidence_status",
+        "topic_detail",
+        "separate_authority_still_required",
+    ),
+    HELP_PROJECTION_OSS_LOCAL_EVIDENCE: (
+        "installed_qcoder_version",
+        "local_oss_mode",
+        "selected_input_kinds",
+        "available_capabilities",
+        "unsupported_capabilities",
+        "report_sections",
+        "share_safe_export_choices",
+        "account_required",
+        "qcoder_token_required",
+        "explorer_service_used",
+        "mcp_required_or_implied",
+        "client_qualification_established",
+        "explorer_fields",
+        "current_loop_state",
+        "workspace_scanned",
+        "project_history_used",
+        "network_accessed",
+    ),
+}
+
 
 def _digest(value: object) -> str:
     return sha256(
         json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
     ).hexdigest()
+
+
+def validate_help_v2_projection(value: object) -> None:
+    """Validate the discriminated projections carried by canonical Help v2.
+
+    ``projection_type`` is required so consumers do not treat the OSS-local
+    evidence projection as active Current Loop help, or vice versa.
+    """
+
+    if not isinstance(value, Mapping):
+        raise ValueError("help_v2_projection_must_be_object")
+    if value.get("schema_id") != HELP_SCHEMA_ID:
+        raise ValueError("help_v2_schema_id_mismatch")
+    if value.get("schema_version") != HELP_SCHEMA_VERSION:
+        raise ValueError("help_v2_schema_version_mismatch")
+    missing_common = [name for name in HELP_V2_COMMON_REQUIRED_FIELDS if name not in value]
+    if missing_common:
+        raise ValueError("help_v2_common_fields_missing:" + ",".join(missing_common))
+    projection_type = value.get("projection_type")
+    if projection_type not in HELP_V2_PROJECTION_REQUIRED_FIELDS:
+        raise ValueError("help_v2_projection_type_invalid")
+    missing_projection = [
+        name
+        for name in HELP_V2_PROJECTION_REQUIRED_FIELDS[str(projection_type)]
+        if name not in value
+    ]
+    if missing_projection:
+        raise ValueError("help_v2_projection_fields_missing:" + ",".join(missing_projection))
+    if not isinstance(value.get("supported_customer_actions"), list):
+        raise ValueError("help_v2_supported_customer_actions_invalid")
+    if projection_type == HELP_PROJECTION_OSS_LOCAL_EVIDENCE:
+        required_false = (
+            "account_required",
+            "qcoder_token_required",
+            "explorer_service_used",
+            "mcp_required_or_implied",
+            "client_qualification_established",
+            "workspace_scanned",
+            "project_history_used",
+            "network_accessed",
+        )
+        if value.get("local_oss_mode") is not True or any(
+            value.get(name) is not False for name in required_false
+        ):
+            raise ValueError("help_v2_oss_local_boundary_invalid")
+        if value.get("explorer_fields") != "not_applicable":
+            raise ValueError("help_v2_oss_explorer_fields_invalid")
+        if value.get("current_loop_state") != "not_applicable":
+            raise ValueError("help_v2_oss_current_loop_state_invalid")
+    digest = value.get("help_digest")
+    if not isinstance(digest, str) or len(digest) != 64:
+        raise ValueError("help_v2_digest_invalid")
+    unsigned = deepcopy(dict(value))
+    unsigned.pop("help_digest", None)
+    if _digest(unsigned) != digest:
+        raise ValueError("help_v2_digest_mismatch")
 
 
 def customer_interaction(
@@ -366,6 +464,7 @@ def help_response(
         "schema_id": HELP_SCHEMA_ID,
         "schema_version": HELP_SCHEMA_VERSION,
         "topic": topic,
+        "projection_type": HELP_PROJECTION_CURRENT_LOOP,
         **common,
         "topic_detail": topic_detail,
         "separate_authority_still_required": [
@@ -383,6 +482,7 @@ def help_response(
         "complete_contract_matrix_included": False,
     }
     result["help_digest"] = _digest(result)
+    validate_help_v2_projection(result)
     return result
 
 
@@ -407,7 +507,7 @@ def local_evidence_help_response(
         "schema_id": HELP_SCHEMA_ID,
         "schema_version": HELP_SCHEMA_VERSION,
         "topic": "overview",
-        "projection_type": "oss_local_evidence",
+        "projection_type": HELP_PROJECTION_OSS_LOCAL_EVIDENCE,
         "installed_qcoder_version": qcoder_version,
         "local_oss_mode": True,
         "selected_input_kinds": [str(item) for item in selected_input_kinds],
@@ -441,6 +541,7 @@ def local_evidence_help_response(
         "state_reconstructed_from_transcript": False,
     }
     result["help_digest"] = _digest(result)
+    validate_help_v2_projection(result)
     return result
 
 

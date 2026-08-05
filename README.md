@@ -126,6 +126,10 @@ No qCoder account, no qCoder token, no Explorer service, and no MCP connection a
 local report does not establish IDE/client qualification. It creates no project memory or hidden
 persistence.
 
+Ordinary terminal, JSON, and Markdown reports may contain customer filenames and paths and are
+intended for local inspection. Use `--share-safe-json` or `--share-safe-md` before sharing;
+share-safe defaults remove filenames, paths, and raw/private artifacts.
+
 Create a derived-only share-safe export explicitly and inspect it before sharing:
 
 ```bash
@@ -136,7 +140,9 @@ qcoder review local-evidence examples/circuits/bell.qasm \
 Raw/private categories remain excluded by default. Each applicable category has its own explicit
 opt-in, such as `--include-original-qasm`, `--include-source-excerpts`, `--include-raw-counts`,
 `--include-customer-filenames`, or `--include-customer-paths`; there is no include-everything
-switch and no automatic transmission. See
+switch and no automatic transmission. On the currently proven POSIX-style path flow, dot-prefixed
+selected or resolved path segments are rejected, including hidden symlink targets. Windows hidden
+attributes and alternate data streams are not qualified. See
 [`docs/local-evidence-review.md`](docs/local-evidence-review.md) for the complete commands and
 section meanings.
 

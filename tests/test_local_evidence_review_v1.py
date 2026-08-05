@@ -11,8 +11,16 @@ from contextlib import redirect_stderr, redirect_stdout
 import pytest
 
 from qcoder.cli import main
-from qcoder.context_loop import CIRCUIT_MANIFESTATION_SCHEMA_ID
-from qcoder.current_loop_quiet_workflow import HELP_SCHEMA_ID
+from qcoder.context_loop import (
+    CIRCUIT_MANIFESTATION_SCHEMA_ID,
+    RESULT_MANIFESTATION_SCHEMA_ID,
+)
+from qcoder.current_loop_quiet_workflow import (
+    HELP_SCHEMA_ID,
+    HELP_V2_COMMON_REQUIRED_FIELDS,
+    HELP_V2_PROJECTION_REQUIRED_FIELDS,
+    validate_help_v2_projection,
+)
 from qcoder.current_loop_run_summary import RUN_SUMMARY_SCHEMA_ID
 from qcoder.development_evidence import DEVELOPMENT_EVIDENCE_SCHEMA_ID, MOTIF_REGISTRY
 from qcoder.engines.review.local_evidence import (
@@ -307,6 +315,64 @@ def test_hidden_explicit_file_is_rejected(tmp_path: Path) -> None:
         build_local_evidence_review([str(hidden)])
 
 
+def test_visible_symlink_to_hidden_file_or_hidden_parent_is_rejected(tmp_path: Path) -> None:
+    hidden_file = _python(tmp_path / ".hidden.py")
+    visible_link = tmp_path / "visible.py"
+    visible_link.symlink_to(hidden_file)
+    with pytest.raises(LocalEvidenceError, match="hidden files"):
+        build_local_evidence_review([str(visible_link)])
+
+    hidden_parent = tmp_path / ".private"
+    hidden_parent.mkdir()
+    nested = _python(hidden_parent / "source.py")
+    parent_link = tmp_path / "nested-visible.py"
+    parent_link.symlink_to(nested)
+    with pytest.raises(LocalEvidenceError, match="hidden files"):
+        build_local_evidence_review([str(parent_link)])
+
+
+def test_visible_symlink_to_visible_file_is_allowed_and_duplicate_is_rejected(
+    tmp_path: Path,
+) -> None:
+    source = _python(tmp_path / "source.py")
+    link = tmp_path / "selected.py"
+    link.symlink_to(source)
+    report = build_local_evidence_review([str(link)])
+    assert report["review_scope"]["selected_artifact_count"] == 1
+    assert report["review_scope"]["selected_artifacts"][0]["selected_source"] == str(source)
+    with pytest.raises(LocalEvidenceError, match="duplicate"):
+        build_local_evidence_review([str(source), str(link)])
+
+
+def test_hidden_symlink_rejection_is_an_ordinary_customer_error(tmp_path: Path) -> None:
+    hidden = _python(tmp_path / ".hidden.py")
+    link = tmp_path / "visible.py"
+    link.symlink_to(hidden)
+    err = io.StringIO()
+    with redirect_stderr(err):
+        rc = main(["review", "local-evidence", str(link)])
+    assert rc == 2
+    assert "hidden files" in err.getvalue()
+    assert "Traceback" not in err.getvalue()
+
+
+def test_broken_and_directory_symlinks_use_customer_error_path(tmp_path: Path) -> None:
+    broken = tmp_path / "broken.py"
+    broken.symlink_to(tmp_path / "missing.py")
+    directory_link = tmp_path / "directory.py"
+    directory_link.symlink_to(tmp_path, target_is_directory=True)
+    for selected, message in (
+        (broken, "does not exist"),
+        (directory_link, "must be a file"),
+    ):
+        err = io.StringIO()
+        with redirect_stderr(err):
+            rc = main(["review", "local-evidence", str(selected)])
+        assert rc == 2
+        assert message in err.getvalue()
+        assert "Traceback" not in err.getvalue()
+
+
 def test_local_help_reuses_v2_and_states_oss_boundaries(tmp_path: Path) -> None:
     report = build_local_evidence_review([str(_qasm2(tmp_path / "bell.qasm"))])
     help_payload = report["local_qcoder_help"]
@@ -320,10 +386,33 @@ def test_local_help_reuses_v2_and_states_oss_boundaries(tmp_path: Path) -> None:
     assert help_payload["mcp_required_or_implied"] is False
     assert help_payload["client_qualification_established"] is False
     assert help_payload["explorer_fields"] == "not_applicable"
+    validate_help_v2_projection(help_payload)
+    assert set(HELP_V2_COMMON_REQUIRED_FIELDS) <= set(help_payload)
+    assert set(HELP_V2_PROJECTION_REQUIRED_FIELDS["oss_local_evidence"]) <= set(help_payload)
     assert all(
         action.get("command") or action.get("instruction")
         for action in help_payload["supported_customer_actions"]
     )
+
+
+def test_help_v2_projection_discriminator_and_extension_fields_are_required(
+    tmp_path: Path,
+) -> None:
+    report = build_local_evidence_review([str(_qasm2(tmp_path / "bell.qasm"))])
+    valid = report["local_qcoder_help"]
+    for field, error in (
+        ("projection_type", "help_v2_common_fields_missing"),
+        ("selected_input_kinds", "help_v2_projection_fields_missing"),
+        ("account_required", "help_v2_projection_fields_missing"),
+    ):
+        invalid = dict(valid)
+        invalid.pop(field)
+        with pytest.raises(ValueError, match=error):
+            validate_help_v2_projection(invalid)
+    invalid_boundary = dict(valid)
+    invalid_boundary["explorer_service_used"] = True
+    with pytest.raises(ValueError, match="help_v2_oss_local_boundary_invalid"):
+        validate_help_v2_projection(invalid_boundary)
 
 
 def test_share_safe_defaults_and_each_opt_in_are_explicit(tmp_path: Path) -> None:
@@ -339,6 +428,9 @@ def test_share_safe_defaults_and_each_opt_in_are_explicit(tmp_path: Path) -> Non
     counts.write_text(json.dumps(counts_payload), encoding="utf-8")
     paths = [str(source), str(qasm), str(counts)]
     report = build_local_evidence_review(paths)
+    assert report["canonical_identity_reuse"]["result_manifestation"] == (
+        RESULT_MANIFESTATION_SCHEMA_ID
+    )
     safe = build_share_safe_local_evidence_review(report, paths)
     serialized = json.dumps(safe)
     assert "private_source.py" not in serialized
@@ -392,6 +484,62 @@ def test_share_safe_defaults_and_each_opt_in_are_explicit(tmp_path: Path) -> Non
     assert "synthetic-secret-value" not in opted_text
     assert "synthetic-result-token" not in opted_text
     assert "<redacted-sensitive-value>" in opted_text
+
+
+@pytest.mark.parametrize(
+    "selected_label",
+    (
+        "/data/project/source.py",
+        "/opt/app/circuit.qasm",
+        "/srv/work/result.json",
+        "project/source.py",
+        r"C:\work\source.py",
+        r"\\server\share\source.py",
+    ),
+)
+def test_share_safe_redacts_cross_platform_selected_paths_and_next_actions(
+    tmp_path: Path, selected_label: str
+) -> None:
+    source = _python(tmp_path / "selected.py")
+    report = build_local_evidence_review([str(source)])
+    report["review_scope"]["selected_artifacts"][0]["selected_source"] = selected_label
+    report["artifacts"][0]["input"]["selected_source"] = selected_label
+    report["artifacts"][0]["canonical_artifacts"][0]["logical_source_label"] = selected_label
+    report["supported_next_actions"][0]["command"] = (
+        f"qcoder review local-evidence {selected_label}"
+    )
+    report["local_qcoder_help"]["supported_customer_actions"][0]["command"] = (
+        f"qcoder review local-evidence {selected_label}"
+    )
+    safe = build_share_safe_local_evidence_review(report, [str(source)])
+    json_text = json.dumps(safe, sort_keys=True)
+    markdown = render_local_evidence_markdown(safe)
+    assert selected_label not in json_text
+    assert selected_label not in markdown
+    assert safe["local_paths_included"] is False
+
+
+def test_share_safe_path_and_filename_opt_ins_have_truthful_flags(tmp_path: Path) -> None:
+    source = _python(tmp_path / "selected.py")
+    report = build_local_evidence_review([str(source)])
+    filename_only = build_share_safe_local_evidence_review(
+        report,
+        [str(source)],
+        opt_ins={"customer_filenames": True},
+    )
+    assert filename_only["customer_filenames_included"] is True
+    assert filename_only["local_paths_included"] is False
+    assert source.name in json.dumps(filename_only)
+    assert str(source) not in json.dumps(filename_only)
+
+    with_path = build_share_safe_local_evidence_review(
+        report,
+        [str(source)],
+        opt_ins={"customer_paths": True},
+    )
+    assert with_path["customer_filenames_included"] is False
+    assert with_path["local_paths_included"] is True
+    assert str(source) in json.dumps(with_path)
 
 
 def test_no_network_is_used_and_no_protected_module_is_imported(

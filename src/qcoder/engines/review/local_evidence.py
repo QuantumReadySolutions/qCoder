@@ -21,8 +21,15 @@ from qcoder.context_loop import (
     build_circuit_manifestation,
     build_result_manifestation,
 )
-from qcoder.core.share_safe import make_share_safe_payload
-from qcoder.current_loop_quiet_workflow import local_evidence_help_response
+from qcoder.core.share_safe import (
+    contains_local_path,
+    make_share_safe_payload,
+    redact_local_paths,
+)
+from qcoder.current_loop_quiet_workflow import (
+    local_evidence_help_response,
+    validate_help_v2_projection,
+)
 from qcoder.current_loop_run_summary import (
     RUN_SUMMARY_SCHEMA_ID,
     build_run_summary,
@@ -155,15 +162,25 @@ def _display_command(path: str, *, extra: Sequence[str] = ()) -> str:
 
 def _selected_path(value: str) -> Path:
     path = Path(value).expanduser()
+    if any(part.startswith(".") and part not in {".", ".."} for part in path.parts):
+        raise LocalEvidenceError(f"hidden files are not accepted by this workflow: {value}")
     if not path.exists():
         raise LocalEvidenceError(f"selected input does not exist: {value}")
     if not path.is_file():
         raise LocalEvidenceError(
             f"selected input must be a file; directories, globs, and recursive discovery are not supported: {value}"
         )
-    if any(part.startswith(".") and part not in {".", ".."} for part in path.parts):
+    try:
+        resolved = path.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise LocalEvidenceError(
+            f"selected input does not resolve to a regular file: {value}"
+        ) from exc
+    if any(part.startswith(".") and part not in {".", ".."} for part in resolved.parts):
         raise LocalEvidenceError(f"hidden files are not accepted by this workflow: {value}")
-    return path.resolve()
+    if not resolved.is_file():
+        raise LocalEvidenceError(f"selected input does not resolve to a regular file: {value}")
+    return resolved
 
 
 def resolve_explicit_files(paths: Sequence[str]) -> list[Path]:
@@ -700,6 +717,7 @@ def build_local_evidence_review(
         report_sections=REPORT_SECTION_ORDER,
         supported_actions=actions,
     )
+    validate_help_v2_projection(help_payload)
     return {
         "presentation": "Review local evidence",
         "presentation_role": "composition_of_existing_canonical_evidence",
@@ -724,6 +742,7 @@ def build_local_evidence_review(
         "canonical_identity_reuse": {
             "development_evidence": DEVELOPMENT_EVIDENCE_SCHEMA_ID,
             "circuit_manifestation": CIRCUIT_MANIFESTATION_SCHEMA_ID,
+            "result_manifestation": RESULT_MANIFESTATION_SCHEMA_ID,
             "run_summary": RUN_SUMMARY_SCHEMA_ID,
             "help": help_payload["schema_id"],
             "motif_registry_identifiers": list(MOTIF_REGISTRY),
@@ -765,11 +784,7 @@ def _redact_explicit_text(value: str, *, include_paths: bool) -> str:
         lambda match: match.group("prefix") + "<redacted-sensitive-value>", value
     )
     if not include_paths:
-        redacted = re.sub(
-            r"(?:[A-Za-z]:[\\/]|/(?:home|Users|mnt|private|tmp|workspace)/)[^\s'\"<>]+",
-            "<redacted-local-path>",
-            redacted,
-        )
+        redacted = redact_local_paths(redacted)
     return redacted
 
 
@@ -885,7 +900,6 @@ def build_share_safe_local_evidence_review(
     )
     safe["raw_counts_included"] = choices["raw_counts"]
     safe["raw_run_result_payloads_included"] = choices["raw_run_result_payloads"]
-    safe["local_paths_included"] = choices["customer_paths"]
     safe["customer_filenames_included"] = choices["customer_filenames"]
     safe["explicit_opt_in_warning"] = (
         "Explicitly included content may contain customer-private material. Inspect this local export before sharing."
@@ -893,6 +907,12 @@ def build_share_safe_local_evidence_review(
     safe["automatic_network_transmission"] = False
     safe["customer_inspection_required"] = True
     serialized = json.dumps(safe, ensure_ascii=False, sort_keys=True)
+    residual_paths = contains_local_path(serialized)
+    if residual_paths and not choices["customer_paths"]:
+        raise LocalEvidenceError(
+            "share-safe export retained a customer path after sanitization; export was refused"
+        )
+    safe["local_paths_included"] = bool(choices["customer_paths"] or residual_paths)
     safe["token_like_secrets_included"] = "<redacted-sensitive-value>" not in serialized and bool(
         _SECRET_ASSIGNMENT.search(serialized)
     )

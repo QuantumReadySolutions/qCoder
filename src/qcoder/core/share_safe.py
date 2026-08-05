@@ -30,13 +30,25 @@ UNSUPPORTED_CLAIMS = (
 _REDACTED_LOCAL_PATH = "<redacted-local-path>"
 _REDACTED_SENSITIVE_VALUE = "<redacted-sensitive-value>"
 
-_PATH_TERMINATOR_CHARS = r"\s`'\"<>|"
-_LOCAL_PATH_RE = re.compile(
+_PATH_TERMINATOR_CHARS = r"\s`'\"<>|,;)\]}"
+_ABSOLUTE_LOCAL_PATH_RE = re.compile(
     r"(?P<path>"
-    r"(?:[A-Za-z]:[\\/][^" + _PATH_TERMINATOR_CHARS + r"]+)"
+    r"(?:(?<![A-Za-z0-9])[A-Za-z]:[\\/][^" + _PATH_TERMINATOR_CHARS + r"]+)"
     r"|(?:\\\\[^\\/" + _PATH_TERMINATOR_CHARS + r"]+[\\/][^" + _PATH_TERMINATOR_CHARS + r"]+)"
     r"|(?:~[\\/][^" + _PATH_TERMINATOR_CHARS + r"]+)"
-    r"|(?:/(?:home|Users|mnt|private|var|tmp|workspace|workspaces)/[^" + _PATH_TERMINATOR_CHARS + r"]+)"
+    r"|(?:(?<![A-Za-z0-9:/\\])/(?!/)[^"
+    + _PATH_TERMINATOR_CHARS
+    + r"]+/[^"
+    + _PATH_TERMINATOR_CHARS
+    + r"]+)"
+    r")"
+)
+_RELATIVE_LOCAL_PATH_RE = re.compile(
+    r"(?P<path>"
+    r"(?<![A-Za-z0-9:/\\])"
+    r"(?:\.\.?[\\/]|[A-Za-z0-9_.-]+[\\/])"
+    r"(?:[A-Za-z0-9_. -]+[\\/])*"
+    r"[A-Za-z0-9_. -]+\.(?:py|qasm|qasm2|qasm3|json|md|txt|yaml|yml|toml|csv)"
     r")"
 )
 _TOKEN_LIKE_RE = re.compile(
@@ -64,6 +76,9 @@ _PATH_KEYS = {
     "source_path",
     "local_path",
     "logical_source_label",
+    "selected_source",
+    "selected_path",
+    "customer_path",
     "path",
 }
 _RAW_KEYS = {
@@ -224,7 +239,7 @@ def _sanitize(value: Any, *, redactions: set[str], key_path: tuple[str, ...]) ->
     if isinstance(value, tuple):
         return [_sanitize(item, redactions=redactions, key_path=key_path) for item in value]
     if isinstance(value, str):
-        if key_lower in _PATH_KEYS:
+        if _is_path_key(key_lower):
             redactions.add(f"field:{key}")
             return _REDACTED_LOCAL_PATH
         return _sanitize_text(value, redactions=redactions)
@@ -238,11 +253,13 @@ def _sanitize_text(text: str, *, redactions: set[str]) -> str:
             out = out.replace(marker, _REDACTED_SENSITIVE_VALUE)
             redactions.add("raw_or_sensitive_text")
 
-    def _path_repl(match: re.Match[str]) -> str:
+    path_redacted = redact_local_paths(out)
+    if path_redacted != out:
+        # Retain the established metadata category for compatibility.  It now
+        # covers both absolute and conservative relative local-path forms.
         redactions.add("absolute_path")
-        return _REDACTED_LOCAL_PATH
-
-    out = _LOCAL_PATH_RE.sub(_path_repl, out)
+        redactions.add("local_path")
+        out = path_redacted
 
     def _token_repl(match: re.Match[str]) -> str:
         redactions.add("token_or_header_like_text")
@@ -262,7 +279,19 @@ def _stable_string(value: Any) -> str:
 
 
 def contains_local_path(text: str) -> bool:
-    return bool(_LOCAL_PATH_RE.search(text))
+    return bool(_ABSOLUTE_LOCAL_PATH_RE.search(text) or _RELATIVE_LOCAL_PATH_RE.search(text))
+
+
+def redact_local_paths(text: str) -> str:
+    """Redact supported absolute and conservative relative customer path forms.
+
+    Relative-path detection intentionally requires a file-like suffix.  This
+    avoids treating URLs, schema identifiers, QASM expressions, or ordinary
+    slash-separated prose as customer filesystem paths.
+    """
+
+    redacted = _ABSOLUTE_LOCAL_PATH_RE.sub(_REDACTED_LOCAL_PATH, text)
+    return _RELATIVE_LOCAL_PATH_RE.sub(_REDACTED_LOCAL_PATH, redacted)
 
 
 def contains_token_or_header(text: str) -> bool:
@@ -275,6 +304,19 @@ def contains_raw_qasm_marker(text: str) -> bool:
 
 def is_probable_absolute_path(value: str) -> bool:
     try:
-        return PurePath(value).is_absolute() or contains_local_path(value)
+        return PurePath(value).is_absolute() or bool(_ABSOLUTE_LOCAL_PATH_RE.search(value))
     except Exception:
         return False
+
+
+def _is_path_key(key: str) -> bool:
+    normalized = key.casefold().replace("-", "_")
+    return (
+        normalized in _PATH_KEYS
+        or normalized.endswith("_file_path")
+        or normalized.endswith("_source_path")
+        or normalized.endswith("_output_path")
+        or normalized.endswith("_local_path")
+        or normalized.endswith("_customer_path")
+        or normalized.endswith("_paths")
+    )

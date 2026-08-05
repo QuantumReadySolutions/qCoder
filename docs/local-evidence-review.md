@@ -38,6 +38,12 @@ The collection limit is eight files. qCoder orders selected files deterministica
 recurse, search the repository, discover adjacent or hidden files, follow imports, or watch for
 changes.
 
+On the currently proven POSIX-style path flow, qCoder rejects an explicitly selected file when
+the selected path or its resolved target contains a dot-prefixed file or directory segment. A
+visible symlink cannot bypass that rule; a visible symlink to a visible regular file remains an
+explicitly selected input. Windows filesystem hidden attributes and alternate data streams are
+not qualified by this package and require separate platform-specific proof.
+
 ## Supported inputs
 
 - **Explicit Python/Qiskit source:** bounded static AST inspection, Development Evidence v0, and
@@ -104,6 +110,10 @@ that local evidence does not establish client qualification.
 
 ## Create and inspect a share-safe export
 
+Ordinary terminal, JSON, and Markdown reports intentionally show local provenance and may contain
+customer filenames and paths. They are local inspection artifacts, not share-safe artifacts. Use
+`--share-safe-json` or `--share-safe-md` before sharing a report.
+
 Derived evidence only (default):
 
 ```bash
@@ -130,10 +140,16 @@ qcoder review local-evidence examples/fixtures/bell_counts_qiskit.json \
   --include-raw-counts
 ```
 
-Separate flags also cover normalized CircuitIR, raw run-result payloads, Blueprint material when
-applicable, customer filenames, and customer paths. There is no broad include-everything switch.
-Authentication-like values are redacted where detected, but share-safe output is not a privacy
-guarantee: inspect the local file before sharing it. qCoder never uploads the export automatically.
+Share-safe defaults remove customer filenames, customer paths, and raw/private artifacts.
+Separate flags cover normalized CircuitIR, raw run-result payloads, Blueprint material when
+applicable, customer filenames, and customer paths. Each raw/private category requires its own
+explicit opt-in; there is no broad include-everything switch. Authentication-like values are
+redacted where detected, but share-safe output is not a privacy guarantee: inspect the local file
+before sharing it. qCoder never uploads the export automatically.
+
+Local Help uses the canonical `qcoder.current_loop.help.v2` identity with the required
+`projection_type: oss_local_evidence` discriminator. Its common Help v2 fields and OSS-local
+extension fields are validated without adding Explorer or active-loop semantics.
 
 ## Ownership and persistence boundary
 

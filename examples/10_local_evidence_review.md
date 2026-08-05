@@ -25,5 +25,10 @@ qcoder review local-evidence examples/circuits/bell.qasm \
 python -m json.tool local-evidence.share-safe.json
 ```
 
+Ordinary terminal, JSON, and Markdown reports may contain the filenames and paths selected by the
+customer and are intended for local inspection. Use `--share-safe-json` or `--share-safe-md`
+before sharing. Share-safe defaults remove customer filenames, paths, and raw/private artifacts;
+each raw/private or filename/path category requires its own explicit opt-in.
+
 The journey needs no qCoder account, no qCoder token, no Explorer service, and no MCP. OpenQASM 3
 is recognized but evidence extraction is not supported. No backend or simulator is run.

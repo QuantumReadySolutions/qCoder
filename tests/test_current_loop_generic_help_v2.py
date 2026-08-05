@@ -23,7 +23,11 @@ from qcoder.current_loop_coordinator import (
     coordinator_contract_snapshot,
 )
 from qcoder.current_loop_invocation import operation_transport_inventory
-from qcoder.current_loop_quiet_workflow import HELP_SCHEMA_ID, HELP_TOPICS
+from qcoder.current_loop_quiet_workflow import (
+    HELP_SCHEMA_ID,
+    HELP_TOPICS,
+    validate_help_v2_projection,
+)
 from qcoder.current_loop_result_envelope import (
     BOUNDED_CONTROL_REFERENCE_SCHEMA_ID,
     CUSTOMER_ENVELOPE_SCHEMA_ID,
@@ -172,6 +176,8 @@ def test_help_topics_are_distinct_compact_and_non_persistent(tmp_path: Path) -> 
         result = coordinator.help(topic=topic)
         assert result["ok"] is True
         assert result["details"]["help"]["schema_id"] == HELP_SCHEMA_ID
+        assert result["details"]["help"]["projection_type"] == "current_loop"
+        validate_help_v2_projection(result["details"]["help"])
         assert result["schema_id"] == COORDINATOR_RESULT_SCHEMA_ID
         assert result["bounded_control_catalog"]["controls_inline"] is False
         assert result["bounded_contract_controls"] == {}

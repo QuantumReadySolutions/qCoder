@@ -362,6 +362,11 @@ def _cmd_review_local_evidence(argv: list[str]) -> int:
             "Review local evidence from explicitly selected files only. "
             "No account, token, Explorer service, MCP, repository scan, or network is used."
         ),
+        epilog=(
+            "Ordinary terminal, JSON, and Markdown reports may contain customer filenames and "
+            "paths and are intended for local inspection. Use --share-safe-json or "
+            "--share-safe-md before sharing; raw/private categories require separate opt-ins."
+        ),
     )
     p.add_argument(
         "files",
@@ -383,12 +388,18 @@ def _cmd_review_local_evidence(argv: list[str]) -> int:
     p.add_argument(
         "--share-safe-json",
         default=None,
-        help="Explicitly create a local share-safe JSON export for inspection.",
+        help=(
+            "Create an inspectable JSON export whose defaults remove customer filenames, paths, "
+            "and raw/private artifacts."
+        ),
     )
     p.add_argument(
         "--share-safe-md",
         default=None,
-        help="Explicitly create a local share-safe Markdown export for inspection.",
+        help=(
+            "Create an inspectable Markdown export whose defaults remove customer filenames, "
+            "paths, and raw/private artifacts."
+        ),
     )
     p.add_argument(
         "--local-help",
