@@ -62,6 +62,7 @@ EVIDENCE_VIEW_MEANINGS = {
 
 _EXECUTION_FIELD_SOURCES = {
     "backend": ("backend", "backend_name", "simulator", "simulator_name"),
+    "simulator_method": ("simulator_method", "method"),
     "sdk_version": ("sdk_version", "qiskit_version"),
     "runtime_version": ("runtime_version",),
     "shots": ("shots", "shots_total"),
@@ -70,6 +71,8 @@ _EXECUTION_FIELD_SOURCES = {
     "noise_settings": ("noise_settings", "noise_model"),
     "mitigation_settings": ("mitigation_settings", "mitigation"),
     "execution_time_seconds": ("execution_time_seconds", "execution_time"),
+    "reported_memory": ("reported_memory", "memory", "memory_mb", "max_memory_mb"),
+    "resource_metadata": ("resource_metadata", "resources"),
 }
 _FORBIDDEN_SETTING_KEYS = frozenset(
     {

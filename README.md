@@ -9,7 +9,7 @@ The current public local path is **qCoder OSS**. OSS commands run locally and do
 - `qcoder analyze`
 - `qcoder batch`
 - `qcoder context`
-- `qcoder review`
+- `qcoder review` (including the local selected-evidence journey)
 - `qcoder blueprint` (machine-local selected-source evidence)
 - `qcoder current-loop` (explicit assistant-driven coordination for one current IDE build)
 - `qcoder explorer` (Explorer Beta account-backed status/demo/evidence checks)
@@ -96,6 +96,55 @@ operations, for exactly twelve Context Bridge capability tools:
 
 ## Review current evidence
 
+### Review local evidence (OSS development branch)
+
+The WI-0421 development branch composes existing canonical qCoder evidence into one local,
+account-free review. It reads only the files named explicitly on the command line; it does not
+accept a directory, expand a glob, recurse, discover hidden files, follow Python imports, scan a
+workspace, start a watcher, or call a network service.
+
+Discover the journey and review fixed public samples:
+
+```bash
+qcoder review local-evidence --help
+qcoder review local-evidence examples/fixtures/local_evidence_bell.py
+qcoder review local-evidence \
+  examples/circuits/bell.qasm \
+  examples/fixtures/bell_counts_qiskit.json \
+  --out-json local-evidence.json \
+  --out-md local-evidence.md
+qcoder review local-evidence examples/circuits/bell.qasm --local-help
+```
+
+The report presents review scope, provenance, bounded QASM and circuit facts, Python-only motif
+evidence, the canonical factual Run Summary when supplied results are present, limitations,
+unsupported states, share-safe choices, and exact next actions. OpenQASM 2 evidence extraction is
+bounded. OpenQASM 3 is recognized but evidence extraction is not supported; it is never passed to
+the OpenQASM 2 parser or reported as a complete circuit.
+
+No qCoder account, no qCoder token, no Explorer service, and no MCP connection are required. The
+local report does not establish IDE/client qualification. It creates no project memory or hidden
+persistence.
+
+Create a derived-only share-safe export explicitly and inspect it before sharing:
+
+```bash
+qcoder review local-evidence examples/circuits/bell.qasm \
+  --share-safe-json local-evidence.share-safe.json
+```
+
+Raw/private categories remain excluded by default. Each applicable category has its own explicit
+opt-in, such as `--include-original-qasm`, `--include-source-excerpts`, `--include-raw-counts`,
+`--include-customer-filenames`, or `--include-customer-paths`; there is no include-everything
+switch and no automatic transmission. See
+[`docs/local-evidence-review.md`](docs/local-evidence-review.md) for the complete commands and
+section meanings.
+
+This branch documentation describes implemented branch behavior only. It does not activate a
+public product claim or create a release candidate.
+
+### Explorer Evidence Review
+
 Evidence Review is an Explorer capability for understanding what explicitly supplied current evidence supports, what remains unproven, what changed within one bounded workflow, and what the user may choose to check next. It uses the existing Context Bridge operations:
 
 - before an external run, use `create_run_readiness_card`;
@@ -161,6 +210,12 @@ Create local context and review artifacts:
 qcoder context path/to/circuit.qasm --out-json preflight.context.json --out-md preflight.context.md
 qcoder review --counts-json counts.json --format qiskit_counts --preflight-json preflight.context.json --out-json execution.review.json --out-md execution.review.md
 qcoder blueprint source-evidence --source-file selected_generated.py
+```
+
+Or use the coherent local selected-evidence journey:
+
+```bash
+qcoder review local-evidence path/to/selected.py path/to/circuit.qasm path/to/counts.json
 ```
 
 For artifacts you intend to paste into ChatGPT, Cursor, email, GitHub issues, or support threads, add `--share-safe`:

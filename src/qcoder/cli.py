@@ -7,7 +7,7 @@ from pathlib import Path
 
 from qcoder.pipelines.analyze import analyze_qasm
 from qcoder.pipelines.context import write_preflight_context
-from qcoder.pipelines.review import write_execution_review
+from qcoder.pipelines.review import write_execution_review, write_local_evidence_review
 from qcoder.core.share_safe import (
     make_share_safe_payload,
     render_share_safe_note,
@@ -65,6 +65,8 @@ from qcoder.current_loop_event_receipts import (
 )
 from qcoder.current_loop_run_summary import EVIDENCE_VIEW_IDS
 from qcoder.current_loop_quiet_workflow import HELP_TOPICS
+from qcoder.engines.review.local_evidence import LocalEvidenceError
+from qcoder.engines.review.local_evidence_markdown import render_local_evidence_markdown
 
 EXPLORER_BETA_DOCS_URL = "https://qcoder.ai/manual/student-beta/"
 OSS_DOCS_URL = "https://qcoder.ai/manual/oss/"
@@ -323,7 +325,16 @@ def _cmd_context(argv: list[str]) -> int:
 
 
 def _cmd_review(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="qcoder review", add_help=True)
+    if argv and argv[0] == "local-evidence":
+        return _cmd_review_local_evidence(argv[1:])
+    p = argparse.ArgumentParser(
+        prog="qcoder review",
+        add_help=True,
+        epilog=(
+            "Review local evidence from explicit files with: "
+            "qcoder review local-evidence FILE [FILE ...]"
+        ),
+    )
     p.add_argument("--counts-json", required=True, help="Input counts JSON path")
     p.add_argument(
         "--format",
@@ -361,6 +372,98 @@ def _cmd_review(argv: list[str]) -> int:
     print(f"Wrote execution review JSON to {json_label}", file=sys.stderr)
     print(f"Wrote execution review Markdown to {md_label}", file=sys.stderr)
     return 0
+
+
+def _cmd_review_local_evidence(argv: list[str]) -> int:
+    p = argparse.ArgumentParser(
+        prog="qcoder review local-evidence",
+        description=(
+            "Review local evidence from explicitly selected files only. "
+            "No account, token, Explorer service, MCP, repository scan, or network is used."
+        ),
+    )
+    p.add_argument(
+        "files",
+        nargs="+",
+        metavar="FILE",
+        help=(
+            "Explicit Python/Qiskit, OpenQASM, supplied-counts JSON, or supported qCoder "
+            "evidence JSON file (maximum 8; directories and globs are not accepted)."
+        ),
+    )
+    p.add_argument(
+        "--python-profile",
+        choices=PROFILE_IDS,
+        default="generic_qiskit",
+        help="Bounded Python motif lens (default: generic_qiskit).",
+    )
+    p.add_argument("--out-json", default=None, help="Write the canonical composed JSON report.")
+    p.add_argument("--out-md", default=None, help="Write the human-readable Markdown report.")
+    p.add_argument(
+        "--share-safe-json",
+        default=None,
+        help="Explicitly create a local share-safe JSON export for inspection.",
+    )
+    p.add_argument(
+        "--share-safe-md",
+        default=None,
+        help="Explicitly create a local share-safe Markdown export for inspection.",
+    )
+    p.add_argument(
+        "--local-help",
+        action="store_true",
+        help="Print canonical local qCoder Help for the selected input instead of the report.",
+    )
+    opt_ins = {
+        "source_excerpts": "source excerpts",
+        "original_qasm": "original QASM",
+        "normalized_circuit_ir": "normalized CircuitIR",
+        "raw_counts": "raw counts",
+        "raw_run_result_payloads": "raw run-result payloads",
+        "blueprint_material": "Blueprint material",
+        "customer_filenames": "customer filenames",
+        "customer_paths": "customer paths",
+    }
+    for name, label in opt_ins.items():
+        p.add_argument(
+            "--include-" + name.replace("_", "-"),
+            action="store_true",
+            help=f"Include {label} in a requested share-safe export (separate explicit opt-in).",
+        )
+    args = p.parse_args(argv)
+    selected_opt_ins = {name: bool(getattr(args, "include_" + name)) for name in opt_ins}
+    if any(selected_opt_ins.values()) and not (args.share_safe_json or args.share_safe_md):
+        print(
+            "qcoder review local-evidence: --include-* options require --share-safe-json or --share-safe-md.",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        report = write_local_evidence_review(
+            paths=list(args.files),
+            python_profile=args.python_profile,
+            out_json=args.out_json,
+            out_md=args.out_md,
+            share_safe_json=args.share_safe_json,
+            share_safe_md=args.share_safe_md,
+            share_safe_opt_ins=selected_opt_ins,
+        )
+    except (LocalEvidenceError, OSError, ValueError) as exc:
+        print(f"qcoder review local-evidence: {exc}", file=sys.stderr)
+        return 2
+    if args.local_help:
+        print(json.dumps(report["local_qcoder_help"], indent=2, sort_keys=True))
+    else:
+        print(render_local_evidence_markdown(report), end="")
+    for label, output in (
+        ("JSON report", args.out_json),
+        ("Markdown report", args.out_md),
+        ("share-safe JSON", args.share_safe_json),
+        ("share-safe Markdown", args.share_safe_md),
+    ):
+        if output:
+            print(f"Wrote {label} to {output}", file=sys.stderr)
+    return 0 if report["status"] == "completed" else 2
 
 
 def _run_pro_preview_demo_check(
@@ -2798,7 +2901,7 @@ def _print_root_help() -> None:
         "  analyze          Analyze a QASM file (feature extraction + metadata + run config).\n"
         "  batch            Batch extract a directory to JSONL (requires --out).\n"
         "  context          Build deterministic preflight context artifacts.\n"
-        "  review           Build deterministic execution review artifacts from counts.\n"
+        "  review           Review local evidence or build execution review artifacts from counts.\n"
         "  blueprint        Build machine-local static evidence for Algorithm Blueprint.\n"
         "  current-loop     Coordinate one explicit local Explorer Context Loop.\n"
         "  explorer         Explorer Beta status/demo/evidence checks.\n"

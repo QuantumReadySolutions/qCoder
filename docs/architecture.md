@@ -16,12 +16,21 @@ The public `qcoder` package on `main` ships:
 - Optional `--profiles` on `analyze --json` and `context` — derived structural taxonomy from `feature_map`.
 - `qcoder context` — preflight context artifacts (JSON + Markdown).
 - `qcoder review` — post-run review artifacts from user-supplied counts (`qcoder` or `qiskit_counts` formats).
+- `qcoder review local-evidence` — one bounded OSS-local presentation composed from existing
+  canonical evidence for explicitly selected files; it adds no registry, persistence, or network
+  service.
 - `qcoder explorer status`, `qcoder explorer demo`, and `qcoder explorer evidence` — primary Explorer Beta commands for account-backed status, built-in evidence, and derived-context custom evidence checks. `qcoder student ...` remains a compatibility alias during beta.
 - `qcoder pro` — archived pilot/client-contract plumbing only. Pro is not launched and is not a current public product path.
 
 ## OSS boundary
 
 qCoder OSS commands are local/offline after package installation: no LLM calls, no telemetry upload, no QPU/simulator execution, and no card generation in the public package. OSS is the current path for user-owned artifacts.
+
+The local-evidence review accepts explicit files only. It rejects directories, performs no glob or
+recursive discovery, does not inspect hidden files or follow imports, and creates no background
+state. It composes Development Evidence v0, bounded OpenQASM 2/CircuitIR facts, factual Run Summary
+v2, and Help v2. OpenQASM 3 is recognized as unsupported and is not sent through the OpenQASM 2
+parser. Active-loop registry semantics remain with Current Loop and are not projected into OSS.
 
 Portable JSON and Markdown artifacts are intended for humans, chat LLMs, and coding tools to consume in user-managed workflows. Local OSS artifacts remain independent of hosted integrations. For eligible Explorer users, the separately documented Context Bridge adapter carries bounded current-session Evidence Review tools into Cursor, Claude Code, and Codex. ChatGPT remains a manual share-safe Prompt Context handoff rather than a connected Context Bridge client.
 

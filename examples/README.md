@@ -13,6 +13,8 @@ Copy-paste walkthroughs for the qCoder OSS local workflow.
 - [`07_byo_llm_artifact_pack.md`](./07_byo_llm_artifact_pack.md) - BYO LLM artifact pack.
 - [`08_evidence_review.md`](./08_evidence_review.md) - synthetic Explorer Evidence Review walkthrough using existing Context Bridge operations.
 - [`09_algorithm_blueprint.md`](./09_algorithm_blueprint.md) - synthetic intent-to-static-source Algorithm Blueprint walkthrough for the unreleased feature branch.
+- [`10_local_evidence_review.md`](./10_local_evidence_review.md) - coherent OSS review of explicitly selected local evidence.
+- [`fixtures/local_evidence_bell.py`](./fixtures/local_evidence_bell.py) - fixed public Python/Qiskit source fixture for bounded static evidence.
 - [`prompts/single_run_artifact_to_action.md`](./prompts/single_run_artifact_to_action.md) - copy-paste BYO prompt.
 
 ## Walkthroughs
@@ -26,7 +28,8 @@ Copy-paste walkthroughs for the qCoder OSS local workflow.
 7. [`07_byo_llm_artifact_pack.md`](./07_byo_llm_artifact_pack.md) - which artifacts to attach to a user-managed LLM; JSON vs Markdown roles.
 8. [`08_evidence_review.md`](./08_evidence_review.md) - bounded current-session Evidence Review, next checks, and handoff with synthetic evidence.
 9. [`09_algorithm_blueprint.md`](./09_algorithm_blueprint.md) - explicit confirmation, Qiskit-first blueprint, external generation, local static extraction, and bounded alignment.
-9. [`prompts/single_run_artifact_to_action.md`](./prompts/single_run_artifact_to_action.md) - copy-paste BYO prompt for artifact-to-action follow-up.
+10. [`10_local_evidence_review.md`](./10_local_evidence_review.md) - one local review across explicitly selected Python, QASM2, counts, or canonical evidence JSON.
+11. [`prompts/single_run_artifact_to_action.md`](./prompts/single_run_artifact_to_action.md) - copy-paste BYO prompt for artifact-to-action follow-up.
 
 ## Boundary reminder
 

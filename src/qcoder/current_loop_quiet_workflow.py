@@ -386,6 +386,64 @@ def help_response(
     return result
 
 
+def local_evidence_help_response(
+    *,
+    qcoder_version: str,
+    selected_input_kinds: Sequence[str],
+    available_capabilities: Sequence[str],
+    unsupported_capabilities: Sequence[str],
+    report_sections: Sequence[str],
+    supported_actions: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Return the OSS-local projection of the canonical Help v2 contract.
+
+    This projection is deliberately independent of Current Loop state.  It accepts
+    only already-classified, explicitly selected local inputs and never inspects a
+    workspace, consults an entitlement, or calls an Explorer service.
+    """
+
+    actions = [deepcopy(dict(item)) for item in supported_actions]
+    result = {
+        "schema_id": HELP_SCHEMA_ID,
+        "schema_version": HELP_SCHEMA_VERSION,
+        "topic": "overview",
+        "projection_type": "oss_local_evidence",
+        "installed_qcoder_version": qcoder_version,
+        "local_oss_mode": True,
+        "selected_input_kinds": [str(item) for item in selected_input_kinds],
+        "available_capabilities": [str(item) for item in available_capabilities],
+        "unsupported_capabilities": [str(item) for item in unsupported_capabilities],
+        "report_sections": [str(item) for item in report_sections],
+        "share_safe_export_choices": [
+            "derived evidence only (default)",
+            "source excerpts (separate explicit opt-in)",
+            "original QASM (separate explicit opt-in)",
+            "normalized CircuitIR (separate explicit opt-in)",
+            "raw counts (separate explicit opt-in)",
+            "raw run-result payload (separate explicit opt-in)",
+            "Blueprint material (separate explicit opt-in when applicable)",
+            "customer filenames (separate explicit opt-in)",
+            "customer paths (separate explicit opt-in)",
+        ],
+        "supported_customer_actions": actions,
+        "account_required": False,
+        "qcoder_token_required": False,
+        "explorer_service_used": False,
+        "mcp_required_or_implied": False,
+        "client_qualification_established": False,
+        "explorer_fields": "not_applicable",
+        "current_loop_state": "not_applicable",
+        "workspace_scanned": False,
+        "project_history_used": False,
+        "network_accessed": False,
+        "commands_exposed": True,
+        "json_choreography_exposed": False,
+        "state_reconstructed_from_transcript": False,
+    }
+    result["help_digest"] = _digest(result)
+    return result
+
+
 def quiet_workflow_contract_snapshot() -> dict[str, Any]:
     payload = {
         "customer_interaction_schema_id": CUSTOMER_INTERACTION_SCHEMA_ID,

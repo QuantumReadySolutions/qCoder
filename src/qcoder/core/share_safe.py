@@ -57,11 +57,13 @@ _FORBIDDEN_TEXT_MARKERS = (
     "Postmark",
 )
 _PATH_KEYS = {
+    "customer_filename",
     "qasm_path",
     "preflight_context_path",
     "counts_json",
     "source_path",
     "local_path",
+    "logical_source_label",
     "path",
 }
 _RAW_KEYS = {
