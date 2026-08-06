@@ -19,8 +19,8 @@ from typing import Any
 from qcoder.algorithm_blueprint import PROFILE_DEFINITIONS
 from qcoder.current_loop_quiet_workflow import INTENT_PROVENANCE
 
-ADAPTIVE_INTENT_INPUT_SCHEMA_ID = "qcoder.current_loop.adaptive_intent_input.v1"
-ADAPTIVE_INTENT_INPUT_SCHEMA_VERSION = 1
+ADAPTIVE_INTENT_INPUT_SCHEMA_ID = "qcoder.current_loop.adaptive_intent_input.v2"
+ADAPTIVE_INTENT_INPUT_SCHEMA_VERSION = 2
 ADAPTIVE_INTENT_INPUT_CONTRACT_KIND = "adaptive_intent_input"
 ADAPTIVE_INTENT_DOCUMENT_SCHEMA_ID = "qcoder.current_loop.adaptive_intent_fields_document.v1"
 ADAPTIVE_INTENT_DOCUMENT_SCHEMA_VERSION = 1
@@ -91,6 +91,35 @@ def _canonical_document_bytes(value: object) -> bytes:
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
+
+
+def _object_without_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Build one JSON object while rejecting ambiguous semantic input."""
+
+    result: dict[str, Any] = {}
+    for name, value in pairs:
+        if name in result:
+            raise AdaptiveIntentInputError("adaptive_intent_semantic_conflict")
+        result[name] = value
+    return result
+
+
+def canonicalize_adaptive_intent_document(text: str) -> tuple[dict[str, Any], bytes]:
+    """Parse supported transport and return its deterministic canonical form.
+
+    This helper normalizes structure only. Duplicate keys are semantic conflicts,
+    and all field/value/provenance validation remains the consumer's responsibility.
+    """
+
+    try:
+        document = json.loads(text, object_pairs_hook=_object_without_duplicate_keys)
+    except AdaptiveIntentInputError:
+        raise
+    except json.JSONDecodeError as exc:
+        raise AdaptiveIntentInputError("adaptive_intent_json_invalid") from exc
+    if not isinstance(document, dict):
+        raise AdaptiveIntentInputError("adaptive_intent_document_type_invalid")
+    return document, _canonical_document_bytes(document)
 
 
 def classify_profile_from_request(request: str) -> str:
@@ -319,7 +348,11 @@ def build_adaptive_intent_input_contract(
                 "item_separator": ",",
                 "key_separator": ":",
                 "trailing_newline": False,
-                "alternate_whitespace_permitted": False,
+                "alternate_whitespace_permitted": True,
+                "alternate_object_key_order_permitted": True,
+                "duplicate_object_keys_permitted": False,
+                "semantic_correction_permitted": False,
+                "canonical_output_produced_before_validation": True,
             },
             "exact_qcoder_owned_path": str(input_path),
             "assistant_may_choose_path": False,
@@ -391,7 +424,7 @@ def build_adaptive_intent_input_contract(
             "adaptive_intent_file_oversize",
             "adaptive_intent_utf8_invalid",
             "adaptive_intent_json_invalid",
-            "adaptive_intent_serialization_invalid",
+            "adaptive_intent_semantic_conflict",
             "adaptive_intent_document_type_invalid",
             "adaptive_intent_fixed_payload_mismatch",
             "adaptive_intent_field_missing",
@@ -529,14 +562,9 @@ def consume_fields_file(
         text = raw.decode("utf-8", errors="strict")
     except UnicodeDecodeError as exc:
         raise AdaptiveIntentInputError("adaptive_intent_utf8_invalid") from exc
-    try:
-        document = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise AdaptiveIntentInputError("adaptive_intent_json_invalid") from exc
-    if not isinstance(document, dict):
-        raise AdaptiveIntentInputError("adaptive_intent_document_type_invalid")
-    if raw != _canonical_document_bytes(document):
-        raise AdaptiveIntentInputError("adaptive_intent_serialization_invalid")
+    document, canonical_document = canonicalize_adaptive_intent_document(text)
+    if len(canonical_document) > ADAPTIVE_INTENT_INPUT_MAX_BYTES:
+        raise AdaptiveIntentInputError("adaptive_intent_file_oversize")
     fixed = contract.get("fixed_payload")
     if not isinstance(fixed, Mapping):
         raise AdaptiveIntentInputError("adaptive_intent_fixed_payload_mismatch")
@@ -648,7 +676,10 @@ def adaptive_intent_contract_snapshot() -> dict[str, Any]:
             "format": "canonical_json_object",
             "encoding": ADAPTIVE_INTENT_ENCODING,
             "unicode_normalization": "none",
-            "canonical_serialization_required": True,
+            "canonical_serialization_produced_by_qcoder": True,
+            "structural_normalization_permitted": True,
+            "semantic_correction_permitted": False,
+            "duplicate_object_keys_permitted": False,
             "qcoder_supplies_exact_path_and_ready_to_fill_document": True,
             "single_use": True,
             "maximum_bytes": ADAPTIVE_INTENT_INPUT_MAX_BYTES,

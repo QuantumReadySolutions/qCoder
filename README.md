@@ -55,10 +55,12 @@ Narrowing applies immediately; broadening requires explicit confirmation.
 
 ### Upgrading an active Current Loop
 
-qCoder 0.6.0a5 changes the operation-receipt and recovery machine semantics. Finish or restart an
-active qCoder loop before upgrading. An outstanding pre-v4 operation receipt cannot be reused by
-0.6.0a5; when an old receipt is outstanding, the IDE must provide a fresh authority grant for the
-new runtime before the operation is attempted again. qCoder fails closed instead of silently
+This unversioned integrated source advances the connected-assistant, adaptive-intent input,
+coordinator-result, and vocabulary contracts while preserving the existing recovery and receipt
+boundaries. The published 0.6.0a5 release remains the current official public release. Finish or
+restart an active qCoder loop before upgrading once a later release is published. An outstanding
+pre-v4 operation receipt cannot be reused. When an old receipt is outstanding, the IDE must
+provide a fresh authority grant for the new runtime. qCoder fails closed instead of silently
 reinterpreting old authority data. This is a local active-loop compatibility boundary, not a
 migration of project history or server-side persistence.
 

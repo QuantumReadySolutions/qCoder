@@ -1008,12 +1008,12 @@ def test_historical_a4_fixture_and_corrected_a5_status_detour(tmp_path: Path) ->
     assert registered["ok"] is True
 
 
-def test_binding_v17_delta_preserves_exact_twelve_tool_inventory() -> None:
+def test_binding_v18_delta_preserves_exact_twelve_tool_inventory() -> None:
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v17"
-    assert descriptor["schema_version"] == 17
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v18"
+    assert descriptor["schema_version"] == 18
     assert len(EXPECTED_TOOLS) == 12
     assert descriptor["qcoder_domain_tool_count"] == 12
     receipt = event_receipt_snapshot()

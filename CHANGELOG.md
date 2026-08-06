@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased integrated source
+
+- Add the OSS local-evidence review journey over explicitly selected Python/Qiskit, OpenQASM 2,
+  supplied-result, and canonical evidence inputs with local Help and opt-in share-safe exports.
+- Canonicalize harmless adaptive-intent JSON structure on the first supported submission while
+  rejecting duplicate, unknown, missing, or conflicting semantic input and preserving the exact
+  Request Baseline and value provenance.
+- Make the live recovery resolver the single policy authority, retire disconnected recovery
+  tables, distinguish machine-result semantics explicitly, and preserve stale-only one-attempt
+  causal continuation with exact authority ceilings.
+- Reject nested authoritative-store lock acquisition immediately while retaining the existing
+  non-reentrant lock, one-CAS mutation boundary, commit-time expiry checks, replay protection, and
+  atomic replacement behavior.
+- Add an internal client-neutral source conformance contract with Cursor Desktop as its source
+  reference profile. This is test architecture, not a new public client selector or a Copilot,
+  Gemini, or generic MCP support claim.
+- Advance the connected-assistant binding from v17 to v18, adaptive-intent input from v1 to v2,
+  coordinator result from v16 to v17, and current-loop vocabulary from v1 to v2. Receipt v4,
+  recovery v5, coordinator state v13, and exactly twelve tools remain unchanged.
+- Correct the real coordinator recovery-action result path so selecting an action that is not
+  permitted by an otherwise valid v5 recovery document emits `unsupported_action` with the
+  `unsupported_action` semantic class rather than mislabeling the result as a schema failure.
+- Preserve the published `0.6.0a5` package identity until a separate release stage assigns a new
+  version. This source convergence is not a release candidate and is not publicly installable.
+
 ## 0.6.0a5
 
 - Carry forward the corrected public distribution metadata from `0.6.0a4`, the unpublished

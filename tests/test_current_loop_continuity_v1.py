@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 import json
 import os
@@ -530,8 +531,25 @@ def test_state_cas_lock_corruption_wrong_schema_and_interrupted_temp(
 def test_lock_contention_times_out_without_auto_merge(tmp_path: Path) -> None:
     store, _activated = _activate(tmp_path)
     contender = CurrentLoopStore.for_workspace(store.workspace_root, lock_timeout_seconds=0.05)
+
+    def contend() -> None:
+        with contender.lock():
+            pass
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        with store.lock():
+            future = executor.submit(contend)
+            with pytest.raises(CurrentLoopConflict, match="current_loop_lock_timeout"):
+                future.result()
+
+
+def test_same_thread_store_instance_reacquisition_is_nested_not_contention(
+    tmp_path: Path,
+) -> None:
+    store, _activated = _activate(tmp_path)
+    contender = CurrentLoopStore.for_workspace(store.workspace_root, lock_timeout_seconds=0.05)
     with store.lock():
-        with pytest.raises(CurrentLoopConflict, match="current_loop_lock_timeout"):
+        with pytest.raises(CurrentLoopConflict, match="current_loop_nested_lock_acquisition"):
             with contender.lock():
                 pass
 

@@ -413,11 +413,11 @@ def test_sidecar_v3_ui_is_local_accessible_and_storage_free() -> None:
     assert "https://" not in _HTML + _CSS + _JS
 
 
-def test_binding_v17_publishes_management_without_changing_tools() -> None:
+def test_binding_v18_publishes_management_without_changing_tools() -> None:
     binding = build_client_binding_descriptor(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v17"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v18"
     assert binding["contract_management"]["schema_id"] == CONTRACT_MANAGEMENT_SCHEMA_ID
     assert binding["browser_and_ide_share_contract_management_service"] is True
     assert binding["effective_contract_json_read_only"] is True

@@ -268,7 +268,7 @@ def test_material_checkpoint_blocks_direct_finish_without_abandonment(
     assert coordinator.store.read()["activation_state"] == "active"
 
 
-def test_binding_v17_routes_governance_and_finish_without_document_fanout() -> None:
+def test_binding_v18_routes_governance_and_finish_without_document_fanout() -> None:
     binding = build_client_binding_descriptor(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
@@ -278,8 +278,8 @@ def test_binding_v17_routes_governance_and_finish_without_document_fanout() -> N
         python_executable="/runtime/python",
     )
     normalized_instructions = " ".join(instructions.split())
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v17"
-    assert binding["schema_version"] == 17
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v18"
+    assert binding["schema_version"] == 18
     assert len(EXPECTED_TOOLS) == 12
     assert "contract-set-generation-governance" in normalized_instructions
     assert "Do not call contract status first" in normalized_instructions

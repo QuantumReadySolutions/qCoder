@@ -16,6 +16,7 @@ from pathlib import Path
 import re
 import secrets
 import tempfile
+import threading
 import time
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
@@ -1258,6 +1259,9 @@ def _atomic_write_bytes(path: Path, payload: bytes, *, maximum_bytes: int) -> No
             pass
 
 
+_CURRENT_LOOP_HELD_LOCKS = threading.local()
+
+
 class CurrentLoopStore:
     """Single-file, inspectable current-loop state with bounded CAS updates."""
 
@@ -1296,6 +1300,13 @@ class CurrentLoopStore:
 
     @contextmanager
     def lock(self) -> Iterator[None]:
+        lock_identity = str(self.lock_path)
+        held_locks = getattr(_CURRENT_LOOP_HELD_LOCKS, "paths", None)
+        if held_locks is None:
+            held_locks = set()
+            _CURRENT_LOOP_HELD_LOCKS.paths = held_locks
+        if lock_identity in held_locks:
+            raise CurrentLoopConflict("current_loop_nested_lock_acquisition")
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         _apply_private_permissions(self.state_path.parent, directory=True)
         deadline = time.monotonic() + self.lock_timeout_seconds
@@ -1317,8 +1328,10 @@ class CurrentLoopStore:
             os.close(descriptor)
             descriptor = None
             _apply_private_permissions(self.lock_path, directory=False)
+            held_locks.add(lock_identity)
             yield
         finally:
+            held_locks.discard(lock_identity)
             if descriptor is not None:
                 os.close(descriptor)
             try:
