@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased integrated source
+## 0.6.0a9
 
 - Add the OSS local-evidence review journey over explicitly selected Python/Qiskit, OpenQASM 2,
   supplied-result, and canonical evidence inputs with local Help and opt-in share-safe exports.
@@ -22,8 +22,12 @@
 - Correct the real coordinator recovery-action result path so selecting an action that is not
   permitted by an otherwise valid v5 recovery document emits `unsupported_action` with the
   `unsupported_action` semantic class rather than mislabeling the result as a schema failure.
-- Preserve the published `0.6.0a5` package identity until a separate release stage assigns a new
-  version. This source convergence is not a release candidate and is not publicly installable.
+- Preserve bounded QASM2 extraction and recognize OpenQASM 3 only as unsupported; this version
+  adds no OpenQASM 3 parser, historical account-free OSS MCP, named-client support claim, Copilot
+  behavior, or persistent project intelligence.
+- At source freeze, `0.6.0a9` is an unpublished, non-publishable candidate pending exact-artifact
+  qualification and a separate publication decision. This changelog describes version contents;
+  package-index availability remains a separate lifecycle fact.
 
 ## 0.6.0a5
 

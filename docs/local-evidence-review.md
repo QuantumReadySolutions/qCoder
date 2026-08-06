@@ -1,6 +1,6 @@
 # Review local evidence
 
-`qcoder review local-evidence` is the qCoder OSS development-branch journey for reviewing one
+`qcoder review local-evidence` is the qCoder 0.6.0a9 OSS journey for reviewing one
 explicitly selected artifact or a bounded explicit list of artifacts in one coherent local report.
 It composes existing qCoder evidence contracts; it does not create a second evidence registry,
 Run Summary, Help contract, CircuitIR, motif schema, or Current Loop Contract.
@@ -65,7 +65,7 @@ a concise customer-facing message or visible unsupported state, not a Python tra
 
 ### OpenQASM 3 boundary
 
-OpenQASM 3 evidence extraction is not supported in WI-0421. A declared OpenQASM 3 header is
+OpenQASM 3 evidence extraction is not supported in qCoder 0.6.0a9. A declared OpenQASM 3 header is
 recognized, but the input is not passed through the OpenQASM 2 parser and no partial circuit facts
 are presented as complete. The report directs the customer to supply supported OpenQASM 2,
 explicitly selected Python/Qiskit source, or supported counts JSON. No OpenQASM 3 parser is added.
@@ -159,5 +159,5 @@ remain customer-owned. Current/prior relationships are shown only when they alre
 explicitly selected canonical artifact. Active Current Loop registries and snapshots are not
 projected into this OSS workflow because their semantics are loop-bound.
 
-This development-branch guide is implementation evidence for later review. It does not activate a
-public claim, assign a version, create a release candidate, qualify a client, or publish a package.
+This guide describes behavior contained in qCoder 0.6.0a9. Package-index availability, named-client
+qualification, and public claim status are governed separately from this package documentation.

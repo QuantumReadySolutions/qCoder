@@ -24,7 +24,7 @@ adapter for eligible Explorer users. Pro is not launched and is not a current pu
 
 - **OSS commands** (`analyze`, `batch`, `context`, `review`) are Apache-2.0, local-first/offline, and useful without an account or token. They do not upload data, call a qCoder hosted service, or run QPU/simulator jobs.
 - **Explorer Beta commands** (`qcoder explorer status`, `qcoder explorer demo`, `qcoder explorer evidence`) are account-backed checks for Explorer Beta status, built-in guided evidence samples, and derived-context guided evidence for user-owned OpenQASM 2 artifacts. The older `qcoder student ...` commands remain available as beta compatibility aliases.
-- **Context Bridge adapter commands** (`qcoder context-bridge mcp serve`, `qcoder context-bridge mcp smoke`) are for eligible Explorer users who create a display-once token through Account Center. Support handles revocation and lost-token replacement. The adapter exposes bounded current-evidence context tools to configured Cursor, Claude Code, and Codex clients and reads the token from a local token file.
+- **Context Bridge adapter commands** (`qcoder context-bridge mcp serve`, `qcoder context-bridge mcp smoke`) are for eligible Explorer users who create a display-once token through Account Center. Support handles revocation and lost-token replacement. The adapter exposes bounded current-evidence context tools to a configured connected client and reads the token from a local token file. Client qualification is separate from connection or tool discovery.
 - Explorer Beta custom evidence uses locally derived qCoder context/features. The CLI may read QASM locally, but the hosted request must not include raw QASM, raw source text, local paths, operation lists, raw counts, notebooks, prompts, tokens, auth headers, or cookies.
 - Explorer Beta custom evidence is stateless in this v0 slice; it does not create persistent Explorer history.
 - **`qcoder pro` bootstrap/workflow commands** are archived pilot/client-contract surfaces. They are not a Pro purchase path, not a current public signup path, and not generally available hosted Pro.
@@ -55,10 +55,10 @@ Narrowing applies immediately; broadening requires explicit confirmation.
 
 ### Upgrading an active Current Loop
 
-This unversioned integrated source advances the connected-assistant, adaptive-intent input,
-coordinator-result, and vocabulary contracts while preserving the existing recovery and receipt
-boundaries. The published 0.6.0a5 release remains the current official public release. Finish or
-restart an active qCoder loop before upgrading once a later release is published. An outstanding
+Version 0.6.0a9 advances the connected-assistant, adaptive-intent input, coordinator-result, and
+vocabulary contracts while preserving the existing recovery and receipt boundaries. At source
+freeze, 0.6.0a9 is an unpublished candidate; package-index availability requires a separate
+publication decision. Finish or restart an active qCoder loop before upgrading. An outstanding
 pre-v4 operation receipt cannot be reused. When an old receipt is outstanding, the IDE must
 provide a fresh authority grant for the new runtime. qCoder fails closed instead of silently
 reinterpreting old authority data. This is a local active-loop compatibility boundary, not a
@@ -66,15 +66,11 @@ migration of project history or server-side persistence.
 
 ### Connected-client qualification
 
-- **Cursor Desktop:** full active Current Loop support.
-- **Cursor terminal/CLI:** connection and Desktop parity are distinct; full active-loop support is
-  not claimed.
-- **Codex CLI and Claude Code:** only exact-release bounded capabilities may be claimed after their
-  separate client proofs; full active-loop support is not claimed here.
-- **Generic MCP clients:** no support claim.
-
-Connection alone is not qualification. One-call help and direct contract or completion routes do
-not add persistent memory, project history, repository discovery, or automatic IDE authority.
+This package does not activate a named-client support claim. Qualification applies only to an
+exact scenario, delivery-environment profile, workstyle, and qCoder artifact. Connection, MCP tool
+discovery, or evidence for a related client does not establish qualification. One-call help and
+direct contract or completion routes do not add persistent memory, project history, repository
+discovery, or automatic IDE authority.
 
 ## Context Bridge inventory
 
@@ -98,10 +94,10 @@ operations, for exactly twelve Context Bridge capability tools:
 
 ## Review current evidence
 
-### Review local evidence (OSS development branch)
+### Review local evidence
 
-The WI-0421 development branch composes existing canonical qCoder evidence into one local,
-account-free review. It reads only the files named explicitly on the command line; it does not
+qCoder 0.6.0a9 composes existing canonical qCoder evidence into one local, account-free review.
+It reads only the files named explicitly on the command line; it does not
 accept a directory, expand a glob, recurse, discover hidden files, follow Python imports, scan a
 workspace, start a watcher, or call a network service.
 
@@ -148,8 +144,8 @@ attributes and alternate data streams are not qualified. See
 [`docs/local-evidence-review.md`](docs/local-evidence-review.md) for the complete commands and
 section meanings.
 
-This branch documentation describes implemented branch behavior only. It does not activate a
-public product claim or create a release candidate.
+This section describes the behavior contained in version 0.6.0a9. Package-index availability and
+public claim status are governed separately from the package documentation.
 
 ### Explorer Evidence Review
 
@@ -164,9 +160,9 @@ Evidence Review is an Explorer capability for understanding what explicitly supp
 Core Evidence Review output uses these provenance and evidence-status labels: **Observed**, **User-provided**, **Inferred**, **Assumed**, **Not proven**, and **Suggested next check**. They are not confidence percentages, assurance ratings, or correctness scores. “What the evidence supports” is a bounded interpretation, not independent verification. “What changed” is a descriptive comparison of explicit inputs, not history, causality, or multi-run analysis. Suggested checks remain user-controlled and are not executed by qCoder.
 
 Local qCoder OSS commands provide deterministic local analysis and review artifacts. Circuit
-Workbench is the machine-local selected-evidence surface in supported Cursor setup. Explorer
+Workbench is the machine-local selected-evidence surface for explicitly supplied artifacts. Explorer
 Evidence Review supplies bounded current-session interpretation within the complete Explorer
-Context Loop; Context Bridge carries the operations into supported coding clients but does not own
+Context Loop; Context Bridge carries the operations into a configured connected client but does not own
 the workflow or retain lineage. ChatGPT uses a manual share-safe Prompt Context handoff and is
 not a connected Context Bridge client.
 
@@ -182,8 +178,8 @@ compact static Python evidence against that contract. The current workflow uses:
   and explicit user-reviewed confirmation;
 - `create_implementation_blueprint` to return an Implementation Blueprint and a distinct Output
   Evidence Contract without adding another tool;
-- `create_generation_context_pack` to prepare requirements for code generation in Cursor, Claude
-  Code, Codex, or a manual ChatGPT handoff;
+- `create_generation_context_pack` to prepare requirements for an external, user-selected code
+  generation assistant or a manual handoff;
 - external, user-controlled Python generation outside qCoder;
 - `qcoder blueprint source-evidence` for deterministic machine-local AST extraction from one
   selected `.py` file or bounded stdin; and
@@ -200,11 +196,9 @@ See the synthetic [`Algorithm Blueprint walkthrough`](examples/09_algorithm_blue
 
 ## Quick start
 
-Install:
-
-```bash
-python -m pip install "qcoder==0.6.0a5"
-```
+Version 0.6.0a9 is installed from its exact retained artifact path during candidate qualification.
+Package-index installation is appropriate only if this exact version is separately published;
+check the package index for current availability. The commands below describe version 0.6.0a9.
 
 Analyze a circuit:
 

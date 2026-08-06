@@ -12,14 +12,17 @@ Before publication, a superseding private candidate for an already used release 
 a PEP 440 local version in the form `<public-version>+wi<work-item>.<bounded-candidate-id>`. The
 local identity is private, non-publishable proof material. The plain public version remains
 reserved for the eventual frozen publication candidate and must not be assigned to another
-intermediate byte set. Customer-facing package pins continue to name the approved plain public
-version because customers never install a private local-version candidate from an index; private
-proof installs the exact recorded archive by path and hash.
+intermediate byte set. Separately governed customer-facing surfaces may continue to name the
+approved public version while it remains current, because customers never install a private
+local-version candidate from an index; private proof installs the exact recorded archive by path
+and hash. Candidate package documentation itself carries no stale public-version install pin.
 
-The version-consistency proof must therefore distinguish the exact artifact identity from its
-public release base. Authoritative package sources and distribution metadata must equal the exact
-identity. Customer-facing pins must equal the public release base. A local candidate whose base
-does not match those pins fails the release unit.
+The version-consistency proof must therefore distinguish the exact artifact identity from the
+current public release. Authoritative package sources and distribution metadata must equal the
+exact candidate identity. Candidate package documentation must not pin either an unpublished
+candidate or a stale public version. When an external customer surface intentionally carries a
+version pin, that pin must equal the current public release; candidate, rejected, or intervening
+unpublished versions are forbidden.
 
 Release proof must record the source commit, wheel hash, source-distribution hash, and publication
 source. Private artifacts that reuse a published version are obsolete and must be either moved to a
