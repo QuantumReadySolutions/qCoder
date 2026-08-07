@@ -1362,6 +1362,7 @@ class ContextBridgeTransport:
                         "use_selected_portable_bundle": True,
                         "resolution_confirmation": {
                             "confirmed": True,
+                            "confirmed_by": "explicit_current_user",
                             "confirmation_assertion": semantic_confirmation,
                             "provenance": "explicit_user_confirmation",
                         },

@@ -57,6 +57,40 @@ PROFILE_COUNTS = {
 }
 
 
+def test_context_bridge_confirmation_uses_nonidentifying_explicit_user_marker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_handle(message: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        captured["message"] = deepcopy(message)
+        captured["kwargs"] = deepcopy(kwargs)
+        return {"result": {"structuredContent": {"ok": True}}}
+
+    monkeypatch.setattr(
+        "qcoder.context_bridge_mcp.handle_jsonrpc_message",
+        fake_handle,
+    )
+    transport = current_loop_coordinator_module.ContextBridgeTransport(
+        base_url="https://example.invalid",
+        token_file=tmp_path / "token.txt",
+    )
+    result = transport.confirm_selected_bundle(
+        selected_bundle_file=tmp_path / "proposal.json",
+        semantic_confirmation="I confirm proposal proposal-example.",
+    )
+    assert result == {"ok": True}
+    confirmation = captured["message"]["params"]["arguments"][
+        "resolution_confirmation"
+    ]
+    assert confirmation == {
+        "confirmed": True,
+        "confirmed_by": "explicit_current_user",
+        "confirmation_assertion": "I confirm proposal proposal-example.",
+        "provenance": "explicit_user_confirmation",
+    }
+
+
 def _checkpoint_payload(
     operation: str,
     checkpoint_kind: str,
