@@ -18,7 +18,7 @@ from qcoder.blueprint_decisions import (
     unpack_decision_record_set,
     with_consistency_digest,
 )
-from qcoder.context_bridge_mcp import EXPECTED_TOOLS, PROMPT_CONTEXT_MODES
+from qcoder.context_bridge_mcp import EXPECTED_TOOLS, PROMPT_CONTEXT_MODES, TOOL_INPUT_FIELDS
 from qcoder.cli import _parse_current_loop_scalar, main as cli_main
 from qcoder.context_loop import (
     build_carry_forward_proposal,
@@ -419,7 +419,9 @@ class PublicBuilderTransport:
         records = [deepcopy(item) for item in supplied["decision_records"]]
         proposal = build_carry_forward_proposal(
             selected_action=supplied["selected_action"],
-            profile_id=supplied["profile_id"],
+            profile_id=decision_inventory_binding(supplied["algorithm_intent_card"])[
+                "profile_id"
+            ],
             decision_records=records,
             parent_artifacts=supplied["evidence_parent_artifacts"],
             current_build_context=supplied["current_build_context"],
@@ -1651,6 +1653,18 @@ def test_one_proposal_selected_bundle_confirmation_and_next_loop(
         and call[1].get("resolution_phase") == "propose"
     ]
     assert len(protected_proposals) == 1
+    proposal_arguments = protected_proposals[0][1]
+    assert set(proposal_arguments) <= TOOL_INPUT_FIELDS["create_implementation_blueprint"]
+    assert "profile_id" not in proposal_arguments
+    assert proposal_arguments["algorithm_intent_card"]["artifact_type"] == (
+        "algorithm_intent_card"
+    )
+    assert proposal_arguments["intent_relationship"] == {
+        "relationship_type": "represented_by",
+        "parent_artifact_digest": proposal_arguments["algorithm_intent_card"][
+            "artifact_digest"
+        ],
+    }
     portable_path = (
         workspace / ".qcoder/current-loop/artifacts/"
         "current-build-context.proposal-bearing.portable.json"

@@ -8799,7 +8799,6 @@ class CurrentLoopCoordinator:
                 )
             state = self.store.read()
             blueprint = self._saved_artifact(state, "working_blueprint")
-            binding = decision_inventory_binding(blueprint)
             records = self._decision_records(blueprint)
             selected = next(
                 (item for item in records if item.get("decision_ref") == decision_ref),
@@ -8808,6 +8807,7 @@ class CurrentLoopCoordinator:
             if selected is None:
                 raise CurrentLoopError("selected_decision_not_found")
             current = self._saved_artifact(state, "current_build_context")
+            algorithm_intent_card = self._saved_artifact(state, "algorithm_intent_card")
             applicable = current.get("applicable_actions")
             if isinstance(applicable, list) and selected_action not in applicable:
                 raise CurrentLoopError("selected_action_not_applicable")
@@ -8832,7 +8832,11 @@ class CurrentLoopCoordinator:
                 "decision_records": records,
                 "selected_decision_references": [decision_ref],
                 "proposed_updates": [proposed_update],
-                "profile_id": binding["profile_id"],
+                "algorithm_intent_card": algorithm_intent_card,
+                "intent_relationship": {
+                    "relationship_type": "represented_by",
+                    "parent_artifact_digest": _artifact_digest(algorithm_intent_card),
+                },
                 "remaining_uncertainty": list(current.get("remaining_uncertainty", [])),
                 "generation_context_effect": (
                     "Apply only after exact proposal-specific confirmation."
