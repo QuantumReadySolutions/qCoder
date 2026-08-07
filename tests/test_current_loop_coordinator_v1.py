@@ -440,11 +440,7 @@ class PublicBuilderTransport:
                 "derived_artifact_materialized": False,
             }
         )
-        lineage = next(
-            parent
-            for parent in supplied["evidence_parent_artifacts"]
-            if parent.get("artifact_type") == "decision_evidence_lineage"
-        )
+        lineage = supplied["decision_evidence_lineage"]
         portable = build_portable_current_build_context(
             current_build_context=supplied["current_build_context"],
             decision_records=records,
@@ -1665,6 +1661,16 @@ def test_one_proposal_selected_bundle_confirmation_and_next_loop(
             "artifact_digest"
         ],
     }
+    assert all(
+        set(parent) == {"artifact_ref", "artifact_digest", "artifact_type"}
+        for parent in proposal_arguments["evidence_parent_artifacts"]
+    )
+    assert proposal_arguments["evidence_parent_artifacts"][-1]["artifact_type"] == (
+        "current_build_context"
+    )
+    assert proposal_arguments["decision_evidence_lineage"]["schema_id"] == (
+        "qcoder.decision_evidence_lineage.v1"
+    )
     portable_path = (
         workspace / ".qcoder/current-loop/artifacts/"
         "current-build-context.proposal-bearing.portable.json"

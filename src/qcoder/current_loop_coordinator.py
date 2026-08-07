@@ -24,6 +24,7 @@ from qcoder.algorithm_blueprint import (
     with_artifact_digest,
 )
 from qcoder.context_loop import (
+    CURRENT_BUILD_EVIDENCE_PARENT_ORDER,
     build_circuit_manifestation,
     build_decision_evidence_lineage,
     build_request_baseline,
@@ -8816,9 +8817,7 @@ class CurrentLoopCoordinator:
                 proposed_value=proposed_value,
                 control_treatment=control_treatment,
             )
-            parent_artifacts = [
-                self._saved_artifact(state, role) for role in self._current_parent_roles(current)
-            ] + [current]
+            parent_artifacts = self._current_parent_descriptors(current)
             arguments = {
                 "context_loop": "current_build_context_v1",
                 "decision_loop": "readiness_resolution_v1",
@@ -8828,6 +8827,9 @@ class CurrentLoopCoordinator:
                 "current_lineage_reference": records[0]["current_lineage_reference"],
                 "working_blueprint": blueprint,
                 "current_build_context": current,
+                "decision_evidence_lineage": self._saved_artifact(
+                    state, "decision_evidence_lineage"
+                ),
                 "evidence_parent_artifacts": parent_artifacts,
                 "decision_records": records,
                 "selected_decision_references": [decision_ref],
@@ -10319,27 +10321,54 @@ class CurrentLoopCoordinator:
         ]
         return result
 
-    def _current_parent_roles(self, current: Mapping[str, Any]) -> list[str]:
+    def _current_parent_descriptors(
+        self, current: Mapping[str, Any]
+    ) -> list[dict[str, str]]:
         references = current.get("artifact_references")
         if not isinstance(references, Mapping):
             raise CurrentLoopError("canonical_parent_set_incomplete")
-        outcome = self._coordinator_state(self.store.read()).get("generation_context_outcome")
-        generation_role = (
-            "exploratory_generation_context"
-            if isinstance(outcome, Mapping)
-            and outcome.get("exploratory_generation_context_created") is True
-            else "generation_context_pack"
+        parents: list[dict[str, str]] = []
+        for name in CURRENT_BUILD_EVIDENCE_PARENT_ORDER:
+            value = references.get(name)
+            if value is None:
+                continue
+            if not isinstance(value, Mapping):
+                raise CurrentLoopError("canonical_parent_set_incomplete")
+            artifact_ref = value.get("artifact_ref")
+            digest = value.get("digest")
+            artifact_type = value.get("artifact_type")
+            if (
+                not isinstance(artifact_ref, str)
+                or not artifact_ref.startswith("session-artifact-")
+                or not isinstance(digest, str)
+                or len(digest) != 64
+                or not isinstance(artifact_type, str)
+            ):
+                raise CurrentLoopError("canonical_parent_set_incomplete")
+            parents.append(
+                {
+                    "artifact_ref": artifact_ref,
+                    "artifact_digest": digest,
+                    "artifact_type": artifact_type,
+                }
+            )
+        current_ref = current.get("artifact_ref")
+        current_digest = current.get("artifact_digest")
+        if (
+            not isinstance(current_ref, str)
+            or not current_ref.startswith("session-artifact-")
+            or not isinstance(current_digest, str)
+            or len(current_digest) != 64
+        ):
+            raise CurrentLoopError("canonical_parent_set_incomplete")
+        parents.append(
+            {
+                "artifact_ref": current_ref,
+                "artifact_digest": current_digest,
+                "artifact_type": "current_build_context",
+            }
         )
-        mapping = {
-            "request_baseline": "request_baseline_handoff",
-            "working_blueprint": "working_blueprint",
-            "generation_context": generation_role,
-            "python_manifestation": "python_manifestation",
-            "circuit_manifestation": "circuit_manifestation",
-            "result_manifestation": "result_manifestation",
-            "lineage": "decision_evidence_lineage",
-        }
-        return [mapping[name] for name in references if name in mapping]
+        return parents
 
     def _require_phase(self, operation: str, allowed: set[str]) -> dict[str, Any]:
         try:
