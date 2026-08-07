@@ -733,6 +733,7 @@ _CONTEXT_LOOP_EVIDENCE_FIELDS = {
     "result_manifestation",
     "stage_availability",
     "stage_identities",
+    "selected_share_safe_summaries",
     "decision_evidence_lineage",
     "current_build_context",
     "carry_forward_proposal",
@@ -2283,6 +2284,14 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
         "python_manifestation": {"type": "object", "additionalProperties": True},
         "circuit_manifestation": {"type": "object", "additionalProperties": True},
         "result_manifestation": {"type": "object", "additionalProperties": True},
+        "selected_share_safe_summaries": {
+            "type": "object",
+            "additionalProperties": True,
+            "description": (
+                "Already-derived bounded share-safe summaries for the current request. "
+                "Raw results, paths, and filenames remain prohibited."
+            ),
+        },
         "stage_availability": stage_availability_schema,
         "stage_identities": {
             "type": "object",

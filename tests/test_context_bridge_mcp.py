@@ -1336,6 +1336,12 @@ def _passive_current_context() -> dict[str, object]:
     }
 
 
+def test_current_context_transport_accepts_bounded_share_safe_summaries() -> None:
+    assert "selected_share_safe_summaries" in (
+        context_bridge_mcp.TOOL_INPUT_FIELDS["create_context_session_card"]
+    )
+
+
 def _passive_lineage() -> dict[str, object]:
     return {
         "schema_id": "qcoder.decision_evidence_lineage.v1",
