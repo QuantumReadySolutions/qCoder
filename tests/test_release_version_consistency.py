@@ -13,10 +13,10 @@ from qcoder import __version__
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts/verify-release-version.py"
-EXPECTED_VERSION = "0.6.0a9"
-EXPECTED_PUBLIC_VERSION = "0.6.0a5"
+EXPECTED_VERSION = "0.6.0a10"
+EXPECTED_PUBLIC_VERSION = "0.6.0a9"
 EXPECTED_POSTURE = "unpublished_candidate"
-EXPECTED_INTERVENING = ["0.6.0a6", "0.6.0a7", "0.6.0a8"]
+EXPECTED_INTERVENING: list[str] = []
 
 
 def _load_verifier():
@@ -27,7 +27,7 @@ def _load_verifier():
     return module
 
 
-def test_source_version_identity_is_a9_unpublished_candidate() -> None:
+def test_source_version_identity_is_a10_unpublished_candidate() -> None:
     verifier = _load_verifier()
     assert verifier.source_versions(REPO_ROOT) == {
         "pyproject": EXPECTED_VERSION,
@@ -122,9 +122,7 @@ def test_unpublished_candidate_without_customer_install_pin_passes(tmp_path: Pat
     ("customer_pin", "error"),
     [
         (EXPECTED_VERSION, "unpublished_candidate_customer_pin"),
-        ("0.6.0a6", "unpublished_intervening_customer_pin"),
-        ("0.6.0a7", "unpublished_intervening_customer_pin"),
-        ("0.6.0a8", "unpublished_intervening_customer_pin"),
+        ("0.6.0a8", "customer_package_pin_mismatch"),
         ("0.6.0a4", "customer_package_pin_mismatch"),
     ],
 )
@@ -173,8 +171,23 @@ def test_unpublished_candidate_metadata_cannot_claim_publication(
 
 
 def test_intervening_unpublished_inventory_must_be_complete(tmp_path: Path) -> None:
-    _write_candidate_fixture(tmp_path, intervening_versions=[])
+    _write_candidate_fixture(
+        tmp_path,
+        current_public_version="0.6.0a5",
+        intervening_versions=[],
+    )
     with pytest.raises(ValueError, match="intervening_unpublished_versions_mismatch"):
+        _verify_fixture(tmp_path)
+
+
+def test_declared_intervening_unpublished_pin_is_rejected(tmp_path: Path) -> None:
+    _write_candidate_fixture(
+        tmp_path,
+        current_public_version="0.6.0a5",
+        intervening_versions=["0.6.0a6", "0.6.0a7", "0.6.0a8", "0.6.0a9"],
+        customer_pin="0.6.0a8",
+    )
+    with pytest.raises(ValueError, match="unpublished_intervening_customer_pin"):
         _verify_fixture(tmp_path)
 
 

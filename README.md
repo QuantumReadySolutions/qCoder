@@ -55,10 +55,11 @@ Narrowing applies immediately; broadening requires explicit confirmation.
 
 ### Upgrading an active Current Loop
 
-Version 0.6.0a9 advances the connected-assistant, adaptive-intent input, coordinator-result, and
-vocabulary contracts while preserving the existing recovery and receipt boundaries. At source
-freeze, 0.6.0a9 is an unpublished candidate; package-index availability requires a separate
-publication decision. Finish or restart an active qCoder loop before upgrading. An outstanding
+Version 0.6.0a10 preserves the connected-assistant, adaptive-intent input, coordinator-result, and
+vocabulary contracts while correcting exact external-artifact authority carry-through. It is an
+unpublished successor candidate to the current public 0.6.0a9 pre-release; package-index
+availability requires a separate publication decision. Finish or restart an active qCoder loop
+before upgrading. An outstanding
 pre-v4 operation receipt cannot be reused. When an old receipt is outstanding, the IDE must
 provide a fresh authority grant for the new runtime. qCoder fails closed instead of silently
 reinterpreting old authority data. This is a local active-loop compatibility boundary, not a
@@ -96,7 +97,8 @@ operations, for exactly twelve Context Bridge capability tools:
 
 ### Review local evidence
 
-qCoder 0.6.0a9 composes existing canonical qCoder evidence into one local, account-free review.
+The public qCoder 0.6.0a9 pre-release and this unpublished 0.6.0a10 successor candidate compose
+existing canonical qCoder evidence into one local, account-free review.
 It reads only the files named explicitly on the command line; it does not
 accept a directory, expand a glob, recurse, discover hidden files, follow Python imports, scan a
 workspace, start a watcher, or call a network service.
@@ -144,8 +146,9 @@ attributes and alternate data streams are not qualified. See
 [`docs/local-evidence-review.md`](docs/local-evidence-review.md) for the complete commands and
 section meanings.
 
-This section describes the behavior contained in version 0.6.0a9. Package-index availability and
-public claim status are governed separately from the package documentation.
+This section describes behavior present in public version 0.6.0a9 and retained by the unpublished
+0.6.0a10 successor candidate. Package-index availability and public claim status are governed
+separately from the package documentation.
 
 ### Explorer Evidence Review
 
@@ -196,9 +199,10 @@ See the synthetic [`Algorithm Blueprint walkthrough`](examples/09_algorithm_blue
 
 ## Quick start
 
-Version 0.6.0a9 is installed from its exact retained artifact path during candidate qualification.
-Package-index installation is appropriate only if this exact version is separately published;
-check the package index for current availability. The commands below describe version 0.6.0a9.
+This source identifies the unpublished 0.6.0a10 successor candidate. Candidate qualification must
+install its exact retained artifact after the separate freeze step; do not use a candidate-only
+package-index pin. The current public package remains the 0.6.0a9 pre-release. The commands below
+describe behavior retained by the successor candidate.
 
 Analyze a circuit:
 

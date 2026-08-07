@@ -407,3 +407,111 @@ def test_inventory_and_contract_separate_local_and_hosted_stages() -> None:
     recovery = recovery_action_contract_snapshot()
     assert recovery["refresh_executes_action"] is False
     assert recovery["selection_requires_qcoder_owned_recovery_reference"] is True
+
+
+def test_explicit_external_selection_survives_normalization_and_local_processing(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    fixtures = tmp_path / "public-fixtures"
+    fixtures.mkdir()
+    activate_current_loop(
+        workspace_root=workspace,
+        generation_posture="exploratory_first_pass",
+        explicit_authority=True,
+        request_baseline_digest="a" * 64,
+    )
+    coordinator = CurrentLoopCoordinator(workspace_root=workspace)
+    source = fixtures / "bell.py"
+    source.write_text(
+        "from qiskit import QuantumCircuit\nqc = QuantumCircuit(2, 2)\nqc.h(0)\nqc.cx(0, 1)\nqc.measure([0, 1], [0, 1])\n",
+        encoding="utf-8",
+    )
+    qasm = fixtures / "bell.qasm"
+    qasm.write_text(
+        'OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[2];\ncreg c[2];\nh q[0];\ncx q[0],q[1];\nmeasure q -> c;\n',
+        encoding="utf-8",
+    )
+    results = fixtures / "counts.json"
+    results.write_text('{"00": 512, "11": 512}\n', encoding="utf-8")
+    candidates = [
+        {
+            "path": str(source),
+            "role": "source",
+            "artifact_type": "source",
+            "provenance": "user_selected",
+            "explicit_external": True,
+        },
+        {
+            "path": str(qasm),
+            "role": "circuit_qasm",
+            "artifact_type": "circuit_qasm",
+            "provenance": "user_selected",
+            "explicit_external": True,
+        },
+        {
+            "path": str(results),
+            "role": "results",
+            "artifact_type": "results",
+            "provenance": "user_selected",
+            "explicit_external": True,
+        },
+    ]
+    normalized = coordinator._normalize_candidates(candidates)
+    assert all(item["external"] is True for item in normalized)
+    assert all(item["explicit_external"] is True for item in normalized)
+
+    store = coordinator.store
+    state = store.read()
+    proposed = propose_selected_artifact_authorization(
+        loop_ref=str(state["loop_ref"]),
+        proposed_artifacts=[
+            {
+                "artifact_role": item["role"],
+                "artifact_type": item["artifact_type"],
+                "local_path": item["path"],
+            }
+            for item in normalized
+        ],
+    )
+    approved = update_selected_artifact_authorization(
+        proposed,
+        action="approve_all",
+        explicit_action_provenance="direct_user_action",
+    )
+    state = set_artifact_authorization(
+        store=store,
+        authorization=approved,
+        expected_revision=int(state["state_revision"]),
+    )
+    protocol = coordinator._initial_coordinator_state(
+        phase="evidence_processing",
+        state_status="ready",
+        checkpoint_kind="none",
+        summary="Exact external public fixtures are authorized.",
+    )
+    protocol["artifact_candidates"] = normalized
+
+    def set_protocol(value: dict[str, Any]) -> Mapping[str, Any]:
+        value["coordinator"] = deepcopy(protocol)
+        return value
+
+    coordinator.store.update(set_protocol, expected_revision=int(state["state_revision"]))
+    result = coordinator.process_authorized_artifacts()
+
+    assert result["ok"] is True, result
+    assert result["details"]["local_processing"]["protected_calls_attempted"] == 0
+    assert set(result["details"]["extracted_roles"]) >= {
+        "source_evidence",
+        "python_manifestation",
+        "circuit_manifestation",
+        "result_manifestation",
+    }
+    assert result["details"]["raw_source_sent"] is False
+    assert result["details"]["raw_qasm_sent"] is False
+    assert result["details"]["raw_results_sent"] is False
+    serialized = json.dumps(result, sort_keys=True)
+    assert str(source) not in serialized
+    assert str(qasm) not in serialized
+    assert str(results) not in serialized

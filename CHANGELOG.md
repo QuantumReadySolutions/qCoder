@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.0a10
+
+- Preserve explicit customer selection of exact external Python, OpenQASM 2, and supplied-result
+  files through canonical current-loop registration and local derivation. The repair neither
+  discovers other files nor broadens artifact, IDE-write, execution, or hosted authority.
+- Keep raw artifacts local, deterministic, and process-and-discard at the hosted boundary. The
+  protected comparison correction is separately deployable and remains compatible with the
+  existing binding-v18 adapter and twelve-tool inventory.
+- Preserve five Prompt Context modes, three Algorithm Blueprint profiles, seven Decision
+  Resolution actions, explicit confirmation, immutable lineage, stale-state rejection, and the
+  absence of project history, repository scanning, autonomous editing, execution, or Pro behavior.
+- `0.6.0a10` is an unpublished successor candidate to the public `0.6.0a9` pre-release. It is not
+  a stable or generally available release, and it may not be installed from a candidate-only pin.
+
 ## 0.6.0a9
 
 - Add the OSS local-evidence review journey over explicitly selected Python/Qiskit, OpenQASM 2,

@@ -10192,6 +10192,12 @@ class CurrentLoopCoordinator:
                     "path": exact,
                     "display_path": display,
                     "external": external,
+                    # `_normalize_candidates` is the authority boundary for an
+                    # explicitly selected external file. Preserve that bounded
+                    # decision for the later canonical registration transaction;
+                    # otherwise the same exact file is incorrectly reclassified
+                    # as never explicitly selected during local processing.
+                    "explicit_external": external,
                     "event_disposition": event_disposition,
                     "related_circuit_ref": candidate.get("related_circuit_ref"),
                 }
@@ -10237,6 +10243,7 @@ class CurrentLoopCoordinator:
                 "role",
                 "artifact_type",
                 "external",
+                "explicit_external",
                 "related_circuit_ref",
             )
             if any(previous.get(key) != value.get(key) for key in comparable_keys):
