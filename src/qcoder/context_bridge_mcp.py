@@ -1150,8 +1150,10 @@ def _expand_selected_portable_bundle(
         )
     if not isinstance(exact_input, dict):
         return None, None, "portable_confirmation_tool_input_invalid"
+    if "resolution_confirmation" not in arguments:
+        return None, None, "selected_portable_bundle_resolution_confirmation_missing"
     for field in ("proposal_ref", "selected_action", "resolution_confirmation"):
-        if arguments.get(field) != exact_input.get(field):
+        if field in arguments and arguments[field] != exact_input.get(field):
             return None, None, f"selected_portable_bundle_{field}_mismatch"
     digest = canonical_context_bridge_request_sha256(
         tool_name="create_implementation_blueprint",

@@ -1080,6 +1080,19 @@ def test_current_build_proposal_call_requires_and_transports_evidence_parents(
         tool_input=exact_confirm,
     )
 
+    selected_file_only_confirm, selected_file_only_digest, error = (
+        context_bridge_mcp._expand_selected_portable_bundle(
+            {
+                "use_selected_portable_bundle": True,
+                "resolution_confirmation": confirmation,
+            },
+            selected_file=selected_file,
+        )
+    )
+    assert error is None
+    assert selected_file_only_confirm == exact_confirm
+    assert selected_file_only_digest == digest
+
 
 def test_current_build_accept_proposal_rejects_empty_update_before_network(
     tmp_path: Path,
