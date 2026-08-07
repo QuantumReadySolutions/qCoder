@@ -1652,6 +1652,11 @@ def test_one_proposal_selected_bundle_confirmation_and_next_loop(
     proposal_arguments = protected_proposals[0][1]
     assert set(proposal_arguments) <= TOOL_INPUT_FIELDS["create_implementation_blueprint"]
     assert "profile_id" not in proposal_arguments
+    assert proposal_arguments["profile_decision_catalog_version"] == 1
+    assert proposal_arguments["proposed_updates"][0]["semantic_classification"] == (
+        "blueprint_decision"
+    )
+    assert proposal_arguments["proposed_updates"][0]["evidence_expectation"]
     assert proposal_arguments["algorithm_intent_card"]["artifact_type"] == (
         "algorithm_intent_card"
     )

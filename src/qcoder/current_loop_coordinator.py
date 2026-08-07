@@ -8800,6 +8800,7 @@ class CurrentLoopCoordinator:
                 )
             state = self.store.read()
             blueprint = self._saved_artifact(state, "working_blueprint")
+            binding = decision_inventory_binding(blueprint)
             records = self._decision_records(blueprint)
             selected = next(
                 (item for item in records if item.get("decision_ref") == decision_ref),
@@ -8821,6 +8822,7 @@ class CurrentLoopCoordinator:
             arguments = {
                 "context_loop": "current_build_context_v1",
                 "decision_loop": "readiness_resolution_v1",
+                "profile_decision_catalog_version": binding["catalog_version"],
                 "resolution_context": "current_build_context",
                 "resolution_phase": "propose",
                 "selected_action": selected_action,
@@ -10301,10 +10303,46 @@ class CurrentLoopCoordinator:
         proposed_value: object,
         control_treatment: str,
     ) -> dict[str, Any]:
+        if control_treatment != "keep_fixed":
+            raise CurrentLoopError("unsupported_control_treatment")
+        profile_id = selected.get("selected_profile")
+        decision_id = selected.get("profile_decision_id")
+        definition = next(
+            (
+                item
+                for item in catalog_entries(str(profile_id))
+                if item.get("profile_decision_id") == decision_id
+            ),
+            None,
+        )
+        if not isinstance(definition, Mapping):
+            raise CurrentLoopError("selected_decision_contract_missing")
         result = deepcopy(dict(selected))
         result.update(
             {
+                "semantic_classification": "blueprint_decision",
                 "control_treatment": control_treatment,
+                "semantic_role": selected.get("semantic_role")
+                or definition["semantic_role"],
+                "applicable_scope": selected.get("applicable_scope")
+                or definition["applicable_scope"],
+                "relationship_to_requirement": selected.get(
+                    "relationship_to_requirement"
+                )
+                or definition["relationship_to_requirement"],
+                "related_requirement_references": [
+                    selected.get("relationship_to_requirement")
+                    or definition["relationship_to_requirement"]
+                ],
+                "evidence_expectation": deepcopy(
+                    selected.get("evidence_expectation")
+                    or definition["later_evidence_requirements"]
+                ),
+                "future_review_rule": selected.get("future_review_rule")
+                or definition["future_review_rule"],
+                "remaining_non_proofs": deepcopy(
+                    selected.get("remaining_non_proofs") or definition["non_proofs"]
+                ),
                 "selected_value": deepcopy(proposed_value),
                 "resolution_state": "resolved",
                 "user_disposition": "selected_choice",
