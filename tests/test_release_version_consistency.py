@@ -13,8 +13,8 @@ from qcoder import __version__
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts/verify-release-version.py"
-EXPECTED_VERSION = "0.6.0a10"
-EXPECTED_PUBLIC_VERSION = "0.6.0a9"
+EXPECTED_VERSION = "0.6.0a11"
+EXPECTED_PUBLIC_VERSION = "0.6.0a10"
 EXPECTED_POSTURE = "unpublished_candidate"
 EXPECTED_INTERVENING: list[str] = []
 
@@ -27,7 +27,7 @@ def _load_verifier():
     return module
 
 
-def test_source_version_identity_is_a10_unpublished_candidate() -> None:
+def test_source_version_identity_is_a11_unpublished_candidate() -> None:
     verifier = _load_verifier()
     assert verifier.source_versions(REPO_ROOT) == {
         "pyproject": EXPECTED_VERSION,
@@ -184,7 +184,13 @@ def test_declared_intervening_unpublished_pin_is_rejected(tmp_path: Path) -> Non
     _write_candidate_fixture(
         tmp_path,
         current_public_version="0.6.0a5",
-        intervening_versions=["0.6.0a6", "0.6.0a7", "0.6.0a8", "0.6.0a9"],
+        intervening_versions=[
+            "0.6.0a6",
+            "0.6.0a7",
+            "0.6.0a8",
+            "0.6.0a9",
+            "0.6.0a10",
+        ],
         customer_pin="0.6.0a8",
     )
     with pytest.raises(ValueError, match="unpublished_intervening_customer_pin"):

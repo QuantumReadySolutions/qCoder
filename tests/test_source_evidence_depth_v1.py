@@ -658,9 +658,7 @@ def test_hosted_projection_is_compact_valid_and_retains_gated_semantics(profile_
         "ambiguous",
         "not_observed",
     }
-    assert construction["boundary"] == (
-        "bounded_static_ast_no_execution_no_equivalence"
-    )
+    assert construction["boundary"] == ("bounded_static_ast_no_execution_no_equivalence")
     assert depth["motif_observation_inventory"]
     assert depth["inspection_scope"]["selected_artifact_reference"]["scope"] == "current_session"
 
@@ -693,7 +691,9 @@ def test_context_bridge_automatically_sends_only_compact_depth_projection(tmp_pa
         return Response()
 
     token_file = tmp_path / "token.txt"
-    token_file.write_text("synthetic-context-bridge-token", encoding="utf-8")
+    token_file.write_text(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_", encoding="utf-8"
+    )
     token_file.chmod(0o600)
     local = _extract("qaoa")
     result = post_context_bridge(
@@ -738,7 +738,9 @@ def test_context_bridge_preserves_precompacted_grover_negative_scope(tmp_path: P
         return Response()
 
     token_file = tmp_path / "token.txt"
-    token_file.write_text("synthetic-context-bridge-token", encoding="utf-8")
+    token_file.write_text(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_", encoding="utf-8"
+    )
     token_file.chmod(0o600)
     projected = compact_selected_python_source_evidence_for_hosted(_extract("grover_search"))
     depth = projected["development_evidence"]["source_evidence_depth"]

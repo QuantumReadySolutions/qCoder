@@ -23,6 +23,8 @@ EXPECTED_LABELS = [
     ("suggested_next_check", "Suggested next check"),
 ]
 
+SYNTHETIC_CANONICAL_TOKEN = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
 
 class _Response:
     status = 200
@@ -48,7 +50,7 @@ class _Response:
 
 def _token_file(tmp_path: Path) -> Path:
     path = tmp_path / "token.txt"
-    path.write_text("synthetic-token-not-printed", encoding="utf-8")
+    path.write_text(SYNTHETIC_CANONICAL_TOKEN, encoding="utf-8")
     path.chmod(0o600)
     return path
 

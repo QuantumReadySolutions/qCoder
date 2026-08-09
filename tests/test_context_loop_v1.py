@@ -998,9 +998,12 @@ def test_adapter_inventory_and_context_loop_schemas_are_additive() -> None:
     assert validate_optional_payload({"counts": {"0": 1}}) == "forbidden_input_value"
 
 
+SYNTHETIC_CANONICAL_TOKEN = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
+
 def test_adapter_rejects_context_loop_at_intent_stage_before_transport(tmp_path) -> None:
     token = tmp_path / "token"
-    token.write_text("synthetic-token-value", encoding="utf-8")
+    token.write_text(SYNTHETIC_CANONICAL_TOKEN, encoding="utf-8")
     token.chmod(0o600)
     response = post_context_bridge(
         base_url="https://example.invalid",
@@ -1030,7 +1033,7 @@ def test_adapter_rejects_context_loop_at_intent_stage_before_transport(tmp_path)
 
 def test_adapter_accepts_structured_context_loop_diff_without_legacy_sides(tmp_path) -> None:
     token = tmp_path / "token"
-    token.write_text("synthetic-token-value", encoding="utf-8")
+    token.write_text(SYNTHETIC_CANONICAL_TOKEN, encoding="utf-8")
     token.chmod(0o600)
     captured: dict[str, object] = {}
 
@@ -1073,7 +1076,7 @@ def test_adapter_accepts_structured_context_loop_diff_without_legacy_sides(tmp_p
 
 def test_adapter_keeps_legacy_diff_side_requirement(tmp_path) -> None:
     token = tmp_path / "token"
-    token.write_text("synthetic-token-value", encoding="utf-8")
+    token.write_text(SYNTHETIC_CANONICAL_TOKEN, encoding="utf-8")
     token.chmod(0o600)
 
     response = post_context_bridge(

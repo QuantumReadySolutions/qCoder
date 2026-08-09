@@ -8,6 +8,7 @@ import ntpath
 import os
 from pathlib import Path
 import posixpath
+import re
 import stat
 import sys
 from typing import Any, Callable, Mapping
@@ -125,6 +126,17 @@ from qcoder.development_evidence import (
 
 DEFAULT_BASE_URL = "https://preview-api.qcoder.ai"
 ROUTE_PATH = "/v0/internal/hosted-mcp/context"
+CONTEXT_BRIDGE_TOKEN_RANDOM_BYTES = 48
+CONTEXT_BRIDGE_TOKEN_LENGTH = 64
+CONTEXT_BRIDGE_TOKEN_PATTERN = re.compile(
+    rf"\A[A-Za-z0-9_-]{{{CONTEXT_BRIDGE_TOKEN_LENGTH}}}\Z",
+    flags=re.ASCII,
+)
+MALFORMED_CONTEXT_BRIDGE_TOKEN_MESSAGE = (
+    "The token file does not contain a valid qCoder Context Bridge token. "
+    "In Account Center, select Copy token, then replace the local file value "
+    "with only the copied token."
+)
 SESSION_ARTIFACT_REFERENCE_PATTERN = r"^session-artifact-[0-9a-f]{16,64}$"
 EXPECTED_TOOLS = (
     "get_guided_evidence_context",
@@ -1182,6 +1194,9 @@ def safe_error(error_category: str, *, status_category: str = "adapter_rejected"
             "decision-loop-confirmed Working Blueprint before generating downstream "
             "evidence."
         )
+    elif error_category == "token_file_malformed":
+        payload["message"] = MALFORMED_CONTEXT_BRIDGE_TOKEN_MESSAGE
+        payload["recovery_action"] = "copy_token_and_replace_local_file_value"
     return payload
 
 
@@ -1197,11 +1212,13 @@ def validate_token_file(token_file: str | Path) -> tuple[bool, str, str]:
         return False, "token_file_permissions_unsafe", ""
     try:
         token = path.read_text(encoding="utf-8").strip()
+    except UnicodeError:
+        return False, "token_file_malformed", ""
     except OSError:
         return False, "token_file_unreadable", ""
     if not token:
         return False, "token_file_empty", ""
-    if "\n" in token or "\r" in token:
+    if CONTEXT_BRIDGE_TOKEN_PATTERN.fullmatch(token) is None:
         return False, "token_file_malformed", ""
     return True, "ok", token
 
@@ -3211,14 +3228,21 @@ def _case_summary(*, payload: dict[str, Any], expected_success: bool) -> dict[st
 def _run_full_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
     token_ok, token_category, _ = validate_token_file(token_file)
     if not token_ok:
-        return {
+        result = {
             "ok": False,
             "metadata_only": True,
             "token_file_category": token_category,
             "token_printed": False,
             "raw_token_printed": False,
-            "instruction_category": "create_local_chmod_600_token_file",
+            "instruction_category": (
+                "copy_token_and_replace_local_file_value"
+                if token_category == "token_file_malformed"
+                else "create_local_chmod_600_token_file"
+            ),
         }
+        if token_category == "token_file_malformed":
+            result["message"] = MALFORMED_CONTEXT_BRIDGE_TOKEN_MESSAGE
+        return result
     safe_text = (
         "Share-safe current qCoder evidence summary. "
         "Small Bell-state style circuit workflow. Evidence summary says the user prepared "
@@ -3508,7 +3532,7 @@ def run_smoke(*, base_url: str, token_file: str | Path, full: bool = False) -> d
 
     token_ok, token_category, _ = validate_token_file(token_file)
     if not token_ok:
-        return {
+        result = {
             "ok": False,
             "metadata_only": True,
             "connection_status_category": "token_file_not_ready",
@@ -3519,8 +3543,15 @@ def run_smoke(*, base_url: str, token_file: str | Path, full: bool = False) -> d
             "tools_discovered": len(EXPECTED_TOOLS),
             "token_printed": False,
             "raw_token_printed": False,
-            "instruction_category": "create_local_chmod_600_token_file",
+            "instruction_category": (
+                "copy_token_and_replace_local_file_value"
+                if token_category == "token_file_malformed"
+                else "create_local_chmod_600_token_file"
+            ),
         }
+        if token_category == "token_file_malformed":
+            result["message"] = MALFORMED_CONTEXT_BRIDGE_TOKEN_MESSAGE
+        return result
 
     safe_text = (
         "Share-safe current qCoder evidence summary for a harmless connection check. "
@@ -3724,6 +3755,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Context Bridge connection: {status}")
             print(f"Token accepted: {result.get('token_accepted', 'unknown')}")
             print(f"Tools discovered: {result.get('tools_discovered', 0)}")
+            if result.get("message"):
+                print(str(result["message"]))
         if result.get("diagnostic_status_category") == "rate_limit_pause_required":
             return 2
         return 0 if result.get("ok") else 1

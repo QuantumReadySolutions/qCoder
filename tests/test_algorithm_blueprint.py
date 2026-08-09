@@ -53,6 +53,8 @@ def build_circuit():
     return circuit
 """
 
+SYNTHETIC_CANONICAL_TOKEN = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
 
 class _Response:
     status = 200
@@ -78,7 +80,7 @@ class _Response:
 
 def _token_file(tmp_path: Path) -> Path:
     token = tmp_path / "token.txt"
-    token.write_text("synthetic-not-printed", encoding="utf-8")
+    token.write_text(SYNTHETIC_CANONICAL_TOKEN, encoding="utf-8")
     token.chmod(0o600)
     return token
 

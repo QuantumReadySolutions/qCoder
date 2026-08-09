@@ -24,7 +24,11 @@ from qcoder.context_bridge_mcp import (
     CLIENT_BINDING_CONTRACT_ID,
     CLIENT_BINDING_SCHEMA_ID,
     CLIENT_BINDING_SCHEMA_VERSION,
+    CONTEXT_BRIDGE_TOKEN_LENGTH,
+    CONTEXT_BRIDGE_TOKEN_PATTERN,
+    CONTEXT_BRIDGE_TOKEN_RANDOM_BYTES,
     EXPECTED_TOOLS,
+    MALFORMED_CONTEXT_BRIDGE_TOKEN_MESSAGE,
     build_client_activation_instructions,
     build_client_binding_descriptor,
     handle_jsonrpc_message,
@@ -67,7 +71,10 @@ class _FakeResponse:
         ).encode("utf-8")
 
 
-def _write_token(path: Path, text: str = "ctxbridge-token-not-printed") -> None:
+SYNTHETIC_CANONICAL_TOKEN = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
+
+def _write_token(path: Path, text: str = SYNTHETIC_CANONICAL_TOKEN) -> None:
     path.write_text(text, encoding="utf-8")
     path.chmod(0o600)
 
@@ -1350,8 +1357,9 @@ def _passive_current_context() -> dict[str, object]:
 
 
 def test_current_context_transport_accepts_bounded_share_safe_summaries() -> None:
-    assert "selected_share_safe_summaries" in (
-        context_bridge_mcp.TOOL_INPUT_FIELDS["create_context_session_card"]
+    assert (
+        "selected_share_safe_summaries"
+        in (context_bridge_mcp.TOOL_INPUT_FIELDS["create_context_session_card"])
     )
 
 
@@ -2031,13 +2039,103 @@ def test_token_file_validation_requires_private_local_file(tmp_path: Path) -> No
     ok, category, token = validate_token_file(token_file)
     assert ok is True
     assert category == "ok"
-    assert token == "ctxbridge-token-not-printed"
+    assert token == SYNTHETIC_CANONICAL_TOKEN
 
     token_file.chmod(0o644)
     ok, category, token = validate_token_file(token_file)
     assert ok is False
     assert category == "token_file_permissions_unsafe"
     assert token == ""
+
+
+def test_token_file_grammar_matches_account_issuer_and_preserves_supported_normalization(
+    tmp_path: Path,
+) -> None:
+    assert CONTEXT_BRIDGE_TOKEN_RANDOM_BYTES == 48
+    assert CONTEXT_BRIDGE_TOKEN_LENGTH == 64
+    assert len(SYNTHETIC_CANONICAL_TOKEN) == CONTEXT_BRIDGE_TOKEN_LENGTH
+    assert CONTEXT_BRIDGE_TOKEN_PATTERN.fullmatch(SYNTHETIC_CANONICAL_TOKEN) is not None
+
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file, f" \t{SYNTHETIC_CANONICAL_TOKEN}\r\n")
+    assert validate_token_file(token_file) == (True, "ok", SYNTHETIC_CANONICAL_TOKEN)
+
+
+def test_impossible_issuer_values_are_malformed_and_make_zero_network_requests(
+    monkeypatch, tmp_path: Path
+) -> None:
+    invalid_values = (
+        SYNTHETIC_CANONICAL_TOKEN[:-1],
+        SYNTHETIC_CANONICAL_TOKEN + "A",
+        "X" * 244,
+        f"Token: {SYNTHETIC_CANONICAL_TOKEN}",
+        f'"{SYNTHETIC_CANONICAL_TOKEN}"',
+        f"{SYNTHETIC_CANONICAL_TOKEN[:32]} {SYNTHETIC_CANONICAL_TOKEN[33:]}",
+        f"{SYNTHETIC_CANONICAL_TOKEN}\n{SYNTHETIC_CANONICAL_TOKEN}",
+        f"{SYNTHETIC_CANONICAL_TOKEN[:-1]}=",
+        f"{SYNTHETIC_CANONICAL_TOKEN[:-1]}é",
+        f"{SYNTHETIC_CANONICAL_TOKEN[:-1]}\u200b",
+        f"{SYNTHETIC_CANONICAL_TOKEN[:-1]}\x00",
+    )
+    network_calls = 0
+
+    def fail_if_called(*_args: object, **_kwargs: object) -> object:
+        nonlocal network_calls
+        network_calls += 1
+        raise AssertionError("network should not be called")
+
+    monkeypatch.setattr(context_bridge_mcp.urllib.request, "urlopen", fail_if_called)
+    token_file = tmp_path / "token.txt"
+    for invalid_value in invalid_values:
+        _write_token(token_file, invalid_value)
+        ok, category, token = validate_token_file(token_file)
+        assert (ok, category, token) == (False, "token_file_malformed", "")
+        result = run_smoke(base_url="https://example.invalid", token_file=token_file)
+        assert result["connection_status_category"] == "token_file_not_ready"
+        assert result["token_file_category"] == "token_file_malformed"
+        assert result["instruction_category"] == "copy_token_and_replace_local_file_value"
+        assert result["message"] == MALFORMED_CONTEXT_BRIDGE_TOKEN_MESSAGE
+        assert invalid_value not in json.dumps(result, sort_keys=True)
+
+    token_file.write_bytes(b"\xff" * CONTEXT_BRIDGE_TOKEN_LENGTH)
+    token_file.chmod(0o600)
+    assert validate_token_file(token_file) == (False, "token_file_malformed", "")
+
+    human = io.StringIO()
+    with redirect_stdout(human):
+        rc = context_bridge_mcp.main(["mcp", "smoke", "--token-file", str(token_file)])
+    assert rc == 1
+    assert MALFORMED_CONTEXT_BRIDGE_TOKEN_MESSAGE in human.getvalue()
+    assert "Token accepted: no" in human.getvalue()
+    assert network_calls == 0
+
+
+def test_well_formed_server_invalid_token_reaches_authoritative_service_once(
+    monkeypatch, tmp_path: Path
+) -> None:
+    token_file = tmp_path / "token.txt"
+    _write_token(token_file)
+    network_calls = 0
+
+    def rejected(**kwargs: object) -> dict[str, object]:
+        nonlocal network_calls
+        if "OPENQASM" in str(kwargs["artifact_text"]):
+            return context_bridge_mcp.safe_error("forbidden_input_value")
+        network_calls += 1
+        return {
+            "ok": False,
+            "adapter_status_category": "http_401",
+            "error_category": "token_rejected",
+            "retention": "process_and_discard",
+            "retained_artifacts": [],
+        }
+
+    monkeypatch.setattr(context_bridge_mcp, "post_context_bridge", rejected)
+    result = run_smoke(base_url="https://example.invalid", token_file=token_file)
+    assert network_calls == 1
+    assert result["connection_status_category"] == "token_rejected"
+    assert result["token_file_category"] == "present_safe"
+    assert result["token_accepted"] == "no"
 
 
 def test_unsafe_inputs_rejected_before_network(tmp_path: Path) -> None:
@@ -2184,7 +2282,7 @@ def test_optional_payloads_reject_raw_or_history_values_before_network(tmp_path:
 
 def test_approved_call_forwards_bearer_without_printing_token(tmp_path: Path) -> None:
     token_file = tmp_path / "token.txt"
-    _write_token(token_file, "ctxbridge-secret-token")
+    _write_token(token_file, SYNTHETIC_CANONICAL_TOKEN)
     seen: dict[str, str] = {}
 
     def opener(request: object, timeout: int = 20) -> _FakeResponse:
@@ -2200,9 +2298,9 @@ def test_approved_call_forwards_bearer_without_printing_token(tmp_path: Path) ->
         opener=opener,
     )
     assert payload["ok"] is True
-    assert seen["authorization"] == "Bearer ctxbridge-secret-token"
+    assert seen["authorization"] == f"Bearer {SYNTHETIC_CANONICAL_TOKEN}"
     assert payload["token_printed"] is False
-    assert "ctxbridge-secret-token" not in json.dumps(payload)
+    assert SYNTHETIC_CANONICAL_TOKEN not in json.dumps(payload)
 
 
 def test_jsonrpc_lists_exact_tools_and_calls_tool(tmp_path: Path) -> None:
@@ -2376,7 +2474,7 @@ def test_mcp_stdio_content_length_lists_exact_tools(tmp_path: Path) -> None:
             "Never activate silently",
         ):
             assert required in normalized_instructions
-        assert "ctxbridge-token-not-printed" not in instructions
+        assert SYNTHETIC_CANONICAL_TOKEN not in instructions
 
         proc.stdin.write(
             _content_length_message({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})

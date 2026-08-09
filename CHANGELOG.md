@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.0a11
+
+- Enforce the Account issuer's canonical Context Bridge credential grammar after the existing
+  token-file normalization: exactly 64 URL-safe ASCII characters from `A-Z`, `a-z`, `0-9`, `-`,
+  and `_`.
+- Reject wrong-length, invalid-character, embedded-whitespace, quoted, multi-line, labelled,
+  non-ASCII, invisible, and otherwise impossible issuer values locally before any Context Bridge
+  network request. Recovery directs the customer to Account Center's **Copy token** action and
+  never displays the submitted value.
+- Preserve valid existing 64-character tokens and keep the protected service authoritative for
+  expiry, revocation, entitlement, scope, and authentication. Protected authentication, Account
+  issuance, billing, consent, token scope, and client-qualification claims are unchanged.
+- `0.6.0a11` is an unpublished successor candidate to the public `0.6.0a10` pre-release at source
+  freeze. Package-index availability is a separate immutable lifecycle fact.
+
 ## 0.6.0a10
 
 - Preserve explicit customer selection of exact external Python, OpenQASM 2, and supplied-result
