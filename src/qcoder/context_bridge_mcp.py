@@ -116,6 +116,8 @@ from qcoder.current_loop import (
 from qcoder.connected_assistant_conformance import (
     client_neutral_conformance_contract,
     cursor_desktop_reference_profile,
+    named_workflow_completion_contract,
+    retention_evidence_contract,
 )
 from qcoder.development_evidence import (
     ALIGNMENT_STATUSES,
@@ -150,8 +152,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 18
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v18"
+CLIENT_BINDING_SCHEMA_VERSION = 19
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v19"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -166,10 +168,13 @@ invoke the coordinator, call a qCoder MCP domain tool, or create qCoder state. A
 is permitted but must not activate qCoder without acceptance.
 
 Single capability: for an explicit bounded qCoder capability request without active-build
-activation, use the applicable existing Context Bridge MCP tool. Do not invoke qcoder current-loop,
-activate a complete Context Loop, attach the bounded result to loop lineage, transform it into
-governing intent, or create continuity. Direct bounded use of one applicable MCP tool is legitimate
-in this workstyle.
+activation, start with the applicable existing Context Bridge MCP tool. If the structured result
+is a canonical preparatory state for the customer's named workflow, quietly follow only the
+same-workflow continuation declared by the named-workflow completion contract. Do not invoke
+qcoder current-loop, activate a complete Context Loop, attach the bounded result to loop lineage,
+transform it into governing intent, or create continuity. Direct bounded use remains legitimate
+in this workstyle and ends at the named customer outcome, a genuine blocker, or a real customer
+authority or decision boundary.
 
 Active build: explicit wording equivalent to “Use qCoder for this build.” or explicit acceptance
 of a qCoder activation offer routes to the local coordinator first. Then follow
@@ -217,6 +222,26 @@ Hosted operations during active build: the coordinator may invoke or direct exis
 Bridge operations. Follow those directions and never invent a hosted-tool order. Do not call one
 of the twelve domain tools in place of local coordinator activation. This restriction does not
 prohibit legitimate direct use of one applicable MCP tool in the single-capability workstyle.
+
+NAMED CONNECTED-ASSISTANT WORKFLOW COMPLETION
+Once the customer selects a named qCoder workflow, a successful preparatory tool result is not
+customer completion. Use only canonical structured result state and the binding's
+named_workflow_completion contract. Continue quietly within the already-selected workflow until
+the named customer outcome is ready. Stop without bypass at a genuine qCoder blocker, a real
+customer authority or decision boundary, or an unsupported state. Never infer or auto-supply
+customer confirmation, artifact-selection authority, IDE write/run permission, a governing
+Blueprint decision, privacy or raw-evidence consent, or another customer decision. Never broaden
+the selected artifact scope, discover a repository, inspect neighboring or hidden files, or chain
+an unrelated qCoder capability. Do not ask the customer to name or invoke qCoder's internal tool
+choreography. Never repeat a preparatory operation after the same unchanged preparatory result.
+
+For the named Evidence Review workflow, get_guided_evidence_context returning canonical
+context_status assistant_context_ready is NON_TERMINAL_PREPARATORY. Quietly continue only that
+workflow with create_result_review_context_card, using only the result evidence already supplied
+or explicitly selected for this request. create_result_review_context_card returning canonical
+context_status result_review_context_card_ready is CUSTOMER_TERMINAL_OUTCOME; stop qCoder tool
+composition there. A non-success result is a GENUINE_BLOCKER. Canonical required customer
+authority is CUSTOMER_AUTHORITY_OR_DECISION_BOUNDARY and must not be supplied by the assistant.
 
 REQUEST FIDELITY
 Preserve the complete governing customer message verbatim as original_request. Do not summarize,
@@ -526,6 +551,8 @@ def build_client_binding_descriptor(
             "client_neutral_conformance_contract": client_neutral_conformance_contract(
                 EXPECTED_TOOLS
             ),
+            "named_workflow_completion": named_workflow_completion_contract(EXPECTED_TOOLS),
+            "retention_evidence": retention_evidence_contract(),
             "cursor_desktop_reference_profile": cursor_desktop_reference_profile(),
             "artifact_format_contract": artifact_format_contract_snapshot(),
             "evidence_processing_contract": evidence_processing_contract_snapshot(),
@@ -1348,6 +1375,8 @@ def evidence_review_contract_snapshot() -> dict[str, Any]:
         "artifact_discriminators": EVIDENCE_REVIEW_ARTIFACT_DISCRIMINATORS,
         "context_scope": "current_artifact_current_session",
         "retention": "process_and_discard",
+        "named_workflow_completion": named_workflow_completion_contract(EXPECTED_TOOLS),
+        "retention_evidence": retention_evidence_contract(),
         "boundaries": list(EVIDENCE_REVIEW_BOUNDARIES),
         "algorithm_blueprint": algorithm_blueprint_contract_snapshot(),
         "context_loop": context_loop_contract_snapshot(),
@@ -2811,7 +2840,14 @@ def _tool_schema(tool_name: str) -> dict[str, Any]:
 
 def tool_descriptors() -> list[dict[str, Any]]:
     descriptions = {
-        "get_guided_evidence_context": "Create bounded assistant context from share-safe current qCoder evidence.",
+        "get_guided_evidence_context": (
+            "Create bounded assistant context from share-safe current qCoder evidence. For a named Evidence "
+            "Review request, canonical assistant_context_ready is preparatory and non-terminal: quietly "
+            "continue only that workflow with create_result_review_context_card using result evidence already "
+            "supplied or explicitly selected for this request. Do not broaden artifact scope, discover files, "
+            "or ask the customer to invoke qCoder's internal choreography; stop on a genuine blocker or real "
+            "customer authority or decision boundary."
+        ),
         "create_prompt_context": (
             "Create a purpose-specific handoff context from current qCoder evidence, preserving Evidence Review "
             "labels, supported interpretations, unproven statements, and user-controlled next checks."
@@ -2824,7 +2860,9 @@ def tool_descriptors() -> list[dict[str, Any]]:
         ),
         "create_result_review_context_card": (
             "Review share-safe user-provided result evidence with Observed, User-provided, Inferred, Assumed, "
-            "Not proven, and Suggested next check semantics."
+            "Not proven, and Suggested next check semantics. For named Evidence Review, canonical "
+            "result_review_context_card_ready is the customer-terminal outcome: stop qCoder tool composition "
+            "and do not call an unrelated capability."
         ),
         "create_next_check_plan": (
             "Create an ordered, bounded, user-controlled next-check plan tied to current-request evidence and "
@@ -2837,18 +2875,25 @@ def tool_descriptors() -> list[dict[str, Any]]:
         ),
         "create_algorithm_intent_card": (
             "Preserve an explicitly supplied quantum algorithm request, validate a proposed interpretation, "
-            "surface profile questions and provenance, and require explicit user-reviewed confirmation."
+            "surface profile questions and provenance, and require explicit user-reviewed confirmation. For "
+            "the named Algorithm Blueprint / Generation Context workflow, algorithm_intent_card_ready with a "
+            "confirmed card is preparatory: quietly continue with create_implementation_blueprint. A proposed "
+            "or needs-clarification card is a customer decision boundary and must not be auto-confirmed."
         ),
         "create_implementation_blueprint": (
             "Create a Qiskit-first Implementation Blueprint and distinct Output Evidence Contract from an "
             "explicitly supplied confirmed Algorithm Intent Card. Decision-loop metadata and the complete "
             "decision-record set are inherited exactly from that supplied card; do not reconstruct them. "
-            "No code or circuit is generated."
+            "No code or circuit is generated. For the named Algorithm Blueprint / Generation Context workflow, "
+            "implementation_blueprint_ready is preparatory: quietly continue with "
+            "create_generation_context_pack using only its exact returned blueprint and evidence contract."
         ),
         "create_generation_context_pack": (
             "Create a current-session Generation Context Pack for external code generation from an explicitly "
             "supplied confirmed blueprint and matching evidence contract. Decision-loop metadata is inherited "
-            "exactly from that supplied blueprint; qCoder does not invoke an assistant."
+            "exactly from that supplied blueprint; qCoder does not invoke an assistant. For the named Algorithm "
+            "Blueprint / Generation Context workflow, generation_context_pack_ready is the customer-terminal "
+            "outcome; stop qCoder tool composition there."
         ),
         "create_source_blueprint_alignment_review": (
             "Review compact machine-local Selected Python Source Evidence against a confirmed blueprint, scoped "

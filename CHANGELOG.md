@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.6.0a12
+
+- Advance the shared connected-assistant binding from v18 to v19 so canonical preparatory states
+  cannot be treated as completion of a customer-selected named qCoder workflow. Continuation is
+  bounded to that already-selected workflow and stops at the customer outcome, a genuine blocker,
+  a customer authority or decision boundary, or an unsupported state.
+- Define Evidence Review's `assistant_context_ready` as non-terminal and
+  `result_review_context_card_ready` as its customer-terminal outcome. The shared binding directs
+  quiet continuation to the existing Result Review operation without adding a tool, protected
+  operation, Prompt Context mode, client profile, SDK, or customer action.
+- Define canonical structured `process_and_discard` as sufficient no-retention evidence for the
+  exact operation without requiring a literal `retained_artifacts: []` projection. Absent,
+  ambiguous, contradictory, free-form-only, and wrong-operation evidence continues to fail closed.
+- Preserve the exact twelve-tool inventory, five Prompt Context modes, protected service behavior,
+  customer authority boundaries, artifact-selection scope, repository non-discovery, and public
+  client-qualification claims. `0.6.0a12` is an unpublished successor candidate to public
+  `0.6.0a11`; package-index publication remains a separate immutable lifecycle fact.
+
 ## 0.6.0a11
 
 - Enforce the Account issuer's canonical Context Bridge credential grammar after the existing

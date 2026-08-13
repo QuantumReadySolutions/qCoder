@@ -8,7 +8,7 @@ compatibility claim.
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from hashlib import sha256
 from typing import Any
@@ -19,6 +19,71 @@ CLIENT_CONFORMANCE_CONTRACT_SCHEMA_ID = (
 CLIENT_CONFORMANCE_CONTRACT_SCHEMA_VERSION = 1
 CLIENT_CONFORMANCE_PROFILE_SCHEMA_ID = "qcoder.connected_assistant.conformance_profile.v1"
 CLIENT_CONFORMANCE_PROFILE_SCHEMA_VERSION = 1
+NAMED_WORKFLOW_COMPLETION_SCHEMA_ID = (
+    "qcoder.connected_assistant.named_workflow_completion.v1"
+)
+NAMED_WORKFLOW_COMPLETION_SCHEMA_VERSION = 1
+RETENTION_EVIDENCE_SCHEMA_ID = "qcoder.connected_assistant.retention_evidence.v1"
+RETENTION_EVIDENCE_SCHEMA_VERSION = 1
+
+NON_TERMINAL_PREPARATORY = "NON_TERMINAL_PREPARATORY"
+CUSTOMER_TERMINAL_OUTCOME = "CUSTOMER_TERMINAL_OUTCOME"
+GENUINE_BLOCKER = "GENUINE_BLOCKER"
+CUSTOMER_AUTHORITY_OR_DECISION_BOUNDARY = "CUSTOMER_AUTHORITY_OR_DECISION_BOUNDARY"
+
+_EVIDENCE_REVIEW_WORKFLOW = {
+    "workflow_name": "Evidence Review",
+    "preparatory_states": [
+        {
+            "tool_name": "get_guided_evidence_context",
+            "status_field": "context_status",
+            "status_value": "assistant_context_ready",
+            "classification": NON_TERMINAL_PREPARATORY,
+            "continue_with_tool": "create_result_review_context_card",
+        }
+    ],
+    "customer_terminal_outcomes": [
+        {
+            "tool_name": "create_result_review_context_card",
+            "status_field": "context_status",
+            "status_value": "result_review_context_card_ready",
+            "classification": CUSTOMER_TERMINAL_OUTCOME,
+        }
+    ],
+    "maximum_automatic_continuations": 1,
+}
+_ALGORITHM_BLUEPRINT_WORKFLOW = {
+    "workflow_name": "Algorithm Blueprint / Generation Context",
+    "preparatory_states": [
+        {
+            "tool_name": "create_algorithm_intent_card",
+            "status_field": "context_status",
+            "status_value": "algorithm_intent_card_ready",
+            "classification": NON_TERMINAL_PREPARATORY,
+            "continue_with_tool": "create_implementation_blueprint",
+        },
+        {
+            "tool_name": "create_implementation_blueprint",
+            "status_field": "context_status",
+            "status_value": "implementation_blueprint_ready",
+            "classification": NON_TERMINAL_PREPARATORY,
+            "continue_with_tool": "create_generation_context_pack",
+        },
+    ],
+    "customer_terminal_outcomes": [
+        {
+            "tool_name": "create_generation_context_pack",
+            "status_field": "context_status",
+            "status_value": "generation_context_pack_ready",
+            "classification": CUSTOMER_TERMINAL_OUTCOME,
+        }
+    ],
+    "maximum_automatic_continuations": 2,
+}
+_NAMED_WORKFLOWS = {
+    "Evidence Review": _EVIDENCE_REVIEW_WORKFLOW,
+    "Algorithm Blueprint / Generation Context": _ALGORITHM_BLUEPRINT_WORKFLOW,
+}
 
 _SHARED_ASSERTIONS = (
     "mcp_initialization",
@@ -37,6 +102,7 @@ _SHARED_ASSERTIONS = (
     "one_call_help",
     "truthful_authority_and_next_actions",
     "direct_completion",
+    "named_workflow_completion",
     "project_files_preserved",
     "no_cross_loop_carryover",
 )
@@ -46,6 +112,228 @@ def _digest(value: object) -> str:
     return sha256(
         json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode()
     ).hexdigest()
+
+
+def named_workflow_completion_contract(tool_inventory: Sequence[str]) -> dict[str, Any]:
+    """Describe shared terminality using existing tool-result vocabulary."""
+
+    tools = tuple(str(name) for name in tool_inventory)
+    required_tools = {
+        state["tool_name"]
+        for workflow in _NAMED_WORKFLOWS.values()
+        for category in ("preparatory_states", "customer_terminal_outcomes")
+        for state in workflow[category]
+    }
+    required_tools.update(
+        state["continue_with_tool"]
+        for workflow in _NAMED_WORKFLOWS.values()
+        for state in workflow["preparatory_states"]
+    )
+    if not required_tools.issubset(tools):
+        raise ValueError("named_workflow_completion_tool_inventory_invalid")
+    payload: dict[str, Any] = {
+        "schema_id": NAMED_WORKFLOW_COMPLETION_SCHEMA_ID,
+        "schema_version": NAMED_WORKFLOW_COMPLETION_SCHEMA_VERSION,
+        "classifications": [
+            NON_TERMINAL_PREPARATORY,
+            CUSTOMER_TERMINAL_OUTCOME,
+            GENUINE_BLOCKER,
+            CUSTOMER_AUTHORITY_OR_DECISION_BOUNDARY,
+        ],
+        "canonical_status_source": "structured_tool_result",
+        "workflow_selection_source": "customer_named_workflow",
+        "preparatory_success_is_completion": False,
+        "routine_continuation_customer_interaction_required": False,
+        "automatic_continuation_scope": "already_selected_named_workflow_only",
+        "stop_on_genuine_blocker": True,
+        "stop_on_customer_authority_or_decision_boundary": True,
+        "stop_on_unsupported_state": True,
+        "customer_authority_may_be_inferred": False,
+        "artifact_scope_may_be_broadened": False,
+        "repository_discovery_permitted": False,
+        "neighboring_file_access_permitted": False,
+        "hidden_file_selection_permitted": False,
+        "workflows": deepcopy(list(_NAMED_WORKFLOWS.values())),
+    }
+    payload["contract_digest"] = _digest(payload)
+    return payload
+
+
+def retention_evidence_contract() -> dict[str, Any]:
+    """Define the canonical structured process-and-discard evidence semantic."""
+
+    payload: dict[str, Any] = {
+        "schema_id": RETENTION_EVIDENCE_SCHEMA_ID,
+        "schema_version": RETENTION_EVIDENCE_SCHEMA_VERSION,
+        "canonical_field": "retention",
+        "canonical_value": "process_and_discard",
+        "meaning": "no_customer_artifact_retained_for_this_operation",
+        "literal_empty_retained_artifacts_required": False,
+        "literal_empty_retained_artifacts_sufficient_when_present": True,
+        "exact_operation_identity_required": True,
+        "free_form_prose_sufficient": False,
+        "absent_semantic_state_sufficient": False,
+        "ambiguous_semantic_state_sufficient": False,
+        "contradictory_semantic_state_sufficient": False,
+    }
+    payload["contract_digest"] = _digest(payload)
+    return payload
+
+
+def _result_is_success(result: Mapping[str, Any]) -> bool:
+    status = result.get("adapter_status_category") or result.get("status_category")
+    return result.get("ok") is True or status == "success_2xx"
+
+
+def _result_requires_customer_authority(result: Mapping[str, Any]) -> bool:
+    intent_card = result.get("algorithm_intent_card")
+    return (
+        isinstance(result.get("required_authority_input"), Mapping)
+        or bool(result.get("awaiting_confirmation_fields"))
+        or result.get("approval_required") is True
+        or result.get("requires_explicit_customer_confirmation") is True
+        or result.get("proposal_state") == "unconfirmed"
+        or (
+            isinstance(intent_card, Mapping)
+            and intent_card.get("confirmation_state") in ("proposed", "needs_clarification")
+        )
+    )
+
+
+def evaluate_named_workflow_result(
+    *,
+    workflow_name: str,
+    tool_name: str,
+    structured_result: Mapping[str, Any],
+    prior_tool_names: Sequence[str] = (),
+) -> dict[str, Any]:
+    """Classify one structured result and return a bounded same-workflow continuation."""
+
+    workflow = _NAMED_WORKFLOWS.get(workflow_name)
+    if workflow is None:
+        raise ValueError("named_workflow_unsupported")
+    prepared = tuple(str(name) for name in prior_tool_names)
+    allowed_tools = {
+        state["tool_name"]
+        for category in ("preparatory_states", "customer_terminal_outcomes")
+        for state in workflow[category]
+    }
+    base: dict[str, Any] = {
+        "workflow_name": workflow_name,
+        "tool_name": tool_name,
+        "next_tool_name": None,
+        "automatic_continuation_allowed": False,
+        "customer_interaction_required": False,
+    }
+    if structured_result.get("tool_name") != tool_name:
+        return {
+            **base,
+            "classification": GENUINE_BLOCKER,
+            "stop_reason": "structured_result_operation_identity_mismatch",
+        }
+    if tool_name not in allowed_tools:
+        return {
+            **base,
+            "classification": GENUINE_BLOCKER,
+            "stop_reason": "unrelated_workflow_operation",
+        }
+    if not _result_is_success(structured_result):
+        return {
+            **base,
+            "classification": GENUINE_BLOCKER,
+            "stop_reason": "qcoder_non_success_or_unsupported_state",
+        }
+    if _result_requires_customer_authority(structured_result):
+        return {
+            **base,
+            "classification": CUSTOMER_AUTHORITY_OR_DECISION_BOUNDARY,
+            "stop_reason": "canonical_customer_authority_required",
+            "customer_interaction_required": True,
+        }
+    for state in workflow["customer_terminal_outcomes"]:
+        if (
+            tool_name == state["tool_name"]
+            and structured_result.get(state["status_field"]) == state["status_value"]
+        ):
+            return {
+                **base,
+                "classification": CUSTOMER_TERMINAL_OUTCOME,
+                "stop_reason": "named_customer_outcome_ready",
+            }
+    for state in workflow["preparatory_states"]:
+        if (
+            tool_name == state["tool_name"]
+            and structured_result.get(state["status_field"]) == state["status_value"]
+        ):
+            if (
+                tool_name in prepared
+                or len(prepared) >= workflow["maximum_automatic_continuations"]
+            ):
+                return {
+                    **base,
+                    "classification": GENUINE_BLOCKER,
+                    "stop_reason": "automatic_continuation_loop_or_budget_exhausted",
+                }
+            return {
+                **base,
+                "classification": NON_TERMINAL_PREPARATORY,
+                "next_tool_name": state["continue_with_tool"],
+                "automatic_continuation_allowed": True,
+                "stop_reason": None,
+            }
+    return {
+        **base,
+        "classification": GENUINE_BLOCKER,
+        "stop_reason": "qcoder_non_success_or_unsupported_state",
+    }
+
+
+def process_and_discard_retention_satisfied(
+    *,
+    structured_evidence: Mapping[str, Any],
+    expected_tool_name: str,
+) -> bool:
+    """Fail closed unless exact-operation structured evidence proves no retention."""
+
+    if not expected_tool_name or structured_evidence.get("tool_name") != expected_tool_name:
+        return False
+    if structured_evidence.get("retention") != "process_and_discard":
+        return False
+    if "retained_artifacts" in structured_evidence and structured_evidence.get(
+        "retained_artifacts"
+    ) != []:
+        return False
+    if "retained_artifact_count" in structured_evidence and structured_evidence.get(
+        "retained_artifact_count"
+    ) != 0:
+        return False
+    if "process_and_discard" in structured_evidence and structured_evidence.get(
+        "process_and_discard"
+    ) is not True:
+        return False
+    if structured_evidence.get("artifact_retained") is True:
+        return False
+    if structured_evidence.get("customer_artifact_retained") is True:
+        return False
+    if "retained_artifacts_empty" in structured_evidence and structured_evidence.get(
+        "retained_artifacts_empty"
+    ) not in (True, "yes"):
+        return False
+    if "retained_artifacts_empty_or_absent" in structured_evidence and structured_evidence.get(
+        "retained_artifacts_empty_or_absent"
+    ) is not True:
+        return False
+    if "retention_category" in structured_evidence and structured_evidence.get(
+        "retention_category"
+    ) != "process_and_discard":
+        return False
+    nested = structured_evidence.get("retention_state")
+    if nested is not None:
+        if not isinstance(nested, Mapping) or nested.get("state") != "process_and_discard":
+            return False
+        if "retained_artifacts" in nested and nested.get("retained_artifacts") != []:
+            return False
+    return True
 
 
 def client_neutral_conformance_contract(tool_inventory: Sequence[str]) -> dict[str, Any]:

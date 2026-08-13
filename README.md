@@ -55,11 +55,11 @@ Narrowing applies immediately; broadening requires explicit confirmation.
 
 ### Upgrading an active Current Loop
 
-Version 0.6.0a11 preserves the connected-assistant, adaptive-intent input, coordinator-result, and
-vocabulary contracts while adding strict local validation for the Account issuer's canonical
-Context Bridge token grammar. It is an unpublished successor candidate to the current public
-0.6.0a10 pre-release; package-index availability requires a separate publication decision. Finish
-or restart an active qCoder loop
+Version 0.6.0a12 preserves the connected-assistant, adaptive-intent input, coordinator-result, and
+vocabulary contracts while adding generic named-workflow completion semantics to the Context
+Bridge binding. It is an unpublished successor candidate to the current public 0.6.0a11
+pre-release; package-index availability requires a separate publication decision. Finish or
+restart an active qCoder loop
 before upgrading. An outstanding
 pre-v4 operation receipt cannot be reused. When an old receipt is outstanding, the IDE must
 provide a fresh authority grant for the new runtime. qCoder fails closed instead of silently
@@ -73,6 +73,16 @@ exact scenario, delivery-environment profile, workstyle, and qCoder artifact. Co
 discovery, or evidence for a related client does not establish qualification. One-call help and
 direct contract or completion routes do not add persistent memory, project history, repository
 discovery, or automatic IDE authority.
+
+For a customer-selected named qCoder workflow, canonical preparatory states are non-terminal. The
+connected assistant quietly continues only the already-selected workflow until the named customer
+outcome is ready, qCoder reports a genuine blocker, or qCoder reaches a real customer authority or
+decision boundary. For Evidence Review, `assistant_context_ready` is preparatory;
+`result_review_context_card_ready` is the customer outcome. The assistant must not infer customer
+authority, broaden artifact selection, discover files, or chain an unrelated qCoder capability.
+Canonical structured `process_and_discard` unambiguously means that no customer artifact is
+retained for that operation; qualification evidence remains fail-closed when this semantic state
+is absent, ambiguous, contradictory, free-form only, or belongs to another operation.
 
 ## Context Bridge inventory
 
@@ -98,7 +108,7 @@ operations, for exactly twelve Context Bridge capability tools:
 
 ### Review local evidence
 
-The public qCoder 0.6.0a10 pre-release and this unpublished 0.6.0a11 successor candidate compose
+The public qCoder 0.6.0a11 pre-release and this unpublished 0.6.0a12 successor candidate compose
 existing canonical qCoder evidence into one local, account-free review.
 It reads only the files named explicitly on the command line; it does not
 accept a directory, expand a glob, recurse, discover hidden files, follow Python imports, scan a
@@ -147,8 +157,8 @@ attributes and alternate data streams are not qualified. See
 [`docs/local-evidence-review.md`](docs/local-evidence-review.md) for the complete commands and
 section meanings.
 
-This section describes behavior present in public version 0.6.0a10 and retained by the unpublished
-0.6.0a11 successor candidate. Package-index availability and public claim status are governed
+This section describes behavior present in public version 0.6.0a11 and retained by the unpublished
+0.6.0a12 successor candidate. Package-index availability and public claim status are governed
 separately from the package documentation.
 
 ### Explorer Evidence Review
@@ -200,9 +210,9 @@ See the synthetic [`Algorithm Blueprint walkthrough`](examples/09_algorithm_blue
 
 ## Quick start
 
-This source identifies the unpublished 0.6.0a11 successor candidate. Candidate qualification must
+This source identifies the unpublished 0.6.0a12 successor candidate. Candidate qualification must
 install its exact retained artifact after the separate freeze step; do not use a candidate-only
-package-index pin. The current public package remains the 0.6.0a10 pre-release. The commands below
+package-index pin. The current public package remains the 0.6.0a11 pre-release. The commands below
 describe behavior retained by the successor candidate.
 
 Analyze a circuit:
