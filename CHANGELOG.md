@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0a13
+
+- Preserve the exact qCoder 0.6.0a12 runtime behavior, connected-assistant binding v19,
+  schemas, twelve Context Bridge tools, five Prompt Context modes, workflow and retention
+  contracts, authority boundaries, artifact-access scope, dependencies, and entry points.
+- Replace transient candidate/publication wording in immutable package metadata with durable
+  publication-truthful pre-release wording. Release-control and qualification state remain
+  separate from package metadata.
+- qCoder 0.6.0a13 is a public pre-release. It is not a stable or generally available release,
+  and package publication does not activate a named-client support claim.
+
 ## 0.6.0a12
 
 - Advance the shared connected-assistant binding from v18 to v19 so canonical preparatory states

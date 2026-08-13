@@ -10,7 +10,7 @@ def _normalized(path: Path) -> str:
     return " ".join(path.read_text(encoding="utf-8").split())
 
 
-def test_readme_is_candidate_qualified_and_keeps_client_claims_held() -> None:
+def test_readme_is_publication_truthful_and_keeps_client_claims_held() -> None:
     readme = _normalized(ROOT / "README.md")
     lowered = readme.lower()
     assert 'python -m pip install "qcoder==0.6.0a5"' not in readme
@@ -18,12 +18,17 @@ def test_readme_is_candidate_qualified_and_keeps_client_claims_held() -> None:
     assert 'python -m pip install "qcoder==0.6.0a10"' not in readme
     assert 'python -m pip install "qcoder==0.6.0a11"' not in readme
     assert 'python -m pip install "qcoder==0.6.0a12"' not in readme
+    assert 'python -m pip install "qcoder==0.6.0a13"' not in readme
     assert "**Cursor Desktop:** full active Current Loop support." not in readme
     assert "This package does not activate a named-client support claim." in readme
     assert "Connection, MCP tool discovery, or evidence for a related client does not establish qualification." in readme
-    assert "0.6.0a12" in readme
-    assert "unpublished successor candidate" in lowered
-    assert "package-index availability requires a separate publication decision" in lowered
+    assert "0.6.0a13" in readme
+    assert "qcoder 0.6.0a13 is a public pre-release" in lowered
+    assert "unpublished successor candidate" not in lowered
+    assert "package-index availability requires a separate publication decision" not in lowered
+    assert "current public package remains" not in lowered
+    assert "publication remains pending" not in lowered
+    assert "stable or generally available release" in lowered
     assert "Review local evidence (OSS development branch)" not in readme
     assert "WI-0421 development branch" not in readme
     assert "does not scan repositories" in readme
@@ -34,9 +39,10 @@ def test_readme_is_candidate_qualified_and_keeps_client_claims_held() -> None:
     assert "fails closed instead of silently reinterpreting old authority data" in readme
 
 
-def test_changelog_records_a12_repair_and_release_holds() -> None:
+def test_changelog_records_a13_metadata_successor_and_a12_history() -> None:
     changelog = _normalized(ROOT / "CHANGELOG.md")
     lowered = changelog.lower()
+    assert "## 0.6.0a13" in changelog
     assert "## 0.6.0a12" in changelog
     assert "## Unreleased integrated source" not in changelog
     assert "unpublished successor candidate" in lowered
@@ -46,6 +52,8 @@ def test_changelog_records_a12_repair_and_release_holds() -> None:
     assert "canonical context bridge credential grammar" in lowered
     assert "assistant_context_ready" in changelog
     assert "process_and_discard" in changelog
+    assert "qcoder 0.6.0a13 is a public pre-release" in lowered
+    assert "preserve the exact qcoder 0.6.0a12 runtime behavior" in lowered
     assert "after `0.6.0a3` was published with stale distribution metadata" in changelog
     assert "unpublished superseded metadata-correction candidate" in changelog
     assert "bounded first-build receipt hardening" in changelog
