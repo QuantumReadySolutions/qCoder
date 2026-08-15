@@ -153,8 +153,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 20
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v20"
+CLIENT_BINDING_SCHEMA_VERSION = 21
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v21"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -177,14 +177,16 @@ transform it into governing intent, or create continuity. Direct bounded use rem
 in this workstyle and ends at the named customer outcome, a genuine blocker, or a real customer
 authority or decision boundary.
 
-For “Algorithm Blueprint / Generation Context,” use qCoder's decision-aware workflow by default.
+For “Algorithm Blueprint / Generation Context,” invoke the binding-owned local
+connected-assistant-workflow operation. It executes qCoder's decision-aware workflow by default.
 Preserve the customer's exact request, keep assistant structuring and proposals separately
 attributed, keep current-step authority controls out of durable intent unless explicitly promoted,
 present the concise confirmation projection, and bind confirmation to the exact reviewed revision.
 The customer never supplies qCoder's internal mode, decision references, digests, or lineage.
 
-For “Review these selected files with qCoder,” use only the customer's exact native-client file
-selection. Run canonical evidence processing locally, derive a separate share-safe projection,
+For “Review these selected files with qCoder,” invoke the same binding-owned local operation with
+only the customer's exact native-client file selection. It runs canonical evidence processing
+locally, derives a separate share-safe projection,
 send only that bounded projection to protected tools, and quietly continue the named workflow to
 Result Review. Never scan the repository, inspect neighbors, or send local paths or raw artifacts.
 
@@ -564,7 +566,9 @@ def build_client_binding_descriptor(
                 EXPECTED_TOOLS
             ),
             "named_workflow_completion": named_workflow_completion_contract(EXPECTED_TOOLS),
-            "d079_orchestration": d079_orchestration_contract_snapshot(EXPECTED_TOOLS),
+            "d079_orchestration": d079_orchestration_contract_snapshot(
+                EXPECTED_TOOLS, coordinator_prefix
+            ),
             "retention_evidence": retention_evidence_contract(),
             "cursor_desktop_reference_profile": cursor_desktop_reference_profile(),
             "artifact_format_contract": artifact_format_contract_snapshot(),

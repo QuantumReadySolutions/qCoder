@@ -252,7 +252,7 @@ def test_parameterized_client_neutral_conformance_profile(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     assert descriptor["contract_id"] == CLIENT_BINDING_CONTRACT_ID
-    assert CLIENT_BINDING_CONTRACT_ID.endswith(".v20")
+    assert CLIENT_BINDING_CONTRACT_ID.endswith(".v21")
     assert descriptor["qcoder_domain_tool_count"] == 12
     assert descriptor["client_neutral_conformance_contract"] == contract
     assert descriptor["cursor_desktop_reference_profile"] == profile

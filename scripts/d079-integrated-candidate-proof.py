@@ -19,7 +19,7 @@ from typing import Any
 from qcoder.blueprint_decisions import catalog_entries
 from qcoder.context_bridge_mcp import EXPECTED_TOOLS
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
-from qcoder.d079_workflows import D079WorkflowError, scale_limit_receipt
+from qcoder.d079_workflows import D079WorkflowError
 
 
 def canonical(value: Any) -> bytes:
@@ -127,10 +127,9 @@ def main() -> int:
         for item in catalog_entries("generic_qiskit")
         if item["generation_relevant"]
     }
-    proposal = coordinator.prepare_connected_assistant_blueprint(
-        customer_request=customer_request,
-        explicit_user_facts=facts,
-        assistant_structuring={
+    blueprint_context = {
+        "explicit_user_facts": facts,
+        "assistant_structuring": {
             "normalized_goal": "four-qubit readable Qiskit circuit with one correlated pair",
             "problem_size_meaning": "four logical qubits",
             "framework_requirement": "readable Qiskit and Python",
@@ -138,23 +137,31 @@ def main() -> int:
             "execution_intent": "construction only; the IDE or customer decides whether to run",
             "desired_output": "readable Python source and counts-compatible results",
         },
-        assistant_implementation_proposals={
+        "assistant_implementation_proposals": {
             "circuit_construction": "direct QuantumCircuit with readable operations",
             "measurement_structure": "explicit final measurement",
             "result_processing": "counts-compatible result representation",
         },
-        customer_dispositions={},
-        current_step_controls=[
+        "customer_dispositions": {},
+        "current_step_controls": [
             "do not edit or run anything yet",
             "show me what you understood",
             "ask before continuing",
         ],
+    }
+    prepared_execution = coordinator.execute_connected_assistant_workflow(
+        customer_instruction=customer_request,
+        blueprint_context=blueprint_context,
     )
+    proposal = prepared_execution["workflow_result"]
     # Proposals remain distinct from confirmed customer facts. The explicit facts above
     # make readiness deterministic; the implementation proposals remain subordinate.
-    confirmed = coordinator.confirm_connected_assistant_blueprint(
-        proposal=proposal, confirmation=proposal["confirmation_requirements"]
+    confirmed_execution = coordinator.execute_connected_assistant_workflow(
+        customer_instruction=customer_request,
+        proposal=proposal,
+        confirmation=proposal["confirmation_requirements"],
     )
+    confirmed = confirmed_execution["workflow_result"]
     blueprint_call_receipts = deepcopy(transport.calls)
     transport.calls.clear()
     negatives: dict[str, Any] = {}
@@ -175,7 +182,60 @@ def main() -> int:
         else:
             raise RuntimeError(f"negative unexpectedly succeeded: {name}")
 
-    evidence = coordinator.review_customer_selected_files(selected_paths=[str(selected)])
+    for name, mutator in (
+        (
+            "projection_mismatch",
+            lambda value: value["customer_confirmation_projection"].__setitem__(
+                "what_you_said", "altered display envelope"
+            ),
+        ),
+        (
+            "identity_envelope_mismatch",
+            lambda value: (
+                value.__setitem__("artifact_identity", "proposal-alteredEnvelopeIdentity"),
+                value["confirmation_requirements"].__setitem__(
+                    "artifact_identity", "proposal-alteredEnvelopeIdentity"
+                ),
+            ),
+        ),
+    ):
+        altered_proposal = deepcopy(proposal)
+        mutator(altered_proposal)
+        try:
+            coordinator.confirm_connected_assistant_blueprint(
+                proposal=altered_proposal,
+                confirmation=altered_proposal["confirmation_requirements"],
+            )
+        except D079WorkflowError as exc:
+            negatives[name] = exc.recovery
+        else:
+            raise RuntimeError(f"negative unexpectedly succeeded: {name}")
+
+    revision = coordinator.revise_connected_assistant_blueprint(
+        proposal=proposal,
+        semantic_changes={
+            "assistant_structuring": {
+                **blueprint_context["assistant_structuring"],
+                "desired_output": "readable Python source plus an explicit counts contract",
+            }
+        },
+    )
+    revised_proposal = revision["proposal"]
+    try:
+        coordinator.confirm_connected_assistant_blueprint(
+            proposal=revised_proposal,
+            confirmation=proposal["confirmation_requirements"],
+        )
+    except D079WorkflowError as exc:
+        negatives["old_confirmation_on_revised_proposal"] = exc.recovery
+    else:
+        raise RuntimeError("old confirmation unexpectedly confirmed revised proposal")
+
+    evidence_execution = coordinator.execute_connected_assistant_workflow(
+        customer_instruction="Review these selected files with qCoder.",
+        selected_paths=[str(selected)],
+    )
+    evidence = evidence_execution["workflow_result"]
     if any(item["evidence_payload_local_path_detected"] for item in transport.calls):
         raise RuntimeError("local path crossed protected boundary")
     if any(item["evidence_payload_selected_raw_source_detected"] for item in transport.calls):
@@ -190,36 +250,82 @@ def main() -> int:
         for _ in range(whole):
             handle.write(block)
         handle.write("x q[0];\n" * remainder)
-    scale_receipt = scale_limit_receipt(
-        selected_path=str(scale), effective_gate_magnitude=args.scale_gates
-    )
+    reproduced_gate_count = 0
+    with scale.open("r", encoding="utf-8") as stream:
+        for line in stream:
+            if line == "x q[0];\n":
+                reproduced_gate_count += 1
+    protected_calls_before_scale = len(transport.calls)
+    try:
+        coordinator.execute_connected_assistant_workflow(
+            customer_instruction="Review this selected file with qCoder.",
+            selected_paths=[str(scale)],
+        )
+    except D079WorkflowError as exc:
+        if exc.recovery.get("reason_category") != "selected_artifact_limit":
+            raise
+        scale_receipt = deepcopy(exc.recovery["limit_receipt"])
+    else:
+        raise RuntimeError("million-gate selected artifact unexpectedly bypassed local limit")
+    if len(transport.calls) != protected_calls_before_scale:
+        raise RuntimeError("limited raw artifact reached protected transport")
     elapsed = time.monotonic() - start
-    semantic_intent = confirmed["confirmed_semantic_child"]["intent_card"]
-    semantic_blueprint = confirmed["implementation_blueprint"]
-    safe_scale = {
-        key: value
-        for key, value in scale_receipt.items()
-        if key != "selected_artifact_identity"
-    }
+    semantic_scale_request = (
+        "Design a bounded semantic handling plan for an approximately million-gate selected circuit. "
+        "Do not edit or run anything yet."
+    )
+    semantic_execution = coordinator.execute_connected_assistant_workflow(
+        customer_instruction=semantic_scale_request,
+        blueprint_context=blueprint_context,
+    )
+    semantic_proposal = semantic_execution["workflow_result"]
+    semantic_confirmed_execution = coordinator.execute_connected_assistant_workflow(
+        customer_instruction=semantic_scale_request,
+        proposal=semantic_proposal,
+        confirmation=semantic_proposal["confirmation_requirements"],
+    )
+    semantic_confirmed = semantic_confirmed_execution["workflow_result"]
     scale_metrics = {
-        **scale_receipt,
-        "intent_card_serialized_bytes": len(canonical(semantic_intent)),
-        "blueprint_semantic_serialized_bytes": len(canonical(semantic_blueprint)),
-        "decision_count": len(proposal["decision_records"]),
-        "full_local_evidence_bytes": len(canonical(scale_receipt)),
-        "share_safe_representation_bytes": len(canonical(safe_scale)),
-        "protected_request_bytes": 0,
+        "schema_id": "qcoder.d079.composite_scale_proof.v2",
+        "semantic_decision_state_boundedness": {
+            "fixture_gate_magnitude_reference": reproduced_gate_count,
+            "intent_card_serialized_bytes": len(
+                canonical(semantic_confirmed["algorithm_intent_card"])
+            ),
+            "blueprint_semantic_serialized_bytes": len(
+                canonical(semantic_confirmed["implementation_blueprint"])
+            ),
+            "proposal_semantic_body_serialized_bytes": len(
+                canonical(semantic_proposal)
+            ),
+            "decision_count": len(semantic_proposal["decision_records"]),
+            "semantic_state_growth_basis": "canonical_meaningful_decisions_not_individual_gates",
+            "raw_scale_artifact_in_semantic_state": False,
+        },
+        "actual_selected_file_evidence_review_limit": {
+            **scale_receipt,
+            "actual_file_bytes": scale.stat().st_size,
+            "reproduced_fixture_gate_count": reproduced_gate_count,
+            "fixture_construction": "fixed OpenQASM header plus exactly N literal x q[0] lines",
+            "actual_production_path": "current-loop connected-assistant-workflow -> local_first_evidence_review",
+            "extractor_gate_processing_claimed": False,
+            "coverage_status": "LIMITED",
+            "protected_request_bytes": 0,
+            "no_downstream_complete_relabel": True,
+        },
         "processing_wall_seconds": round(elapsed, 6),
         "max_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
-        "semantic_state_growth_basis": "canonical_decision_count_not_gate_count",
-        "accepted_scale_outcome": "B_explicit_structured_limit",
+        "accepted_scale_outcome": "B_explicit_supported_selected_artifact_limit",
     }
 
     write_json(out / "wi0432-terminal-proof.json", {
         "gate": "WI0432_IDE_FIRST_BLUEPRINT_DECISION_AND_CONFIRMATION_PASS",
         "ordinary_customer_request": customer_request,
         "proposal": proposal,
+        "binding_owned_preparation_execution": prepared_execution,
         "confirmed_derived_artifact": confirmed,
+        "binding_owned_confirmation_execution": confirmed_execution,
+        "revision_proof": revision,
         "protected_call_receipts": blueprint_call_receipts,
         "negative_proofs": negatives,
         "customer_supplied_internal_choreography": False,
@@ -230,6 +336,7 @@ def main() -> int:
         "gate": "WI0433_LOCAL_FIRST_CONNECTED_ASSISTANT_EVIDENCE_REVIEW_PASS",
         "ordinary_customer_instruction": "Review this selected file with qCoder.",
         "workflow_result": evidence,
+        "binding_owned_execution": evidence_execution,
         "protected_call_receipts": transport.calls,
         "selected_path_crossed_protected_boundary": False,
         "raw_artifact_crossed_protected_boundary": False,
@@ -255,6 +362,11 @@ def main() -> int:
         "public_context_bridge_tools": list(EXPECTED_TOOLS),
         "protected_source_path": str(args.protected_root.absolute()),
         "inventory": inventory,
+        "packet_identity_canonicalization": (
+            "sha256 of RFC-8259-compatible UTF-8 JSON serialized with ensure_ascii=true, "
+            "sort_keys=true, separators=(',', ':'), over the complete manifest object "
+            "before packet_identity is added"
+        ),
     }
     manifest["packet_identity"] = "sha256:" + sha256(canonical(manifest)).hexdigest()
     write_json(out / "packet-manifest.json", manifest)

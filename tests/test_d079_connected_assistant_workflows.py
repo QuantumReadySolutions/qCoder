@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import io
+import sys
 from copy import deepcopy
 from pathlib import Path
 
 import pytest
 
 from qcoder.blueprint_decisions import catalog_entries
+from qcoder.cli import _cmd_current_loop
 from qcoder.context_bridge_mcp import (
     CLIENT_ACTIVATION_INSTRUCTIONS,
     EXPECTED_TOOLS,
@@ -19,6 +22,7 @@ from qcoder.d079_workflows import (
     confirm_ide_first_blueprint,
     prepare_ide_first_blueprint,
     review_selected_files_with_qcoder,
+    revise_ide_first_blueprint,
     scale_limit_receipt,
 )
 
@@ -186,6 +190,36 @@ def test_exact_confirmation_creates_immutable_child_and_usable_generation_artifa
 
 
 @pytest.mark.parametrize(
+    ("mutation", "category"),
+    [
+        ("projection", "confirmation_projection_mismatch"),
+        ("artifact_identity", "artifact_identity_mismatch"),
+        ("requirements", "confirmation_requirements_mismatch"),
+    ],
+)
+def test_confirmation_rederives_identity_and_presentation_envelopes(
+    mutation: str, category: str
+) -> None:
+    proposal = _proposal()
+    tampered = deepcopy(proposal)
+    if mutation == "projection":
+        tampered["customer_confirmation_projection"]["what_you_said"] = "altered display"
+    elif mutation == "artifact_identity":
+        altered = "proposal-alteredEnvelopeIdentity"
+        tampered["artifact_identity"] = altered
+        tampered["confirmation_requirements"]["artifact_identity"] = altered
+    else:
+        tampered["confirmation_requirements"]["artifact_revision"] = 99
+    with pytest.raises(D079WorkflowError) as raised:
+        confirm_ide_first_blueprint(
+            proposal=tampered,
+            confirmation=tampered["confirmation_requirements"],
+        )
+    assert raised.value.recovery["reason_category"] == category
+    assert raised.value.recovery["fail_closed"] is True
+
+
+@pytest.mark.parametrize(
     ("field", "replacement", "category"),
     [
         ("artifact_identity", "proposal-wrongwrongwrongwrong22", "incorrect_confirmation_reference"),
@@ -243,6 +277,82 @@ def test_malformed_and_unknown_fields_have_actionable_recovery() -> None:
         _proposal(explicit_user_facts={"fixture-17": "not canonical"})
     assert raised.value.recovery["reason_category"] == "unknown_decision_field"
     assert raised.value.recovery["valid_portions_may_be_retained"] is True
+
+
+def test_ambiguous_catalog_alias_fails_with_all_collisions_and_stable_identity() -> None:
+    with pytest.raises(D079WorkflowError) as raised:
+        _proposal(explicit_user_facts={"measurement_plan": "measure all"})
+    recovery = raised.value.recovery
+    assert recovery["reason_category"] == "ambiguous_decision_alias"
+    assert recovery["details"]["ambiguous_alias"] == "measurement_plan"
+    assert recovery["details"]["colliding_profile_decision_ids"] == [
+        "generic_qiskit.bit_order",
+        "generic_qiskit.classical_width",
+        "generic_qiskit.measurement_mapping",
+        "generic_qiskit.measurement_structure",
+    ]
+    assert recovery["details"]["customer_must_supply_internal_identity"] is False
+    unique = _proposal(
+        explicit_user_facts={
+            **_all_explicit_facts(),
+            "circuit_construction": "explicit readable construction",
+        }
+    )
+    assert any(
+        item["profile_decision_id"] == "generic_qiskit.circuit_construction"
+        for item in unique["decision_records"]
+    )
+
+
+@pytest.mark.parametrize(
+    "wording",
+    [
+        "Do not edit or run.",
+        "Do not run or edit.",
+        "Do not edit or run anything.",
+        "Do not run or edit anything.",
+        "Do not edit or run anything yet.",
+        "DO NOT RUN OR EDIT ANYTHING YET!",
+    ],
+)
+def test_coordinated_temporary_edit_run_controls_are_both_non_durable(wording: str) -> None:
+    proposal = _proposal(customer_request=f"Build a circuit. {wording}")
+    assert proposal["temporary_authority_actions"] == ["edit", "run"]
+    assert proposal["semantic_layers"]["durable_blueprint_constraints"] == []
+
+
+def test_blueprint_revision_has_exact_parent_bounded_diff_and_fresh_confirmation() -> None:
+    original = _proposal()
+    unchanged = revise_ide_first_blueprint(
+        proposal=original,
+        semantic_changes={
+            "assistant_structuring": original["semantic_layers"]["assistant_structuring"]
+        },
+    )
+    assert unchanged["material_revision_created"] is False
+    revised_result = revise_ide_first_blueprint(
+        proposal=original,
+        semantic_changes={"assistant_structuring": {"goal": "revised semantic goal"}},
+    )
+    revised = revised_result["proposal"]
+    assert revised["artifact_revision"] == original["artifact_revision"] + 1
+    assert revised["parent_artifact"]["artifact_ref"] == original["artifact_identity"]
+    assert revised_result["semantic_diff"][0]["bounded_field"] == (
+        "semantic_layers.assistant_structuring"
+    )
+    assert revised["semantic_layers"]["current_step_authority_controls"] == (
+        original["semantic_layers"]["current_step_authority_controls"]
+    )
+    with pytest.raises(D079WorkflowError):
+        confirm_ide_first_blueprint(
+            proposal=revised,
+            confirmation=original["confirmation_requirements"],
+        )
+    confirmed = confirm_ide_first_blueprint(
+        proposal=revised,
+        confirmation=revised["confirmation_requirements"],
+    )
+    assert confirmed["parent_artifact_identity"] == revised["artifact_identity"]
 
 
 def test_local_first_review_is_exact_bounded_share_safe_and_terminal(tmp_path: Path) -> None:
@@ -337,6 +447,29 @@ def test_scale_limit_receipt_is_explicit_not_silent(tmp_path: Path) -> None:
     assert result["protected_request_bytes"] == 0
 
 
+def test_real_local_first_path_returns_structured_selected_artifact_limit(tmp_path: Path) -> None:
+    fixture = tmp_path / "selected-million-scale.qasm"
+    gate_count = 20_000
+    fixture.write_text(
+        'OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[1];\n'
+        + "x q[0];\n" * gate_count,
+        encoding="utf-8",
+    )
+    with pytest.raises(D079WorkflowError) as raised:
+        review_selected_files_with_qcoder(
+            selected_paths=[str(fixture)],
+            protected_call=lambda *_: pytest.fail("protected call must not be reached"),
+        )
+    receipt = raised.value.recovery["limit_receipt"]
+    assert sum(1 for line in fixture.read_text().splitlines() if line == "x q[0];") == gate_count
+    assert receipt["coverage_status"] == "LIMITED"
+    assert receipt["selected_artifacts"][0]["raw_artifact_bytes"] == fixture.stat().st_size
+    assert receipt["raw_artifact_remained_local"] is True
+    assert receipt["protected_request_bytes"] == 0
+    assert receipt["silent_truncation"] is False
+    assert receipt["downstream_complete_status_permitted"] is False
+
+
 def test_public_tool_inventory_remains_exactly_twelve() -> None:
     assert len(EXPECTED_TOOLS) == 12
     assert "review_selected_files_with_qcoder" not in EXPECTED_TOOLS
@@ -344,10 +477,22 @@ def test_public_tool_inventory_remains_exactly_twelve() -> None:
     descriptor = build_client_binding_descriptor(coordinator_prefix=["python", "-m", "qcoder"])[
         "client_binding_contract"
     ]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v20"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v21"
     assert descriptor["d079_orchestration"]["public_tool_count"] == 12
     assert descriptor["d079_orchestration"]["blueprint_workflow"]["decision_aware_by_default"] is True
     assert descriptor["d079_orchestration"]["evidence_review_workflow"]["repository_discovery"] is False
+    invocation = descriptor["d079_orchestration"]["binding_owned_local_invocation"]
+    assert invocation["operation"] == "connected-assistant-workflow"
+    assert invocation["qcoder_owned_argv"] == [
+        "python",
+        "-m",
+        "qcoder",
+        "current-loop",
+        "connected-assistant-workflow",
+        "--operation-input-stdin",
+    ]
+    assert invocation["customer_constructs_input_envelope"] is False
+    assert invocation["public_mcp_tool_added"] is False
     assert "decision-aware workflow by default" in CLIENT_ACTIVATION_INSTRUCTIONS
     assert "Review these selected files with qCoder" in CLIENT_ACTIVATION_INSTRUCTIONS
     assert "Never scan the repository" in CLIENT_ACTIVATION_INSTRUCTIONS
@@ -379,3 +524,80 @@ def test_production_relevant_coordinator_path_owns_both_workflows(tmp_path: Path
     assert confirmed["generation_context"]["generation_ready"] is True
     assert reviewed["status"] == "result_review_ready"
     assert len(EXPECTED_TOOLS) == 12
+
+
+def test_binding_owned_ordinary_language_operation_routes_both_workflows(tmp_path: Path) -> None:
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    class Transport:
+        def call(self, name: str, arguments: object) -> dict[str, object]:
+            return _protected(calls)(name, arguments)
+
+    coordinator = CurrentLoopCoordinator(workspace_root=tmp_path, transport=Transport())
+    planned = coordinator.execute_connected_assistant_workflow(
+        customer_instruction=(
+            "Help me design a measured Qiskit circuit. Do not edit or run anything yet."
+        ),
+        blueprint_context={
+            "explicit_user_facts": _all_explicit_facts(),
+            "assistant_structuring": {"goal": "measured circuit"},
+            "assistant_implementation_proposals": {},
+            "customer_dispositions": {},
+        },
+    )
+    assert planned["selected_workflow"] == "ide_first_blueprint_decision_and_confirmation"
+    assert planned["binding_owned_local_invocation"] is True
+    assert planned["workflow_result"]["temporary_authority_actions"] == ["edit", "run"]
+    selected = tmp_path / "selected.py"
+    selected.write_text("x = 1\n", encoding="utf-8")
+    reviewed = coordinator.execute_connected_assistant_workflow(
+        customer_instruction="Review these selected files with qCoder.",
+        selected_paths=[str(selected)],
+    )
+    assert reviewed["selected_workflow"] == "local_first_evidence_review"
+    assert reviewed["terminal_state"] == "Result Review"
+    assert reviewed["workflow_result"]["status"] == "result_review_ready"
+    assert len(EXPECTED_TOOLS) == 12
+
+
+def test_exact_binding_owned_cli_invocation_executes_ordinary_language_route(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    class Input:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self.buffer = io.BytesIO(json.dumps(payload).encode())
+
+        def isatty(self) -> bool:
+            return False
+
+    instruction = "Design a measured Qiskit circuit. Do not edit or run anything yet."
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        Input(
+            {
+                "customer_instruction": instruction,
+                "blueprint_context": {
+                    "explicit_user_facts": _all_explicit_facts(),
+                    "assistant_structuring": {"goal": "measured circuit"},
+                    "assistant_implementation_proposals": {},
+                    "customer_dispositions": {},
+                },
+            }
+        ),
+    )
+    result = _cmd_current_loop(
+        [
+            "--workspace",
+            str(tmp_path),
+            "connected-assistant-workflow",
+            "--operation-input-stdin",
+        ]
+    )
+    assert result == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["selected_workflow"] == "ide_first_blueprint_decision_and_confirmation"
+    assert output["workflow_result"]["semantic_layers"][
+        "original_customer_request_verbatim"
+    ] == instruction
+    assert output["workflow_result"]["temporary_authority_actions"] == ["edit", "run"]

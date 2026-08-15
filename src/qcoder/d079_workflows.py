@@ -42,11 +42,18 @@ BLUEPRINT_PROPOSAL_SCHEMA_ID = "qcoder.connected_assistant.blueprint_proposal.v1
 CONFIRMED_BLUEPRINT_SCHEMA_ID = "qcoder.connected_assistant.confirmed_blueprint.v1"
 EVIDENCE_WORKFLOW_SCHEMA_ID = "qcoder.connected_assistant.local_first_evidence_review.v1"
 RECOVERY_SCHEMA_ID = "qcoder.connected_assistant.structured_recovery.v1"
+INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.connected_assistant.d079_local_invocation.v1"
 DECISION_AWARE_PATH = "readiness_resolution_v1"
 MAX_PROTECTED_EVIDENCE_BYTES = 131_072
+MAX_SEMANTIC_DIFF_ENTRIES = 64
 
 _TEMPORARY_CONTROL_PATTERNS = (
-    re.compile(r"\bdo not (?:edit|run)(?:\s+yet)?\b", re.IGNORECASE),
+    re.compile(r"\bdo not edit(?:\s+anything)?(?:\s+yet)?\b", re.IGNORECASE),
+    re.compile(r"\bdo not run(?:\s+anything)?(?:\s+yet)?\b", re.IGNORECASE),
+    re.compile(
+        r"\bdo not (?:edit\s+or\s+run|run\s+or\s+edit)(?:\s+anything)?(?:\s+yet)?\b",
+        re.IGNORECASE,
+    ),
     re.compile(r"\bshow me the evidence and stop\b", re.IGNORECASE),
     re.compile(r"\bask before continuing\b", re.IGNORECASE),
 )
@@ -72,7 +79,9 @@ class D079WorkflowError(ValueError):
         super().__init__(json.dumps(self.recovery, ensure_ascii=True, sort_keys=True))
 
 
-def d079_orchestration_contract_snapshot(tool_inventory: Sequence[str]) -> dict[str, Any]:
+def d079_orchestration_contract_snapshot(
+    tool_inventory: Sequence[str], coordinator_prefix: Sequence[str] = ("python", "-m", "qcoder")
+) -> dict[str, Any]:
     """Expose the binding-owned D-079 semantics without adding a public tool."""
 
     tools = tuple(str(item) for item in tool_inventory)
@@ -84,6 +93,9 @@ def d079_orchestration_contract_snapshot(tool_inventory: Sequence[str]) -> dict[
         "public_tool_inventory": list(tools),
         "public_tool_count": 12,
         "new_customer_visible_tools": [],
+        "binding_owned_local_invocation": connected_assistant_invocation_contract(
+            coordinator_prefix=coordinator_prefix
+        ),
         "blueprint_workflow": {
             "ordinary_customer_language": True,
             "decision_aware_by_default": True,
@@ -117,6 +129,48 @@ def d079_orchestration_contract_snapshot(tool_inventory: Sequence[str]) -> dict[
     return payload
 
 
+def connected_assistant_invocation_contract(
+    *, coordinator_prefix: Sequence[str] = ("python", "-m", "qcoder")
+) -> dict[str, Any]:
+    """Return the executable binding-owned route for the two ordinary workflows."""
+
+    prefix = [str(item) for item in coordinator_prefix]
+    if not prefix or prefix[-1] != "current-loop":
+        prefix.append("current-loop")
+    return {
+        "schema_id": INVOCATION_CONTRACT_SCHEMA_ID,
+        "schema_version": 1,
+        "operation": "connected-assistant-workflow",
+        "qcoder_owned_argv": [
+            *prefix,
+            "connected-assistant-workflow",
+            "--operation-input-stdin",
+        ],
+        "input_transport": "binding_constructed_utf8_json_stdin",
+        "customer_constructs_input_envelope": False,
+        "input_envelope": {
+            "required": ["customer_instruction"],
+            "properties": {
+                "customer_instruction": "verbatim ordinary customer language",
+                "selected_paths": "exact native-client/customer-selected paths; local only",
+                "blueprint_context": "assistant-attributed bounded structuring; never customer JSON",
+                "proposal": "qCoder-produced exact reviewed proposal",
+                "confirmation": "qCoder-produced binding plus explicit customer review assertion",
+            },
+            "maximum_utf8_bytes": 1_048_576,
+        },
+        "ordinary_language_router": {
+            "algorithm_blueprint_generation_context": "ide_first_blueprint_decision_and_confirmation",
+            "review_selected_files_with_qcoder": "local_first_evidence_review",
+        },
+        "lower_level_mcp_tools": "diagnostic_or_composed_primitives_not_customer_choreography",
+        "native_client_exact_file_selection_required": True,
+        "repository_discovery": False,
+        "public_mcp_tool_added": False,
+        "retention": "process_and_discard",
+    }
+
+
 def _canonical_bytes(value: Any) -> bytes:
     return json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode()
 
@@ -141,8 +195,9 @@ def _recovery(
     local_preprocessing: str | None = None,
     valid_portions_retained: bool = False,
     protected_safe_error_category: str | None = None,
+    details: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    result = {
         "schema_id": RECOVERY_SCHEMA_ID,
         "schema_version": 1,
         "reason_category": reason,
@@ -156,6 +211,9 @@ def _recovery(
         "protected_safe_error_category": protected_safe_error_category,
         "fail_closed": True,
     }
+    if details:
+        result["details"] = deepcopy(dict(details))
+    return result
 
 
 def _lineage(value: str | None) -> str:
@@ -173,7 +231,9 @@ def _lineage(value: str | None) -> str:
     return value
 
 
-def _catalog_lookup(profile_id: str) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+def _catalog_lookup(
+    profile_id: str,
+) -> tuple[list[dict[str, Any]], dict[str, tuple[dict[str, Any], ...]]]:
     try:
         entries = catalog_entries(profile_id)
     except ValueError as exc:
@@ -185,18 +245,25 @@ def _catalog_lookup(profile_id: str) -> tuple[list[dict[str, Any]], dict[str, di
                 category="choose_supported_profile",
             )
         ) from exc
-    lookup: dict[str, dict[str, Any]] = {}
+    candidates: dict[str, list[dict[str, Any]]] = {}
     for item in entries:
-        lookup[item["profile_decision_id"]] = item
-        lookup[item["profile_decision_id"].split(".", 1)[1]] = item
-        for name in item["intent_fields"] + item["blueprint_fields"]:
-            lookup.setdefault(name, item)
+        aliases = {
+            item["profile_decision_id"],
+            item["profile_decision_id"].split(".", 1)[1],
+            *item["intent_fields"],
+            *item["blueprint_fields"],
+        }
+        for alias in aliases:
+            candidates.setdefault(str(alias), []).append(item)
+    lookup = {key: tuple(value) for key, value in candidates.items()}
     return entries, lookup
 
 
-def _resolve_decision_key(key: str, lookup: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
-    entry = lookup.get(key)
-    if entry is None:
+def _resolve_decision_key(
+    key: str, lookup: Mapping[str, Sequence[dict[str, Any]]]
+) -> dict[str, Any]:
+    matches = lookup.get(key)
+    if not matches:
         raise D079WorkflowError(
             _recovery(
                 "unknown_decision_field",
@@ -206,7 +273,26 @@ def _resolve_decision_key(key: str, lookup: Mapping[str, dict[str, Any]]) -> dic
                 valid_portions_retained=True,
             )
         )
-    return entry
+    canonical = {
+        str(item["profile_decision_id"]): item
+        for item in matches
+    }
+    if len(canonical) != 1:
+        raise D079WorkflowError(
+            _recovery(
+                "ambiguous_decision_alias",
+                offending_class="decision_input",
+                field=key,
+                category="resolve_through_canonical_decision_identity",
+                valid_portions_retained=True,
+                details={
+                    "ambiguous_alias": key,
+                    "colliding_profile_decision_ids": sorted(canonical),
+                    "customer_must_supply_internal_identity": False,
+                },
+            )
+        )
+    return next(iter(canonical.values()))
 
 
 def _stable_decision_refs(profile_id: str, lineage: str, entries: Sequence[Mapping[str, Any]]) -> dict[str, str]:
@@ -300,6 +386,98 @@ def _is_temporary_control(value: str) -> bool:
     return any(pattern.search(value) for pattern in _TEMPORARY_CONTROL_PATTERNS)
 
 
+def _temporary_authority_actions(value: str) -> tuple[str, ...]:
+    normalized = value.casefold()
+    actions: list[str] = []
+    if re.search(r"\bdo not\s+(?:edit|run\s+or\s+edit|edit\s+or\s+run)\b", normalized):
+        actions.append("edit")
+    if re.search(r"\bdo not\s+(?:run|edit\s+or\s+run|run\s+or\s+edit)\b", normalized):
+        actions.append("run")
+    if "show me the evidence and stop" in normalized:
+        actions.append("stop_after_evidence")
+    if "ask before continuing" in normalized:
+        actions.append("ask_before_continuing")
+    return tuple(dict.fromkeys(actions))
+
+
+def _expected_artifact_identity(lineage: str, proposal_digest: str) -> str:
+    return _opaque("proposal", f"{lineage}|{proposal_digest}")
+
+
+def _canonical_confirmation_requirements(
+    *, artifact_identity: str, artifact_revision: int, lineage: str, proposal_digest: str
+) -> dict[str, Any]:
+    return {
+        "artifact_identity": artifact_identity,
+        "artifact_revision": artifact_revision,
+        "parent_lineage_identity": lineage,
+        "proposal_digest": proposal_digest,
+        "exact_proposal_reviewed": True,
+    }
+
+
+def _canonical_confirmation_projection(proposal: Mapping[str, Any]) -> dict[str, Any]:
+    layers = proposal.get("semantic_layers")
+    if not isinstance(layers, Mapping):
+        raise D079WorkflowError(
+            _recovery(
+                "malformed_proposal",
+                offending_class="proposal_integrity",
+                field="semantic_layers",
+                category="regenerate_reviewable_proposal",
+            )
+        )
+    entries, _lookup = _catalog_lookup(str(proposal.get("profile_id") or ""))
+    entries_by_id = {str(item["profile_decision_id"]): item for item in entries}
+    facts = layers.get("explicit_user_facts")
+    proposals = layers.get("assistant_implementation_proposals")
+    records = proposal.get("decision_records")
+    if not isinstance(facts, Mapping) or not isinstance(proposals, Mapping) or not isinstance(records, list):
+        raise D079WorkflowError(
+            _recovery(
+                "malformed_proposal",
+                offending_class="proposal_integrity",
+                field="semantic_layers",
+                category="regenerate_reviewable_proposal",
+            )
+        )
+    return {
+        "what_you_said": layers.get("original_customer_request_verbatim"),
+        "facts_you_supplied": [
+            {"field": entries_by_id[str(decision_id)]["display_label"], "value": deepcopy(value)}
+            for decision_id, value in facts.items()
+        ],
+        "how_your_request_was_structured": deepcopy(layers.get("assistant_structuring")),
+        "proposed_implementation_choices": [
+            {"field": entries_by_id[str(decision_id)]["display_label"], "proposal": deepcopy(value)}
+            for decision_id, value in proposals.items()
+        ],
+        "unresolved_or_delegated_choices": [
+            {"question": entry["question"], "state": record["resolution_state"]}
+            for entry, record in zip(entries, records)
+            if record.get("resolution_state") != "resolved"
+            and (entry["generation_relevant"] or record.get("user_disposition") != "not_supplied")
+        ],
+        "confirmation_will_change": "Create a new confirmed child artifact bound to this exact proposal.",
+        "confirmation_will_not_change": "The reviewed proposal, current-step controls, file/edit/run authority, and original request.",
+        "internal_identifiers_required_from_customer": False,
+    }
+
+
+def _proposal_body_for_digest(proposal: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: deepcopy(value)
+        for key, value in proposal.items()
+        if key
+        not in {
+            "artifact_identity",
+            "proposal_digest",
+            "confirmation_requirements",
+            "customer_confirmation_projection",
+        }
+    }
+
+
 def prepare_ide_first_blueprint(
     *,
     customer_request: str,
@@ -386,6 +564,14 @@ def prepare_ide_first_blueprint(
             text = match.group(0)
             if text not in temporary:
                 temporary.append(text)
+    observed_actions = {
+        action for item in temporary for action in _temporary_authority_actions(item)
+    }
+    authority_actions = [
+        action
+        for action in ("edit", "run", "stop_after_evidence", "ask_before_continuing")
+        if action in observed_actions
+    ]
     promoted = {str(item) for item in explicitly_promoted_controls}
     durable = list(dict.fromkeys([str(item) for item in durable_constraints] + [x for x in temporary if x in promoted]))
     proposal_body: dict[str, Any] = {
@@ -412,9 +598,15 @@ def prepare_ide_first_blueprint(
             "durable_blueprint_constraints": durable,
         },
         "temporary_control_classification": [
-            {"text": item, "recognized_current_step_control": _is_temporary_control(item), "promoted_to_durable": item in promoted}
+            {
+                "text": item,
+                "recognized_current_step_control": _is_temporary_control(item),
+                "authority_actions": list(_temporary_authority_actions(item)),
+                "promoted_to_durable": item in promoted,
+            }
             for item in temporary
         ],
+        "temporary_authority_actions": authority_actions,
         "decision_records": records,
         "decision_dispositions": disposition_views,
         "readiness": readiness,
@@ -429,44 +621,18 @@ def prepare_ide_first_blueprint(
         "persistent": False,
     }
     proposal_digest = _digest(proposal_body)
-    proposal_ref = _opaque("proposal", f"{lineage}|{proposal_digest}")
+    proposal_ref = _expected_artifact_identity(lineage, proposal_digest)
     proposal_body["artifact_identity"] = proposal_ref
     proposal_body["proposal_digest"] = proposal_digest
-    proposal_body["confirmation_requirements"] = {
-        "artifact_identity": proposal_ref,
-        "artifact_revision": 1,
-        "parent_lineage_identity": lineage,
-        "proposal_digest": proposal_digest,
-        "exact_proposal_reviewed": True,
-    }
-    entries_by_id = {str(item["profile_decision_id"]): item for item in entries}
-    proposal_body["customer_confirmation_projection"] = {
-        "what_you_said": customer_request,
-        "facts_you_supplied": [
-            {
-                "field": entries_by_id[decision_id]["display_label"],
-                "value": deepcopy(value),
-            }
-            for decision_id, value in facts.items()
-        ],
-        "how_your_request_was_structured": deepcopy(dict(assistant_structuring)),
-        "proposed_implementation_choices": [
-            {
-                "field": entries_by_id[decision_id]["display_label"],
-                "proposal": deepcopy(value),
-            }
-            for decision_id, value in proposals.items()
-        ],
-        "unresolved_or_delegated_choices": [
-            {"question": entry["question"], "state": record["resolution_state"]}
-            for entry, record in zip(entries, records)
-            if record["resolution_state"] != "resolved"
-            and (entry["generation_relevant"] or record["user_disposition"] != "not_supplied")
-        ],
-        "confirmation_will_change": "Create a new confirmed child artifact bound to this exact proposal.",
-        "confirmation_will_not_change": "The reviewed proposal, current-step controls, file/edit/run authority, and original request.",
-        "internal_identifiers_required_from_customer": False,
-    }
+    proposal_body["confirmation_requirements"] = _canonical_confirmation_requirements(
+        artifact_identity=proposal_ref,
+        artifact_revision=1,
+        lineage=lineage,
+        proposal_digest=proposal_digest,
+    )
+    proposal_body["customer_confirmation_projection"] = _canonical_confirmation_projection(
+        proposal_body
+    )
     return proposal_body
 
 
@@ -484,8 +650,8 @@ def confirm_ide_first_blueprint(*, proposal: Mapping[str, Any], confirmation: Ma
                 wrong_layer=str(proposal.get("schema_id") or "missing"),
             )
         )
-    required = proposal.get("confirmation_requirements")
-    if not isinstance(required, Mapping):
+    stored_requirements = proposal.get("confirmation_requirements")
+    if not isinstance(stored_requirements, Mapping):
         raise D079WorkflowError(
             _recovery(
                 "missing_lineage",
@@ -494,6 +660,64 @@ def confirm_ide_first_blueprint(*, proposal: Mapping[str, Any], confirmation: Ma
                 category="regenerate_reviewable_proposal",
             )
         )
+    body_for_digest = _proposal_body_for_digest(proposal)
+    computed_digest = _digest(body_for_digest)
+    lineage = proposal.get("current_lineage_reference")
+    revision = proposal.get("artifact_revision")
+    if not isinstance(lineage, str) or not isinstance(revision, int):
+        raise D079WorkflowError(
+            _recovery(
+                "missing_lineage",
+                offending_class="proposal_integrity",
+                field="current_lineage_reference",
+                category="regenerate_reviewable_proposal",
+            )
+        )
+    expected_identity = _expected_artifact_identity(lineage, computed_digest)
+    expected_requirements = _canonical_confirmation_requirements(
+        artifact_identity=expected_identity,
+        artifact_revision=revision,
+        lineage=lineage,
+        proposal_digest=computed_digest,
+    )
+    if proposal.get("proposal_digest") != computed_digest:
+        raise D079WorkflowError(
+            _recovery(
+                "digest_mismatch",
+                offending_class="proposal_integrity",
+                field="proposal_digest",
+                category="review_current_exact_proposal",
+            )
+        )
+    if proposal.get("artifact_identity") != expected_identity:
+        raise D079WorkflowError(
+            _recovery(
+                "artifact_identity_mismatch",
+                offending_class="proposal_identity_envelope",
+                field="artifact_identity",
+                category="regenerate_identity_from_canonical_lineage_and_digest",
+            )
+        )
+    expected_projection = _canonical_confirmation_projection(proposal)
+    if proposal.get("customer_confirmation_projection") != expected_projection:
+        raise D079WorkflowError(
+            _recovery(
+                "confirmation_projection_mismatch",
+                offending_class="proposal_presentation_envelope",
+                field="customer_confirmation_projection",
+                category="regenerate_projection_from_canonical_proposal",
+            )
+        )
+    for field, expected in expected_requirements.items():
+        if stored_requirements.get(field) != expected:
+            raise D079WorkflowError(
+                _recovery(
+                    "confirmation_requirements_mismatch",
+                    offending_class="proposal_identity_envelope",
+                    field=field,
+                    category="regenerate_requirements_from_canonical_proposal",
+                )
+            )
     checks = (
         ("artifact_identity", "incorrect_confirmation_reference"),
         ("artifact_revision", "stale_revision"),
@@ -501,7 +725,7 @@ def confirm_ide_first_blueprint(*, proposal: Mapping[str, Any], confirmation: Ma
         ("proposal_digest", "digest_mismatch"),
     )
     for field, category in checks:
-        if confirmation.get(field) != required.get(field):
+        if confirmation.get(field) != expected_requirements.get(field):
             raise D079WorkflowError(
                 _recovery(
                     category,
@@ -517,20 +741,6 @@ def confirm_ide_first_blueprint(*, proposal: Mapping[str, Any], confirmation: Ma
                 offending_class="confirmation_binding",
                 field="exact_proposal_reviewed",
                 category="review_and_explicitly_assert_exact_proposal",
-            )
-        )
-    body_for_digest = {
-        key: deepcopy(value)
-        for key, value in proposal.items()
-        if key not in {"artifact_identity", "proposal_digest", "confirmation_requirements", "customer_confirmation_projection"}
-    }
-    if _digest(body_for_digest) != required.get("proposal_digest"):
-        raise D079WorkflowError(
-            _recovery(
-                "digest_mismatch",
-                offending_class="proposal_integrity",
-                field="proposal_digest",
-                category="review_current_exact_proposal",
             )
         )
     readiness = proposal.get("readiness")
@@ -585,6 +795,303 @@ def confirm_ide_first_blueprint(*, proposal: Mapping[str, Any], confirmation: Ma
     if dict(proposal) != original:
         raise RuntimeError("confirmation_mutated_parent")
     return child_body
+
+
+def revise_ide_first_blueprint(
+    *, proposal: Mapping[str, Any], semantic_changes: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Derive revision N+1 with exact parent lineage and a bounded semantic diff."""
+
+    # Reuse confirmation's envelope validator without granting confirmation authority.
+    canonical_requirements = proposal.get("confirmation_requirements")
+    if not isinstance(canonical_requirements, Mapping):
+        raise D079WorkflowError(
+            _recovery(
+                "missing_lineage",
+                offending_class="proposal_revision",
+                field="confirmation_requirements",
+                category="regenerate_reviewable_proposal",
+            )
+        )
+    validation_probe = deepcopy(dict(canonical_requirements))
+    validation_probe["exact_proposal_reviewed"] = False
+    try:
+        confirm_ide_first_blueprint(proposal=proposal, confirmation=validation_probe)
+    except D079WorkflowError as exc:
+        if exc.recovery.get("reason_category") != "missing_review_assertion":
+            raise
+    else:  # pragma: no cover - the false assertion must never authorize confirmation
+        raise RuntimeError("proposal_revision_validation_probe_unexpectedly_confirmed")
+    original = deepcopy(dict(proposal))
+    revised = deepcopy(dict(proposal))
+    allowed = {
+        "assistant_structuring",
+        "assistant_implementation_proposals",
+        "durable_blueprint_constraints",
+    }
+    unsupported = sorted(set(str(key) for key in semantic_changes) - allowed)
+    if unsupported:
+        raise D079WorkflowError(
+            _recovery(
+                "wrong_artifact_layer",
+                offending_class="proposal_revision",
+                field=unsupported[0],
+                category="revise_supported_semantic_layer_only",
+                wrong_layer="current_step_authority_or_unsupported_layer",
+                valid_portions_retained=True,
+            )
+        )
+    layers = revised.get("semantic_layers")
+    if not isinstance(layers, dict):
+        raise D079WorkflowError(
+            _recovery(
+                "malformed_proposal",
+                offending_class="proposal_revision",
+                field="semantic_layers",
+                category="regenerate_reviewable_proposal",
+            )
+        )
+    changes: list[dict[str, Any]] = []
+    for field, supplied in semantic_changes.items():
+        layer_field = str(field)
+        value = deepcopy(supplied)
+        if layer_field == "assistant_implementation_proposals":
+            if not isinstance(value, Mapping):
+                raise D079WorkflowError(
+                    _recovery(
+                        "malformed_proposal",
+                        offending_class="proposal_revision",
+                        field=layer_field,
+                        category="supply_bounded_semantic_mapping",
+                    )
+                )
+            _entries, lookup = _catalog_lookup(str(proposal.get("profile_id") or ""))
+            value = {
+                str(_resolve_decision_key(str(key), lookup)["profile_decision_id"]): deepcopy(item)
+                for key, item in value.items()
+            }
+        elif layer_field == "assistant_structuring" and not isinstance(value, Mapping):
+            raise D079WorkflowError(
+                _recovery(
+                    "malformed_proposal",
+                    offending_class="proposal_revision",
+                    field=layer_field,
+                    category="supply_bounded_semantic_mapping",
+                )
+            )
+        elif layer_field == "durable_blueprint_constraints" and (
+            not isinstance(value, Sequence) or isinstance(value, (str, bytes))
+        ):
+            raise D079WorkflowError(
+                _recovery(
+                    "malformed_proposal",
+                    offending_class="proposal_revision",
+                    field=layer_field,
+                    category="supply_bounded_semantic_sequence",
+                )
+            )
+        before = layers.get(layer_field)
+        if before == value:
+            continue
+        changes.append(
+            {
+                "bounded_field": f"semantic_layers.{layer_field}",
+                "change_category": "semantic_value_changed",
+                "before_digest": _digest(before),
+                "after_digest": _digest(value),
+            }
+        )
+        layers[layer_field] = value
+    if not changes:
+        return {
+            "status": "unchanged_no_material_revision",
+            "material_revision_created": False,
+            "proposal": original,
+            "semantic_diff": [],
+            "fresh_confirmation_required": False,
+        }
+    if len(changes) > MAX_SEMANTIC_DIFF_ENTRIES:
+        raise D079WorkflowError(
+            _recovery(
+                "semantic_diff_limit_exceeded",
+                offending_class="proposal_revision",
+                category="split_revision_into_bounded_reviewable_changes",
+                valid_portions_retained=True,
+            )
+        )
+    parent_identity = str(proposal.get("artifact_identity") or "")
+    parent_digest = str(proposal.get("proposal_digest") or "")
+    revised["artifact_revision"] = int(proposal.get("artifact_revision") or 0) + 1
+    revised["parent_artifact"] = {
+        "artifact_type": "blueprint_proposal",
+        "artifact_ref": parent_identity,
+        "artifact_digest": parent_digest,
+        "artifact_revision": int(proposal.get("artifact_revision") or 0),
+    }
+    revised["revision_semantic_diff"] = changes
+    revised["fresh_confirmation_required"] = True
+    for field in (
+        "artifact_identity",
+        "proposal_digest",
+        "confirmation_requirements",
+        "customer_confirmation_projection",
+    ):
+        revised.pop(field, None)
+    proposal_digest = _digest(revised)
+    lineage = str(revised["current_lineage_reference"])
+    artifact_identity = _expected_artifact_identity(lineage, proposal_digest)
+    revised["proposal_digest"] = proposal_digest
+    revised["artifact_identity"] = artifact_identity
+    revised["confirmation_requirements"] = _canonical_confirmation_requirements(
+        artifact_identity=artifact_identity,
+        artifact_revision=int(revised["artifact_revision"]),
+        lineage=lineage,
+        proposal_digest=proposal_digest,
+    )
+    revised["customer_confirmation_projection"] = _canonical_confirmation_projection(revised)
+    if dict(proposal) != original:
+        raise RuntimeError("revision_mutated_parent")
+    return {
+        "status": "revised_proposal_ready_for_review",
+        "material_revision_created": True,
+        "proposal": revised,
+        "semantic_diff": changes,
+        "parent_artifact_identity": parent_identity,
+        "fresh_confirmation_required": True,
+    }
+
+
+def classify_ordinary_customer_workflow(
+    *, customer_instruction: str, selected_paths: Sequence[str]
+) -> str:
+    """Select one D-079 workflow from ordinary language without an internal flag."""
+
+    normalized = " ".join(customer_instruction.casefold().split())
+    evidence_language = "review" in normalized and (
+        "selected file" in normalized or "these files" in normalized or "this file" in normalized
+    )
+    if evidence_language:
+        if not selected_paths:
+            raise D079WorkflowError(
+                _recovery(
+                    "selected_artifact_required",
+                    offending_class="ordinary_language_invocation",
+                    field="selected_paths",
+                    category="retain_instruction_and_request_exact_native_client_selection",
+                    local_preprocessing="native_client_exact_file_selection",
+                )
+            )
+        return "local_first_evidence_review"
+    blueprint_language = any(
+        token in normalized
+        for token in (
+            "algorithm blueprint",
+            "generation context",
+            "design a",
+            "build a",
+            "create a",
+            "quantum program",
+            "quantum circuit",
+            "qiskit",
+        )
+    )
+    if blueprint_language:
+        return "ide_first_blueprint_decision_and_confirmation"
+    raise D079WorkflowError(
+        _recovery(
+            "ordinary_language_workflow_not_identified",
+            offending_class="ordinary_language_invocation",
+            field="customer_instruction",
+            category="ask_one_bounded_workflow_clarification",
+            valid_portions_retained=True,
+        )
+    )
+
+
+def execute_ordinary_connected_assistant_workflow(
+    *,
+    customer_instruction: str,
+    selected_paths: Sequence[str],
+    blueprint_context: Mapping[str, Any] | None,
+    protected_call: ProtectedCall,
+    proposal: Mapping[str, Any] | None = None,
+    confirmation: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Execute the binding-owned route selected from the customer's ordinary words."""
+
+    selected_workflow = classify_ordinary_customer_workflow(
+        customer_instruction=customer_instruction,
+        selected_paths=selected_paths,
+    )
+    common = {
+        "schema_id": "qcoder.connected_assistant.d079_execution.v1",
+        "ok": True,
+        "selected_workflow": selected_workflow,
+        "route_source": "ordinary_customer_language",
+        "binding_owned_local_invocation": True,
+        "customer_internal_choreography_required": False,
+        "public_mcp_tool_added": False,
+        "retention": "process_and_discard",
+        "persistent": False,
+    }
+    if selected_workflow == "local_first_evidence_review":
+        result = review_selected_files_with_qcoder(
+            selected_paths=selected_paths,
+            protected_call=protected_call,
+        )
+        return {**common, "workflow_result": result, "terminal_state": "Result Review"}
+    if proposal is not None or confirmation is not None:
+        if proposal is None or confirmation is None:
+            raise D079WorkflowError(
+                _recovery(
+                    "incomplete_confirmation_invocation",
+                    offending_class="ordinary_language_invocation",
+                    category="retain_reviewed_proposal_and_request_exact_customer_confirmation",
+                    valid_portions_retained=True,
+                )
+            )
+        child = confirm_ide_first_blueprint(proposal=proposal, confirmation=confirmation)
+        materialized = materialize_confirmed_blueprint_workflow(
+            proposal=proposal,
+            confirmed_child=child,
+            protected_call=protected_call,
+        )
+        return {
+            **common,
+            "workflow_result": materialized,
+            "terminal_state": "Generation Context",
+        }
+    if not isinstance(blueprint_context, Mapping):
+        raise D079WorkflowError(
+            _recovery(
+                "assistant_structuring_required",
+                offending_class="ordinary_language_invocation",
+                field="blueprint_context",
+                category="assistant_structure_request_without_claiming_customer_provenance",
+                valid_portions_retained=True,
+            )
+        )
+    prepared = prepare_ide_first_blueprint(
+        customer_request=customer_instruction,
+        explicit_user_facts=blueprint_context.get("explicit_user_facts", {}),
+        assistant_structuring=blueprint_context.get("assistant_structuring", {}),
+        assistant_implementation_proposals=blueprint_context.get(
+            "assistant_implementation_proposals", {}
+        ),
+        customer_dispositions=blueprint_context.get("customer_dispositions", {}),
+        current_step_controls=blueprint_context.get("current_step_controls", ()),
+        durable_constraints=blueprint_context.get("durable_constraints", ()),
+        explicitly_promoted_controls=blueprint_context.get(
+            "explicitly_promoted_controls", ()
+        ),
+        profile_id=str(blueprint_context.get("profile_id") or "generic_qiskit"),
+        current_lineage_reference=blueprint_context.get("current_lineage_reference"),
+    )
+    return {
+        **common,
+        "workflow_result": prepared,
+        "terminal_state": "Customer confirmation required",
+    }
 
 
 def materialize_confirmed_blueprint_workflow(
@@ -882,6 +1389,7 @@ def review_selected_files_with_qcoder(
 ) -> dict[str, Any]:
     """Run exact-selection local processing and continue only to Result Review."""
 
+    resolved: list[Path] = []
     try:
         resolved = resolve_explicit_files(selected_paths)
         report = build_local_evidence_review(selected_paths, python_profile=python_profile)
@@ -893,14 +1401,41 @@ def review_selected_files_with_qcoder(
             if "limit" in message
             else "unsupported_or_invalid_selected_artifact"
         )
-        raise D079WorkflowError(
-            _recovery(
+        recovery = _recovery(
                 category,
                 offending_class="selected_artifact",
                 category="correct_exact_selection_and_retry_local_processing",
                 local_preprocessing="local_qcoder_evidence",
             )
-        ) from exc
+        if category == "selected_artifact_limit" and resolved:
+            safe_selected = []
+            for position, path in enumerate(resolved, start=1):
+                digest = sha256()
+                with path.open("rb") as stream:
+                    for block in iter(lambda: stream.read(1024 * 1024), b""):
+                        digest.update(block)
+                safe_selected.append(
+                    {
+                        "position": position,
+                        "selection": "exact_customer_selected_artifact",
+                        "content_identity": digest.hexdigest(),
+                        "raw_artifact_bytes": path.stat().st_size,
+                    }
+                )
+            recovery["limit_receipt"] = {
+                "schema_id": "qcoder.connected_assistant.selected_artifact_limit.v1",
+                "coverage_status": "LIMITED",
+                "local_processing_result": "supported_selected_artifact_size_limit",
+                "selected_artifacts": safe_selected,
+                "selected_artifact_count": len(safe_selected),
+                "raw_artifact_remained_local": True,
+                "protected_request_bytes": 0,
+                "protected_transfer_performed": False,
+                "silent_truncation": False,
+                "downstream_complete_status_permitted": False,
+                "recovery": "Segment into explicitly selected supported artifacts and retry the same local-first workflow.",
+            }
+        raise D079WorkflowError(recovery) from exc
     projection = _protected_projection(report, safe)
     _assert_protected_projection(projection)
     receipt = {

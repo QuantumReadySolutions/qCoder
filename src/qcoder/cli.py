@@ -1024,6 +1024,7 @@ def _cmd_current_loop(argv: list[str]) -> int:
         CurrentLoopCoordinator,
     )
     from qcoder.current_loop import CurrentLoopError
+    from qcoder.d079_workflows import D079WorkflowError
 
     parser = argparse.ArgumentParser(
         prog="qcoder current-loop",
@@ -1879,6 +1880,26 @@ def _cmd_current_loop(argv: list[str]) -> int:
         default="user_selected",
     )
 
+    connected_assistant = sub.add_parser(
+        "connected-assistant-workflow",
+        help=(
+            "Execute qCoder's binding-owned ordinary-language Blueprint or exact-selected-file "
+            "Evidence Review route. The connected-assistant binding constructs the input envelope."
+        ),
+    )
+    _add_current_loop_transport_arguments(
+        connected_assistant, DEFAULT_BASE_URL, default_token_file()
+    )
+    connected_assistant.add_argument(
+        "--operation-input-stdin",
+        action="store_true",
+        required=True,
+        help=(
+            "Read the bounded binding-constructed invocation envelope from UTF-8 stdin. "
+            "Customers do not author this envelope."
+        ),
+    )
+
     abandon = sub.add_parser("abandon", help="Explicitly abandon the active local loop.")
     abandon.add_argument(
         "--approve",
@@ -2203,8 +2224,46 @@ def _cmd_current_loop(argv: list[str]) -> int:
                 path=args.path,
                 provenance=args.provenance,
             )
+        elif command == "connected-assistant-workflow":
+            raw_envelope = sys.stdin.buffer.read(1_048_577)
+            if len(raw_envelope) > 1_048_576:
+                parser.error("connected assistant operation input exceeds 1048576 bytes")
+            try:
+                envelope = json.loads(raw_envelope.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                parser.error("connected assistant operation input must be UTF-8 JSON")
+            if not isinstance(envelope, dict):
+                parser.error("connected assistant operation input must be an object")
+            instruction = envelope.get("customer_instruction")
+            selected_paths = envelope.get("selected_paths", [])
+            if not isinstance(instruction, str) or not isinstance(selected_paths, list) or not all(
+                isinstance(item, str) for item in selected_paths
+            ):
+                parser.error("connected assistant operation input fields are invalid")
+            result = coordinator.execute_connected_assistant_workflow(
+                customer_instruction=instruction,
+                selected_paths=selected_paths,
+                blueprint_context=(
+                    envelope.get("blueprint_context")
+                    if isinstance(envelope.get("blueprint_context"), dict)
+                    else None
+                ),
+                proposal=(
+                    envelope.get("proposal")
+                    if isinstance(envelope.get("proposal"), dict)
+                    else None
+                ),
+                confirmation=(
+                    envelope.get("confirmation")
+                    if isinstance(envelope.get("confirmation"), dict)
+                    else None
+                ),
+            )
         else:
             result = coordinator.abandon(explicit_authority=args.approve)
+    except D079WorkflowError as exc:
+        print(json.dumps({"ok": False, **exc.recovery}, indent=2, sort_keys=True))
+        return 2
     except (ValueError, OSError) as exc:
         if (
             command == "activate"

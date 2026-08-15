@@ -2604,6 +2604,62 @@ class CurrentLoopCoordinator:
             protected_call=self.transport.call,
         )
 
+    def revise_connected_assistant_blueprint(
+        self,
+        *,
+        proposal: Mapping[str, Any],
+        semantic_changes: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Create a bounded internal proposal revision with immutable parent lineage."""
+
+        from qcoder.d079_workflows import revise_ide_first_blueprint
+
+        return revise_ide_first_blueprint(
+            proposal=proposal,
+            semantic_changes=semantic_changes,
+        )
+
+    def execute_connected_assistant_workflow(
+        self,
+        *,
+        customer_instruction: str,
+        selected_paths: Sequence[str] = (),
+        blueprint_context: Mapping[str, Any] | None = None,
+        proposal: Mapping[str, Any] | None = None,
+        confirmation: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Execute the binding-owned D-079 route selected from ordinary language."""
+
+        from qcoder.d079_workflows import (
+            D079WorkflowError,
+            execute_ordinary_connected_assistant_workflow,
+        )
+
+        if self.local_only_surface or self.transport is None:
+            raise D079WorkflowError(
+                {
+                    "schema_id": "qcoder.connected_assistant.structured_recovery.v1",
+                    "schema_version": 1,
+                    "reason_category": "protected_service_unavailable",
+                    "offending_class": "binding_owned_invocation",
+                    "bounded_field": None,
+                    "affected_decision": None,
+                    "recovery_category": "retain_local_inputs_and_retry_when_available",
+                    "wrong_artifact_layer": None,
+                    "required_local_preprocessing": None,
+                    "valid_portions_may_be_retained": True,
+                    "fail_closed": True,
+                }
+            )
+        return execute_ordinary_connected_assistant_workflow(
+            customer_instruction=customer_instruction,
+            selected_paths=selected_paths,
+            blueprint_context=blueprint_context,
+            protected_call=self.transport.call,
+            proposal=proposal,
+            confirmation=confirmation,
+        )
+
     def review_customer_selected_files(
         self,
         *,
