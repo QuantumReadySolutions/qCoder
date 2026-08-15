@@ -240,6 +240,7 @@ def main() -> int:
         raise RuntimeError("local path crossed protected boundary")
     if any(item["evidence_payload_selected_raw_source_detected"] for item in transport.calls):
         raise RuntimeError("raw or neighboring source crossed protected boundary")
+    evidence_call_receipts = deepcopy(transport.calls)
 
     scale = fixtures / "million_gate_scale.qasm"
     start = time.monotonic()
@@ -337,7 +338,7 @@ def main() -> int:
         "ordinary_customer_instruction": "Review this selected file with qCoder.",
         "workflow_result": evidence,
         "binding_owned_execution": evidence_execution,
-        "protected_call_receipts": transport.calls,
+        "protected_call_receipts": evidence_call_receipts,
         "selected_path_crossed_protected_boundary": False,
         "raw_artifact_crossed_protected_boundary": False,
         "neighbor_inspected": False,
