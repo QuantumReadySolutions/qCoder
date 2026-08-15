@@ -155,6 +155,8 @@ def main() -> int:
     confirmed = coordinator.confirm_connected_assistant_blueprint(
         proposal=proposal, confirmation=proposal["confirmation_requirements"]
     )
+    blueprint_call_receipts = deepcopy(transport.calls)
+    transport.calls.clear()
     negatives: dict[str, Any] = {}
     for name, field, value in (
         ("stale_revision", "artifact_revision", 0),
@@ -218,6 +220,7 @@ def main() -> int:
         "ordinary_customer_request": customer_request,
         "proposal": proposal,
         "confirmed_derived_artifact": confirmed,
+        "protected_call_receipts": blueprint_call_receipts,
         "negative_proofs": negatives,
         "customer_supplied_internal_choreography": False,
         "authority_separation": confirmed["confirmed_semantic_child"]["authority"],
