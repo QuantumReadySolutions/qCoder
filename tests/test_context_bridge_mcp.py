@@ -411,10 +411,28 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
         "action": "none",
     }
     assert binding["workstyle_routes"]["single_capability"] == {
-        "trigger": "explicit_bounded_capability_request",
+        "trigger": (
+            "explicit_bounded_capability_request_not_classified_as_named_d079_workflow"
+        ),
         "action": "use_applicable_mcp_tool",
         "activates_context_loop": False,
     }
+    named = binding["workstyle_routes"]["named_d079_workflow"]
+    assert binding["workstyle_routes"]["routing_precedence"] == [
+        "available_inactive",
+        "explicit_active_build",
+        "supported_named_d079_workflow",
+        "generic_single_capability_fallthrough",
+    ]
+    assert named["named_workflow_precedence"]["precedes"] == (
+        "generic_single_capability_fallthrough"
+    )
+    assert named["named_workflows"]["algorithm_blueprint_generation_context"][
+        "operation"
+    ] == "connected_assistant_workflow"
+    assert named["named_workflows"]["selected_file_evidence_review"][
+        "raw_mcp_default_entrypoint"
+    ] is False
     assert binding["workstyle_routes"]["active_build"] == {
         "trigger": "explicit_use_qcoder_for_this_build_or_accepted_offer",
         "action": "execute_fresh_active_build_bootstrap_invocation",

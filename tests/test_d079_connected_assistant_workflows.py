@@ -16,9 +16,12 @@ from qcoder.context_bridge_mcp import (
     build_client_binding_descriptor,
 )
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
+from qcoder.current_loop_invocation import HOSTED_CAPABLE, operation_transport_inventory
 from qcoder.d079_workflows import (
     D079WorkflowError,
     _assert_protected_projection,
+    binding_default_routing_contract,
+    classify_binding_default_route,
     confirm_ide_first_blueprint,
     prepare_ide_first_blueprint,
     review_selected_files_with_qcoder,
@@ -477,7 +480,7 @@ def test_public_tool_inventory_remains_exactly_twelve() -> None:
     descriptor = build_client_binding_descriptor(coordinator_prefix=["python", "-m", "qcoder"])[
         "client_binding_contract"
     ]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v21"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v22"
     assert descriptor["d079_orchestration"]["public_tool_count"] == 12
     assert descriptor["d079_orchestration"]["blueprint_workflow"]["decision_aware_by_default"] is True
     assert descriptor["d079_orchestration"]["evidence_review_workflow"]["repository_discovery"] is False
@@ -493,9 +496,128 @@ def test_public_tool_inventory_remains_exactly_twelve() -> None:
     ]
     assert invocation["customer_constructs_input_envelope"] is False
     assert invocation["public_mcp_tool_added"] is False
-    assert "decision-aware workflow by default" in CLIENT_ACTIVATION_INSTRUCTIONS
+    normalized_instructions = " ".join(CLIENT_ACTIVATION_INSTRUCTIONS.split()).casefold()
+    assert "decision-aware workflow by default" in normalized_instructions
     assert "Review these selected files with qCoder" in CLIENT_ACTIVATION_INSTRUCTIONS
     assert "Never scan the repository" in CLIENT_ACTIVATION_INSTRUCTIONS
+
+
+def test_m4_blueprint_named_route_precedes_generic_single_capability() -> None:
+    request = "Help me design a Bell-state Qiskit program. Do not edit or run anything yet."
+    decision = classify_binding_default_route(customer_instruction=request)
+    assert decision == {
+        "schema_id": "qcoder.connected_assistant.route_decision.v1",
+        "selected_route": "named_d079_workflow",
+        "action": "execute_binding_owned_current_loop_operation",
+        "operation": "connected_assistant_workflow",
+        "subcommand": "connected-assistant-workflow",
+        "matched_named_workflow": "algorithm_blueprint_generation_context",
+        "workflow": "ide_first_blueprint_decision_and_confirmation",
+        "named_d079_route_preceded_generic_single_capability": True,
+        "customer_constructs_operation_envelope": False,
+        "raw_mcp_default_entrypoint": False,
+        "deterministic_single_route": True,
+        "routing_contract": "qcoder.connected_assistant.default_workstyle_routing.v1",
+    }
+    contract = binding_default_routing_contract()
+    assert contract["deterministic_single_route"] is True
+    assert contract["dual_action_permitted"] is False
+    assert contract["recursive_routing_permitted"] is False
+    assert contract["selected_action_cardinality"] == "exactly_one"
+    assert contract["named_workflow_precedence"]["precedes"] == (
+        "generic_single_capability_fallthrough"
+    )
+    assert contract["customer_inputs_exclude"] == [
+        "qcoder_current_loop_command",
+        "operation_input_json",
+        "decision_loop_flag",
+        "mcp_tool_name",
+        "decision_id",
+        "digest",
+        "lineage_identity",
+    ]
+    scale_decision = classify_binding_default_route(
+        customer_instruction=(
+            "Design a bounded semantic handling plan for an approximately million-gate "
+            "selected circuit. Do not edit or run anything yet."
+        )
+    )
+    assert scale_decision["matched_named_workflow"] == (
+        "algorithm_blueprint_generation_context"
+    )
+
+
+def test_m4_evidence_named_route_precedes_raw_mcp_and_retains_selection_authority(
+    tmp_path: Path,
+) -> None:
+    selected = tmp_path / "selected.py"
+    selected.write_text("x = 1\n", encoding="utf-8")
+    decision = classify_binding_default_route(
+        customer_instruction="Review these selected files with qCoder.",
+        selected_paths=[str(selected)],
+    )
+    assert decision["selected_route"] == "named_d079_workflow"
+    assert decision["matched_named_workflow"] == "selected_file_evidence_review"
+    assert decision["operation"] == "connected_assistant_workflow"
+    assert decision["raw_mcp_default_entrypoint"] is False
+    route = binding_default_routing_contract()["named_workflows"][
+        "selected_file_evidence_review"
+    ]
+    assert route["native_client_selected_paths_required"] is True
+    assert route["customer_constructs_operation_envelope"] is False
+
+
+def test_m4_generic_active_and_inactive_routes_are_deterministic_fallthroughs() -> None:
+    generic = classify_binding_default_route(
+        customer_instruction="Create a prompt context with qCoder."
+    )
+    assert generic["selected_route"] == "single_capability"
+    assert generic["action"] == "use_applicable_mcp_tool"
+    assert generic["raw_mcp_default_entrypoint"] is True
+    active = classify_binding_default_route(
+        customer_instruction="Use qCoder for this build. Help me plan the work."
+    )
+    assert active["selected_route"] == "active_build"
+    assert active["action"] == "execute_fresh_active_build_bootstrap_invocation"
+    inactive = classify_binding_default_route(customer_instruction="")
+    assert inactive["selected_route"] == "available_inactive"
+    for decision in (generic, active, inactive):
+        assert decision["deterministic_single_route"] is True
+        assert decision["matched_named_workflow"] is None
+
+
+def test_m4_operation_inventory_and_activation_instructions_are_consistent() -> None:
+    inventory = operation_transport_inventory()
+    row = next(
+        item
+        for item in inventory["operations"]
+        if item["operation"] == "connected_assistant_workflow"
+    )
+    assert row == {
+        "operation": "connected_assistant_workflow",
+        "subcommand": "connected-assistant-workflow",
+        "transport": HOSTED_CAPABLE,
+        "binding_owned_internal_operation": True,
+        "public_context_bridge_tool": False,
+        "input_channel": "binding_constructed_utf8_json_stdin",
+        "customer_constructs_input_envelope": False,
+        "composes_existing_context_bridge_tools": True,
+    }
+    descriptor = build_client_binding_descriptor(
+        coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
+    )["client_binding_contract"]
+    structured = descriptor["workstyle_routes"]["named_d079_workflow"]
+    assert structured == descriptor["d079_orchestration"]["default_routing"]
+    instructions = CLIENT_ACTIVATION_INSTRUCTIONS
+    normalized = " ".join(instructions.split()).casefold()
+    assert instructions.index("Named D-079 workflow override") < instructions.index(
+        "Single capability fallthrough"
+    )
+    assert "do not begin with or expose raw individual mcp-tool choreography" in normalized
+    assert "Single capability: for an explicit bounded" not in instructions
+    assert len(EXPECTED_TOOLS) == 12
+    assert "connected_assistant_workflow" not in EXPECTED_TOOLS
+    assert "connected-assistant-workflow" not in EXPECTED_TOOLS
 
 
 def test_production_relevant_coordinator_path_owns_both_workflows(tmp_path: Path) -> None:

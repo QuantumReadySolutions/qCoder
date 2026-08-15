@@ -53,6 +53,7 @@ def test_inventory_is_complete_deterministic_and_diagnostics_only() -> None:
         "status",
         "activate",
         "prepare-generation",
+        "connected-assistant-workflow",
         "record-ide-authority",
         "register-artifacts",
         "authorize-artifacts",
@@ -109,6 +110,7 @@ def test_all_local_only_invocations_exclude_hosted_transport() -> None:
 def test_hosted_invocations_own_exact_transport_and_platform_serialization() -> None:
     for subcommand in (
         "prepare-generation",
+        "connected-assistant-workflow",
         "enrich-authorized-evidence",
         "review-build",
         "propose-change",
@@ -231,8 +233,8 @@ def test_binding_v7_has_no_global_transport_routing_or_ambiguous_instruction(
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v21"
-    assert descriptor["schema_version"] == 21
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v22"
+    assert descriptor["schema_version"] == 22
     assert descriptor["operation_invocation_contract"]["global_transport_argument_array"] is False
     assert descriptor["operation_transport_inventory"]["diagnostics_only"] is True
     assert (

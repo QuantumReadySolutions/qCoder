@@ -29,8 +29,8 @@ from qcoder.current_loop_iteration import ITERATION_AUTHORITY_RECEIPT_SCHEMA_ID
 
 INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v6"
 INVOCATION_CONTRACT_SCHEMA_VERSION = 6
-OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v4"
-OPERATION_INVENTORY_SCHEMA_VERSION = 4
+OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v5"
+OPERATION_INVENTORY_SCHEMA_VERSION = 5
 
 LOCAL_ONLY = "local_only"
 HOSTED_CAPABLE = "hosted_capable"
@@ -44,6 +44,16 @@ _OPERATION_ROWS: tuple[dict[str, Any], ...] = (
         "operation": "prepare_generation",
         "subcommand": "prepare-generation",
         "transport": HOSTED_CAPABLE,
+    },
+    {
+        "operation": "connected_assistant_workflow",
+        "subcommand": "connected-assistant-workflow",
+        "transport": HOSTED_CAPABLE,
+        "binding_owned_internal_operation": True,
+        "public_context_bridge_tool": False,
+        "input_channel": "binding_constructed_utf8_json_stdin",
+        "customer_constructs_input_envelope": False,
+        "composes_existing_context_bridge_tools": True,
     },
     {
         "operation": "record_ide_authority",
@@ -217,6 +227,7 @@ _BOOLEAN_FLAGS = frozenset(
         "--explicit",
         "--request-stdin",
         "--instruction-stdin",
+        "--operation-input-stdin",
         "--document-stdin",
         "--stop",
         "--use-current-intent",
@@ -383,6 +394,8 @@ def build_operation_invocation(
         input_channel = "exact_current_customer_instruction_stdin"
     elif any("document-stdin" in str(item) for item in required_flags):
         input_channel = "bounded_customer_contract_document_stdin"
+    elif subcommand == "connected-assistant-workflow":
+        input_channel = "binding_constructed_utf8_json_stdin"
     elif subcommand == "prepare-adaptive-intent":
         input_channel = "qcoder_owned_single_use_json_file"
     elif dynamic_arguments or required_flags:

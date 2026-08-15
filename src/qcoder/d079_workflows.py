@@ -43,6 +43,7 @@ CONFIRMED_BLUEPRINT_SCHEMA_ID = "qcoder.connected_assistant.confirmed_blueprint.
 EVIDENCE_WORKFLOW_SCHEMA_ID = "qcoder.connected_assistant.local_first_evidence_review.v1"
 RECOVERY_SCHEMA_ID = "qcoder.connected_assistant.structured_recovery.v1"
 INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.connected_assistant.d079_local_invocation.v1"
+DEFAULT_ROUTING_SCHEMA_ID = "qcoder.connected_assistant.default_workstyle_routing.v1"
 DECISION_AWARE_PATH = "readiness_resolution_v1"
 MAX_PROTECTED_EVIDENCE_BYTES = 131_072
 MAX_SEMANTIC_DIFF_ENTRIES = 64
@@ -93,6 +94,7 @@ def d079_orchestration_contract_snapshot(
         "public_tool_inventory": list(tools),
         "public_tool_count": 12,
         "new_customer_visible_tools": [],
+        "default_routing": binding_default_routing_contract(),
         "binding_owned_local_invocation": connected_assistant_invocation_contract(
             coordinator_prefix=coordinator_prefix
         ),
@@ -129,6 +131,67 @@ def d079_orchestration_contract_snapshot(
     return payload
 
 
+def binding_default_routing_contract() -> dict[str, Any]:
+    """Return one authoritative precedence table for named and generic requests."""
+
+    named_common = {
+        "action": "execute_binding_owned_current_loop_operation",
+        "operation": "connected_assistant_workflow",
+        "subcommand": "connected-assistant-workflow",
+        "operation_input_owner": "qcoder_connected_assistant_binding",
+        "customer_constructs_operation_envelope": False,
+        "raw_mcp_default_entrypoint": False,
+        "raw_mcp_role": "composed_or_diagnostic_primitive",
+        "activates_full_context_loop": False,
+    }
+    return {
+        "schema_id": DEFAULT_ROUTING_SCHEMA_ID,
+        "schema_version": 1,
+        "deterministic_single_route": True,
+        "dual_action_permitted": False,
+        "recursive_routing_permitted": False,
+        "selected_action_cardinality": "exactly_one",
+        "decision_order": [
+            "available_inactive",
+            "explicit_active_build",
+            "supported_named_d079_workflow",
+            "generic_single_capability_fallthrough",
+        ],
+        "named_workflow_precedence": {
+            "precedes": "generic_single_capability_fallthrough",
+            "falls_through_when_unmatched": True,
+        },
+        "named_workflows": {
+            "algorithm_blueprint_generation_context": {
+                **named_common,
+                "classifier": "ordinary_language_planning_or_design_for_quantum_program",
+                "workflow": "ide_first_blueprint_decision_and_confirmation",
+                "native_client_selected_paths_required": False,
+            },
+            "selected_file_evidence_review": {
+                **named_common,
+                "classifier": "ordinary_language_review_of_exact_selected_files_with_qcoder",
+                "workflow": "local_first_evidence_review",
+                "native_client_selected_paths_required": True,
+            },
+        },
+        "generic_single_capability_fallthrough": {
+            "trigger": "explicit_bounded_capability_request_not_classified_as_named_d079_workflow",
+            "action": "use_applicable_mcp_tool",
+            "activates_context_loop": False,
+        },
+        "customer_inputs_exclude": [
+            "qcoder_current_loop_command",
+            "operation_input_json",
+            "decision_loop_flag",
+            "mcp_tool_name",
+            "decision_id",
+            "digest",
+            "lineage_identity",
+        ],
+    }
+
+
 def connected_assistant_invocation_contract(
     *, coordinator_prefix: Sequence[str] = ("python", "-m", "qcoder")
 ) -> dict[str, Any]:
@@ -163,6 +226,7 @@ def connected_assistant_invocation_contract(
             "algorithm_blueprint_generation_context": "ide_first_blueprint_decision_and_confirmation",
             "review_selected_files_with_qcoder": "local_first_evidence_review",
         },
+        "default_route_precedence": binding_default_routing_contract(),
         "lower_level_mcp_tools": "diagnostic_or_composed_primitives_not_customer_choreography",
         "native_client_exact_file_selection_required": True,
         "repository_discovery": False,
@@ -982,18 +1046,26 @@ def classify_ordinary_customer_workflow(
                 )
             )
         return "local_first_evidence_review"
-    blueprint_language = any(
+    planning_language = any(
         token in normalized
         for token in (
             "algorithm blueprint",
             "generation context",
             "design a",
+            "design the",
             "build a",
             "create a",
-            "quantum program",
-            "quantum circuit",
-            "qiskit",
+            "plan a",
         )
+    )
+    quantum_program_subject = any(
+        token in normalized
+        for token in ("quantum program", "quantum circuit", "circuit", "qiskit", "bell-state")
+    )
+    blueprint_language = (
+        "algorithm blueprint" in normalized
+        or "generation context" in normalized
+        or (planning_language and quantum_program_subject)
     )
     if blueprint_language:
         return "ide_first_blueprint_decision_and_confirmation"
@@ -1008,6 +1080,78 @@ def classify_ordinary_customer_workflow(
     )
 
 
+def classify_binding_default_route(
+    *, customer_instruction: str, selected_paths: Sequence[str] = ()
+) -> dict[str, Any]:
+    """Apply the binding's authoritative workstyle precedence to one request."""
+
+    normalized = " ".join(customer_instruction.casefold().split())
+    contract = binding_default_routing_contract()
+    if not normalized:
+        selected_route = "available_inactive"
+        return {
+            "schema_id": "qcoder.connected_assistant.route_decision.v1",
+            "selected_route": selected_route,
+            "action": "none",
+            "matched_named_workflow": None,
+            "named_d079_route_preceded_generic_single_capability": False,
+            "deterministic_single_route": True,
+            "raw_mcp_default_entrypoint": False,
+            "routing_contract": contract["schema_id"],
+        }
+    if "use qcoder for this build" in normalized:
+        return {
+            "schema_id": "qcoder.connected_assistant.route_decision.v1",
+            "selected_route": "active_build",
+            "action": "execute_fresh_active_build_bootstrap_invocation",
+            "matched_named_workflow": None,
+            "named_d079_route_preceded_generic_single_capability": False,
+            "deterministic_single_route": True,
+            "raw_mcp_default_entrypoint": False,
+            "routing_contract": contract["schema_id"],
+        }
+    try:
+        workflow = classify_ordinary_customer_workflow(
+            customer_instruction=customer_instruction,
+            selected_paths=selected_paths,
+        )
+    except D079WorkflowError as exc:
+        if exc.recovery.get("reason_category") == "selected_artifact_required":
+            raise
+        workflow = None
+    if workflow is not None:
+        route_id = (
+            "algorithm_blueprint_generation_context"
+            if workflow == "ide_first_blueprint_decision_and_confirmation"
+            else "selected_file_evidence_review"
+        )
+        named = contract["named_workflows"][route_id]
+        return {
+            "schema_id": "qcoder.connected_assistant.route_decision.v1",
+            "selected_route": "named_d079_workflow",
+            "action": named["action"],
+            "operation": named["operation"],
+            "subcommand": named["subcommand"],
+            "matched_named_workflow": route_id,
+            "workflow": workflow,
+            "named_d079_route_preceded_generic_single_capability": True,
+            "customer_constructs_operation_envelope": False,
+            "raw_mcp_default_entrypoint": False,
+            "deterministic_single_route": True,
+            "routing_contract": contract["schema_id"],
+        }
+    return {
+        "schema_id": "qcoder.connected_assistant.route_decision.v1",
+        "selected_route": "single_capability",
+        "action": "use_applicable_mcp_tool",
+        "matched_named_workflow": None,
+        "named_d079_route_preceded_generic_single_capability": False,
+        "raw_mcp_default_entrypoint": True,
+        "deterministic_single_route": True,
+        "routing_contract": contract["schema_id"],
+    }
+
+
 def execute_ordinary_connected_assistant_workflow(
     *,
     customer_instruction: str,
@@ -1019,15 +1163,27 @@ def execute_ordinary_connected_assistant_workflow(
 ) -> dict[str, Any]:
     """Execute the binding-owned route selected from the customer's ordinary words."""
 
-    selected_workflow = classify_ordinary_customer_workflow(
+    route_decision = classify_binding_default_route(
         customer_instruction=customer_instruction,
         selected_paths=selected_paths,
     )
+    if route_decision.get("selected_route") != "named_d079_workflow":
+        raise D079WorkflowError(
+            _recovery(
+                "binding_owned_operation_route_mismatch",
+                offending_class="ordinary_language_invocation",
+                field="customer_instruction",
+                category="apply_authoritative_default_route_fallthrough",
+                valid_portions_retained=True,
+            )
+        )
+    selected_workflow = str(route_decision["workflow"])
     common = {
         "schema_id": "qcoder.connected_assistant.d079_execution.v1",
         "ok": True,
         "selected_workflow": selected_workflow,
         "route_source": "ordinary_customer_language",
+        "machine_readable_route_decision": route_decision,
         "binding_owned_local_invocation": True,
         "customer_internal_choreography_required": False,
         "public_mcp_tool_added": False,

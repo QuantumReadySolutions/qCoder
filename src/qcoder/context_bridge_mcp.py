@@ -153,8 +153,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 21
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v21"
+CLIENT_BINDING_SCHEMA_VERSION = 22
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v22"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -168,17 +168,16 @@ offer, and no explicit bounded qCoder capability request, perform no qCoder oper
 invoke the coordinator, call a qCoder MCP domain tool, or create qCoder state. A proactive offer
 is permitted but must not activate qCoder without acceptance.
 
-Single capability: for an explicit bounded qCoder capability request without active-build
-activation, start with the applicable existing Context Bridge MCP tool. If the structured result
-is a canonical preparatory state for the customer's named workflow, quietly follow only the
-same-workflow continuation declared by the named-workflow completion contract. Do not invoke
-qcoder current-loop, activate a complete Context Loop, attach the bounded result to loop lineage,
-transform it into governing intent, or create continuity. Direct bounded use remains legitimate
-in this workstyle and ends at the named customer outcome, a genuine blocker, or a real customer
-authority or decision boundary.
+Named D-079 workflow override: before applying the generic single-capability route, classify
+whether ordinary customer language requests “Algorithm Blueprint / Generation Context” or
+exact-selected-file Evidence Review equivalent to “Review these selected files with qCoder.” For
+either named workflow, invoke the binding-owned local connected-assistant-workflow operation. Do
+not begin with or expose raw individual MCP-tool choreography. The operation composes existing
+capabilities internally without activating a full Context Loop, and the customer never constructs
+its command or input envelope.
 
-For “Algorithm Blueprint / Generation Context,” invoke the binding-owned local
-connected-assistant-workflow operation. It executes qCoder's decision-aware workflow by default.
+For “Algorithm Blueprint / Generation Context,” that operation executes qCoder's decision-aware
+workflow by default.
 Preserve the customer's exact request, keep assistant structuring and proposals separately
 attributed, keep current-step authority controls out of durable intent unless explicitly promoted,
 present the concise confirmation projection, and bind confirmation to the exact reviewed revision.
@@ -189,6 +188,14 @@ only the customer's exact native-client file selection. It runs canonical eviden
 locally, derives a separate share-safe projection,
 send only that bounded projection to protected tools, and quietly continue the named workflow to
 Result Review. Never scan the repository, inspect neighbors, or send local paths or raw artifacts.
+
+Single capability fallthrough: only when an explicit bounded qCoder capability request is not one
+of those named D-079 workflows, start with the applicable existing Context Bridge MCP tool. If the
+structured result is a canonical preparatory state for another named workflow, quietly follow only
+the same-workflow continuation declared by the named-workflow completion contract. Do not activate
+a complete Context Loop, attach the bounded result to loop lineage, transform it into governing
+intent, or create continuity. Direct bounded use remains legitimate and ends at the named customer
+outcome, a genuine blocker, or a real customer authority or decision boundary.
 
 Active build: explicit wording equivalent to “Use qCoder for this build.” or explicit acceptance
 of a qCoder activation offer routes to the local coordinator first. Then follow
@@ -542,6 +549,7 @@ def build_client_binding_descriptor(
     executable = str(coordinator_prefix[0])
     post_result_contract = invocation_contract_snapshot()
     bootstrap_contract = bootstrap_contract_snapshot(executable=executable)
+    d079_contract = d079_orchestration_contract_snapshot(EXPECTED_TOOLS, coordinator_prefix)
     return {
         "client_binding_contract": {
             "schema_id": CLIENT_BINDING_SCHEMA_ID,
@@ -566,9 +574,7 @@ def build_client_binding_descriptor(
                 EXPECTED_TOOLS
             ),
             "named_workflow_completion": named_workflow_completion_contract(EXPECTED_TOOLS),
-            "d079_orchestration": d079_orchestration_contract_snapshot(
-                EXPECTED_TOOLS, coordinator_prefix
-            ),
+            "d079_orchestration": d079_contract,
             "retention_evidence": retention_evidence_contract(),
             "cursor_desktop_reference_profile": cursor_desktop_reference_profile(),
             "artifact_format_contract": artifact_format_contract_snapshot(),
@@ -632,8 +638,14 @@ def build_client_binding_descriptor(
                     "trigger": "no_explicit_qcoder_request",
                     "action": "none",
                 },
+                "routing_precedence": deepcopy(
+                    d079_contract["default_routing"]["decision_order"]
+                ),
+                "named_d079_workflow": deepcopy(d079_contract["default_routing"]),
                 "single_capability": {
-                    "trigger": "explicit_bounded_capability_request",
+                    "trigger": (
+                        "explicit_bounded_capability_request_not_classified_as_named_d079_workflow"
+                    ),
                     "action": "use_applicable_mcp_tool",
                     "activates_context_loop": False,
                 },

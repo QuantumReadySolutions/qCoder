@@ -278,8 +278,8 @@ def test_binding_v18_routes_governance_and_finish_without_document_fanout() -> N
         python_executable="/runtime/python",
     )
     normalized_instructions = " ".join(instructions.split())
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v21"
-    assert binding["schema_version"] == 21
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v22"
+    assert binding["schema_version"] == 22
     assert len(EXPECTED_TOOLS) == 12
     assert "contract-set-generation-governance" in normalized_instructions
     assert "Do not call contract status first" in normalized_instructions
