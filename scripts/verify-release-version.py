@@ -5,12 +5,11 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import re
 import tarfile
 import tomllib
 import zipfile
-
+from pathlib import Path
 
 OLD_CANDIDATE_VERSION = "0.6.0a1"
 RELEASE_METADATA_FILENAME = "release-version.json"
@@ -126,6 +125,9 @@ def customer_pin_versions(roots: list[Path]) -> dict[str, list[str]]:
 
 
 def _qcoder_alpha_version(version: str) -> tuple[int, int, int, int]:
+    private_candidate = PRIVATE_CANDIDATE_PATTERN.fullmatch(version)
+    if private_candidate is not None:
+        version = private_candidate.group("public_version")
     match = QCODER_ALPHA_VERSION_PATTERN.fullmatch(version)
     if match is None:
         raise ValueError(f"unsupported_qcoder_release_line:{version}")

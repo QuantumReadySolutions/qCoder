@@ -125,6 +125,7 @@ from qcoder.development_evidence import (
     EVIDENCE_CONFIDENCE_LABELS as DECISION_EVIDENCE_CONFIDENCE_LABELS,
     RELATIONSHIP_DECLARATION_STATES,
 )
+from qcoder.d079_workflows import d079_orchestration_contract_snapshot
 
 DEFAULT_BASE_URL = "https://preview-api.qcoder.ai"
 ROUTE_PATH = "/v0/internal/hosted-mcp/context"
@@ -152,8 +153,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 19
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v19"
+CLIENT_BINDING_SCHEMA_VERSION = 20
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v20"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -175,6 +176,17 @@ qcoder current-loop, activate a complete Context Loop, attach the bounded result
 transform it into governing intent, or create continuity. Direct bounded use remains legitimate
 in this workstyle and ends at the named customer outcome, a genuine blocker, or a real customer
 authority or decision boundary.
+
+For “Algorithm Blueprint / Generation Context,” use qCoder's decision-aware workflow by default.
+Preserve the customer's exact request, keep assistant structuring and proposals separately
+attributed, keep current-step authority controls out of durable intent unless explicitly promoted,
+present the concise confirmation projection, and bind confirmation to the exact reviewed revision.
+The customer never supplies qCoder's internal mode, decision references, digests, or lineage.
+
+For “Review these selected files with qCoder,” use only the customer's exact native-client file
+selection. Run canonical evidence processing locally, derive a separate share-safe projection,
+send only that bounded projection to protected tools, and quietly continue the named workflow to
+Result Review. Never scan the repository, inspect neighbors, or send local paths or raw artifacts.
 
 Active build: explicit wording equivalent to “Use qCoder for this build.” or explicit acceptance
 of a qCoder activation offer routes to the local coordinator first. Then follow
@@ -552,6 +564,7 @@ def build_client_binding_descriptor(
                 EXPECTED_TOOLS
             ),
             "named_workflow_completion": named_workflow_completion_contract(EXPECTED_TOOLS),
+            "d079_orchestration": d079_orchestration_contract_snapshot(EXPECTED_TOOLS),
             "retention_evidence": retention_evidence_contract(),
             "cursor_desktop_reference_profile": cursor_desktop_reference_profile(),
             "artifact_format_contract": artifact_format_contract_snapshot(),
@@ -1376,6 +1389,7 @@ def evidence_review_contract_snapshot() -> dict[str, Any]:
         "context_scope": "current_artifact_current_session",
         "retention": "process_and_discard",
         "named_workflow_completion": named_workflow_completion_contract(EXPECTED_TOOLS),
+        "d079_orchestration": d079_orchestration_contract_snapshot(EXPECTED_TOOLS),
         "retention_evidence": retention_evidence_contract(),
         "boundaries": list(EVIDENCE_REVIEW_BOUNDARIES),
         "algorithm_blueprint": algorithm_blueprint_contract_snapshot(),

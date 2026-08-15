@@ -2548,6 +2548,94 @@ class CurrentLoopCoordinator:
         if checkpoint != expected_checkpoint:
             raise CurrentLoopError("operation_invocation_checkpoint_mismatch")
 
+    def prepare_connected_assistant_blueprint(
+        self,
+        *,
+        customer_request: str,
+        explicit_user_facts: Mapping[str, Any],
+        assistant_structuring: Mapping[str, Any],
+        assistant_implementation_proposals: Mapping[str, Any],
+        customer_dispositions: Mapping[str, Mapping[str, Any]],
+        current_step_controls: Sequence[str] = (),
+        durable_constraints: Sequence[str] = (),
+        explicitly_promoted_controls: Sequence[str] = (),
+        profile_id: str = "generic_qiskit",
+        current_lineage_reference: str | None = None,
+    ) -> dict[str, Any]:
+        """Compose the ordinary IDE-first Blueprint workflow without a public flag."""
+
+        from qcoder.d079_workflows import prepare_ide_first_blueprint
+
+        return prepare_ide_first_blueprint(
+            customer_request=customer_request,
+            explicit_user_facts=explicit_user_facts,
+            assistant_structuring=assistant_structuring,
+            assistant_implementation_proposals=assistant_implementation_proposals,
+            customer_dispositions=customer_dispositions,
+            current_step_controls=current_step_controls,
+            durable_constraints=durable_constraints,
+            explicitly_promoted_controls=explicitly_promoted_controls,
+            profile_id=profile_id,
+            current_lineage_reference=current_lineage_reference,
+        )
+
+    def confirm_connected_assistant_blueprint(
+        self,
+        *,
+        proposal: Mapping[str, Any],
+        confirmation: Mapping[str, Any],
+        materialize_canonical_artifacts: bool = True,
+    ) -> dict[str, Any]:
+        """Materialize only the exact reviewed proposal as an immutable child."""
+
+        from qcoder.d079_workflows import (
+            confirm_ide_first_blueprint,
+            materialize_confirmed_blueprint_workflow,
+        )
+
+        child = confirm_ide_first_blueprint(proposal=proposal, confirmation=confirmation)
+        if not materialize_canonical_artifacts:
+            return child
+        if self.local_only_surface or self.transport is None:
+            raise CurrentLoopError("protected_service_unavailable")
+        return materialize_confirmed_blueprint_workflow(
+            proposal=proposal,
+            confirmed_child=child,
+            protected_call=self.transport.call,
+        )
+
+    def review_customer_selected_files(
+        self,
+        *,
+        selected_paths: Sequence[str],
+        python_profile: str = "generic_qiskit",
+    ) -> dict[str, Any]:
+        """Run local-first review and automatically continue only to Result Review."""
+
+        from qcoder.d079_workflows import D079WorkflowError, review_selected_files_with_qcoder
+
+        if self.local_only_surface or self.transport is None:
+            raise D079WorkflowError(
+                {
+                    "schema_id": "qcoder.connected_assistant.structured_recovery.v1",
+                    "schema_version": 1,
+                    "reason_category": "protected_service_unavailable",
+                    "offending_class": "protected_enrichment",
+                    "bounded_field": None,
+                    "affected_decision": None,
+                    "recovery_category": "retain_local_evidence_and_retry_when_available",
+                    "wrong_artifact_layer": None,
+                    "required_local_preprocessing": "local_qcoder_evidence",
+                    "valid_portions_may_be_retained": True,
+                    "fail_closed": True,
+                }
+            )
+        return review_selected_files_with_qcoder(
+            selected_paths=selected_paths,
+            protected_call=self.transport.call,
+            python_profile=python_profile,
+        )
+
     def _pending_activation_result(
         self,
         *,
