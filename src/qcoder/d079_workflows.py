@@ -31,6 +31,7 @@ from qcoder.connected_assistant_conformance import (
     evaluate_named_workflow_result,
     process_and_discard_retention_satisfied,
 )
+from qcoder.current_loop_request_semantics import classify_current_request
 from qcoder.engines.review.local_evidence import (
     LocalEvidenceError,
     build_local_evidence_review,
@@ -153,6 +154,7 @@ def binding_default_routing_contract() -> dict[str, Any]:
         "selected_action_cardinality": "exactly_one",
         "decision_order": [
             "available_inactive",
+            "supported_d080_concrete_current_request",
             "explicit_active_build",
             "supported_named_d079_workflow",
             "generic_single_capability_fallthrough",
@@ -160,6 +162,21 @@ def binding_default_routing_contract() -> dict[str, Any]:
         "named_workflow_precedence": {
             "precedes": "generic_single_capability_fallthrough",
             "falls_through_when_unmatched": True,
+        },
+        "d080_current_request": {
+            "classifier": "canonical_compositional_current_request_semantics",
+            "precedes": [
+                "generic_single_capability_fallthrough",
+                "planning_language_fallback",
+            ],
+            "action": "execute_fresh_active_build_bootstrap_invocation",
+            "operation": "activate",
+            "exact_message_request_baseline": True,
+            "one_local_bootstrap": True,
+            "binding_constructs_invocation": True,
+            "customer_constructs_operation_envelope": False,
+            "stage_ceiling_is_temporary": True,
+            "compact_next_action_is_sole_procedural_source": True,
         },
         "named_workflows": {
             "algorithm_blueprint_generation_context": {
@@ -337,10 +354,7 @@ def _resolve_decision_key(
                 valid_portions_retained=True,
             )
         )
-    canonical = {
-        str(item["profile_decision_id"]): item
-        for item in matches
-    }
+    canonical = {str(item["profile_decision_id"]): item for item in matches}
     if len(canonical) != 1:
         raise D079WorkflowError(
             _recovery(
@@ -359,7 +373,9 @@ def _resolve_decision_key(
     return next(iter(canonical.values()))
 
 
-def _stable_decision_refs(profile_id: str, lineage: str, entries: Sequence[Mapping[str, Any]]) -> dict[str, str]:
+def _stable_decision_refs(
+    profile_id: str, lineage: str, entries: Sequence[Mapping[str, Any]]
+) -> dict[str, str]:
     return {
         str(item["profile_decision_id"]): _opaque(
             "decision",
@@ -496,7 +512,11 @@ def _canonical_confirmation_projection(proposal: Mapping[str, Any]) -> dict[str,
     facts = layers.get("explicit_user_facts")
     proposals = layers.get("assistant_implementation_proposals")
     records = proposal.get("decision_records")
-    if not isinstance(facts, Mapping) or not isinstance(proposals, Mapping) or not isinstance(records, list):
+    if (
+        not isinstance(facts, Mapping)
+        or not isinstance(proposals, Mapping)
+        or not isinstance(records, list)
+    ):
         raise D079WorkflowError(
             _recovery(
                 "malformed_proposal",
@@ -596,7 +616,11 @@ def prepare_ide_first_blueprint(
             bounds=supplied.get("bounds") if isinstance(supplied.get("bounds"), Mapping) else None,
         )
         disposition_views.append(
-            {"profile_decision_id": decision_id, "decision_ref": refs[decision_id], "disposition": kind}
+            {
+                "profile_decision_id": decision_id,
+                "decision_ref": refs[decision_id],
+                "disposition": kind,
+            }
         )
 
     parent = {
@@ -637,7 +661,11 @@ def prepare_ide_first_blueprint(
         if action in observed_actions
     ]
     promoted = {str(item) for item in explicitly_promoted_controls}
-    durable = list(dict.fromkeys([str(item) for item in durable_constraints] + [x for x in temporary if x in promoted]))
+    durable = list(
+        dict.fromkeys(
+            [str(item) for item in durable_constraints] + [x for x in temporary if x in promoted]
+        )
+    )
     proposal_body: dict[str, Any] = {
         "schema_id": BLUEPRINT_PROPOSAL_SCHEMA_ID,
         "schema_version": 1,
@@ -700,7 +728,9 @@ def prepare_ide_first_blueprint(
     return proposal_body
 
 
-def confirm_ide_first_blueprint(*, proposal: Mapping[str, Any], confirmation: Mapping[str, Any]) -> dict[str, Any]:
+def confirm_ide_first_blueprint(
+    *, proposal: Mapping[str, Any], confirmation: Mapping[str, Any]
+) -> dict[str, Any]:
     """Confirm an exact reviewed proposal and create an immutable child artifact."""
 
     original = deepcopy(dict(proposal))
@@ -808,8 +838,15 @@ def confirm_ide_first_blueprint(*, proposal: Mapping[str, Any], confirmation: Ma
             )
         )
     readiness = proposal.get("readiness")
-    if not isinstance(readiness, Mapping) or readiness.get("aggregate_readiness_result") == "blocked_pending_decisions":
-        blocking = [] if not isinstance(readiness, Mapping) else list(readiness.get("blocking_decision_references") or [])
+    if (
+        not isinstance(readiness, Mapping)
+        or readiness.get("aggregate_readiness_result") == "blocked_pending_decisions"
+    ):
+        blocking = (
+            []
+            if not isinstance(readiness, Mapping)
+            else list(readiness.get("blocking_decision_references") or [])
+        )
         raise D079WorkflowError(
             _recovery(
                 "unresolved_blocking_decision",
@@ -831,14 +868,20 @@ def confirm_ide_first_blueprint(*, proposal: Mapping[str, Any], confirmation: Ma
             "binding_validated_immediately_before_materialization": True,
         },
         "intent_card": {
-            "original_customer_request_verbatim": proposal["semantic_layers"]["original_customer_request_verbatim"],
+            "original_customer_request_verbatim": proposal["semantic_layers"][
+                "original_customer_request_verbatim"
+            ],
             "explicit_user_facts": deepcopy(proposal["semantic_layers"]["explicit_user_facts"]),
-            "durable_constraints": deepcopy(proposal["semantic_layers"]["durable_blueprint_constraints"]),
+            "durable_constraints": deepcopy(
+                proposal["semantic_layers"]["durable_blueprint_constraints"]
+            ),
             "decision_records": deepcopy(proposal["decision_records"]),
         },
         "implementation_blueprint": {
             "assistant_structuring": deepcopy(proposal["semantic_layers"]["assistant_structuring"]),
-            "implementation_choices": deepcopy(proposal["semantic_layers"]["assistant_implementation_proposals"]),
+            "implementation_choices": deepcopy(
+                proposal["semantic_layers"]["assistant_implementation_proposals"]
+            ),
             "layer": "implementation_blueprint",
         },
         "generation_context": {
@@ -1099,26 +1142,111 @@ def classify_binding_default_route(
             "raw_mcp_default_entrypoint": False,
             "routing_contract": contract["schema_id"],
         }
-    if "use qcoder for this build" in normalized:
+    request_semantics = classify_current_request(
+        customer_instruction,
+        active_loop=False,
+        selected_paths=selected_paths,
+    )
+    workflow: str | None = None
+    if request_semantics["requested_operation"] == "selected_artifact_review":
+        if request_semantics["clarification_required"]:
+            raise D079WorkflowError(
+                _recovery(
+                    "selected_artifact_required",
+                    offending_class="ordinary_language_invocation",
+                    field="selected_paths",
+                    category="retain_instruction_and_request_exact_native_client_selection",
+                    local_preprocessing="native_client_exact_file_selection",
+                )
+            )
+        workflow = "local_first_evidence_review"
+    if request_semantics["route"] == "active_build":
         return {
             "schema_id": "qcoder.connected_assistant.route_decision.v1",
             "selected_route": "active_build",
             "action": "execute_fresh_active_build_bootstrap_invocation",
+            "operation": "activate",
+            "matched_named_workflow": "d080_current_request_semantics",
+            "request_semantics": request_semantics,
+            "named_d079_route_preceded_generic_single_capability": True,
+            "customer_constructs_operation_envelope": False,
+            "deterministic_single_route": True,
+            "raw_mcp_default_entrypoint": False,
+            "routing_contract": contract["schema_id"],
+        }
+    if request_semantics["requested_operation"] in {"informational", "setup_guidance"}:
+        return {
+            "schema_id": "qcoder.connected_assistant.route_decision.v1",
+            "selected_route": "available_inactive",
+            "action": "none",
             "matched_named_workflow": None,
+            "request_semantics": request_semantics,
             "named_d079_route_preceded_generic_single_capability": False,
             "deterministic_single_route": True,
             "raw_mcp_default_entrypoint": False,
             "routing_contract": contract["schema_id"],
         }
-    try:
-        workflow = classify_ordinary_customer_workflow(
-            customer_instruction=customer_instruction,
-            selected_paths=selected_paths,
+    # Retain the legacy explicit active-build entry only for an affirmative
+    # action instruction.  A capability/information question that happens to
+    # contain "build" must never mutate a loop.
+    explicit_legacy_build = bool(
+        re.match(r"^(?:please\s+)?(?:let(?:'s| us)\s+)?use\s+qcoder\b", normalized)
+        and (
+            request_semantics["requested_operation"] == "bounded_single_capability"
+            or (
+                "build" in normalized
+                and request_semantics["requested_operation"] == "source_and_local_execution"
+            )
         )
-    except D079WorkflowError as exc:
-        if exc.recovery.get("reason_category") == "selected_artifact_required":
-            raise
-        workflow = None
+    )
+    if explicit_legacy_build:
+        return {
+            "schema_id": "qcoder.connected_assistant.route_decision.v1",
+            "selected_route": "active_build",
+            "action": "execute_fresh_active_build_bootstrap_invocation",
+            "operation": "activate",
+            "matched_named_workflow": None,
+            "request_semantics": request_semantics,
+            "named_d079_route_preceded_generic_single_capability": False,
+            "customer_constructs_operation_envelope": False,
+            "deterministic_single_route": True,
+            "raw_mcp_default_entrypoint": False,
+            "routing_contract": contract["schema_id"],
+        }
+    if request_semantics["route"] == "clarification_required":
+        return {
+            "schema_id": "qcoder.connected_assistant.route_decision.v1",
+            "selected_route": "clarification_required",
+            "action": "ask_one_concise_stage_clarification",
+            "matched_named_workflow": "d080_current_request_semantics",
+            "request_semantics": request_semantics,
+            "named_d079_route_preceded_generic_single_capability": True,
+            "deterministic_single_route": True,
+            "raw_mcp_default_entrypoint": False,
+            "routing_contract": contract["schema_id"],
+        }
+    if workflow is None:
+        try:
+            workflow = classify_ordinary_customer_workflow(
+                customer_instruction=customer_instruction,
+                selected_paths=selected_paths,
+            )
+        except D079WorkflowError as exc:
+            if exc.recovery.get("reason_category") == "selected_artifact_required":
+                raise
+            workflow = None
+    if workflow is None and request_semantics["route"] == "available_inactive":
+        return {
+            "schema_id": "qcoder.connected_assistant.route_decision.v1",
+            "selected_route": "available_inactive",
+            "action": "none",
+            "matched_named_workflow": None,
+            "request_semantics": request_semantics,
+            "named_d079_route_preceded_generic_single_capability": False,
+            "deterministic_single_route": True,
+            "raw_mcp_default_entrypoint": False,
+            "routing_contract": contract["schema_id"],
+        }
     if workflow is not None:
         route_id = (
             "algorithm_blueprint_generation_context"
@@ -1237,9 +1365,7 @@ def execute_ordinary_connected_assistant_workflow(
         customer_dispositions=blueprint_context.get("customer_dispositions", {}),
         current_step_controls=blueprint_context.get("current_step_controls", ()),
         durable_constraints=blueprint_context.get("durable_constraints", ()),
-        explicitly_promoted_controls=blueprint_context.get(
-            "explicitly_promoted_controls", ()
-        ),
+        explicitly_promoted_controls=blueprint_context.get("explicitly_promoted_controls", ()),
         profile_id=str(blueprint_context.get("profile_id") or "generic_qiskit"),
         current_lineage_reference=blueprint_context.get("current_lineage_reference"),
     )
@@ -1323,9 +1449,7 @@ def materialize_confirmed_blueprint_workflow(
                     proposal["semantic_layers"]["durable_blueprint_constraints"]
                 ),
                 "non_goals": [],
-                "field_provenance": {
-                    name: "connected_assistant" for name in structure
-                }
+                "field_provenance": {name: "connected_assistant" for name in structure}
                 | {"original_user_intent": "user"},
                 "requested_confirmation_state": "confirmed",
                 "confirmation_assertion": {"user_reviewed": True},
@@ -1486,9 +1610,18 @@ def _protected_projection(report: Mapping[str, Any], safe: Mapping[str, Any]) ->
     return {
         "schema_id": "qcoder.connected_assistant.protected_evidence_projection.v1",
         "status": report.get("status"),
-        "coverage": "complete_for_supported_local_extractors" if report.get("status") == "completed" else "partial_or_limited",
+        "coverage": "complete_for_supported_local_extractors"
+        if report.get("status") == "completed"
+        else "partial_or_limited",
         "artifacts": artifacts,
-        "excluded": ["local_paths", "raw_python", "raw_qasm", "raw_counts", "notebooks", "repository_content"],
+        "excluded": [
+            "local_paths",
+            "raw_python",
+            "raw_qasm",
+            "raw_counts",
+            "notebooks",
+            "repository_content",
+        ],
         "retention": "process_and_discard",
     }
 
@@ -1522,6 +1655,7 @@ def _assert_protected_projection(value: Any) -> None:
                     valid_portions_retained=True,
                 )
             )
+
     walk(value)
     if len(_canonical_bytes(value)) > MAX_PROTECTED_EVIDENCE_BYTES:
         raise D079WorkflowError(
@@ -1558,11 +1692,11 @@ def review_selected_files_with_qcoder(
             else "unsupported_or_invalid_selected_artifact"
         )
         recovery = _recovery(
-                category,
-                offending_class="selected_artifact",
-                category="correct_exact_selection_and_retry_local_processing",
-                local_preprocessing="local_qcoder_evidence",
-            )
+            category,
+            offending_class="selected_artifact",
+            category="correct_exact_selection_and_retry_local_processing",
+            local_preprocessing="local_qcoder_evidence",
+        )
         if category == "selected_artifact_limit" and resolved:
             safe_selected = []
             for position, path in enumerate(resolved, start=1):
@@ -1606,7 +1740,14 @@ def review_selected_files_with_qcoder(
         "canonical_local_evidence_created": True,
         "share_safe_derivative_created": True,
         "protected_content_class": "bounded_share_safe_semantic_evidence",
-        "remained_local": ["paths", "raw_python", "raw_qasm", "raw_counts", "notebooks", "repository_content"],
+        "remained_local": [
+            "paths",
+            "raw_python",
+            "raw_qasm",
+            "raw_counts",
+            "notebooks",
+            "repository_content",
+        ],
         "coverage": projection["coverage"],
         "omissions": deepcopy(projection["excluded"]),
         "repository_discovery_performed": False,
@@ -1617,7 +1758,10 @@ def review_selected_files_with_qcoder(
         guided = dict(
             protected_call(
                 "get_guided_evidence_context",
-                {"artifact_kind": "share_safe_evidence_summary", "artifact_text": json.dumps(projection, sort_keys=True)},
+                {
+                    "artifact_kind": "share_safe_evidence_summary",
+                    "artifact_text": json.dumps(projection, sort_keys=True),
+                },
             )
         )
     except Exception as exc:
@@ -1670,8 +1814,13 @@ def review_selected_files_with_qcoder(
                 valid_portions_retained=True,
             )
         )
-    for name, response in (("get_guided_evidence_context", guided), ("create_result_review_context_card", result_review)):
-        if not process_and_discard_retention_satisfied(structured_evidence=response, expected_tool_name=name):
+    for name, response in (
+        ("get_guided_evidence_context", guided),
+        ("create_result_review_context_card", result_review),
+    ):
+        if not process_and_discard_retention_satisfied(
+            structured_evidence=response, expected_tool_name=name
+        ):
             raise D079WorkflowError(
                 _recovery(
                     "retention_evidence_missing",
@@ -1689,8 +1838,18 @@ def review_selected_files_with_qcoder(
         "protected_projection": projection,
         "local_processing_receipt": receipt,
         "protected_result_review": result_review,
-        "continuation": {"calls": calls, "automatic": True, "terminal": "Result Review", "unrelated_work_continued": False},
-        "authority": {"native_client_read_authority": True, "qcoder_discovery_authority": False, "qcoder_edit_authority": False, "qcoder_run_authority": False},
+        "continuation": {
+            "calls": calls,
+            "automatic": True,
+            "terminal": "Result Review",
+            "unrelated_work_continued": False,
+        },
+        "authority": {
+            "native_client_read_authority": True,
+            "qcoder_discovery_authority": False,
+            "qcoder_edit_authority": False,
+            "qcoder_run_authority": False,
+        },
         "retention": "process_and_discard",
         "persistent": False,
     }

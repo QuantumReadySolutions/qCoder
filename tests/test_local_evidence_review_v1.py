@@ -378,7 +378,9 @@ def test_local_help_reuses_v2_and_states_oss_boundaries(tmp_path: Path) -> None:
     help_payload = report["local_qcoder_help"]
     assert help_payload["schema_id"] == HELP_SCHEMA_ID
     assert help_payload["projection_type"] == "oss_local_evidence"
-    assert help_payload["installed_qcoder_version"] == "0.6.0a14+wi0432.wi0433.d079"
+    assert help_payload["installed_qcoder_version"] == (
+        "0.6.0a14+wi0432.wi0433.wi0434.d079.d080"
+    )
     assert help_payload["local_oss_mode"] is True
     assert help_payload["account_required"] is False
     assert help_payload["qcoder_token_required"] is False

@@ -643,6 +643,38 @@ def evidence_control_contracts(
 
 
 def operation_receipt_contract(state: Mapping[str, Any]) -> dict[str, Any]:
+    coordinator = state.get("coordinator")
+    semantics = (
+        coordinator.get("current_request_semantics") if isinstance(coordinator, Mapping) else None
+    )
+    requested_operation = (
+        str(semantics.get("requested_operation")) if isinstance(semantics, Mapping) else None
+    )
+    current_substage = (
+        coordinator.get("current_step_substage") if isinstance(coordinator, Mapping) else None
+    )
+    d080_operation_category = (
+        "ide_execute"
+        if current_substage == "execution" or requested_operation == "local_execution"
+        else "ide_write"
+    )
+    d080_output_role = (
+        "results"
+        if current_substage == "execution" or requested_operation == "local_execution"
+        else "circuit_qasm"
+        if current_substage == "qasm" or requested_operation == "qasm_export"
+        else "source"
+    )
+    d080_path_flag = {
+        "source": "--source",
+        "circuit_qasm": "--qasm",
+        "results": "--results",
+    }[d080_output_role]
+    current_receipt_id = (
+        coordinator.get("current_step_operation_receipt_id")
+        if isinstance(coordinator, Mapping)
+        else None
+    )
     receipts = [
         {
             "value": receipt_id,
@@ -662,9 +694,10 @@ def operation_receipt_contract(state: Mapping[str, Any]) -> dict[str, Any]:
                 {
                     "name": "operation_category",
                     "flag": "--operation-category",
-                    "ownership": CUSTOMER_SELECTS,
-                    "required": False,
-                    "qcoder_default": "ide_write",
+                    "ownership": QCODER_PREBINDS if semantics is not None else CUSTOMER_SELECTS,
+                    "required": semantics is not None,
+                    "qcoder_default": d080_operation_category,
+                    "fixed_value": d080_operation_category if semantics is not None else None,
                     "json_type": "string",
                     "accepted_values": [
                         _option(value, value.replace("_", " "))
@@ -674,9 +707,14 @@ def operation_receipt_contract(state: Mapping[str, Any]) -> dict[str, Any]:
                 {
                     "name": "output_role",
                     "flag": "--output-role",
-                    "ownership": CUSTOMER_SELECTS,
-                    "required": False,
-                    "qcoder_default": list(SUPPORTED_OUTPUT_ROLES),
+                    "ownership": QCODER_PREBINDS if semantics is not None else CUSTOMER_SELECTS,
+                    "required": semantics is not None,
+                    "qcoder_default": (
+                        [d080_output_role]
+                        if semantics is not None
+                        else list(SUPPORTED_OUTPUT_ROLES)
+                    ),
+                    "fixed_value": d080_output_role if semantics is not None else None,
                     "json_type": "array",
                     "item_type": "string",
                     "accepted_values": [
@@ -717,23 +755,30 @@ def operation_receipt_contract(state: Mapping[str, Any]) -> dict[str, Any]:
                 {
                     "name": "operation_receipt_id",
                     "flag": "--operation-receipt-id",
-                    "ownership": "customer_selects_from_qcoder_owned_references",
-                    "required": False,
+                    "ownership": (
+                        QCODER_PREBINDS
+                        if semantics is not None
+                        else "customer_selects_from_qcoder_owned_references"
+                    ),
+                    "required": semantics is not None,
+                    "fixed_value": current_receipt_id if semantics is not None else None,
                     "json_type": "string",
                     "accepted_values": receipts,
                     "arbitrary_text_prohibited": True,
                 },
                 {
                     "name": "artifact_role",
-                    "ownership": CUSTOMER_SELECTS,
+                    "ownership": QCODER_PREBINDS if semantics is not None else CUSTOMER_SELECTS,
                     "required": True,
                     "json_type": "string",
+                    "fixed_value": d080_output_role if semantics is not None else None,
                     "accepted_values": [
                         _option(value, value.replace("_", " ")) for value in SUPPORTED_OUTPUT_ROLES
                     ],
                 },
                 {
                     "name": "artifact_path",
+                    "flag": d080_path_flag if semantics is not None else None,
                     "ownership": EXACT_PATH_CHANNEL,
                     "required": True,
                     "json_type": "string",
@@ -745,9 +790,10 @@ def operation_receipt_contract(state: Mapping[str, Any]) -> dict[str, Any]:
                 {
                     "name": "provenance",
                     "flag": "--provenance",
-                    "ownership": CUSTOMER_SELECTS,
+                    "ownership": QCODER_PREBINDS if semantics is not None else CUSTOMER_SELECTS,
                     "required": True,
                     "json_type": "string",
+                    "fixed_value": "assistant_created" if semantics is not None else None,
                     "accepted_values": [
                         _option(value, value.replace("_", " ")) for value in PROVENANCE_VALUES
                     ],

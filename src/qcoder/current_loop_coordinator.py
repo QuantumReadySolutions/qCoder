@@ -12,6 +12,7 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import sys
 import tempfile
@@ -100,6 +101,12 @@ from qcoder.current_loop_invocation import (
     invocation_contract_snapshot,
     operation_for_subcommand,
     operation_transport_inventory,
+)
+from qcoder.current_loop_request_semantics import (
+    ceiling_allows,
+    classify_current_request,
+    semantics_contract_snapshot,
+    validate_request_semantics,
 )
 from qcoder.current_loop_bootstrap import (
     BOOTSTRAP_INVOCATION_SCHEMA_ID,
@@ -292,7 +299,8 @@ def result_semantic_classification(
         return "schema_failure"
     if normalized and (
         normalized.endswith("_denied")
-        or normalized in {
+        or normalized
+        in {
             "authorization_declined",
             "protected_authority_missing",
             "current_loop_delete_authority_required",
@@ -314,19 +322,19 @@ def result_semantic_classification(
         return "lifecycle_or_expiry_failure"
     if not ok:
         return "recoverable_state"
-    if (
-        not persist_performance
-        and operation in _VERIFIED_PURE_OBSERVATION_OPERATIONS
-    ):
+    if not persist_performance and operation in _VERIFIED_PURE_OBSERVATION_OPERATIONS:
         return "pure_observation"
     if state_status == "checkpoint_required":
         return "checkpoint_production"
     return "authoritative_mutation"
-COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v13"
-PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v12"
+
+
+COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v14"
+PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v13"
 OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
     {
         "qcoder.current_loop.coordinator_state.v9",
+        "qcoder.current_loop.coordinator_state.v12",
         "qcoder.current_loop.coordinator_state.v10",
         "qcoder.current_loop.coordinator_state.v6",
         "qcoder.current_loop.coordinator_state.v7",
@@ -338,7 +346,7 @@ OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
         "qcoder.current_loop.coordinator_state.v3",
     }
 )
-COORDINATOR_STATE_SCHEMA_VERSION = 13
+COORDINATOR_STATE_SCHEMA_VERSION = 14
 RECOVERY_SCHEMA_ID = "qcoder.current_loop.recovery.v5"
 RECOVERY_SCHEMA_VERSION = 5
 CONSEQUENCE_PROJECTION_SCHEMA_ID = "qcoder.current_loop.consequence_projection.v1"
@@ -450,6 +458,12 @@ ADDITIONAL_TYPED_RECOVERY_CATEGORIES = frozenset(
         "recovery_reference_stale",
         "recovery_stop_requires_abandon_invocation",
         "result_artifact_invalid",
+        "current_request_semantics_invalid",
+        "current_request_stage_unsupported",
+        "current_step_authority_mismatch",
+        "current_step_ceiling_violation",
+        "current_step_artifact_cardinality_invalid",
+        "active_loop_continuation_ambiguous",
     }
 )
 
@@ -468,6 +482,7 @@ _PHASE_TRANSITIONS = {
         "abandoned",
     ),
     "awaiting_local_artifacts": (
+        "generation_ready",
         "artifact_authorization",
         "evidence_processing",
         "abandoned",
@@ -1178,25 +1193,21 @@ def recovery_action_executability_matrix() -> list[dict[str, Any]]:
             )
         for variant in variants:
             causal = bool(variant["causal_continuation_eligible"])
-            active_loop_nonterminal = (
-                _RECOVERY_PRESENTATION.get(
-                    category, _RECOVERY_PRESENTATION["unknown_local_internal"]
-                )[2]
-                is True
-                and category
-                not in {
-                    "loop_not_activated",
-                    "local_state_corrupt",
-                    "reconstruction_attempt_refused",
-                    "causal_continuation_blocked",
-                }
-            )
+            active_loop_nonterminal = _RECOVERY_PRESENTATION.get(
+                category, _RECOVERY_PRESENTATION["unknown_local_internal"]
+            )[2] is True and category not in {
+                "loop_not_activated",
+                "local_state_corrupt",
+                "reconstruction_attempt_refused",
+                "causal_continuation_blocked",
+            }
             policy = resolve_live_recovery_policy(
                 category=category,
                 presentation=_RECOVERY_PRESENTATION.get(
                     category, _RECOVERY_PRESENTATION["unknown_local_internal"]
                 ),
-                receipt_context_present=category in {
+                receipt_context_present=category
+                in {
                     "operation_receipt_invalid",
                     "operation_receipt_digest_mismatch",
                     "operation_receipt_revision_invalid",
@@ -1220,9 +1231,7 @@ def recovery_action_executability_matrix() -> list[dict[str, Any]]:
                 {
                     "action": row["action"],
                     "handler": row["handler"],
-                    "executable_in_advertised_state": row[
-                        "executable_in_advertised_state"
-                    ],
+                    "executable_in_advertised_state": row["executable_in_advertised_state"],
                     "availability": row["availability"],
                     "result": "terminal" if row["terminal"] else "non_terminal",
                     "ordinary_supported_next_step": row["ordinary_supported_next_step"],
@@ -1242,6 +1251,7 @@ def recovery_action_executability_matrix() -> list[dict[str, Any]]:
                 }
             )
     return rows
+
 
 _POSTURE_CUES = {
     "exploratory_first_pass": (
@@ -1626,6 +1636,7 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "adaptive_intent_input": ADAPTIVE_INTENT_INPUT_SCHEMA_ID,
             "adaptive_intent_fields_document": ADAPTIVE_INTENT_DOCUMENT_SCHEMA_ID,
             "invocation_lifecycle": INVOCATION_LIFECYCLE_SCHEMA_ID,
+            "current_request_semantics": semantics_contract_snapshot()["semantic_schema_id"],
             "current_loop_contract": contract_snapshot()["schema_id"],
             "contract_management": CONTRACT_MANAGEMENT_SCHEMA_ID,
             "effective_contract_document": EFFECTIVE_CONTRACT_DOCUMENT_SCHEMA_ID,
@@ -1665,6 +1676,7 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "retention": retention_contract_snapshot()["schema_id"],
         },
         "operation_invocation": invocation_contract_snapshot(),
+        "current_request_semantics": semantics_contract_snapshot(),
         "bounded_control_input": bounded_control_contract_snapshot(),
         "adaptive_intent_input": adaptive_intent_contract_snapshot(),
         "quiet_iteration": iteration_contract_snapshot(),
@@ -2191,11 +2203,14 @@ _ACTION_INPUT_SOURCE_CATEGORIES = {
         "authority_only_approval",
     ),
     "obtain_separate_ide_write_or_run_authority": ("authority_only_approval",),
+    "obtain_action_specific_native_permission": ("authority_only_approval",),
+    "await_exact_customer_continuation": ("exact_request_capture_transport",),
     "assist_iteration_ready": (
         "exact_request_capture_transport",
         "authority_only_approval",
     ),
     "perform_authorized_ide_work_and_register_exact_paths": ("exact_artifact_lineage",),
+    "register_exact_authorized_output": ("exact_artifact_lineage",),
     "obtain_exact_artifact_set_authorization": (
         "qcoder_held_staged_value",
         "bounded_enumerated_customer_choice",
@@ -2237,6 +2252,8 @@ def _default_permitted_input_source(action: str) -> str:
             "explicit_user_authority_only_for_qcoder_held_activation_request"
         ),
         "obtain_separate_ide_write_or_run_authority": ("explicit_user_authority_only"),
+        "obtain_action_specific_native_permission": ("explicit_action_specific_native_permission"),
+        "await_exact_customer_continuation": "exact_current_customer_message",
         "assist_iteration_ready": (
             "exact_current_customer_development_instruction_and_native_ide_authority"
         ),
@@ -2329,8 +2346,7 @@ def _active_recovery_schema_error(
             "continuation_attempted": bool,
         }
         if any(
-            not isinstance(context.get(field), kind)
-            for field, kind in required_context.items()
+            not isinstance(context.get(field), kind) for field, kind in required_context.items()
         ):
             return "active_recovery_action_fields_missing"
         if (
@@ -2364,9 +2380,7 @@ def _causal_registration_action(
         "role_ceiling": deepcopy(receipt.get("authorized_output_role_ceiling")),
         "format_ceiling": deepcopy(receipt.get("authorized_output_format_ceiling")),
         "contract_revision": state["current_loop_contract"]["contract_revision"],
-        "effective_contract_digest": state["current_loop_contract"].get(
-            "effective_policy_digest"
-        ),
+        "effective_contract_digest": state["current_loop_contract"].get("effective_policy_digest"),
         "originating_phase": (
             authority_binding.get("phase") if isinstance(authority_binding, Mapping) else None
         ),
@@ -2658,6 +2672,180 @@ class CurrentLoopCoordinator:
             protected_call=self.transport.call,
             proposal=proposal,
             confirmation=confirmation,
+        )
+
+    def interpret_current_request(
+        self,
+        *,
+        exact_message: str,
+        selected_paths: Sequence[str] = (),
+    ) -> dict[str, Any]:
+        """Interpret one active-loop customer message without re-bootstrap or archaeology."""
+
+        started = self.clock()
+        state = self._require_phase(
+            "interpret_current_request",
+            {
+                "generation_ready",
+                "awaiting_local_artifacts",
+                "evidence_processing",
+                "current_build_review",
+                "continuation_choice",
+            },
+        )
+        coordinator = self._coordinator_state(state)
+        semantics = classify_current_request(
+            exact_message,
+            active_loop=True,
+            selected_paths=selected_paths,
+        )
+        if semantics["clarification_required"]:
+            return {
+                "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
+                "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
+                "operation": "interpret_current_request",
+                "ok": False,
+                "category": "active_loop_continuation_ambiguous",
+                "state_revision": state["state_revision"],
+                "loop_ref": state["loop_ref"],
+                "customer_summary": semantics["customer_clarification"],
+                "current_request_semantics": semantics,
+                "recovery": semantics["recovery"],
+                "state_mutated": False,
+                "authority_broadened": False,
+                "request_baseline_recreated": False,
+                "rebootstrap_performed": False,
+                "raw_artifact_included": False,
+                "local_path_included": False,
+            }
+        if semantics["requested_operation"] == "selected_artifact_review":
+            result = self.review_customer_selected_files(selected_paths=selected_paths)
+            return {
+                "schema_id": "qcoder.current_loop.selected_review_continuation.v1",
+                "schema_version": 1,
+                "ok": True,
+                "operation": "interpret_current_request",
+                "workflow": "local_first_evidence_review",
+                "current_request_semantics": semantics,
+                "result_review": result,
+                "request_baseline_recreated": False,
+                "rebootstrap_performed": False,
+                "loop_state_mutated": False,
+                "protected_received_selected_paths": False,
+                "protected_received_raw_artifacts": False,
+            }
+        if semantics["requested_operation"] == "current_loop_evidence_diff":
+            if self.local_only_surface or self.transport is None:
+                raise CurrentLoopError("protected_service_unavailable")
+            registry = state.get("evidence_registry", {})
+            current_refs = sorted(
+                str(value)
+                for value in (
+                    registry.get("artifact_revisions", {}).keys()
+                    if isinstance(registry, Mapping)
+                    and isinstance(registry.get("artifact_revisions"), Mapping)
+                    else ()
+                )
+            )
+            history = coordinator.get("request_semantics_history", [])
+            before_refs = current_refs[:-1] if current_refs else []
+            comparison = self.transport.call(
+                "create_single_loop_evidence_diff",
+                {
+                    "artifact_text": "Share-safe canonical Current Loop evidence comparison.",
+                    "artifact_kind": "share_safe_evidence_summary",
+                    "client_context": "connected_assistant_current_loop",
+                    "current_goal": "Show the bounded canonical evidence change.",
+                    "before": {
+                        "artifact_reference_count": len(before_refs),
+                        "artifact_references": before_refs,
+                        "request_step_count": max(0, len(history) - 1),
+                    },
+                    "after": {
+                        "artifact_reference_count": len(current_refs),
+                        "artifact_references": current_refs,
+                        "request_step_count": len(history),
+                    },
+                },
+            )
+            return {
+                "schema_id": "qcoder.current_loop.evidence_diff_continuation.v1",
+                "schema_version": 1,
+                "ok": True,
+                "operation": "interpret_current_request",
+                "current_request_semantics": semantics,
+                "supported_path": "canonical_current_loop_comparison",
+                "comparison_result": comparison,
+                "protected_input_share_safe_only": True,
+                "raw_artifact_transferred": False,
+                "local_path_transferred": False,
+                "request_baseline_recreated": False,
+                "rebootstrap_performed": False,
+                "loop_state_mutated": False,
+            }
+        if semantics["requested_operation"] == "close_current_loop":
+            closed = self.abandon(explicit_authority=True)
+            return {
+                **closed,
+                "operation": "interpret_current_request",
+                "current_request_semantics": semantics,
+                "ordinary_language_close": True,
+                "request_baseline_recreated": False,
+                "rebootstrap_performed": False,
+            }
+        if semantics["requested_operation"] not in {
+            "source_generation",
+            "source_and_qasm_generation",
+            "source_and_local_execution",
+            "qasm_export",
+            "local_execution",
+        }:
+            raise CurrentLoopError("current_request_stage_unsupported")
+        history = list(coordinator.get("request_semantics_history", []))
+        history.append(
+            {
+                "semantics_digest": semantics["semantics_digest"],
+                "original_message_utf8_sha256": semantics["original_message_utf8_sha256"],
+                "requested_operation": semantics["requested_operation"],
+                "active_loop_at_classification": True,
+            }
+        )
+        coordinator.update(
+            {
+                "phase": "generation_ready",
+                "state_status": "ready",
+                "checkpoint_kind": "none",
+                "customer_summary": (
+                    "qCoder interpreted the exact continuation and prepared one bounded "
+                    "next action without recreating the Request Baseline."
+                ),
+                "current_request_semantics": deepcopy(semantics),
+                "request_semantics_history": history[-32:],
+                "current_step_status": "awaiting_native_permission",
+                "current_step_substage": (
+                    "qasm"
+                    if semantics["requested_operation"] == "qasm_export"
+                    else "execution"
+                    if semantics["requested_operation"] == "local_execution"
+                    else "source"
+                ),
+                "compact_next_action_source": "canonical_current_request_semantics_only",
+                "procedural_archaeology_permitted": False,
+            }
+        )
+        self._replace_coordinator(coordinator)
+        return self._result(
+            operation="interpret_current_request",
+            ok=True,
+            state=self.store.read(),
+            summary=coordinator["customer_summary"],
+            elapsed=self.clock() - started,
+            details={
+                "request_baseline_recreated": False,
+                "rebootstrap_performed": False,
+                "bootstrap_count": coordinator["bootstrap_count"],
+                "request_baseline_count": coordinator["request_baseline_count"],
+            },
         )
 
     def review_customer_selected_files(
@@ -3359,6 +3547,26 @@ class CurrentLoopCoordinator:
             if capture_mode not in {"review_required", "exact_current_customer_message"}:
                 raise CurrentLoopError("activation_capture_mode_invalid")
             if original_request is not None and capture_mode == "exact_current_customer_message":
+                request_semantics = classify_current_request(original_request, active_loop=False)
+                normalized_request = " ".join(original_request.casefold().split())
+                legacy_explicit_active_build = bool(
+                    (
+                        request_semantics.get("requested_operation") == "bounded_single_capability"
+                        and request_semantics.get("qcoder_explicitly_requested") is True
+                    )
+                    or (
+                        re.match(
+                            r"^(?:please\s+)?(?:let(?:'s| us)\s+)?use\s+qcoder\b",
+                            normalized_request,
+                        )
+                        and (
+                            "build" in normalized_request
+                            and request_semantics.get("requested_operation")
+                            == "source_and_local_execution"
+                        )
+                    )
+                    and request_semantics.get("clarification_required") is False
+                )
                 if (
                     explicit_authority is not True
                     or generation_posture is not None
@@ -3366,7 +3574,14 @@ class CurrentLoopCoordinator:
                     or explicit_constraints
                     or explicit_choices
                     or assistant_interpretation is not None
-                    or "qcoder" not in original_request.casefold()
+                    or (
+                        request_semantics.get("route") != "active_build"
+                        and not legacy_explicit_active_build
+                    )
+                    or (
+                        request_semantics.get("clarification_required") is True
+                        and not legacy_explicit_active_build
+                    )
                 ):
                     raise CurrentLoopError("activation_exact_message_mode_ineligible")
                 baseline = build_request_baseline(original_request=original_request)
@@ -3389,13 +3604,13 @@ class CurrentLoopCoordinator:
                 state = self.store.read()
                 contract = state["current_loop_contract"]
                 coordinator = self._initial_coordinator_state(
-                    phase="intent_review",
+                    phase=("intent_review" if legacy_explicit_active_build else "generation_ready"),
                     state_status="ready",
                     checkpoint_kind="none",
                     summary=(
-                        "qCoder is active under quiet Assist. The exact current customer "
-                        "message is preserved as the Request Baseline; adaptive generation "
-                        "governance applies without a posture question."
+                        "qCoder preserved the exact request and prepared one bounded next "
+                        "action. Activation did not grant native write, execution, review, "
+                        "or governing authority."
                     ),
                 )
                 coordinator["activation"] = {
@@ -3411,6 +3626,26 @@ class CurrentLoopCoordinator:
                 coordinator["assist_ready"] = True
                 coordinator["effective_generation_posture"] = "exploratory_first_pass"
                 coordinator["request_baseline_reference"] = _artifact_reference(baseline)
+                if not legacy_explicit_active_build:
+                    coordinator["current_request_semantics"] = deepcopy(request_semantics)
+                    coordinator["request_semantics_history"] = [
+                        {
+                            "semantics_digest": request_semantics["semantics_digest"],
+                            "original_message_utf8_sha256": request_semantics[
+                                "original_message_utf8_sha256"
+                            ],
+                            "requested_operation": request_semantics["requested_operation"],
+                            "active_loop_at_classification": False,
+                        }
+                    ]
+                    coordinator["current_step_status"] = "awaiting_native_permission"
+                    coordinator["current_step_substage"] = "source"
+                coordinator["bootstrap_count"] = 1
+                coordinator["request_baseline_count"] = 1
+                coordinator["compact_next_action_source"] = (
+                    "canonical_current_request_semantics_only"
+                )
+                coordinator["procedural_archaeology_permitted"] = False
                 self._replace_coordinator(coordinator)
                 return self._result(
                     operation="activate",
@@ -3433,6 +3668,14 @@ class CurrentLoopCoordinator:
                         "internal_generation_posture": "exploratory_first_pass",
                         "ide_write_or_run_authorized": False,
                         "artifact_review_authorized": False,
+                        "current_request_semantics": (
+                            None if legacy_explicit_active_build else deepcopy(request_semantics)
+                        ),
+                        "request_semantics_contract": (
+                            None if legacy_explicit_active_build else semantics_contract_snapshot()
+                        ),
+                        "bootstrap_count": 1,
+                        "request_baseline_count": 1,
                     },
                 )
             if original_request is not None:
@@ -6367,6 +6610,70 @@ class CurrentLoopCoordinator:
                     elapsed=self.clock() - started,
                 )
             coordinator = self._coordinator_state(state)
+            request_semantics = coordinator.get("current_request_semantics")
+            if isinstance(request_semantics, Mapping):
+                validate_request_semantics(request_semantics)
+                requested_operation = str(request_semantics["requested_operation"])
+                current_substage = coordinator.get("current_step_substage")
+                expected_category, expected_roles = (
+                    ("ide_write", ("circuit_qasm",))
+                    if current_substage == "qasm"
+                    else ("ide_execute", ("results",))
+                    if current_substage == "execution"
+                    else ("ide_write", ("source",))
+                    if requested_operation
+                    in {
+                        "source_generation",
+                        "source_and_qasm_generation",
+                        "source_and_local_execution",
+                    }
+                    else ("ide_write", ("circuit_qasm",))
+                    if requested_operation == "qasm_export"
+                    else ("ide_execute", ("results",))
+                    if requested_operation == "local_execution"
+                    else ("", ())
+                )
+                if (
+                    operation_category != expected_category
+                    or tuple(output_role_ceiling) != expected_roles
+                    or not ceiling_allows(
+                        request_semantics,
+                        operation=(
+                            "ide_write_source"
+                            if expected_roles == ("source",)
+                            else "ide_export_qasm"
+                            if expected_roles == ("circuit_qasm",)
+                            else "ide_execute_local"
+                        ),
+                        artifact_roles=expected_roles,
+                    )
+                ):
+                    return {
+                        "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
+                        "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
+                        "operation": "record_ide_authority",
+                        "ok": False,
+                        "category": "current_step_authority_mismatch",
+                        "state_revision": state["state_revision"],
+                        "loop_ref": state["loop_ref"],
+                        "customer_summary": (
+                            "That permission does not match qCoder's exact bounded next action."
+                        ),
+                        "recovery": {
+                            "schema_id": "qcoder.current_loop.stage_recovery.v1",
+                            "schema_version": 1,
+                            "recovery_category": "use_exact_compact_next_action",
+                            "expected_operation_category": expected_category,
+                            "expected_output_roles": list(expected_roles),
+                            "valid_current_step_retained": True,
+                            "state_mutated": False,
+                            "authority_broadened": False,
+                            "fail_closed": True,
+                        },
+                        "raw_artifact_included": False,
+                        "local_path_included": False,
+                        "secret_included": False,
+                    }
             originating_phase = str(coordinator["phase"])
             quiet_iteration = (
                 originating_phase
@@ -6393,6 +6700,8 @@ class CurrentLoopCoordinator:
             coordinator["authority_separation"]["ide_write_or_run"] = (
                 "action_specific_native_permission_recorded_by_qcoder"
             )
+            if isinstance(request_semantics, Mapping):
+                coordinator["current_step_status"] = "awaiting_artifact_registration"
             committed_receipt_id: str | None = None
             committed_iteration_receipt: dict[str, Any] | None = None
 
@@ -6418,9 +6727,27 @@ class CurrentLoopCoordinator:
                         "execution_requested": operation_category == "ide_execute",
                         "hosted_activity_requested": False,
                         "raw_exposure_requested": False,
+                        "current_request_semantics_digest": (
+                            request_semantics.get("semantics_digest")
+                            if isinstance(request_semantics, Mapping)
+                            else None
+                        ),
+                        "current_step_ceiling_digest": (
+                            request_semantics.get("current_step_ceiling", {}).get("ceiling_digest")
+                            if isinstance(request_semantics, Mapping)
+                            else None
+                        ),
+                        "authorized_artifact_cardinality": (
+                            "exactly_one"
+                            if isinstance(request_semantics, Mapping)
+                            else "bounded_by_role_ceiling"
+                        ),
+                        "authority_layer": "native_client_permission",
                     },
                 )
                 committed_receipt_id = str(issued["receipt_id"])
+                if isinstance(request_semantics, Mapping):
+                    coordinator["current_step_operation_receipt_id"] = committed_receipt_id
                 value["operation_receipts"][committed_receipt_id] = deepcopy(issued)
                 if quiet_iteration and exact_iteration_instruction is not None:
                     committed_iteration_receipt = iteration_authority_receipt(
@@ -6428,17 +6755,15 @@ class CurrentLoopCoordinator:
                         loop_ref=str(value["loop_ref"]),
                         workspace_binding=str(value["workspace_root"]),
                         state_revision=final_revision,
-                        contract_revision=int(
-                            value["current_loop_contract"]["contract_revision"]
-                        ),
+                        contract_revision=int(value["current_loop_contract"]["contract_revision"]),
                         action_category=operation_category,
                     )
                     value["iteration_authority_receipts"].append(
                         deepcopy(committed_iteration_receipt)
                     )
-                    value["iteration_authority_receipts"] = value[
-                        "iteration_authority_receipts"
-                    ][-32:]
+                    value["iteration_authority_receipts"] = value["iteration_authority_receipts"][
+                        -32:
+                    ]
                     value["latest_iteration_authority_receipt"] = deepcopy(
                         committed_iteration_receipt
                     )
@@ -6476,9 +6801,7 @@ class CurrentLoopCoordinator:
                     or observed_receipt.get("issued_state_revision") != final_revision
                     or observed_receipt.get("status") != "issued"
                 ):
-                    raise CurrentLoopError(
-                        "operation_receipt_issuance_incomplete"
-                    ) from exc
+                    raise CurrentLoopError("operation_receipt_issuance_incomplete") from exc
                 state = observed
             if state["state_revision"] != final_revision or committed_receipt_id is None:
                 raise CurrentLoopError("operation_receipt_issuance_incomplete")
@@ -6516,9 +6839,7 @@ class CurrentLoopCoordinator:
                     "exact_iteration_instruction_provenance": (
                         "user_stated" if committed_iteration_receipt is not None else None
                     ),
-                    "build_review_implicitly_deferred": (
-                        committed_iteration_receipt is not None
-                    ),
+                    "build_review_implicitly_deferred": (committed_iteration_receipt is not None),
                     "governing_blueprint_unchanged": True,
                     "continuation_artifact_created": False,
                 },
@@ -6565,7 +6886,116 @@ class CurrentLoopCoordinator:
                 },
             )
             coordinator = self._coordinator_state(state)
+            request_semantics = coordinator.get("current_request_semantics")
+            if isinstance(request_semantics, Mapping):
+                validate_request_semantics(request_semantics)
+                expected_receipt_id = coordinator.get("current_step_operation_receipt_id")
+                receipt = (
+                    state.get("operation_receipts", {}).get(operation_receipt_id)
+                    if isinstance(operation_receipt_id, str)
+                    else None
+                )
+                authority_binding = (
+                    receipt.get("authority_binding") if isinstance(receipt, Mapping) else None
+                )
+                receipt_exact = bool(
+                    coordinator.get("current_step_status") == "awaiting_artifact_registration"
+                    and isinstance(expected_receipt_id, str)
+                    and operation_receipt_id == expected_receipt_id
+                    and isinstance(receipt, Mapping)
+                    and receipt.get("status") == "issued"
+                    and isinstance(authority_binding, Mapping)
+                    and authority_binding.get("current_request_semantics_digest")
+                    == request_semantics.get("semantics_digest")
+                    and authority_binding.get("current_step_ceiling_digest")
+                    == request_semantics.get("current_step_ceiling", {}).get("ceiling_digest")
+                    and authority_binding.get("authorized_artifact_cardinality") == "exactly_one"
+                )
+                if not receipt_exact:
+                    return {
+                        "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
+                        "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
+                        "operation": "register_artifacts",
+                        "ok": False,
+                        "category": "current_step_operation_receipt_required",
+                        "state_revision": state["state_revision"],
+                        "loop_ref": state["loop_ref"],
+                        "customer_summary": (
+                            "Use the exact receipt-bound registration action supplied by "
+                            "qCoder for this current step."
+                        ),
+                        "recovery": {
+                            "schema_id": "qcoder.current_loop.stage_recovery.v1",
+                            "schema_version": 1,
+                            "recovery_category": "use_exact_compact_registration_action",
+                            "current_step_status": coordinator.get("current_step_status"),
+                            "exact_live_receipt_required": True,
+                            "valid_current_step_retained": True,
+                            "state_mutated": False,
+                            "authority_broadened": False,
+                            "fail_closed": True,
+                        },
+                        "raw_artifact_included": False,
+                        "local_path_included": False,
+                        "secret_included": False,
+                    }
             normalized = self._normalize_candidates(candidates)
+            if isinstance(request_semantics, Mapping):
+                if len(normalized) != 1:
+                    return {
+                        "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
+                        "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
+                        "operation": "register_artifacts",
+                        "ok": False,
+                        "category": "current_step_artifact_cardinality_invalid",
+                        "state_revision": state["state_revision"],
+                        "loop_ref": state["loop_ref"],
+                        "customer_summary": (
+                            "The artifact set does not match qCoder's exact bounded action."
+                        ),
+                        "recovery": {
+                            "schema_id": "qcoder.current_loop.stage_recovery.v1",
+                            "schema_version": 1,
+                            "expected_artifact_count": 1,
+                            "received_artifact_count": len(normalized),
+                            "recovery_category": "register_only_exact_compact_action_output",
+                            "valid_current_step_retained": True,
+                            "operation_receipt_retained": True,
+                            "state_mutated": False,
+                            "fail_closed": True,
+                        },
+                        "raw_artifact_included": False,
+                        "secret_included": False,
+                    }
+                roles = [str(item["role"]) for item in normalized]
+                if not ceiling_allows(request_semantics, artifact_roles=roles):
+                    return {
+                        "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
+                        "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
+                        "operation": "register_artifacts",
+                        "ok": False,
+                        "category": "current_step_ceiling_violation",
+                        "state_revision": state["state_revision"],
+                        "loop_ref": state["loop_ref"],
+                        "customer_summary": (
+                            "That artifact role is outside the exact current-step ceiling."
+                        ),
+                        "recovery": {
+                            "schema_id": "qcoder.current_loop.stage_recovery.v1",
+                            "schema_version": 1,
+                            "offending_artifact_roles": roles,
+                            "allowed_artifact_roles": list(
+                                request_semantics["current_step_ceiling"]["allowed_artifact_roles"]
+                            ),
+                            "recovery_category": "retain_valid_step_and_remove_prohibited_output",
+                            "valid_current_step_retained": True,
+                            "operation_receipt_retained": True,
+                            "state_mutated": False,
+                            "fail_closed": True,
+                        },
+                        "raw_artifact_included": False,
+                        "secret_included": False,
+                    }
             if operation_receipt_id is not None:
                 category_by_role = {
                     "source": "python_manifestation",
@@ -6639,9 +7069,7 @@ class CurrentLoopCoordinator:
                     OSError,
                     ValueError,
                 ) as exc:
-                    error_category = str(
-                        getattr(exc, "category", "unknown_local_internal")
-                    )
+                    error_category = str(getattr(exc, "category", "unknown_local_internal"))
                     receipt_recovery_context: dict[str, Any] = {
                         "operation_receipt_id": operation_receipt_id,
                         "candidates": [
@@ -6662,9 +7090,7 @@ class CurrentLoopCoordinator:
                         ],
                         "causal_continuation_eligible": False,
                     }
-                    original_receipt = state.get("operation_receipts", {}).get(
-                        operation_receipt_id
-                    )
+                    original_receipt = state.get("operation_receipts", {}).get(operation_receipt_id)
                     authority_binding = (
                         original_receipt.get("authority_binding")
                         if isinstance(original_receipt, Mapping)
@@ -6677,14 +7103,12 @@ class CurrentLoopCoordinator:
                         and isinstance(authority_binding, Mapping)
                         and original_receipt.get("status") == "issued"
                         and original_receipt.get("loop_ref") == state.get("loop_ref")
-                        and original_receipt.get("workspace_binding")
-                        == state.get("workspace_root")
+                        and original_receipt.get("workspace_binding") == state.get("workspace_root")
                         and original_receipt.get("issued_contract_revision")
                         == state["current_loop_contract"].get("contract_revision")
                         and authority_binding.get("effective_contract_digest")
                         == state["current_loop_contract"].get("effective_policy_digest")
-                        and authority_binding.get("phase")
-                        == current_coordinator.get("phase")
+                        and authority_binding.get("phase") == current_coordinator.get("phase")
                         and authority_binding.get("checkpoint_kind")
                         == current_coordinator.get("checkpoint_kind")
                     )
@@ -6697,9 +7121,7 @@ class CurrentLoopCoordinator:
                         )
                         receipt_recovery_context.update(
                             {
-                                "original_receipt_digest": original_receipt.get(
-                                    "receipt_digest"
-                                ),
+                                "original_receipt_digest": original_receipt.get("receipt_digest"),
                                 "causal_action_binding": causal_binding,
                                 "causal_continuation_eligible": True,
                                 "continuation_attempted": False,
@@ -6724,6 +7146,80 @@ class CurrentLoopCoordinator:
                     ) from exc
                 state = self.store.read()
                 coordinator = self._coordinator_state(state)
+                if isinstance(request_semantics, Mapping):
+                    requested_operation = str(request_semantics["requested_operation"])
+                    completed_substage = coordinator.get("current_step_substage")
+                    next_substage = (
+                        "qasm"
+                        if requested_operation == "source_and_qasm_generation"
+                        and completed_substage == "source"
+                        else "execution"
+                        if requested_operation == "source_and_local_execution"
+                        and completed_substage == "source"
+                        else None
+                    )
+                    step_complete = next_substage is None
+                    coordinator.update(
+                        {
+                            "phase": "evidence_processing" if step_complete else "generation_ready",
+                            "state_status": "ready",
+                            "checkpoint_kind": "none",
+                            "customer_summary": (
+                                "The exact bounded artifact was registered. qCoder stopped at "
+                                "the requested current-step ceiling without Evidence Review. "
+                                "The loop remains ready for a later exact customer instruction."
+                                if step_complete
+                                else (
+                                    "The exact source artifact was registered. qCoder prepared "
+                                    "the separately authorized next action already requested by "
+                                    "the customer; no broader authority was inferred."
+                                )
+                            ),
+                            "artifact_candidates": deepcopy(normalized),
+                            "evidence_processing_complete": False,
+                            "current_step_status": (
+                                "complete_resumable"
+                                if step_complete
+                                else "awaiting_native_permission"
+                            ),
+                            "current_step_substage": (
+                                completed_substage if step_complete else next_substage
+                            ),
+                            "current_step_operation_receipt_id": None,
+                            "assist_iteration_ready": False,
+                        }
+                    )
+                    self._replace_coordinator(coordinator)
+                    return self._result(
+                        operation="register_artifacts",
+                        ok=True,
+                        state=self.store.read(),
+                        summary=coordinator["customer_summary"],
+                        elapsed=self.clock() - started,
+                        details={
+                            "automatic_output_enrollment": True,
+                            "artifact_review_performed": False,
+                            "local_evidence_processing_performed": False,
+                            "operation_receipt_consumed": True,
+                            "activity_receipt": deepcopy(registration["activity_receipt"]),
+                            "registered_revision_ids": deepcopy(
+                                registration["registered_revision_ids"]
+                            ),
+                            "exact_artifact_inventory": {
+                                "source": 1 if normalized[0]["role"] == "source" else 0,
+                                "circuit_qasm": (
+                                    1 if normalized[0]["role"] == "circuit_qasm" else 0
+                                ),
+                                "execution": 1 if normalized[0]["role"] == "results" else 0,
+                                "results": 1 if normalized[0]["role"] == "results" else 0,
+                                "unrelated": 0,
+                            },
+                            "forced_close": False,
+                            "loop_resumable": True,
+                            "current_step_complete": step_complete,
+                            "next_substage": next_substage,
+                        },
+                    )
                 coordinator.update(
                     {
                         "phase": "evidence_processing",
@@ -8106,9 +8602,7 @@ class CurrentLoopCoordinator:
             operation=operation,
             ok=False,
             category=(
-                "unsupported_action"
-                if action_not_permitted
-                else "unsupported_recovery_schema"
+                "unsupported_action" if action_not_permitted else "unsupported_recovery_schema"
             ),
             state=state,
             summary=(
@@ -8264,8 +8758,7 @@ class CurrentLoopCoordinator:
                     if (
                         not isinstance(original, Mapping)
                         or original.get("status") != "issued"
-                        or original.get("receipt_digest")
-                        != context.get("original_receipt_digest")
+                        or original.get("receipt_digest") != context.get("original_receipt_digest")
                     ):
                         raise CurrentLoopError("causal_continuation_authority_changed")
                     current_action = _causal_registration_action(
@@ -8315,12 +8808,8 @@ class CurrentLoopCoordinator:
                     raise CurrentLoopError(
                         "causal_continuation_blocked",
                         safe_details={
-                            "one_continuation_attempt_exhausted": (
-                                continuation_attempt_committed
-                            ),
-                            "continuation_attempt_consumed": (
-                                continuation_attempt_committed
-                            ),
+                            "one_continuation_attempt_exhausted": (continuation_attempt_committed),
+                            "continuation_attempt_consumed": (continuation_attempt_committed),
                             "material_change_or_commit_conflict_detected": True,
                             "retry_loop_permitted": False,
                             "new_authority_silently_requested": False,
@@ -10467,13 +10956,10 @@ class CurrentLoopCoordinator:
             {
                 "semantic_classification": "blueprint_decision",
                 "control_treatment": control_treatment,
-                "semantic_role": selected.get("semantic_role")
-                or definition["semantic_role"],
+                "semantic_role": selected.get("semantic_role") or definition["semantic_role"],
                 "applicable_scope": selected.get("applicable_scope")
                 or definition["applicable_scope"],
-                "relationship_to_requirement": selected.get(
-                    "relationship_to_requirement"
-                )
+                "relationship_to_requirement": selected.get("relationship_to_requirement")
                 or definition["relationship_to_requirement"],
                 "related_requirement_references": [
                     selected.get("relationship_to_requirement")
@@ -10504,9 +10990,7 @@ class CurrentLoopCoordinator:
         ]
         return result
 
-    def _current_parent_descriptors(
-        self, current: Mapping[str, Any]
-    ) -> list[dict[str, str]]:
+    def _current_parent_descriptors(self, current: Mapping[str, Any]) -> list[dict[str, str]]:
         references = current.get("artifact_references")
         if not isinstance(references, Mapping):
             raise CurrentLoopError("canonical_parent_set_incomplete")
@@ -10635,6 +11119,13 @@ class CurrentLoopCoordinator:
             "pending_checkpoint_input": None,
             "checkpoint_input_history": [],
             "next_loop_branch": None,
+            "current_request_semantics": None,
+            "request_semantics_history": [],
+            "current_step_status": "not_applicable",
+            "current_step_substage": None,
+            "current_step_operation_receipt_id": None,
+            "bootstrap_count": 0,
+            "request_baseline_count": 0,
         }
 
     def _coordinator_state(self, state: Mapping[str, Any]) -> dict[str, Any]:
@@ -10650,7 +11141,7 @@ class CurrentLoopCoordinator:
         if result.get("schema_id") in {
             PREVIOUS_COORDINATOR_STATE_SCHEMA_ID,
             *OLDER_COORDINATOR_STATE_SCHEMA_IDS,
-        } and result.get("schema_version") in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}:
+        } and result.get("schema_version") in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}:
             result["schema_id"] = COORDINATOR_STATE_SCHEMA_ID
             result["schema_version"] = COORDINATOR_STATE_SCHEMA_VERSION
             result.setdefault("effective_generation_posture", state.get("generation_posture"))
@@ -10666,6 +11157,13 @@ class CurrentLoopCoordinator:
             result.setdefault("pending_checkpoint_input", None)
             result.setdefault("checkpoint_input_history", [])
             result.setdefault("next_loop_branch", None)
+            result.setdefault("current_request_semantics", None)
+            result.setdefault("request_semantics_history", [])
+            result.setdefault("current_step_status", "not_applicable")
+            result.setdefault("current_step_substage", None)
+            result.setdefault("current_step_operation_receipt_id", None)
+            result.setdefault("bootstrap_count", 0)
+            result.setdefault("request_baseline_count", 0)
             for candidate in result.get("artifact_candidates", []):
                 if (
                     isinstance(candidate, dict)
@@ -10685,6 +11183,13 @@ class CurrentLoopCoordinator:
         result.setdefault("pending_checkpoint_input", None)
         result.setdefault("checkpoint_input_history", [])
         result.setdefault("next_loop_branch", None)
+        result.setdefault("current_request_semantics", None)
+        result.setdefault("request_semantics_history", [])
+        result.setdefault("current_step_status", "not_applicable")
+        result.setdefault("current_step_substage", None)
+        result.setdefault("current_step_operation_receipt_id", None)
+        result.setdefault("bootstrap_count", 0)
+        result.setdefault("request_baseline_count", 0)
         if (
             result.get("schema_id") != COORDINATOR_STATE_SCHEMA_ID
             or result.get("schema_version") != COORDINATOR_STATE_SCHEMA_VERSION
@@ -10719,6 +11224,41 @@ class CurrentLoopCoordinator:
         ):
             raise CurrentLoopError("current_loop_state_corrupt")
         if not isinstance(result.get("recovery_history"), list):
+            raise CurrentLoopError("current_loop_state_corrupt")
+        request_semantics = result.get("current_request_semantics")
+        if request_semantics is not None:
+            if not isinstance(request_semantics, Mapping):
+                raise CurrentLoopError("current_loop_state_corrupt")
+            try:
+                validate_request_semantics(request_semantics)
+            except ValueError as exc:
+                raise CurrentLoopError("current_request_semantics_invalid") from exc
+        if not isinstance(result.get("request_semantics_history"), list):
+            raise CurrentLoopError("current_loop_state_corrupt")
+        if result.get("current_step_status") not in {
+            "not_applicable",
+            "action_ready",
+            "awaiting_native_permission",
+            "awaiting_artifact_registration",
+            "complete_resumable",
+        }:
+            raise CurrentLoopError("current_loop_state_corrupt")
+        if result.get("current_step_substage") not in {
+            None,
+            "source",
+            "qasm",
+            "execution",
+            "review",
+            "diff",
+        }:
+            raise CurrentLoopError("current_loop_state_corrupt")
+        if result.get("current_step_operation_receipt_id") is not None and not isinstance(
+            result.get("current_step_operation_receipt_id"), str
+        ):
+            raise CurrentLoopError("current_loop_state_corrupt")
+        if not isinstance(result.get("bootstrap_count"), int) or not isinstance(
+            result.get("request_baseline_count"), int
+        ):
             raise CurrentLoopError("current_loop_state_corrupt")
         if result.get("pending_checkpoint_input") is not None and not isinstance(
             result.get("pending_checkpoint_input"), Mapping
@@ -10942,6 +11482,87 @@ class CurrentLoopCoordinator:
             )
             return protocol
         if phase == "generation_ready" and state_status == "ready":
+            request_semantics = (
+                coordinator.get("current_request_semantics")
+                if isinstance(coordinator, Mapping)
+                else None
+            )
+            if isinstance(request_semantics, Mapping):
+                requested_operation = str(request_semantics["requested_operation"])
+                current_substage = coordinator.get("current_step_substage")
+                if current_substage == "qasm":
+                    operation_category = "ide_write"
+                    output_role = "circuit_qasm"
+                    customer_label = "Allow this QASM export"
+                elif current_substage == "execution":
+                    operation_category = "ide_execute"
+                    output_role = "results"
+                    customer_label = "Allow this local execution"
+                elif requested_operation in {
+                    "source_generation",
+                    "source_and_qasm_generation",
+                    "source_and_local_execution",
+                }:
+                    operation_category = "ide_write"
+                    output_role = "source"
+                    customer_label = "Allow this source write"
+                elif requested_operation == "qasm_export":
+                    operation_category = "ide_write"
+                    output_role = "circuit_qasm"
+                    customer_label = "Allow this QASM export"
+                elif requested_operation == "local_execution":
+                    operation_category = "ide_execute"
+                    output_role = "results"
+                    customer_label = "Allow this local execution"
+                else:
+                    raise CurrentLoopError("current_request_stage_unsupported")
+                invocation = _invocation_template(
+                    "record-ide-authority",
+                    required_flags=(
+                        "--allow",
+                        "--explicit",
+                        "--operation-category",
+                        "--output-role",
+                    ),
+                    new_inputs=("action_specific_native_client_permission",),
+                )
+                invocation["fixed_argument_values"] = {
+                    "--operation-category": operation_category,
+                    "--output-role": output_role,
+                }
+                compact_action = {
+                    "schema_id": "qcoder.current_loop.compact_next_action.v1",
+                    "schema_version": 1,
+                    "action": operation_category,
+                    "artifact_role": output_role,
+                    "customer_facing_permission": customer_label,
+                    "current_request_semantics_digest": request_semantics["semantics_digest"],
+                    "current_step_ceiling_digest": request_semantics["current_step_ceiling"][
+                        "ceiling_digest"
+                    ],
+                    "native_permission_required": True,
+                    "grants_execution": operation_category == "ide_execute",
+                    "grants_evidence_review": False,
+                    "grants_governing_change": False,
+                    "procedural_source_of_truth": True,
+                    "transcript_or_repository_reconstruction_permitted": False,
+                }
+                compact_action["action_digest"] = sha256(
+                    canonical_bytes(compact_action)
+                ).hexdigest()
+                protocol.update(
+                    {
+                        "supported_next_action": "obtain_action_specific_native_permission",
+                        "next_invocation": invocation,
+                        "compact_next_action": compact_action,
+                        "compact_next_action_is_sole_procedural_source": True,
+                        "required_authority_input": _authority_input(
+                            "--allow", customer_label, additional_flags=("--explicit",)
+                        ),
+                        "permitted_input_source": "explicit_action_specific_native_permission",
+                    }
+                )
+                return protocol
             protocol.update(
                 {
                     "supported_next_action": "obtain_separate_ide_write_or_run_authority",
@@ -10960,6 +11581,79 @@ class CurrentLoopCoordinator:
             )
             return protocol
         if phase == "awaiting_local_artifacts" and state_status == "ready":
+            request_semantics = (
+                coordinator.get("current_request_semantics")
+                if isinstance(coordinator, Mapping)
+                else None
+            )
+            receipt_id = (
+                coordinator.get("current_step_operation_receipt_id")
+                if isinstance(coordinator, Mapping)
+                else None
+            )
+            if isinstance(request_semantics, Mapping) and isinstance(receipt_id, str):
+                substage = coordinator.get("current_step_substage")
+                role = (
+                    "source"
+                    if substage == "source"
+                    else "circuit_qasm"
+                    if substage == "qasm"
+                    else "results"
+                )
+                path_flag = {
+                    "source": "--source",
+                    "circuit_qasm": "--qasm",
+                    "results": "--results",
+                }[role]
+                invocation = _invocation_template(
+                    "register-artifacts",
+                    required_flags=(
+                        path_flag,
+                        "--provenance",
+                        "--operation-receipt-id",
+                    ),
+                    new_inputs=("exact_path_returned_by_authorized_native_action",),
+                    argument_values=(
+                        {
+                            "flag": path_flag,
+                            "value_source": "exact_native_action_output_path",
+                        },
+                    ),
+                    fixed_argument_values={
+                        "--provenance": "assistant_created",
+                        "--operation-receipt-id": receipt_id,
+                    },
+                )
+                compact_action = {
+                    "schema_id": "qcoder.current_loop.compact_next_action.v1",
+                    "schema_version": 1,
+                    "action": "register_exact_authorized_output",
+                    "artifact_role": role,
+                    "artifact_cardinality": "exactly_one",
+                    "operation_receipt_id": receipt_id,
+                    "current_request_semantics_digest": request_semantics["semantics_digest"],
+                    "current_step_ceiling_digest": request_semantics["current_step_ceiling"][
+                        "ceiling_digest"
+                    ],
+                    "native_permission_already_recorded": True,
+                    "grants_evidence_review": False,
+                    "procedural_source_of_truth": True,
+                    "transcript_or_repository_reconstruction_permitted": False,
+                }
+                protocol.update(
+                    {
+                        "supported_next_action": "register_exact_authorized_output",
+                        "next_invocation": invocation,
+                        "compact_next_action": compact_action,
+                        "compact_next_action_is_sole_procedural_source": True,
+                        "required_authority_input": None,
+                        "awaiting_confirmation_fields": [],
+                        "confirmation_transmission_state": "confirmed",
+                        "identical_repeat_prohibited": True,
+                        "permitted_input_source": "exact_native_action_output_path",
+                    }
+                )
+                return protocol
             protocol.update(
                 {
                     "supported_next_action": (
@@ -10977,6 +11671,49 @@ class CurrentLoopCoordinator:
             )
             return protocol
         if phase == "evidence_processing" and state_status == "ready":
+            if (
+                isinstance(coordinator, Mapping)
+                and coordinator.get("current_step_status") == "complete_resumable"
+                and isinstance(coordinator.get("current_request_semantics"), Mapping)
+            ):
+                protocol.update(
+                    {
+                        "supported_next_action": "await_exact_customer_continuation",
+                        "next_invocation": _invocation_template(
+                            "interpret-current-request",
+                            required_flags=("--request-stdin",),
+                            new_inputs=(
+                                "exact_current_customer_message",
+                                "optional_exact_native_selected_paths",
+                            ),
+                            argument_values=(
+                                {
+                                    "flag": "--selected-path",
+                                    "value_source": "exact_native_client_selection_if_requested",
+                                    "repeatable": True,
+                                    "required_only_for": "selected_artifact_review",
+                                },
+                            ),
+                        ),
+                        "compact_next_action": {
+                            "schema_id": "qcoder.current_loop.compact_next_action.v1",
+                            "schema_version": 1,
+                            "action": "await_exact_customer_continuation",
+                            "current_step_complete": True,
+                            "loop_resumable": True,
+                            "forced_close": False,
+                            "rebootstrap_permitted": False,
+                            "request_baseline_recreation_permitted": False,
+                            "exact_native_selection_transport_declared": True,
+                            "procedural_source_of_truth": True,
+                            "transcript_or_repository_reconstruction_permitted": False,
+                        },
+                        "compact_next_action_is_sole_procedural_source": True,
+                        "permitted_input_source": "exact_current_customer_message",
+                        "required_authority_input": None,
+                    }
+                )
+                return protocol
             processing_complete = (
                 isinstance(coordinator, Mapping)
                 and coordinator.get("evidence_processing_complete") is True
@@ -11775,6 +12512,28 @@ class CurrentLoopCoordinator:
             protocol=protocol,
             initialize_inputs=persist_performance,
         )
+        request_semantics = coordinator.get("current_request_semantics")
+        compact_action = protocol.get("compact_next_action")
+        bound_next = protocol.get("next_invocation")
+        if (
+            isinstance(request_semantics, Mapping)
+            and isinstance(compact_action, Mapping)
+            and isinstance(bound_next, Mapping)
+            and isinstance(bound_next.get("operation_specific_invocation"), Mapping)
+        ):
+            compact = deepcopy(dict(compact_action))
+            compact.pop("action_digest", None)
+            compact["operation_specific_invocation"] = deepcopy(
+                dict(bound_next["operation_specific_invocation"])
+            )
+            compact["operation_invocation_digest"] = sha256(
+                canonical_bytes(compact["operation_specific_invocation"])
+            ).hexdigest()
+            compact["action_digest"] = sha256(canonical_bytes(compact)).hexdigest()
+            protocol["compact_next_action"] = compact
+            protocol["next_invocation"]["procedural_authority"] = (
+                "non_authoritative_projection_of_compact_next_action"
+            )
         self._validate_protocol_disposition(
             phase=coordinator["phase"],
             state_status=coordinator["state_status"],
@@ -11841,6 +12600,9 @@ class CurrentLoopCoordinator:
             contract_revision=contract_revision,
             reason=controls_reason,
         )
+        if isinstance(request_semantics, Mapping):
+            control_envelope["procedural_construction_permitted"] = False
+            control_envelope["disposition"] = "diagnostic_controls_only"
         result = {
             "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
             "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
@@ -11878,6 +12640,28 @@ class CurrentLoopCoordinator:
             },
             **protocol,
         }
+        if isinstance(request_semantics, Mapping):
+            result["current_request_semantics"] = deepcopy(dict(request_semantics))
+            current_layers = deepcopy(dict(request_semantics["authority_layers"]))
+            current_substage = coordinator.get("current_step_substage")
+            if current_substage in {"qasm", "execution"}:
+                native = current_layers["native_client_permission"]
+                bounded = current_layers["qcoder_bounded_action"]
+                if current_substage == "qasm":
+                    bounded["object"] = "exact_bounded_qasm_export"
+                    native["object"] = "exact_local_file_write"
+                    native["customer_facing_label"] = "Allow this QASM export"
+                else:
+                    bounded["object"] = "exact_bounded_local_execution"
+                    native["object"] = "exact_local_execution"
+                    native["customer_facing_label"] = "Allow this local execution"
+                current_layers["projection_basis"] = "current_step_substage"
+                current_layers["current_step_substage"] = current_substage
+            result["authority_layers"] = current_layers
+            result["request_semantics_contract"] = semantics_contract_snapshot()
+            result["bootstrap_count"] = coordinator.get("bootstrap_count", 0)
+            result["request_baseline_count"] = coordinator.get("request_baseline_count", 0)
+            result["current_step_status"] = coordinator.get("current_step_status")
         interaction_kind = self._interaction_kind(
             operation=operation,
             ok=ok,
@@ -11925,6 +12709,7 @@ class CurrentLoopCoordinator:
                     "finish_loop",
                 )
                 if state.get("quiet_iteration_status") == "assist_iteration_ready"
+                and not isinstance(request_semantics, Mapping)
                 else ()
             ),
         )
@@ -11943,14 +12728,12 @@ class CurrentLoopCoordinator:
             ),
             evidence_summary_reference=(
                 str(state.get("latest_run_summary_reference"))
-                if not causal_continuation
-                and state.get("latest_run_summary_reference") is not None
+                if not causal_continuation and state.get("latest_run_summary_reference") is not None
                 else None
             ),
             primary_next_invocation=(
                 protocol.get("next_invocation")
-                if not causal_continuation
-                and isinstance(protocol.get("next_invocation"), Mapping)
+                if not causal_continuation and isinstance(protocol.get("next_invocation"), Mapping)
                 else None
             ),
             help_invocation=None if causal_continuation else generic_help_invocation,
@@ -13064,9 +13847,7 @@ class CurrentLoopCoordinator:
             state: Mapping[str, Any] | None = self.store.read()
         except CurrentLoopError:
             state = None
-        state_coordinator = (
-            self._coordinator_state(state) if isinstance(state, Mapping) else None
-        )
+        state_coordinator = self._coordinator_state(state) if isinstance(state, Mapping) else None
         causal_continuation = (
             normalized == "operation_receipt_stale"
             and isinstance(state, Mapping)
@@ -13103,9 +13884,7 @@ class CurrentLoopCoordinator:
             "conversation_may_continue": policy["conversation_may_continue"],
             "reauthorization_required": policy["reauthorization_required"],
             "local_state_intact": policy["local_state_intact"],
-            "certification_fallback_available": policy[
-                "certification_fallback_available"
-            ],
+            "certification_fallback_available": policy["certification_fallback_available"],
             **supplied_details,
         }
         payload["assistant_should_stop"] = not recoverable
@@ -13118,11 +13897,7 @@ class CurrentLoopCoordinator:
         )
         strategy = str(policy["strategy"])
         selected_alternatives = list(policy["advertised_actions"])
-        input_digests = [
-            str(value)
-            for value in internal_input_digests
-            if isinstance(value, str)
-        ]
+        input_digests = [str(value) for value in internal_input_digests if isinstance(value, str)]
         fingerprint = recovery_fingerprint(
             category=normalized,
             operation=operation,
@@ -13138,8 +13913,7 @@ class CurrentLoopCoordinator:
             "prior_valid_evidence_preserved": policy["local_state_intact"],
             "permitted_input_source": (
                 "qcoder_owned_prebound_value"
-                if strategy
-                in {"qcoder_corrects", "rebind_event_receipt", "causal_continuation"}
+                if strategy in {"qcoder_corrects", "rebind_event_receipt", "causal_continuation"}
                 else "fresh_coordinator_result"
             ),
             "customer_review_required": policy["reauthorization_required"],
@@ -13347,8 +14121,7 @@ class CurrentLoopCoordinator:
             )
         except CurrentLoopError as exc:
             if not (
-                causal_continuation
-                and exc.category == "causal_continuation_advertisement_invalid"
+                causal_continuation and exc.category == "causal_continuation_advertisement_invalid"
             ):
                 raise
             fallback_details = deepcopy(dict(details or {}))
@@ -13404,6 +14177,7 @@ class CurrentLoopCoordinator:
         if (
             category not in _RECOVERY_PRESENTATION
             and category not in SAFE_TYPED_CURRENT_LOOP_CATEGORIES
+            and category not in ADDITIONAL_TYPED_RECOVERY_CATEGORIES
             and not isinstance(
                 exc,
                 (

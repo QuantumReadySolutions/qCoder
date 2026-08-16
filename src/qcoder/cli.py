@@ -1900,6 +1900,24 @@ def _cmd_current_loop(argv: list[str]) -> int:
         ),
     )
 
+    interpret_request = sub.add_parser(
+        "interpret-current-request",
+        help=("Binding-owned exact-message continuation intake for an active Current Loop."),
+    )
+    interpret_request.add_argument(
+        "--request-stdin",
+        action="store_true",
+        required=True,
+        help="Read the exact current customer message from UTF-8 stdin.",
+    )
+    interpret_request.add_argument(
+        "--selected-path",
+        action="append",
+        default=[],
+        help="Exact native-client/customer-selected file; never discovered by qCoder.",
+    )
+    _add_current_loop_transport_arguments(interpret_request, DEFAULT_BASE_URL, default_token_file())
+
     abandon = sub.add_parser("abandon", help="Explicitly abandon the active local loop.")
     abandon.add_argument(
         "--approve",
@@ -2236,8 +2254,10 @@ def _cmd_current_loop(argv: list[str]) -> int:
                 parser.error("connected assistant operation input must be an object")
             instruction = envelope.get("customer_instruction")
             selected_paths = envelope.get("selected_paths", [])
-            if not isinstance(instruction, str) or not isinstance(selected_paths, list) or not all(
-                isinstance(item, str) for item in selected_paths
+            if (
+                not isinstance(instruction, str)
+                or not isinstance(selected_paths, list)
+                or not all(isinstance(item, str) for item in selected_paths)
             ):
                 parser.error("connected assistant operation input fields are invalid")
             result = coordinator.execute_connected_assistant_workflow(
@@ -2249,15 +2269,27 @@ def _cmd_current_loop(argv: list[str]) -> int:
                     else None
                 ),
                 proposal=(
-                    envelope.get("proposal")
-                    if isinstance(envelope.get("proposal"), dict)
-                    else None
+                    envelope.get("proposal") if isinstance(envelope.get("proposal"), dict) else None
                 ),
                 confirmation=(
                     envelope.get("confirmation")
                     if isinstance(envelope.get("confirmation"), dict)
                     else None
                 ),
+            )
+        elif command == "interpret-current-request":
+            raw_request = sys.stdin.buffer.read(65_537)
+            if len(raw_request) > 65_536:
+                parser.error("current request exceeds 65536 bytes")
+            try:
+                exact_request = raw_request.decode("utf-8")
+            except UnicodeDecodeError:
+                parser.error("current request must be UTF-8")
+            result = coordinator.interpret_current_request(
+                exact_message=exact_request,
+                selected_paths=[
+                    str(Path(value).expanduser().absolute()) for value in args.selected_path
+                ],
             )
         else:
             result = coordinator.abandon(explicit_authority=args.approve)

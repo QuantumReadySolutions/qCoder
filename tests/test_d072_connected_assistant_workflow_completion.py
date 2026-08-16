@@ -398,7 +398,7 @@ def test_distributed_binding_and_tool_descriptions_expose_shared_d072_semantics(
     workflow = descriptor["named_workflow_completion"]
     descriptions = {item["name"]: item["description"] for item in tool_descriptors()}
 
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v22"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v23"
     assert len(EXPECTED_TOOLS) == 12
     assert workflow["preparatory_success_is_completion"] is False
     assert workflow["automatic_continuation_scope"] == "already_selected_named_workflow_only"

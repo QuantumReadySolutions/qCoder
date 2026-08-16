@@ -13,7 +13,7 @@ from qcoder import __version__
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts/verify-release-version.py"
-EXPECTED_VERSION = "0.6.0a14+wi0432.wi0433.d079"
+EXPECTED_VERSION = "0.6.0a14+wi0432.wi0433.wi0434.d079.d080"
 EXPECTED_PUBLIC_VERSION = "0.6.0a13"
 EXPECTED_POSTURE = "unpublished_candidate"
 EXPECTED_INTERVENING: list[str] = []

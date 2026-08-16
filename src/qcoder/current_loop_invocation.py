@@ -29,8 +29,8 @@ from qcoder.current_loop_iteration import ITERATION_AUTHORITY_RECEIPT_SCHEMA_ID
 
 INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v6"
 INVOCATION_CONTRACT_SCHEMA_VERSION = 6
-OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v5"
-OPERATION_INVENTORY_SCHEMA_VERSION = 5
+OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v6"
+OPERATION_INVENTORY_SCHEMA_VERSION = 6
 
 LOCAL_ONLY = "local_only"
 HOSTED_CAPABLE = "hosted_capable"
@@ -40,6 +40,17 @@ DYNAMIC_STAGED_OPERATION = "staged_operation_scoped"
 _OPERATION_ROWS: tuple[dict[str, Any], ...] = (
     {"operation": "status", "subcommand": "status", "transport": LOCAL_ONLY},
     {"operation": "activate", "subcommand": "activate", "transport": LOCAL_ONLY},
+    {
+        "operation": "interpret_current_request",
+        "subcommand": "interpret-current-request",
+        "transport": HOSTED_CAPABLE,
+        "binding_owned_internal_operation": True,
+        "public_context_bridge_tool": False,
+        "input_channel": "exact_request_stdin",
+        "customer_constructs_command": False,
+        "rebootstraps_current_loop": False,
+        "recreates_request_baseline": False,
+    },
     {
         "operation": "prepare_generation",
         "subcommand": "prepare-generation",

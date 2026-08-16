@@ -412,7 +412,7 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
     }
     assert binding["workstyle_routes"]["single_capability"] == {
         "trigger": (
-            "explicit_bounded_capability_request_not_classified_as_named_d079_workflow"
+            "explicit_bounded_capability_request_not_classified_as_named_d079_or_d080_workflow"
         ),
         "action": "use_applicable_mcp_tool",
         "activates_context_loop": False,
@@ -420,6 +420,7 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
     named = binding["workstyle_routes"]["named_d079_workflow"]
     assert binding["workstyle_routes"]["routing_precedence"] == [
         "available_inactive",
+        "supported_d080_concrete_current_request",
         "explicit_active_build",
         "supported_named_d079_workflow",
         "generic_single_capability_fallthrough",
@@ -433,6 +434,9 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
     assert named["named_workflows"]["selected_file_evidence_review"][
         "raw_mcp_default_entrypoint"
     ] is False
+    assert binding["workstyle_routes"]["d080_current_request"][
+        "compact_next_action_is_sole_procedural_source"
+    ] is True
     assert binding["workstyle_routes"]["active_build"] == {
         "trigger": "explicit_use_qcoder_for_this_build_or_accepted_offer",
         "action": "execute_fresh_active_build_bootstrap_invocation",

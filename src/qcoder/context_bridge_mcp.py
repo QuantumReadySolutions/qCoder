@@ -68,6 +68,7 @@ from qcoder.current_loop_invocation import (
     invocation_contract_snapshot,
     operation_transport_inventory,
 )
+from qcoder.current_loop_request_semantics import semantics_contract_snapshot
 from qcoder.current_loop_bounded_control import bounded_control_contract_snapshot
 from qcoder.current_loop_adaptive_intent import (
     adaptive_intent_completeness_matrix,
@@ -153,8 +154,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 22
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v22"
+CLIENT_BINDING_SCHEMA_VERSION = 23
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v23"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -167,6 +168,19 @@ Available but inactive: when there is no explicit qCoder request, no accepted qC
 offer, and no explicit bounded qCoder capability request, perform no qCoder operation. Do not
 invoke the coordinator, call a qCoder MCP domain tool, or create qCoder state. A proactive offer
 is permitted but must not activate qCoder without acceptance.
+
+Concrete D-080 current request: before planning-language or generic single-capability fallback,
+classify the exact current customer message through the binding's canonical request-semantics
+contract. A concrete explicit qCoder source, QASM, execution, or selected-file review request uses
+the binding-owned local route. The binding constructs the invocation; the customer supplies no
+command, flags, JSON, IDs, digests, or lineage. One bootstrap preserves the exact Request Baseline
+and activates Assist for this request only. After the first actionable result, compact_next_action
+is the sole procedural construction source. Never reconstruct procedure from chats, workspaces,
+.qcoder state, package/source inspection, or remembered tool choreography. The temporary stage
+ceiling mechanically limits operation, output roles, registration, and authority receipts.
+Activation, qCoder's bounded action, native action-specific permission, and later artifact or
+governing authority are separate. A later exact customer instruction uses interpret-current-request
+without bootstrap or Request Baseline recreation.
 
 Named D-079 workflow override: before applying the generic single-capability route, classify
 whether ordinary customer language requests “Algorithm Blueprint / Generation Context” or
@@ -567,6 +581,7 @@ def build_client_binding_descriptor(
                 post_result_invocation_contract=post_result_contract,
             ),
             "operation_transport_inventory": operation_transport_inventory(),
+            "current_request_semantics_contract": semantics_contract_snapshot(),
             "bounded_control_input_contract": bounded_control_contract_snapshot(),
             "adaptive_intent_input_contract": adaptive_intent_contract_snapshot(),
             "adaptive_intent_input_completeness_matrix": adaptive_intent_completeness_matrix(),
@@ -638,13 +653,14 @@ def build_client_binding_descriptor(
                     "trigger": "no_explicit_qcoder_request",
                     "action": "none",
                 },
-                "routing_precedence": deepcopy(
-                    d079_contract["default_routing"]["decision_order"]
-                ),
+                "routing_precedence": deepcopy(d079_contract["default_routing"]["decision_order"]),
                 "named_d079_workflow": deepcopy(d079_contract["default_routing"]),
+                "d080_current_request": deepcopy(
+                    d079_contract["default_routing"]["d080_current_request"]
+                ),
                 "single_capability": {
                     "trigger": (
-                        "explicit_bounded_capability_request_not_classified_as_named_d079_workflow"
+                        "explicit_bounded_capability_request_not_classified_as_named_d079_or_d080_workflow"
                     ),
                     "action": "use_applicable_mcp_tool",
                     "activates_context_loop": False,

@@ -605,7 +605,7 @@ def _activate_and_prepare(
 def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
     snapshot = coordinator_contract_snapshot()
     assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v17"
-    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v13"
+    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v14"
     assert snapshot["checkpoint_result_protocol"]["schema_version"] == 17
     assert all(snapshot["checkpoint_result_protocol"].values())
     assert snapshot["permitted_input_source_taxonomy"] == {
@@ -659,7 +659,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("ebdb841db14dab1a306eaf08c784421d028612942456a70c5e266206c55a85f0")
+    assert contract_digest == ("94c4fd3ff17755d39d1808f1cc27fb6110a0429c6c1f3984dbfbf5567beebb09")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)

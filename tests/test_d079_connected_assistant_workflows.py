@@ -480,7 +480,7 @@ def test_public_tool_inventory_remains_exactly_twelve() -> None:
     descriptor = build_client_binding_descriptor(coordinator_prefix=["python", "-m", "qcoder"])[
         "client_binding_contract"
     ]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v22"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v23"
     assert descriptor["d079_orchestration"]["public_tool_count"] == 12
     assert descriptor["d079_orchestration"]["blueprint_workflow"]["decision_aware_by_default"] is True
     assert descriptor["d079_orchestration"]["evidence_review_workflow"]["repository_discovery"] is False
