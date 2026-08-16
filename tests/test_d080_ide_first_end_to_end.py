@@ -743,6 +743,18 @@ def test_negated_or_nonterminal_close_words_cannot_end_or_abandon_the_loop(
     assert semantics["requested_operation"] == "source_generation"
     assert semantics["route"] == "active_loop_continuation"
 
+    for message in (
+        "Close the editor; keep the qCoder loop running.",
+        "End the local execution and return to the qCoder loop.",
+    ):
+        before = deepcopy(coordinator.store.read())
+        result = coordinator.interpret_current_request(exact_message=message)
+        assert result["ok"] is False
+        assert result["category"] == "current_request_inactive"
+        assert result["current_request_semantics"]["requested_operation"] == "inactive"
+        assert result["state_mutated"] is False
+        assert coordinator.store.read() == before
+
 
 def test_polite_modal_tasks_are_tasks_and_modal_discussion_stays_informational() -> None:
     source_tasks = (
@@ -845,3 +857,26 @@ def test_explicit_generation_bootstrap_never_uses_legacy_broad_role_ceiling(
     assert execution["ok"] is False
     assert execution["category"] == "current_step_authority_mismatch"
     assert coordinator.store.read() == before
+
+
+def test_direct_generic_exact_message_activation_cannot_bypass_d080_semantics(
+    tmp_path: Path,
+) -> None:
+    for index, message in enumerate(
+        (
+            "Use qCoder for this build.",
+            "Use qCoder for this build. Help me plan the work.",
+        )
+    ):
+        workspace = tmp_path / f"generic-{index}"
+        workspace.mkdir()
+        coordinator = CurrentLoopCoordinator(workspace_root=workspace)
+        result = coordinator.activate(
+            original_request=message,
+            explicit_authority=True,
+            capture_mode="exact_current_customer_message",
+            request_transport="stdin",
+        )
+        assert result["ok"] is False
+        assert result["category"] == "activation_exact_message_mode_ineligible"
+        assert coordinator.store.state_path.exists() is False

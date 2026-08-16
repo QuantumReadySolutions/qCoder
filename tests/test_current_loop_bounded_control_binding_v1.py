@@ -35,6 +35,7 @@ from qcoder.context_bridge_mcp import (
     CLIENT_BINDING_CONTRACT_ID,
     build_client_binding_descriptor,
 )
+from tests.current_loop_test_support import activate_reviewed_legacy_fixture
 
 
 REQUEST = "Use qCoder for this build. Bind every bounded local control."
@@ -42,11 +43,9 @@ REQUEST = "Use qCoder for this build. Bind every bounded local control."
 
 def _activate(tmp_path: Path) -> tuple[CurrentLoopCoordinator, dict]:
     coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
-    result = coordinator.activate(
+    result = activate_reviewed_legacy_fixture(
+        coordinator,
         original_request=REQUEST,
-        explicit_authority=True,
-        capture_mode="exact_current_customer_message",
-        request_transport="stdin",
     )
     assert result["ok"] is True
     return coordinator, result

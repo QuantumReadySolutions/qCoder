@@ -7,17 +7,14 @@ from qcoder.context_bridge_mcp import EXPECTED_TOOLS
 from qcoder.current_loop import build_loop_instance_record
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.current_loop_invocation import operation_transport_inventory
+from tests.current_loop_test_support import activate_reviewed_legacy_fixture
 
 
 def _evidence_ready(tmp_path: Path) -> CurrentLoopCoordinator:
     coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
-    activated = coordinator.activate(
-        original_request=(
-            "Use qCoder for this build context with optional post-build assessment."
-        ),
-        explicit_authority=True,
-        capture_mode="exact_current_customer_message",
-        request_transport="stdin",
+    activated = activate_reviewed_legacy_fixture(
+        coordinator,
+        original_request=("Use qCoder for this build context with optional post-build assessment."),
     )
     assert activated["ok"] is True
     state = coordinator.store.read()

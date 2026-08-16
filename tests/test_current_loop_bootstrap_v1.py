@@ -225,7 +225,7 @@ def test_black_box_bootstrap_activates_assist_with_exact_receipt(
         FRESH_ACTIVE_BUILD_ENTRYPOINT
     ]
     request = (
-        "Use qCoder for this build. Create and run a simple Bell circuit.\n"
+        "Use qCoder for this build. Create and run a simple Bell Qiskit program.\n"
         "Keep `00` and `11`; literal $(printf no), quotes ' \" and Ω 😀."
     ).encode("utf-8")
     completed = _run_bootstrap(bootstrap, workspace=workspace, request=request)
@@ -240,9 +240,12 @@ def test_black_box_bootstrap_activates_assist_with_exact_receipt(
     assert display["posture_deferred"] is False
     assert display["generation_governance"] == "adaptive"
     assert display["activation_receipt"]["preset"] == "assist"
+    assert result["current_request_semantics"]["requested_operation"] == (
+        "source_and_local_execution"
+    )
     assert (
         result["next_invocation"]["operation_specific_invocation"]["operation"]
-        == "prepare_adaptive_intent"
+        == "record_ide_authority"
     )
 
 
@@ -252,7 +255,7 @@ def test_duplicate_exact_message_bootstrap_fails_without_duplicate_activation(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     bootstrap = build_fresh_active_build_bootstrap(executable=sys.executable)
-    request = b"Use qCoder for this build. Create a Bell circuit."
+    request = b"Use qCoder for this build. Create a Bell Qiskit program."
     first = json.loads(_run_bootstrap(bootstrap, workspace=workspace, request=request).stdout)
     second = json.loads(_run_bootstrap(bootstrap, workspace=workspace, request=request).stdout)
     assert first["ok"] is True

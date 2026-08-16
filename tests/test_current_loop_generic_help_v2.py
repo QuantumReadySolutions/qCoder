@@ -33,10 +33,9 @@ from qcoder.current_loop_result_envelope import (
     CUSTOMER_ENVELOPE_SCHEMA_ID,
     TIERED_RESULT_ENVELOPE_SCHEMA_ID,
 )
+from tests.current_loop_test_support import activate_reviewed_legacy_fixture
 
-REQUEST = (
-    "Use qCoder for this build context with the established generic-help contract."
-)
+REQUEST = "Use qCoder for this build context with the established generic-help contract."
 
 
 def _fields() -> dict[str, dict[str, Any]]:
@@ -68,11 +67,9 @@ def _fields() -> dict[str, dict[str, Any]]:
 
 def _active(workspace: Path, *, with_intent: bool = False) -> CurrentLoopCoordinator:
     coordinator = CurrentLoopCoordinator(workspace_root=workspace)
-    activated = coordinator.activate(
+    activated = activate_reviewed_legacy_fixture(
+        coordinator,
         original_request=REQUEST,
-        explicit_authority=True,
-        capture_mode="exact_current_customer_message",
-        request_transport="stdin",
     )
     assert activated["ok"] is True
     if with_intent:

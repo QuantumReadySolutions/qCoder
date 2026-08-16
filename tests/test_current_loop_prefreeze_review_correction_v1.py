@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from copy import deepcopy
 import json
 import math
 import os
@@ -30,6 +29,7 @@ from qcoder.current_loop_registration import (
     commit_registration_transaction,
     prepare_registration_transaction,
 )
+from tests.current_loop_test_support import activate_reviewed_legacy_fixture
 
 
 class FakeClock:
@@ -49,11 +49,9 @@ def _active(
         workspace_root=tmp_path,
         **({"clock": clock} if clock is not None else {}),
     )
-    result = coordinator.activate(
+    result = activate_reviewed_legacy_fixture(
+        coordinator,
         original_request="Use qCoder for this exact bounded build.",
-        explicit_authority=True,
-        capture_mode="exact_current_customer_message",
-        request_transport="stdin",
     )
     assert result["ok"] is True
     return coordinator
@@ -128,12 +126,9 @@ def _stale_recovery(
 
 
 def _emitted_actions(result: Mapping[str, Any]) -> list[str]:
-    alternatives = result.get("details", {}).get("recovery_contract", {}).get(
-        "alternatives", []
-    )
+    alternatives = result.get("details", {}).get("recovery_contract", {}).get("alternatives", [])
     return [
-        str(item.get("action")) if isinstance(item, Mapping) else str(item)
-        for item in alternatives
+        str(item.get("action")) if isinstance(item, Mapping) else str(item) for item in alternatives
     ]
 
 
@@ -177,9 +172,7 @@ def test_complete_runtime_recovery_matrix_drives_emission_and_snapshot(tmp_path:
             ),
         )
         assert _emitted_actions(result) == row["advertised_alternatives"]
-        active = coordinator._coordinator_state(coordinator.store.read()).get(
-            "active_recovery"
-        )
+        active = coordinator._coordinator_state(coordinator.store.read()).get("active_recovery")
         if row["advertised_alternatives"]:
             assert isinstance(active, Mapping), row
             assert active["alternatives"] == row["advertised_alternatives"]
@@ -214,9 +207,7 @@ def test_retry_registration_is_exclusive_to_executable_stale_only_state(tmp_path
         )
         assert "retry_registration" not in _emitted_actions(result)
 
-    coordinator, _receipt, _candidate_value, result = _stale_recovery(
-        tmp_path / "eligible"
-    )
+    coordinator, _receipt, _candidate_value, result = _stale_recovery(tmp_path / "eligible")
     assert "retry_registration" in _emitted_actions(result)
     active = coordinator._coordinator_state(coordinator.store.read())["active_recovery"]
     assert active["category"] == "operation_receipt_stale"
@@ -227,11 +218,7 @@ def test_every_distinct_advertised_handler_executes_in_real_isolated_state(
     tmp_path: Path,
 ) -> None:
     matrix = recovery_action_executability_matrix()
-    advertised = {
-        action
-        for row in matrix
-        for action in row["advertised_alternatives"]
-    }
+    advertised = {action for row in matrix for action in row["advertised_alternatives"]}
     proved: set[str] = set()
 
     for action, category in {
@@ -383,9 +370,7 @@ def test_receipt_valid_immediately_before_expiry_commits(tmp_path: Path) -> None
         clock=clock,
     )
     assert result["committed"] is True
-    assert result["activity_receipt"]["activity_status"] == (
-        "successful_canonical_registration"
-    )
+    assert result["activity_receipt"]["activity_status"] == ("successful_canonical_registration")
 
 
 @pytest.mark.parametrize(
@@ -503,8 +488,8 @@ def test_causal_continuation_expiry_is_rechecked_inside_canonical_commit(
     assert blocked["details"]["one_continuation_attempt_exhausted"] is True
     state = coordinator.store.read()
     assert state["operation_receipts"][receipt["receipt_id"]]["status"] == "issued"
-    assert state["operation_receipts"][receipt["receipt_id"]]["expires_at"] == (
-        receipt["expires_at"]
+    assert (
+        state["operation_receipts"][receipt["receipt_id"]]["expires_at"] == (receipt["expires_at"])
     )
     assert state["activity_receipts"] == []
     assert state["evidence_registry"]["artifact_revisions"] == {}
@@ -646,9 +631,9 @@ def test_lost_attempt_marker_cas_reports_no_continuation_attempt_consumed(
     assert blocked["details"]["one_continuation_attempt_exhausted"] is False
     assert blocked["details"]["continuation_attempt_consumed"] is False
     assert blocked["details"]["retry_loop_permitted"] is False
-    assert coordinator.store.read()["operation_receipts"][receipt["receipt_id"]][
-        "status"
-    ] == "issued"
+    assert (
+        coordinator.store.read()["operation_receipts"][receipt["receipt_id"]]["status"] == "issued"
+    )
 
 
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux source proof")

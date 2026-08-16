@@ -22,15 +22,14 @@ from qcoder.context_bridge_mcp import (
     build_client_binding_descriptor,
 )
 from qcoder.current_loop_invocation import operation_transport_inventory
+from tests.current_loop_test_support import activate_reviewed_legacy_fixture
 
 
 def _active(workspace: Path) -> CurrentLoopCoordinator:
     coordinator = CurrentLoopCoordinator(workspace_root=workspace)
-    activated = coordinator.activate(
+    activated = activate_reviewed_legacy_fixture(
+        coordinator,
         original_request="Use qCoder for this exact local editor security proof.",
-        explicit_authority=True,
-        capture_mode="exact_current_customer_message",
-        request_transport="stdin",
     )
     assert activated["ok"] is True
     return coordinator

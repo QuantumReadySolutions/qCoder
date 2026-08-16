@@ -10,16 +10,15 @@ import qcoder.current_loop_coordinator as coordinator_module
 from qcoder.current_loop import CurrentLoopError, canonical_bytes
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.current_loop_evidence_processing import hosted_enrichment_status
+from tests.current_loop_test_support import activate_reviewed_legacy_fixture
 
 
 def _active(workspace: Path) -> CurrentLoopCoordinator:
     workspace.mkdir(parents=True, exist_ok=True)
     coordinator = CurrentLoopCoordinator(workspace_root=workspace)
-    result = coordinator.activate(
+    result = activate_reviewed_legacy_fixture(
+        coordinator,
         original_request="Use qCoder for this exact bounded build.",
-        explicit_authority=True,
-        capture_mode="exact_current_customer_message",
-        request_transport="stdin",
     )
     assert result["ok"] is True
     return coordinator
@@ -247,9 +246,9 @@ def test_incompatible_recovery_does_not_weaken_explicit_abandon_authority(
     assert coordinator.store.state_path.exists()
     state = coordinator.store.read()
     assert state["completion_state"] == "in_progress"
-    assert coordinator._coordinator_state(state)["active_recovery"]["schema_id"] == active[
-        "schema_id"
-    ]
+    assert (
+        coordinator._coordinator_state(state)["active_recovery"]["schema_id"] == active["schema_id"]
+    )
     assert project_file.read_text(encoding="utf-8") == "customer-owned\n"
     assert calls == []
 
@@ -366,9 +365,7 @@ def test_stop_loop_endpoint_routes_through_gated_ordinary_abandon(
     )
     assert routed["ok"] is False
     assert routed["category"] == (
-        "unsupported_recovery_schema"
-        if legacy
-        else "recovery_stop_requires_abandon_invocation"
+        "unsupported_recovery_schema" if legacy else "recovery_stop_requires_abandon_invocation"
     )
     assert routed["details"]["supported_next_action"] == "explicit_abandon_active_loop"
     assert routed["details"]["recovery_action_executed"] is False
@@ -397,9 +394,7 @@ def test_supported_v5_actions_stay_gated_while_explicit_abandon_discards(
     executed = action_coordinator.execute_recovery_action(
         recovery_reference=str(action_active["reference"]),
         action="abandon_step",
-        expected_contract_revision=int(
-            action_state["current_loop_contract"]["contract_revision"]
-        ),
+        expected_contract_revision=int(action_state["current_loop_contract"]["contract_revision"]),
     )
     assert executed["ok"] is True
     assert observed_actions == ["abandon_step"]
@@ -440,11 +435,9 @@ def test_documented_upgrade_restart_path_is_executable_and_not_automatic(
     replacement = CurrentLoopCoordinator(workspace_root=workspace)
     with pytest.raises(CurrentLoopError, match="current_loop_not_active"):
         replacement.store.read()
-    restarted = replacement.activate(
+    restarted = activate_reviewed_legacy_fixture(
+        replacement,
         original_request="Restart this exact bounded build under qCoder 0.6.0a5.",
-        explicit_authority=True,
-        capture_mode="exact_current_customer_message",
-        request_transport="stdin",
     )
     assert restarted["ok"] is True
     assert replacement.store.read()["loop_ref"] != old_loop_ref

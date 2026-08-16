@@ -22,19 +22,16 @@ from qcoder.current_loop_adaptive_intent import (
     consume_fields_file,
 )
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
+from tests.current_loop_test_support import activate_reviewed_legacy_fixture
 
-BELL_REQUEST = (
-    "Use qCoder for this build context with the established adaptive-intent contract."
-)
+BELL_REQUEST = "Use qCoder for this build context with the established adaptive-intent contract."
 
 
 def _activate(workspace: Path, request: str = BELL_REQUEST):
     coordinator = CurrentLoopCoordinator(workspace_root=workspace)
-    result = coordinator.activate(
+    result = activate_reviewed_legacy_fixture(
+        coordinator,
         original_request=request,
-        explicit_authority=True,
-        capture_mode="exact_current_customer_message",
-        request_transport="stdin",
     )
     assert result["ok"] is True
     operation = result["next_invocation"]["operation_specific_invocation"]

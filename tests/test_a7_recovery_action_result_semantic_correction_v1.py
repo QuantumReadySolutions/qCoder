@@ -6,6 +6,7 @@ from pathlib import Path
 
 from qcoder.current_loop import canonical_bytes
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
+from tests.current_loop_test_support import activate_reviewed_legacy_fixture
 
 
 def test_valid_v5_unsupported_recovery_action_emits_unsupported_action(
@@ -16,11 +17,9 @@ def test_valid_v5_unsupported_recovery_action_emits_unsupported_action(
     coordinator = CurrentLoopCoordinator(
         workspace_root=workspace,
     )
-    activation = coordinator.activate(
+    activation = activate_reviewed_legacy_fixture(
+        coordinator,
         original_request="Use qCoder for this exact bounded build.",
-        explicit_authority=True,
-        capture_mode="exact_current_customer_message",
-        request_transport="stdin",
     )
     assert activation["ok"] is True
     coordinator._recovery_result(
@@ -40,18 +39,14 @@ def test_valid_v5_unsupported_recovery_action_emits_unsupported_action(
     result = coordinator.execute_recovery_action(
         recovery_reference=str(active["reference"]),
         action="retry_registration",
-        expected_contract_revision=int(
-            state["current_loop_contract"]["contract_revision"]
-        ),
+        expected_contract_revision=int(state["current_loop_contract"]["contract_revision"]),
     )
     after = canonical_bytes(coordinator.store.read())
 
     # These expectations are literal contract requirements. They do not call the
     # runtime classifier, recovery resolver, policy table, or implementation mapping.
     assert result["ok"] is False
-    assert result["details"]["schema_gate_reason"] == (
-        "recovery_action_not_permitted"
-    )
+    assert result["details"]["schema_gate_reason"] == ("recovery_action_not_permitted")
     assert (
         result["category"],
         result["result_semantic_classification"],

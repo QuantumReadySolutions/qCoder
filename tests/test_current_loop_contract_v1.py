@@ -25,6 +25,7 @@ from qcoder.current_loop_contract import (
     set_preset,
 )
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
+from tests.current_loop_test_support import activate_reviewed_legacy_fixture
 
 
 REQUEST = "Use qCoder for this build. Keep the evidence path local."
@@ -127,30 +128,22 @@ def test_adjustment_is_bounded_and_raw_assistant_exposure_ceiling_fails() -> Non
         )
 
 
-def test_exact_message_activation_creates_quiet_assist_receipt_and_adaptive_governance(
+def test_reviewed_activation_creates_quiet_assist_and_adaptive_governance(
     tmp_path: Path,
 ) -> None:
     coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
-    result = coordinator.activate(
+    result = activate_reviewed_legacy_fixture(
+        coordinator,
         original_request=REQUEST,
-        explicit_authority=True,
-        capture_mode="exact_current_customer_message",
-        request_transport="stdin",
     )
     assert result["ok"] is True
     assert result["phase"] == "intent_review"
-    assert result["details"]["assist_ready"] is True
-    assert result["details"]["posture_deferred"] is False
-    assert result["details"]["posture_question_required"] is False
-    assert result["details"]["generation_governance"] == "adaptive"
-    assert result["details"]["original_request"] == REQUEST
-    receipt = result["details"]["activation_receipt"]
-    assert receipt["preset"] == "assist"
-    assert receipt["authority_exclusions"]
     state = coordinator.store.read()
     assert state["schema_id"] == CURRENT_LOOP_STATE_SCHEMA_ID
     assert state["generation_posture"] == "exploratory_first_pass"
     assert state["current_loop_contract"]["schema_id"] == CONTRACT_SCHEMA_ID
+    assert state["current_loop_contract"]["effective_preset"] == "assist"
+    assert state["current_loop_contract"]["generation_governance"] == "adaptive"
     assert state["current_loop_contract"]["cross_loop_inheritance"] is False
     assert state["automatic_reopen"] is False
     assert result["bounded_control_catalog"]["controls_inline"] is False
@@ -276,11 +269,9 @@ def test_contract_enforcement_blocks_excluded_reference() -> None:
 
 def test_evidence_controls_are_bound_to_contract_revision(tmp_path: Path) -> None:
     coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
-    activated = coordinator.activate(
+    activated = activate_reviewed_legacy_fixture(
+        coordinator,
         original_request=REQUEST,
-        explicit_authority=True,
-        capture_mode="exact_current_customer_message",
-        request_transport="stdin",
     )
     reference = next(
         item["artifact_reference"]

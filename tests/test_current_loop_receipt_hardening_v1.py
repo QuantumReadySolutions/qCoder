@@ -31,6 +31,7 @@ from qcoder.context_bridge_mcp import (
     EXPECTED_TOOLS,
     build_client_binding_descriptor,
 )
+from tests.current_loop_test_support import activate_reviewed_legacy_fixture
 
 
 class FakeClock:
@@ -46,11 +47,9 @@ def _active(tmp_path: Path, *, clock: Callable[[], float] | None = None) -> Curr
         workspace_root=tmp_path,
         **({"clock": clock} if clock is not None else {}),
     )
-    activated = coordinator.activate(
+    activated = activate_reviewed_legacy_fixture(
+        coordinator,
         original_request="Use qCoder for this build. Track exact authorized outputs.",
-        explicit_authority=True,
-        capture_mode="exact_current_customer_message",
-        request_transport="stdin",
     )
     assert activated["ok"] is True
     return coordinator
@@ -72,7 +71,9 @@ def _issue(
     return result["details"]["operation_receipt"]
 
 
-def _source_candidate(tmp_path: Path, *, name: str = "program.py", value: int = 1) -> dict[str, Any]:
+def _source_candidate(
+    tmp_path: Path, *, name: str = "program.py", value: int = 1
+) -> dict[str, Any]:
     source = tmp_path / name
     source.write_text(f"VALUE = {value}\n", encoding="utf-8")
     return {
@@ -110,9 +111,7 @@ def test_single_repeated_mixed_and_concurrent_pure_reads_are_revision_neutral(
     before = canonical_bytes(state)
     before_revision = state["state_revision"]
     before_digest = state["state_digest"]
-    before_pending = deepcopy(
-        coordinator._coordinator_state(state).get("pending_checkpoint_input")
-    )
+    before_pending = deepcopy(coordinator._coordinator_state(state).get("pending_checkpoint_input"))
 
     projections = (
         lambda: coordinator.status(),
@@ -167,10 +166,7 @@ def test_single_repeated_mixed_and_concurrent_pure_reads_are_revision_neutral(
     assert canonical_bytes(after) == before
     assert after["state_revision"] == before_revision
     assert after["state_digest"] == before_digest
-    assert (
-        coordinator._coordinator_state(after).get("pending_checkpoint_input")
-        == before_pending
-    )
+    assert coordinator._coordinator_state(after).get("pending_checkpoint_input") == before_pending
     _assert_receipt_valid(coordinator, receipt)
 
     registered = coordinator.register_artifacts(
@@ -231,9 +227,7 @@ def test_pending_checkpoint_expected_revision_remains_exact_across_pure_reads(
     )
     receipt = _issue(coordinator)
     issued = coordinator.store.read()
-    expected = issued["coordinator"]["pending_checkpoint_input"][
-        "expected_state_revision"
-    ]
+    expected = issued["coordinator"]["pending_checkpoint_input"]["expected_state_revision"]
     assert expected == issued["state_revision"] == receipt["issued_state_revision"]
     before = canonical_bytes(issued)
     for _ in range(25):
@@ -241,9 +235,7 @@ def test_pending_checkpoint_expected_revision_remains_exact_across_pure_reads(
         assert coordinator.contract_status()["ok"] is True
     after = coordinator.store.read()
     assert canonical_bytes(after) == before
-    assert after["coordinator"]["pending_checkpoint_input"][
-        "expected_state_revision"
-    ] == expected
+    assert after["coordinator"]["pending_checkpoint_input"]["expected_state_revision"] == expected
     _assert_receipt_valid(coordinator, receipt)
 
 
@@ -567,10 +559,42 @@ def test_real_binding_changes_invalidate_without_revision_fabrication(tmp_path: 
         "current_time": coordinator.clock(),
     }
     cases = (
-        ({"loop_ref": "loop-" + "f" * 32, "workspace_binding": state["workspace_root"], "role": "source", "detected_format": "python_source"}, "operation_receipt_loop_mismatch"),
-        ({"loop_ref": state["loop_ref"], "workspace_binding": "/different/workspace", "role": "source", "detected_format": "python_source"}, "operation_receipt_workspace_mismatch"),
-        ({"loop_ref": state["loop_ref"], "workspace_binding": state["workspace_root"], "role": "results", "detected_format": "json_results"}, "operation_receipt_role_not_authorized"),
-        ({"loop_ref": state["loop_ref"], "workspace_binding": state["workspace_root"], "role": "source", "detected_format": "openqasm_2"}, "operation_receipt_format_not_authorized"),
+        (
+            {
+                "loop_ref": "loop-" + "f" * 32,
+                "workspace_binding": state["workspace_root"],
+                "role": "source",
+                "detected_format": "python_source",
+            },
+            "operation_receipt_loop_mismatch",
+        ),
+        (
+            {
+                "loop_ref": state["loop_ref"],
+                "workspace_binding": "/different/workspace",
+                "role": "source",
+                "detected_format": "python_source",
+            },
+            "operation_receipt_workspace_mismatch",
+        ),
+        (
+            {
+                "loop_ref": state["loop_ref"],
+                "workspace_binding": state["workspace_root"],
+                "role": "results",
+                "detected_format": "json_results",
+            },
+            "operation_receipt_role_not_authorized",
+        ),
+        (
+            {
+                "loop_ref": state["loop_ref"],
+                "workspace_binding": state["workspace_root"],
+                "role": "source",
+                "detected_format": "openqasm_2",
+            },
+            "operation_receipt_format_not_authorized",
+        ),
     )
     for arguments, category in cases:
         with pytest.raises(EventReceiptError, match=category):
@@ -666,9 +690,7 @@ def test_material_authority_change_never_offers_causal_continuation(
                 category="python_manifestation",
                 dimension="assistant_derived_exposure",
                 value="disabled",
-                expected_contract_revision=int(
-                    value["current_loop_contract"]["contract_revision"]
-                ),
+                expected_contract_revision=int(value["current_loop_contract"]["contract_revision"]),
                 provenance="customer_requested_narrowing",
             )
             value["current_loop_contract"] = deepcopy(outcome["contract"])
@@ -827,6 +849,7 @@ def test_material_artifact_change_blocks_causal_continuation_and_second_retry(
     elif material_change == "artifact_path":
         path.rename(tmp_path / "moved.py")
     else:
+
         def mutate_sealed_action(value: dict[str, Any]) -> Mapping[str, Any]:
             recovery = value["coordinator"]["active_recovery"]
             context = recovery["receipt_recovery_context"]
@@ -881,9 +904,9 @@ def test_material_artifact_change_blocks_causal_continuation_and_second_retry(
     )
     assert repeated["ok"] is False
     repeated_active = coordinator._coordinator_state(coordinator.store.read())["active_recovery"]
-    assert not isinstance(repeated_active, Mapping) or "retry_registration" not in repeated_active.get(
-        "alternatives", []
-    )
+    assert not isinstance(
+        repeated_active, Mapping
+    ) or "retry_registration" not in repeated_active.get("alternatives", [])
 
 
 def test_causal_registration_commit_race_blocks_without_ghost_rebound(
@@ -939,10 +962,13 @@ def test_competing_consumption_is_single_use_even_for_idempotent_bytes(tmp_path:
         )
     assert sum(result["ok"] is True for result in results) <= 1
     state_after_race = coordinator.store.read()
-    assert sum(
-        activity.get("operation_receipt_id") == receipt["receipt_id"]
-        for activity in state_after_race["activity_receipts"]
-    ) == 1
+    assert (
+        sum(
+            activity.get("operation_receipt_id") == receipt["receipt_id"]
+            for activity in state_after_race["activity_receipts"]
+        )
+        == 1
+    )
     replay = coordinator.register_artifacts(
         candidates=[candidate],
         operation_receipt_id=str(receipt["receipt_id"]),
@@ -965,9 +991,10 @@ def test_expiry_is_not_extended_by_pure_reads_and_expired_receipt_fails_closed(
         coordinator.status()
         coordinator.contract_status()
     assert canonical_bytes(coordinator.store.read()) == before
-    assert coordinator.store.read()["operation_receipts"][receipt["receipt_id"]][
-        "expires_at"
-    ] == expires_at
+    assert (
+        coordinator.store.read()["operation_receipts"][receipt["receipt_id"]]["expires_at"]
+        == expires_at
+    )
     clock.value = expires_at
     with pytest.raises(EventReceiptError, match="operation_receipt_expired"):
         _assert_receipt_valid(coordinator, receipt)

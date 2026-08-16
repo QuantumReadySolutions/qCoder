@@ -23,20 +23,17 @@ from qcoder.current_loop_quiet_workflow import (
     quiet_workflow_contract_snapshot,
 )
 from qcoder.current_loop_iteration import parent_digest_failure_details
+from tests.current_loop_test_support import activate_reviewed_legacy_fixture
 
 
-REQUEST = (
-    "Use qCoder for this build context with the established quiet-workflow contract."
-)
+REQUEST = "Use qCoder for this build context with the established quiet-workflow contract."
 
 
 def _activate(workspace: Path) -> CurrentLoopCoordinator:
     coordinator = CurrentLoopCoordinator(workspace_root=workspace)
-    result = coordinator.activate(
+    result = activate_reviewed_legacy_fixture(
+        coordinator,
         original_request=REQUEST,
-        explicit_authority=True,
-        capture_mode="exact_current_customer_message",
-        request_transport="stdin",
     )
     assert result["ok"] is True
     return coordinator
@@ -82,9 +79,7 @@ def _ordinary_fields(*, material: bool = False) -> dict[str, dict[str, Any]]:
 
 def _write_run(workspace: Path, *, counts: Mapping[str, int]) -> list[dict[str, str]]:
     source = workspace / "bell.py"
-    source.write_text(
-        "from qiskit import QuantumCircuit\ncircuit = QuantumCircuit(2, 2)\n"
-    )
+    source.write_text("from qiskit import QuantumCircuit\ncircuit = QuantumCircuit(2, 2)\n")
     qasm = workspace / "bell.qasm"
     qasm.write_text(
         'OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[2];\ncreg c[2];\n'

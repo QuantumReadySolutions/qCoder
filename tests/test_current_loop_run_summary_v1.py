@@ -18,6 +18,7 @@ from qcoder.current_loop_run_summary import (
     run_summary_contract_snapshot,
     run_summary_error,
 )
+from tests.current_loop_test_support import activate_reviewed_legacy_fixture
 
 
 QASM = """OPENQASM 2.0;
@@ -32,11 +33,9 @@ measure q -> c;
 
 def _active(tmp_path: Path) -> CurrentLoopCoordinator:
     coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
-    result = coordinator.activate(
+    result = activate_reviewed_legacy_fixture(
+        coordinator,
         original_request="Use qCoder to track this exact synthetic run.",
-        explicit_authority=True,
-        capture_mode="exact_current_customer_message",
-        request_transport="stdin",
     )
     assert result["ok"] is True
     return coordinator

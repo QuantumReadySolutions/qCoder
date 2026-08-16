@@ -12,7 +12,6 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
-import re
 import secrets
 import sys
 import tempfile
@@ -460,6 +459,7 @@ ADDITIONAL_TYPED_RECOVERY_CATEGORIES = frozenset(
         "result_artifact_invalid",
         "current_request_semantics_invalid",
         "current_request_stage_unsupported",
+        "activation_exact_message_mode_ineligible",
         "current_step_authority_mismatch",
         "current_step_ceiling_violation",
         "current_step_artifact_cardinality_invalid",
@@ -3585,23 +3585,6 @@ class CurrentLoopCoordinator:
                 raise CurrentLoopError("activation_capture_mode_invalid")
             if original_request is not None and capture_mode == "exact_current_customer_message":
                 request_semantics = classify_current_request(original_request, active_loop=False)
-                normalized_request = " ".join(original_request.casefold().split())
-                legacy_explicit_active_build = bool(
-                    (
-                        request_semantics.get("requested_operation") == "bounded_single_capability"
-                        and request_semantics.get("qcoder_explicitly_requested") is True
-                    )
-                    or (
-                        re.match(
-                            r"^(?:please\s+)?(?:let(?:'s| us)\s+)?use\s+qcoder\b",
-                            normalized_request,
-                        )
-                        and "build" in normalized_request
-                        and request_semantics.get("requested_operation")
-                        == "source_and_local_execution"
-                    )
-                    and request_semantics.get("clarification_required") is False
-                )
                 if (
                     explicit_authority is not True
                     or generation_posture is not None
@@ -3609,14 +3592,8 @@ class CurrentLoopCoordinator:
                     or explicit_constraints
                     or explicit_choices
                     or assistant_interpretation is not None
-                    or (
-                        request_semantics.get("route") != "active_build"
-                        and not legacy_explicit_active_build
-                    )
-                    or (
-                        request_semantics.get("clarification_required") is True
-                        and not legacy_explicit_active_build
-                    )
+                    or request_semantics.get("route") != "active_build"
+                    or request_semantics.get("clarification_required") is True
                 ):
                     raise CurrentLoopError("activation_exact_message_mode_ineligible")
                 baseline = build_request_baseline(original_request=original_request)
@@ -3639,7 +3616,7 @@ class CurrentLoopCoordinator:
                 state = self.store.read()
                 contract = state["current_loop_contract"]
                 coordinator = self._initial_coordinator_state(
-                    phase=("intent_review" if legacy_explicit_active_build else "generation_ready"),
+                    phase="generation_ready",
                     state_status="ready",
                     checkpoint_kind="none",
                     summary=(

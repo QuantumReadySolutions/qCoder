@@ -30,15 +30,14 @@ from qcoder.current_loop_recovery import (
     recovery_contract_snapshot,
     resolve_live_recovery_policy,
 )
+from tests.current_loop_test_support import activate_reviewed_legacy_fixture
 
 
 def _active(workspace: Path) -> CurrentLoopCoordinator:
     coordinator = CurrentLoopCoordinator(workspace_root=workspace)
-    result = coordinator.activate(
+    result = activate_reviewed_legacy_fixture(
+        coordinator,
         original_request="Use qCoder for this build. Preserve the exact request and evidence.",
-        explicit_authority=True,
-        capture_mode="exact_current_customer_message",
-        request_transport="stdin",
     )
     assert result["ok"] is True
     return coordinator
@@ -51,14 +50,10 @@ def test_nested_authoritative_store_lock_fails_immediately_without_state_change(
     before = canonical_bytes(coordinator.store.read())
     started = time.monotonic()
     with coordinator.store.lock():
-        with pytest.raises(
-            CurrentLoopConflict, match="current_loop_nested_lock_acquisition"
-        ):
+        with pytest.raises(CurrentLoopConflict, match="current_loop_nested_lock_acquisition"):
             with coordinator.store.lock():
                 raise AssertionError("nested lock unexpectedly acquired")
-        with pytest.raises(
-            CurrentLoopConflict, match="current_loop_nested_lock_acquisition"
-        ):
+        with pytest.raises(CurrentLoopConflict, match="current_loop_nested_lock_acquisition"):
             coordinator.store.update(
                 lambda state: state,
                 expected_revision=coordinator.store.read()["state_revision"],
@@ -79,9 +74,7 @@ def test_recovery_policy_has_one_live_action_source_and_no_inactive_table() -> N
     assert vocabulary["disconnected_category_action_table_present"] is False
     assert vocabulary["recovery_actions"] == sorted(inventory)
     for row in recovery_action_executability_matrix():
-        assert row["advertised_alternatives"] == [
-            action["action"] for action in row["actions"]
-        ]
+        assert row["advertised_alternatives"] == [action["action"] for action in row["actions"]]
         assert all(action["executable_in_advertised_state"] for action in row["actions"])
 
 
@@ -104,9 +97,12 @@ def test_hosted_retry_is_conditional_and_stale_continuation_is_exact_only() -> N
         active_loop_nonterminal=True,
     )
     assert hosted["hosted_action_availability"] == "conditional"
-    assert next(
-        row for row in hosted["action_contracts"] if row["action"] == "retry_hosted_enrichment"
-    )["availability"] == "conditional_hosted_service"
+    assert (
+        next(
+            row for row in hosted["action_contracts"] if row["action"] == "retry_hosted_enrichment"
+        )["availability"]
+        == "conditional_hosted_service"
+    )
 
     stale = resolve_live_recovery_policy(
         category="operation_receipt_stale",
@@ -298,16 +294,22 @@ def test_reusable_conformance_evaluator_requires_every_shared_assertion(
     assert passed["live_client_qualification_created"] is False
     missing = deepcopy(observations)
     missing.pop(next(iter(missing)))
-    assert evaluate_conformance_observations(
-        profile=profile,
-        observations=missing,
-    )["passed"] is False
+    assert (
+        evaluate_conformance_observations(
+            profile=profile,
+            observations=missing,
+        )["passed"]
+        is False
+    )
     failed = deepcopy(observations)
     failed[next(iter(failed))] = False
-    assert evaluate_conformance_observations(
-        profile=profile,
-        observations=failed,
-    )["passed"] is False
+    assert (
+        evaluate_conformance_observations(
+            profile=profile,
+            observations=failed,
+        )["passed"]
+        is False
+    )
 
 
 def test_serialized_binding_contains_no_enabled_future_client_adapter() -> None:
@@ -315,5 +317,5 @@ def test_serialized_binding_contains_no_enabled_future_client_adapter() -> None:
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )
     serialized = json.dumps(descriptor, sort_keys=True).casefold()
-    assert "generic_mcp_compatibility_claimed\": false" in serialized
-    assert "future_profile_template_enabled\": false" in serialized
+    assert 'generic_mcp_compatibility_claimed": false' in serialized
+    assert 'future_profile_template_enabled": false' in serialized

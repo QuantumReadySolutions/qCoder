@@ -45,10 +45,9 @@ from qcoder.current_loop_run_summary import (
     validate_run_summary_snapshot_binding,
 )
 from qcoder.current_loop_vocabulary import vocabulary_snapshot
+from tests.current_loop_test_support import activate_reviewed_legacy_fixture
 
-REQUEST = (
-    "Use qCoder for this build context with the established evidence-revision contract."
-)
+REQUEST = "Use qCoder for this build context with the established evidence-revision contract."
 
 
 def _fields() -> dict[str, dict[str, Any]]:
@@ -80,11 +79,9 @@ def _fields() -> dict[str, dict[str, Any]]:
 
 def _coordinator(workspace: Path) -> CurrentLoopCoordinator:
     coordinator = CurrentLoopCoordinator(workspace_root=workspace)
-    activated = coordinator.activate(
+    activated = activate_reviewed_legacy_fixture(
+        coordinator,
         original_request=REQUEST,
-        explicit_authority=True,
-        capture_mode="exact_current_customer_message",
-        request_transport="stdin",
     )
     assert activated["ok"] is True
     assert coordinator.prepare_adaptive_intent(fields=_fields())["ok"] is True

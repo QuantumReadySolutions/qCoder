@@ -378,6 +378,17 @@ def classify_current_request(
     qasm_mentioned = _has_any(words, _QASM_WORDS)
     execution_mentioned = _has_any(words, _EXECUTION_WORDS)
     results_mentioned = _has_any(words, _RESULT_WORDS)
+    non_action_execution_reference = bool(
+        re.search(
+            r"\bkeep\b[^.!?;]{0,40}\b(?:run|running|execution|simulation)\b",
+            normalized,
+        )
+        or re.search(
+            r"\b(?:close|finish|end)\s+(?:(?:the|this)\s+)?(?:local\s+)?"
+            r"(?:editor|execution|run|simulation|backend)\b",
+            normalized,
+        )
+    )
     qasm_prohibited = qasm_mentioned and (
         _negated(normalized, tuple(_QASM_WORDS)) or _deferred(normalized, tuple(_QASM_WORDS))
     )
@@ -420,7 +431,9 @@ def classify_current_request(
         concrete_supported_task=source_action or (review_intent and not review_deferred),
     )
     qasm_requested = qasm_mentioned and not qasm_prohibited
-    execution_requested = execution_mentioned and not execution_prohibited
+    execution_requested = (
+        execution_mentioned and not execution_prohibited and not non_action_execution_reference
+    )
     results_requested = results_mentioned and not results_prohibited
 
     # "Stop after source/code" and "only source/code" are semantic ceiling
@@ -458,16 +471,24 @@ def classify_current_request(
     clarification: str | None = None
     recovery: dict[str, Any] | None = None
 
-    if negated_supported_task or negated_terminal_action:
+    if negated_supported_task or negated_terminal_action or non_action_execution_reference:
         operation = "inactive"
         route = "available_inactive"
         allowed_roles = []
         execution = "prohibited_for_current_step"
         evidence_review = "prohibited_for_current_step"
         stop_after = "no_qcoder_operation"
-        ambiguity = "explicit_action_prohibition"
+        ambiguity = (
+            "stage_reference_without_action_authority"
+            if non_action_execution_reference
+            else "explicit_action_prohibition"
+        )
         recovery = _semantic_recovery(
-            category="explicit_action_prohibited",
+            category=(
+                "stage_reference_not_action_authority"
+                if non_action_execution_reference
+                else "explicit_action_prohibited"
+            ),
             clarification=None,
         )
     elif informational and explicit_qcoder:

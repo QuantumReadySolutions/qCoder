@@ -12,15 +12,14 @@ from qcoder.current_loop_event_receipts import (
     issue_operation_receipt,
     validate_operation_receipt,
 )
+from tests.current_loop_test_support import activate_reviewed_legacy_fixture
 
 
 def _active(tmp_path: Path) -> CurrentLoopCoordinator:
     coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
-    result = coordinator.activate(
+    result = activate_reviewed_legacy_fixture(
+        coordinator,
         original_request="Use qCoder for this build. Track one exact output.",
-        explicit_authority=True,
-        capture_mode="exact_current_customer_message",
-        request_transport="stdin",
     )
     assert result["ok"] is True
     return coordinator
