@@ -144,8 +144,8 @@ def test_bootstrap_owns_platform_serialization_and_cwd_semantics() -> None:
 
 def test_binding_v7_delivers_bootstrap_and_complete_lifecycle() -> None:
     binding = _descriptor("/runtime/python")
-    assert binding["schema_version"] == 23
-    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v24"
+    assert binding["schema_version"] == 24
+    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v25"
     bootstrap = binding["bootstrap_invocation_contract"]
     assert bootstrap["schema_id"] == BOOTSTRAP_INVOCATION_SCHEMA_ID
     assert bootstrap["supported_entrypoints"][FRESH_ACTIVE_BUILD_ENTRYPOINT][
@@ -245,7 +245,7 @@ def test_black_box_bootstrap_activates_assist_with_exact_receipt(
     )
     assert (
         result["next_invocation"]["operation_specific_invocation"]["operation"]
-        == "record_ide_authority"
+        == "complete_native_action"
     )
 
 

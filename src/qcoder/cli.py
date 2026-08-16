@@ -1501,6 +1501,24 @@ def _cmd_current_loop(argv: list[str]) -> int:
         ),
     )
 
+    complete_native = sub.add_parser(
+        "complete-native-action",
+        help=(
+            "Record one action-specific native permission and its exact output through "
+            "the binding-owned compressed handoff."
+        ),
+    )
+    complete_native.add_argument("--allow", action="store_true")
+    complete_native.add_argument("--explicit", action="store_true")
+    complete_native.add_argument("--source", action="append", default=[])
+    complete_native.add_argument("--qasm", action="append", default=[])
+    complete_native.add_argument("--results", action="append", default=[])
+    complete_native.add_argument(
+        "--provenance",
+        choices=("assistant_created", "assistant_modified"),
+        required=True,
+    )
+
     register = sub.add_parser(
         "register-artifacts",
         help="Register only exact candidate paths; no scan or discovery.",
@@ -2155,6 +2173,28 @@ def _cmd_current_loop(argv: list[str]) -> int:
                 operation_category=args.operation_category,
                 output_role_ceiling=args.output_role or ("source", "circuit_qasm", "results"),
                 exact_iteration_instruction=exact_iteration_instruction,
+            )
+        elif command == "complete-native-action":
+            candidates = []
+            for role, values in (
+                ("source", args.source),
+                ("circuit_qasm", args.qasm),
+                ("results", args.results),
+            ):
+                candidates.extend(
+                    {
+                        "role": role,
+                        "path": str(Path(value).expanduser().absolute()),
+                        "provenance": args.provenance,
+                        "explicit_external": False,
+                        "related_circuit_ref": None,
+                    }
+                    for value in values
+                )
+            result = coordinator.complete_native_action(
+                allowed=args.allow,
+                explicit_user_action=args.explicit,
+                candidates=candidates,
             )
         elif command == "register-artifacts":
             candidates = []

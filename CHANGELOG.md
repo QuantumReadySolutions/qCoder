@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.0a15
+
+- Preserve the complete decision-aware Blueprint, local-first selected-file Evidence Review,
+  source-only stage ceiling, action-specific native permission, exact-cardinality receipt, and
+  twelve-tool Context Bridge behavior introduced by the preceding candidate work.
+- Compress the ordinary native-action handoff into one binding-owned post-action operation that
+  records the exact native permission receipt and registers its exact output in one qCoder process.
+- Keep lower-level authority and registration operations as fail-closed recovery primitives while
+  removing separate receipt-reading, help, package inspection, and registration discovery from
+  the normal connected-assistant path.
+- Advance the private connected-assistant binding to v25. Publication and named-client
+  qualification remain separate external release-control decisions.
+
 ## 0.6.0a14
 
 - Make ordinary connected-assistant Algorithm Blueprint / Generation Context requests

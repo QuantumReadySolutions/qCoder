@@ -162,10 +162,23 @@ def test_binding_route_and_inventory_are_deterministic_and_keep_twelve_tools() -
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v24"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v25"
     assert (
         descriptor["current_request_semantics_contract"]["temporary_current_step_ceiling"] is True
     )
+    handoff = descriptor["workstyle_routes"]["d080_current_request"][
+        "normal_path_native_action_handoff"
+    ]
+    assert handoff["post_action_operation"] == "complete_native_action"
+    assert handoff["qcoder_serial_control_cycles"] == 2
+    assert handoff["authority_receipt_and_registration_composed"] is True
+    assert handoff["separate_receipt_read_required"] is False
+    assert handoff["separate_registration_discovery_required"] is False
+    compressed = next(
+        row for row in inventory["operations"] if row["operation"] == "complete_native_action"
+    )
+    assert compressed["transport"] == "local_only"
+    assert compressed["public_context_bridge_tool"] is False
 
 
 def test_source_only_real_coordinator_path_enforces_one_write_and_resumable_stop(
@@ -185,12 +198,13 @@ def test_source_only_real_coordinator_path_enforces_one_write_and_resumable_stop
     action = activated["compact_next_action"]
     assert action["artifact_role"] == "source"
     assert action["procedural_source_of_truth"] is True
-    assert action["operation_specific_invocation"]["operation"] == "record_ide_authority"
+    assert action["operation_specific_invocation"]["operation"] == "complete_native_action"
     assert action["operation_invocation_digest"]
+    assert action["authority_receipt_and_registration_same_process"] is True
+    assert action["normal_path_qcoder_serial_cycles_including_bootstrap"] == 2
     invocation = activated["next_invocation"]
     assert invocation["fixed_argument_values"] == {
-        "--operation-category": "ide_write",
-        "--output-role": "source",
+        "--provenance": "assistant_created",
     }
 
     before_broadened = deepcopy(coordinator.store.read())
@@ -328,6 +342,109 @@ def test_source_only_real_coordinator_path_enforces_one_write_and_resumable_stop
     assert registered["request_baseline_count"] == 1
 
 
+def test_compressed_native_action_preserves_receipt_and_exact_registration(
+    tmp_path: Path,
+) -> None:
+    coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
+    activated = coordinator.activate(
+        original_request=SOURCE_ONLY_REQUESTS[0],
+        explicit_authority=True,
+        capture_mode="exact_current_customer_message",
+        request_transport="stdin",
+    )
+    assert activated["compact_next_action"]["post_action_operation"] == ("complete_native_action")
+    source = tmp_path / "bell.py"
+    source.write_text(
+        "from qiskit import QuantumCircuit\nqc = QuantumCircuit(2)\nqc.h(0)\nqc.cx(0, 1)\n",
+        encoding="utf-8",
+    )
+    completed = coordinator.complete_native_action(
+        allowed=True,
+        explicit_user_action=True,
+        candidates=(
+            {
+                "role": "source",
+                "path": str(source),
+                "provenance": "assistant_created",
+                "explicit_external": False,
+            },
+        ),
+    )
+    assert completed["ok"] is True
+    assert completed["operation"] == "complete_native_action"
+    assert completed["details"]["native_permission_recorded"] is True
+    assert completed["details"]["authority_receipt_issued"] is True
+    assert completed["details"]["authority_receipt_consumed"] is True
+    assert completed["details"]["exact_output_registered"] is True
+    assert completed["details"]["separate_receipt_read_required"] is False
+    assert completed["details"]["separate_registration_discovery_required"] is False
+    assert completed["details"]["exact_artifact_inventory"] == {
+        "source": 1,
+        "circuit_qasm": 0,
+        "execution": 0,
+        "results": 0,
+        "unrelated": 0,
+    }
+    assert completed["compact_next_action"]["action"] == "await_exact_customer_continuation"
+    receipts = coordinator.store.read()["operation_receipts"]
+    assert len(receipts) == 1
+    assert next(iter(receipts.values()))["status"] == "consumed"
+
+
+def test_compressed_native_action_rejects_broader_or_multiple_outputs_before_mutation(
+    tmp_path: Path,
+) -> None:
+    coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
+    coordinator.activate(
+        original_request=SOURCE_ONLY_REQUESTS[0],
+        explicit_authority=True,
+        capture_mode="exact_current_customer_message",
+        request_transport="stdin",
+    )
+    source = tmp_path / "bell.py"
+    source.write_text("print('source')\n", encoding="utf-8")
+    qasm = tmp_path / "bell.qasm"
+    qasm.write_text("OPENQASM 2.0;\nqreg q[2];\n", encoding="utf-8")
+    before = deepcopy(coordinator.store.read())
+    wrong_role = coordinator.complete_native_action(
+        allowed=True,
+        explicit_user_action=True,
+        candidates=(
+            {
+                "role": "circuit_qasm",
+                "path": str(qasm),
+                "provenance": "assistant_created",
+                "explicit_external": False,
+            },
+        ),
+    )
+    assert wrong_role["ok"] is False
+    assert wrong_role["category"] == "compressed_native_action_output_mismatch"
+    assert wrong_role["recovery"]["authority_recorded"] is False
+    assert coordinator.store.read() == before
+    multiple = coordinator.complete_native_action(
+        allowed=True,
+        explicit_user_action=True,
+        candidates=(
+            {
+                "role": "source",
+                "path": str(source),
+                "provenance": "assistant_created",
+                "explicit_external": False,
+            },
+            {
+                "role": "circuit_qasm",
+                "path": str(qasm),
+                "provenance": "assistant_created",
+                "explicit_external": False,
+            },
+        ),
+    )
+    assert multiple["ok"] is False
+    assert multiple["category"] == "compressed_native_action_output_mismatch"
+    assert coordinator.store.read() == before
+
+
 def test_binding_owned_black_box_bootstrap_reaches_d080_compact_action(tmp_path: Path) -> None:
     bootstrap = build_fresh_active_build_bootstrap(executable=sys.executable)
     environment = dict(os.environ)
@@ -349,9 +466,52 @@ def test_binding_owned_black_box_bootstrap_reaches_d080_compact_action(tmp_path:
     assert result["compact_next_action"]["artifact_role"] == "source"
     assert result["compact_next_action_is_sole_procedural_source"] is True
     assert result["next_invocation"]["fixed_argument_values"] == {
-        "--operation-category": "ide_write",
-        "--output-role": "source",
+        "--provenance": "assistant_created",
     }
+
+
+def test_binding_owned_black_box_compressed_post_write_handoff(tmp_path: Path) -> None:
+    bootstrap = build_fresh_active_build_bootstrap(executable=sys.executable)
+    environment = dict(os.environ)
+    source_root = Path(__file__).resolve().parents[1] / "src"
+    environment["PYTHONPATH"] = str(source_root)
+    activated = subprocess.run(
+        [str(value) for value in bootstrap["qcoder_owned_structured_argv"]],
+        cwd=tmp_path,
+        input=SOURCE_ONLY_REQUESTS[0].encode("utf-8"),
+        capture_output=True,
+        check=False,
+        env=environment,
+    )
+    assert activated.returncode == 0, activated.stderr.decode("utf-8", errors="replace")
+    activation = json.loads(activated.stdout)
+    source = tmp_path / "bell.py"
+    source.write_text(
+        "from qiskit import QuantumCircuit\nqc = QuantumCircuit(2)\nqc.h(0)\nqc.cx(0, 1)\n",
+        encoding="utf-8",
+    )
+    invocation = activation["compact_next_action"]["operation_specific_invocation"]
+    assert invocation["operation"] == "complete_native_action"
+    argv = list(invocation["structured_argv"])
+    source_slot = argv.index("--source") + 1
+    assert isinstance(argv[source_slot], dict)
+    argv[source_slot] = str(source)
+    completed = subprocess.run(
+        [str(value) for value in argv],
+        cwd=tmp_path,
+        capture_output=True,
+        check=False,
+        env=environment,
+    )
+    assert completed.returncode == 0, completed.stderr.decode("utf-8", errors="replace")
+    result = json.loads(completed.stdout)
+    assert result["ok"] is True
+    assert result["operation"] == "complete_native_action"
+    assert result["details"]["authority_receipt_consumed"] is True
+    assert result["details"]["exact_artifact_inventory"]["source"] == 1
+    assert result["details"]["exact_artifact_inventory"]["circuit_qasm"] == 0
+    assert result["details"]["exact_artifact_inventory"]["execution"] == 0
+    assert result["details"]["exact_artifact_inventory"]["results"] == 0
     assert result["assistant_reconstruction_performed"] is False
     assert result["bootstrap_count"] == 1
 
@@ -844,8 +1004,7 @@ def test_explicit_generation_bootstrap_never_uses_legacy_broad_role_ceiling(
         "source": "exactly_one"
     }
     assert activated["next_invocation"]["fixed_argument_values"] == {
-        "--operation-category": "ide_write",
-        "--output-role": "source",
+        "--provenance": "assistant_created",
     }
     before = deepcopy(coordinator.store.read())
     execution = coordinator.record_ide_authority(

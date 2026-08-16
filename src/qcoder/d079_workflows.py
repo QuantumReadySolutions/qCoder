@@ -177,6 +177,21 @@ def binding_default_routing_contract() -> dict[str, Any]:
             "customer_constructs_operation_envelope": False,
             "stage_ceiling_is_temporary": True,
             "compact_next_action_is_sole_procedural_source": True,
+            "normal_path_native_action_handoff": {
+                "sequence": [
+                    "execute_fresh_active_build_bootstrap_invocation",
+                    "obtain_one_action_specific_native_permission",
+                    "perform_exact_native_action",
+                    "execute_bound_complete_native_action_invocation",
+                    "present_concise_result_and_stop",
+                ],
+                "post_action_operation": "complete_native_action",
+                "authority_receipt_and_registration_composed": True,
+                "qcoder_serial_control_cycles": 2,
+                "separate_receipt_read_required": False,
+                "separate_registration_discovery_required": False,
+                "help_or_package_inspection_required": False,
+            },
         },
         "named_workflows": {
             "algorithm_blueprint_generation_context": {

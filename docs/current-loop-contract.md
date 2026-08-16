@@ -43,6 +43,12 @@ and the existing exact-display plus authority-only approval path. Generation pos
 unset until generation becomes relevant. Contract inspection, contract changes, exact event
 receipts, permitted evidence registration, and non-generation review remain available.
 
+For a D-080 exact native action, the compact next action names one customer-facing native
+permission and one exact output role. After the client performs that action, the binding-owned
+`complete-native-action` invocation composes receipt issuance and receipt-bound registration in
+one local process. It does not infer permission, broaden the role ceiling, authorize review, or
+replace the lower-level recovery operations.
+
 ## Natural controls
 
 Connected assistants use qCoder-generated local invocations for contract status, preset

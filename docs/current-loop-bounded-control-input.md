@@ -23,6 +23,7 @@ assistant never inspects help, source, package files, proof records, transcripts
 | `evidence-delete` | one eligible qCoder-controlled reference plus approval | artifact identity/digest/role and contract revision | Deletes only qCoder-controlled local evidence. |
 | stop loop (`abandon`) | approval only | current loop/state/workspace binding | Makes the loop inactive. `Off` is not a preset value. |
 | `record-ide-authority` | bounded IDE operation category/output roles plus authority | loop/workspace/revision and receipt construction | Issues a single-use operation receipt; grants no review authority. |
+| `complete-native-action` | exact action-specific native permission plus the exact one-role output path | canonical current-request semantics, stage ceiling, loop/workspace/revision, receipt construction, and registration policy | Binding-owned normal path: composes the existing receipt and receipt-bound registration boundaries in one process; grants no review or later-stage authority. |
 | `register-artifacts` | exact literal output path, truthful provenance, role, and optionally one eligible receipt | receipt/loop/workspace/revision bindings | Registers exact paths only; performs no discovery. |
 | bounded recovery (`status`) | none for refresh; customer may naturally choose a displayed alternative | recovery category, state/contract revision, exact next invocation | Preserves prior valid contract and evidence. |
 | `open-contract-editor` | none | sidecar schema, loop/workspace/session binding | Opens the optional loopback editor; no hosted access. |

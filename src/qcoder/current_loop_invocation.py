@@ -27,10 +27,10 @@ from qcoder.current_loop_bounded_control import (
 )
 from qcoder.current_loop_iteration import ITERATION_AUTHORITY_RECEIPT_SCHEMA_ID
 
-INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v6"
-INVOCATION_CONTRACT_SCHEMA_VERSION = 6
-OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v6"
-OPERATION_INVENTORY_SCHEMA_VERSION = 6
+INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v7"
+INVOCATION_CONTRACT_SCHEMA_VERSION = 7
+OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v7"
+OPERATION_INVENTORY_SCHEMA_VERSION = 7
 
 LOCAL_ONLY = "local_only"
 HOSTED_CAPABLE = "hosted_capable"
@@ -70,6 +70,16 @@ _OPERATION_ROWS: tuple[dict[str, Any], ...] = (
         "operation": "record_ide_authority",
         "subcommand": "record-ide-authority",
         "transport": LOCAL_ONLY,
+    },
+    {
+        "operation": "complete_native_action",
+        "subcommand": "complete-native-action",
+        "transport": LOCAL_ONLY,
+        "binding_owned_internal_operation": True,
+        "public_context_bridge_tool": False,
+        "native_permission_precedes_invocation": True,
+        "authority_receipt_and_registration_composed": True,
+        "customer_constructs_command": False,
     },
     {
         "operation": "register_artifacts",

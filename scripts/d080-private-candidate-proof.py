@@ -160,44 +160,41 @@ def one_acceptance(workspace: Path) -> dict[str, Any]:
     if not activation["ok"]:
         raise RuntimeError("d080_activation_failed")
     compact_permission = activation["compact_next_action"]
-    if compact_permission["operation_specific_invocation"]["operation"] != "record_ide_authority":
+    compressed_invocation = compact_permission["operation_specific_invocation"]
+    if compressed_invocation["operation"] != "complete_native_action":
         raise RuntimeError("compact_permission_operation_invalid")
-    permission, permission_seconds = _run_invocation(
-        compact_permission["operation_specific_invocation"]
-    )
-    if not permission["ok"]:
-        raise RuntimeError("d080_permission_failed")
-    compact_registration = permission["compact_next_action"]
-    registration_invocation = compact_registration["operation_specific_invocation"]
-    if registration_invocation["operation"] != "register_artifacts":
-        raise RuntimeError("compact_registration_operation_invalid")
     source = workspace / "bell_state.py"
     native_started = time.perf_counter()
     source.write_text(BELL_SOURCE, encoding="utf-8")
     native_seconds = time.perf_counter() - native_started
-    # Adversarially omit the qCoder-owned receipt. This intentionally violates
-    # the compact contract and must fail without consuming or registering it.
-    no_receipt_argv = list(registration_invocation["structured_argv"])
-    receipt_flag = no_receipt_argv.index("--operation-receipt-id")
-    del no_receipt_argv[receipt_flag : receipt_flag + 2]
+    # A lower-level registration without the composed receipt must still fail.
+    no_receipt_argv = list(compressed_invocation["structured_argv"])
+    no_receipt_argv[no_receipt_argv.index("complete-native-action")] = "register-artifacts"
+    for flag in ("--allow", "--explicit"):
+        no_receipt_argv.remove(flag)
+    adversarial_dynamic = [
+        item
+        for item in compressed_invocation["dynamic_argument_contract"]
+        if item.get("flag") == "--source"
+    ]
     bypass, _ = _run_invocation(
         {
             "operation": "register_artifacts_adversarial_missing_receipt",
             "structured_argv": no_receipt_argv,
-            "dynamic_argument_contract": registration_invocation["dynamic_argument_contract"],
+            "dynamic_argument_contract": adversarial_dynamic,
         },
         dynamic_values={"--source": str(source)},
     )
     if bypass.get("ok") or bypass.get("category") != "current_step_operation_receipt_required":
         raise RuntimeError(f"missing_receipt_bypass_not_closed:{bypass!r}")
-    registration, registration_seconds = _run_invocation(
-        registration_invocation,
+    registration, compressed_seconds = _run_invocation(
+        compressed_invocation,
         dynamic_values={"--source": str(source)},
     )
     if not registration["ok"]:
         raise RuntimeError("d080_registration_failed")
     total_seconds = time.perf_counter() - started
-    direct_qcoder_seconds = activation_seconds + permission_seconds + registration_seconds
+    direct_qcoder_seconds = activation_seconds + compressed_seconds
     continuation = registration["compact_next_action"]["operation_specific_invocation"]
     closed, close_seconds = _run_invocation(
         continuation,
@@ -208,9 +205,7 @@ def one_acceptance(workspace: Path) -> dict[str, Any]:
     if (
         closed.get("phase") != "completed"
         or closed.get("ordinary_language_abandonment") is not False
-        or closed.get("details", {})
-        .get("completion_receipt", {})
-        .get("resulting_disposition")
+        or closed.get("details", {}).get("completion_receipt", {}).get("resulting_disposition")
         != "stop_loop"
     ):
         raise RuntimeError("d080_orderly_close_disposition_invalid")
@@ -226,7 +221,6 @@ def one_acceptance(workspace: Path) -> dict[str, Any]:
     bound_sequence = [
         "activate",
         compact_permission["operation_specific_invocation"]["operation"],
-        compact_registration["operation_specific_invocation"]["operation"],
         continuation["operation"],
     ]
     return {
@@ -239,8 +233,7 @@ def one_acceptance(workspace: Path) -> dict[str, Any]:
         "request_baseline_count": registration["request_baseline_count"],
         "qcoder_authority_action_cycles_after_bootstrap": len(bound_sequence) - 1,
         "native_permission_prompts": sum(
-            int(item.get("native_permission_required") is True)
-            for item in (compact_permission, compact_registration)
+            int(item.get("native_permission_required") is True) for item in (compact_permission,)
         ),
         "artifact_inventory": inventory,
         "source_artifact": {
@@ -254,7 +247,7 @@ def one_acceptance(workspace: Path) -> dict[str, Any]:
         ),
         "compact_next_action_used": all(
             item.get("procedural_source_of_truth") is True
-            for item in (compact_permission, compact_registration)
+            for item in (compact_permission, registration["compact_next_action"])
         ),
         "bound_operation_sequence": bound_sequence,
         "undeclared_operation_executed": False,

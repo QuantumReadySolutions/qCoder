@@ -154,8 +154,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 23
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v24"
+CLIENT_BINDING_SCHEMA_VERSION = 24
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v25"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -181,6 +181,12 @@ ceiling mechanically limits operation, output roles, registration, and authority
 Activation, qCoder's bounded action, native action-specific permission, and later artifact or
 governing authority are separate. A later exact customer instruction uses interpret-current-request
 without bootstrap or Request Baseline recreation.
+
+For an exact native action, ask for the one action-specific native permission shown by
+compact_next_action, perform only that native action, and then execute its single binding-owned
+post-action invocation. That invocation records the permission receipt and registers the exact
+output together; do not insert separate authority-recording, receipt-reading, help, package,
+binding-source, or registration-discovery calls on the normal path.
 
 Named D-079 workflow override: before applying the generic single-capability route, classify
 whether ordinary customer language requests “Algorithm Blueprint / Generation Context” or

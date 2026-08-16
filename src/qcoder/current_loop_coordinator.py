@@ -6884,6 +6884,136 @@ class CurrentLoopCoordinator:
         except (CurrentLoopError, EventReceiptError, ValueError) as exc:
             return self._exception_result("record_ide_authority", exc, started)
 
+    def complete_native_action(
+        self,
+        *,
+        allowed: bool,
+        explicit_user_action: bool,
+        candidates: Sequence[Mapping[str, Any]],
+    ) -> dict[str, Any]:
+        """Record one native permission and register its exact output in one process.
+
+        This binding-owned normal-path seam composes the existing receipt issuance
+        and receipt-bound registration boundaries.  It grants neither authority
+        implicitly and keeps both lower-level operations available for bounded
+        recovery without making them normal customer choreography.
+        """
+
+        started = self.clock()
+        try:
+            state = self._require_phase("complete_native_action", {"generation_ready"})
+            coordinator = self._coordinator_state(state)
+            request_semantics = coordinator.get("current_request_semantics")
+            if not isinstance(request_semantics, Mapping):
+                raise CurrentLoopError("compressed_native_action_semantics_required")
+            validate_request_semantics(request_semantics)
+            requested_operation = str(request_semantics["requested_operation"])
+            current_substage = coordinator.get("current_step_substage")
+            expected_category, expected_role = (
+                ("ide_write", "circuit_qasm")
+                if current_substage == "qasm"
+                else ("ide_execute", "results")
+                if current_substage == "execution"
+                else ("ide_write", "source")
+                if requested_operation
+                in {
+                    "source_generation",
+                    "source_and_qasm_generation",
+                    "source_and_local_execution",
+                }
+                else ("ide_write", "circuit_qasm")
+                if requested_operation == "qasm_export"
+                else ("ide_execute", "results")
+                if requested_operation == "local_execution"
+                else ("", "")
+            )
+            normalized = self._normalize_candidates(candidates)
+            if len(normalized) != 1 or normalized[0]["role"] != expected_role:
+                return {
+                    "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
+                    "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
+                    "operation": "complete_native_action",
+                    "ok": False,
+                    "category": "compressed_native_action_output_mismatch",
+                    "state_revision": state["state_revision"],
+                    "loop_ref": state["loop_ref"],
+                    "customer_summary": (
+                        "That output does not match qCoder's exact native action."
+                    ),
+                    "recovery": {
+                        "schema_id": "qcoder.current_loop.stage_recovery.v1",
+                        "schema_version": 1,
+                        "recovery_category": "retain_step_and_use_exact_compact_native_action",
+                        "expected_artifact_role": expected_role,
+                        "expected_artifact_count": 1,
+                        "received_artifact_roles": [item["role"] for item in normalized],
+                        "state_mutated": False,
+                        "authority_recorded": False,
+                        "authority_broadened": False,
+                        "fail_closed": True,
+                    },
+                    "raw_artifact_included": False,
+                    "local_path_included": False,
+                    "secret_included": False,
+                }
+            ceiling_operation = (
+                "ide_write_source"
+                if expected_role == "source"
+                else "ide_export_qasm"
+                if expected_role == "circuit_qasm"
+                else "ide_execute_local"
+            )
+            if not expected_category or not ceiling_allows(
+                request_semantics,
+                operation=ceiling_operation,
+                artifact_roles=(expected_role,),
+            ):
+                raise CurrentLoopError("current_step_authority_mismatch")
+
+            authority = self.record_ide_authority(
+                allowed=allowed,
+                explicit_user_action=explicit_user_action,
+                operation_category=expected_category,
+                output_role_ceiling=(expected_role,),
+            )
+            if authority.get("ok") is not True:
+                authority["operation"] = "complete_native_action"
+                authority.setdefault("details", {})["compressed_handoff_stage"] = (
+                    "native_permission_receipt"
+                )
+                return authority
+            receipt = authority.get("details", {}).get("operation_receipt")
+            receipt_id = receipt.get("receipt_id") if isinstance(receipt, Mapping) else None
+            if not isinstance(receipt_id, str):
+                raise CurrentLoopError("operation_receipt_issuance_incomplete")
+            registered = self.register_artifacts(
+                candidates=candidates,
+                operation_receipt_id=receipt_id,
+            )
+            registered["operation"] = "complete_native_action"
+            details = registered.setdefault("details", {})
+            details.update(
+                {
+                    "binding_owned_normal_path_compression": True,
+                    "native_permission_recorded": True,
+                    "authority_receipt_issued": True,
+                    "authority_receipt_consumed": (
+                        registered.get("ok") is True
+                        and details.get("operation_receipt_consumed") is True
+                    ),
+                    "exact_output_registered": registered.get("ok") is True,
+                    "separate_receipt_read_required": False,
+                    "separate_registration_discovery_required": False,
+                    "public_context_bridge_tool_added": False,
+                }
+            )
+            if registered.get("ok") is not True:
+                details["compressed_handoff_stage"] = "receipt_bound_registration"
+                details["issued_authority_retained_for_exact_recovery"] = True
+            return registered
+        except (CurrentLoopError, EventReceiptError, ValueError) as exc:
+            return self._exception_result("complete_native_action", exc, started)
+
     def register_artifacts(
         self,
         *,
@@ -11534,19 +11664,32 @@ class CurrentLoopCoordinator:
                     customer_label = "Allow this local execution"
                 else:
                     raise CurrentLoopError("current_request_stage_unsupported")
+                path_flag = {
+                    "source": "--source",
+                    "circuit_qasm": "--qasm",
+                    "results": "--results",
+                }[output_role]
                 invocation = _invocation_template(
-                    "record-ide-authority",
+                    "complete-native-action",
                     required_flags=(
                         "--allow",
                         "--explicit",
-                        "--operation-category",
-                        "--output-role",
+                        path_flag,
+                        "--provenance",
                     ),
-                    new_inputs=("action_specific_native_client_permission",),
+                    new_inputs=(
+                        "action_specific_native_client_permission",
+                        "exact_path_returned_by_authorized_native_action",
+                    ),
+                    argument_values=(
+                        {
+                            "flag": path_flag,
+                            "value_source": "exact_native_action_output_path",
+                        },
+                    ),
                 )
                 invocation["fixed_argument_values"] = {
-                    "--operation-category": operation_category,
-                    "--output-role": output_role,
+                    "--provenance": "assistant_created",
                 }
                 compact_action = {
                     "schema_id": "qcoder.current_loop.compact_next_action.v1",
@@ -11562,6 +11705,16 @@ class CurrentLoopCoordinator:
                     "grants_execution": operation_category == "ide_execute",
                     "grants_evidence_review": False,
                     "grants_governing_change": False,
+                    "native_action_sequence": [
+                        "obtain_action_specific_native_permission",
+                        "perform_exact_native_action",
+                        "execute_single_bound_post_action_invocation",
+                    ],
+                    "post_action_operation": "complete_native_action",
+                    "authority_receipt_and_registration_same_process": True,
+                    "separate_authority_receipt_call_required": False,
+                    "separate_registration_call_required": False,
+                    "normal_path_qcoder_serial_cycles_including_bootstrap": 2,
                     "procedural_source_of_truth": True,
                     "transcript_or_repository_reconstruction_permitted": False,
                 }
