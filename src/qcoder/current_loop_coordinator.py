@@ -2808,6 +2808,28 @@ class CurrentLoopCoordinator:
                 "request_baseline_recreated": False,
                 "rebootstrap_performed": False,
             }
+        if semantics["requested_operation"] in {"inactive", "informational", "setup_guidance"}:
+            return {
+                "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
+                "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
+                "operation": "interpret_current_request",
+                "ok": False,
+                "category": "current_request_inactive",
+                "state_revision": state["state_revision"],
+                "loop_ref": state["loop_ref"],
+                "customer_summary": (
+                    "qCoder did not take an action because this message did not grant "
+                    "affirmative current-step authority."
+                ),
+                "current_request_semantics": semantics,
+                "recovery": semantics["recovery"],
+                "state_mutated": False,
+                "authority_broadened": False,
+                "request_baseline_recreated": False,
+                "rebootstrap_performed": False,
+                "raw_artifact_included": False,
+                "local_path_included": False,
+            }
         if semantics["requested_operation"] not in {
             "source_generation",
             "source_and_qasm_generation",
@@ -11302,10 +11324,7 @@ class CurrentLoopCoordinator:
             previous_phase != phase
             and phase not in _PHASE_TRANSITIONS.get(previous_phase, ())
             and not (previous_phase == "activated" and phase == "generation_ready")
-            and not (
-                phase == "completed"
-                and previous_phase not in {"completed", "abandoned"}
-            )
+            and not (phase == "completed" and previous_phase not in {"completed", "abandoned"})
         ):
             raise CurrentLoopError("coordinator_transition_invalid")
         updated = deepcopy(dict(coordinator))

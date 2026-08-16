@@ -1186,27 +1186,6 @@ def classify_binding_default_route(
             "raw_mcp_default_entrypoint": False,
             "routing_contract": contract["schema_id"],
         }
-    # Retain the legacy explicit active-build entry only for an affirmative
-    # action instruction.  A capability/information question that happens to
-    # contain "build" must never mutate a loop.
-    explicit_legacy_build = bool(
-        re.match(r"^(?:please\s+)?(?:let(?:'s| us)\s+)?use\s+qcoder\b", normalized)
-        and request_semantics["requested_operation"] == "bounded_single_capability"
-    )
-    if explicit_legacy_build:
-        return {
-            "schema_id": "qcoder.connected_assistant.route_decision.v1",
-            "selected_route": "active_build",
-            "action": "execute_fresh_active_build_bootstrap_invocation",
-            "operation": "activate",
-            "matched_named_workflow": None,
-            "request_semantics": request_semantics,
-            "named_d079_route_preceded_generic_single_capability": False,
-            "customer_constructs_operation_envelope": False,
-            "deterministic_single_route": True,
-            "raw_mcp_default_entrypoint": False,
-            "routing_contract": contract["schema_id"],
-        }
     if request_semantics["route"] == "clarification_required":
         return {
             "schema_id": "qcoder.connected_assistant.route_decision.v1",

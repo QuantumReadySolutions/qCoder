@@ -40,9 +40,7 @@ STAGE_OPERATIONS = (
 )
 
 _WORD = r"[\w+.-]+"
-_SOURCE_ACTIONS = frozenset(
-    {"write", "create", "make", "generate", "produce", "build", "draft"}
-)
+_SOURCE_ACTIONS = frozenset({"write", "create", "make", "generate", "produce", "build", "draft"})
 _SOURCE_NOUNS = frozenset(
     {
         "algorithm",
@@ -103,6 +101,23 @@ def _has_any(words: Sequence[str], choices: frozenset[str]) -> bool:
     return any(word in choices for word in words)
 
 
+def _has_affirmative_action(normalized: str, terms: Sequence[str]) -> bool:
+    """Return whether at least one action occurrence is outside a negated clause."""
+
+    joined = "|".join(re.escape(term) for term in sorted(terms, key=len, reverse=True))
+    for match in re.finditer(rf"\b(?:{joined})\b", normalized):
+        clause_start = max(
+            normalized.rfind(delimiter, 0, match.start())
+            for delimiter in (".", "!", "?", ";", ",", ":")
+        )
+        prefix = normalized[clause_start + 1 : match.start()]
+        if len(prefix) > 64:
+            prefix = prefix[-64:]
+        if not re.search(r"\b(?:do not|don't|dont|never|not|without)\b", prefix):
+            return True
+    return False
+
+
 def _negated(normalized: str, terms: Sequence[str]) -> bool:
     joined = "|".join(re.escape(term) for term in terms)
     patterns = (
@@ -148,6 +163,16 @@ def _review_intent(normalized: str, words: Sequence[str]) -> bool:
         re.search(r"\blook\s+(?:at|over)\b", normalized)
         or re.search(r"\btell\s+me\b[^.!?;]{0,48}\b(?:evidence|results?)\b", normalized)
     )
+
+
+def _affirmative_review_intent(normalized: str, words: Sequence[str]) -> bool:
+    if _has_any(words, _REVIEW_WORDS) and _has_affirmative_action(normalized, tuple(_REVIEW_WORDS)):
+        return True
+    if re.search(r"\blook\s+(?:at|over)\b", normalized):
+        return _has_affirmative_action(normalized, ("look",))
+    if re.search(r"\btell\s+me\b[^.!?;]{0,48}\b(?:evidence|results?)\b", normalized):
+        return _has_affirmative_action(normalized, ("tell",))
+    return False
 
 
 def _semantic_recovery(
@@ -307,6 +332,7 @@ def classify_current_request(
     words = _words(normalized)
     explicit_qcoder = _explicit_qcoder_request(normalized)
     review_intent = _review_intent(normalized, words)
+    affirmative_review_intent = _affirmative_review_intent(normalized, words)
     review_deferred = _deferred(
         normalized,
         tuple(_REVIEW_WORDS | frozenset({"look", "reviewing", "inspection"})),
@@ -318,29 +344,35 @@ def classify_current_request(
             normalized,
         )
     )
-    close_request = bool(
-        active_loop
-        and re.search(
-            r"\b(?:close|finish|end)\b[^.!?;]{0,32}\b(?:qcoder|loop|build|work|session)\b",
+    close_action = bool(
+        re.search(
+            r"\b(?:close|finish|end)\s+(?:(?:this|the)\s+)?(?:current\s+)?"
+            r"(?:qcoder(?:\s+(?:loop|session))?|loop|session|build)\b",
             normalized,
         )
-        or (
-            active_loop
-            and bool(
-                re.search(
-                    r"\bwe(?:'re| are)\s+done\b[^.!?;]{0,24}(?:\b(?:loop|qcoder|build)\b)?",
-                    normalized,
-                )
-            )
+        or re.search(
+            r"\bwe(?:'re| are)\s+done\b(?:\s+with)?\s+"
+            r"(?:(?:this|the)\s+)?(?:qcoder\s+)?(?:loop|session|build)\b",
+            normalized,
+        )
+    )
+    close_request = bool(
+        active_loop
+        and close_action
+        and _has_affirmative_action(normalized, ("close", "finish", "end", "done"))
+    )
+    abandon_action = bool(
+        re.search(
+            r"\b(?:abandon|discard|throw\s+away)\s+"
+            r"(?:(?:this|the)\s+)?(?:current\s+)?"
+            r"(?:qcoder(?:\s+(?:loop|session))?|loop|session|build)\b",
+            normalized,
         )
     )
     abandon_request = bool(
         active_loop
-        and re.search(
-            r"\b(?:abandon|discard|throw\s+away)\b[^.!?;]{0,32}"
-            r"\b(?:(?:this|the)\s+)?(?:current\s+)?(?:qcoder|loop|build|work|session)\b",
-            normalized,
-        )
+        and abandon_action
+        and _has_affirmative_action(normalized, ("abandon", "discard", "throw"))
     )
 
     qasm_mentioned = _has_any(words, _QASM_WORDS)
@@ -356,7 +388,7 @@ def classify_current_request(
     results_prohibited = results_mentioned and (
         _negated(normalized, tuple(_RESULT_WORDS)) or _deferred(normalized, tuple(_RESULT_WORDS))
     )
-    source_action = _has_any(words, _SOURCE_ACTIONS) and (
+    source_action_candidate = _has_any(words, _SOURCE_ACTIONS) and (
         _has_any(words, _SOURCE_NOUNS)
         or (
             (active_loop or explicit_qcoder)
@@ -368,6 +400,20 @@ def classify_current_request(
                 )
             )
         )
+    )
+    source_action = source_action_candidate and _has_affirmative_action(
+        normalized, tuple(_SOURCE_ACTIONS)
+    )
+    negated_supported_task = bool(
+        explicit_qcoder
+        and (
+            (source_action_candidate and not source_action)
+            or (review_intent and not affirmative_review_intent)
+        )
+    )
+    negated_terminal_action = bool(
+        active_loop
+        and ((close_action and not close_request) or (abandon_action and not abandon_request))
     )
     informational, information_category = _question_or_information(
         normalized,
@@ -412,7 +458,19 @@ def classify_current_request(
     clarification: str | None = None
     recovery: dict[str, Any] | None = None
 
-    if informational and explicit_qcoder:
+    if negated_supported_task or negated_terminal_action:
+        operation = "inactive"
+        route = "available_inactive"
+        allowed_roles = []
+        execution = "prohibited_for_current_step"
+        evidence_review = "prohibited_for_current_step"
+        stop_after = "no_qcoder_operation"
+        ambiguity = "explicit_action_prohibition"
+        recovery = _semantic_recovery(
+            category="explicit_action_prohibited",
+            clarification=None,
+        )
+    elif informational and explicit_qcoder:
         operation = (
             "setup_guidance" if information_category == "setup_guidance" else "informational"
         )
@@ -435,7 +493,7 @@ def classify_current_request(
         execution = "prohibited_for_current_step"
         evidence_review = "existing_canonical_evidence_only"
         stop_after = "bounded_difference_ready"
-    elif review_intent and not review_deferred:
+    elif affirmative_review_intent and not review_deferred:
         operation = "selected_artifact_review"
         route = "named_d079_workflow"
         allowed_roles = []

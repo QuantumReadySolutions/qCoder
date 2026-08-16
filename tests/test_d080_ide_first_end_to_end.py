@@ -635,6 +635,43 @@ def test_review_intent_with_native_selection_uses_only_wi0433_selected_files(
     assert "NEIGHBOR_SENTINEL" not in protected
 
 
+def test_negated_review_intent_never_reads_selected_files_or_mutates_loop(
+    tmp_path: Path,
+) -> None:
+    calls: list[tuple[str, object]] = []
+
+    class Transport:
+        def call(self, name: str, arguments: object) -> dict[str, object]:
+            calls.append((name, arguments))
+            raise AssertionError("negated review intent must not reach protected transport")
+
+    coordinator = CurrentLoopCoordinator(workspace_root=tmp_path, transport=Transport())
+    coordinator.activate(
+        original_request=SOURCE_ONLY_REQUESTS[0],
+        explicit_authority=True,
+        capture_mode="exact_current_customer_message",
+    )
+    selected = tmp_path / "selected.py"
+    selected.write_text("SENSITIVE = True\n", encoding="utf-8")
+    for message in (
+        "Do not review these selected files with qCoder.",
+        "Don't check these selected files with qCoder.",
+        "Never inspect the selected results with qCoder.",
+    ):
+        for selected_paths in ((), (str(selected),)):
+            before = deepcopy(coordinator.store.read())
+            result = coordinator.interpret_current_request(
+                exact_message=message,
+                selected_paths=selected_paths,
+            )
+            assert result["ok"] is False
+            assert result["category"] == "current_request_inactive"
+            assert result["current_request_semantics"]["requested_operation"] == "inactive"
+            assert result["state_mutated"] is False
+            assert coordinator.store.read() == before
+    assert calls == []
+
+
 def test_orderly_close_and_explicit_abandon_are_distinct_terminal_actions(
     tmp_path: Path,
 ) -> None:
@@ -680,6 +717,33 @@ def test_orderly_close_and_explicit_abandon_are_distinct_terminal_actions(
         assert "completion_receipt" not in result["details"]
 
 
+def test_negated_or_nonterminal_close_words_cannot_end_or_abandon_the_loop(
+    tmp_path: Path,
+) -> None:
+    coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
+    coordinator.activate(
+        original_request=SOURCE_ONLY_REQUESTS[0],
+        explicit_authority=True,
+        capture_mode="exact_current_customer_message",
+    )
+    for message in (
+        "Do not close the qCoder loop.",
+        "Never abandon this qCoder loop.",
+    ):
+        before = deepcopy(coordinator.store.read())
+        result = coordinator.interpret_current_request(exact_message=message)
+        assert result["ok"] is False
+        assert result["category"] == "current_request_inactive"
+        assert result["state_mutated"] is False
+        assert coordinator.store.read() == before
+
+    semantics = classify_current_request(
+        "Finish writing the source for this qCoder build.", active_loop=True
+    )
+    assert semantics["requested_operation"] == "source_generation"
+    assert semantics["route"] == "active_loop_continuation"
+
+
 def test_polite_modal_tasks_are_tasks_and_modal_discussion_stays_informational() -> None:
     source_tasks = (
         "Could you use qCoder to make a teleportation program? Create only the Python file for now.",
@@ -706,6 +770,24 @@ def test_polite_modal_tasks_are_tasks_and_modal_discussion_stays_informational()
         result = classify_current_request(message)
         assert result["requested_operation"] in {"informational", "setup_guidance"}
         assert result["loop_mutation_permitted"] is False
+
+
+def test_negated_qcoder_tasks_never_activate_or_mutate() -> None:
+    for message in (
+        "Do not use qCoder to write the source.",
+        "Don't have qCoder create a Python file.",
+        "Could you not use qCoder to make this program?",
+        "Never use qCoder to generate code for this.",
+        "I do not want qCoder to write this implementation.",
+    ):
+        semantics = classify_current_request(message)
+        assert semantics["requested_operation"] == "inactive"
+        assert semantics["route"] == "available_inactive"
+        assert semantics["loop_mutation_permitted"] is False
+        assert semantics["bootstrap_required"] is False
+        route = classify_binding_default_route(customer_instruction=message)
+        assert route["selected_route"] == "available_inactive"
+        assert route["action"] == "none"
 
 
 def test_unseen_generation_requests_default_to_exact_source_only_d080_semantics() -> None:

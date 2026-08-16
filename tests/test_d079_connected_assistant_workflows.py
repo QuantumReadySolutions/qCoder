@@ -82,7 +82,10 @@ def test_decision_aware_default_preserves_six_semantic_layers_and_temporary_cont
         "Do not edit yet; show me the evidence and stop."
     )
     assert layers["explicit_user_facts"] != layers["assistant_structuring"]
-    assert layers["assistant_implementation_proposals"]["generic_qiskit.result_processing"] == "counts dictionary"
+    assert (
+        layers["assistant_implementation_proposals"]["generic_qiskit.result_processing"]
+        == "counts dictionary"
+    )
     assert layers["customer_confirmation"] == "not_yet_confirmed"
     assert "Do not edit yet" in layers["current_step_authority_controls"]
     assert "show me the evidence and stop" in layers["current_step_authority_controls"]
@@ -100,9 +103,7 @@ def test_control_enters_durable_intent_only_when_explicitly_promoted() -> None:
         current_step_controls=["ask before continuing"],
         explicitly_promoted_controls=["ask before continuing"],
     )
-    assert result["semantic_layers"]["durable_blueprint_constraints"] == [
-        "ask before continuing"
-    ]
+    assert result["semantic_layers"]["durable_blueprint_constraints"] == ["ask before continuing"]
 
 
 def test_stable_decision_identity_uses_catalog_and_lineage_not_order_or_wording() -> None:
@@ -169,9 +170,7 @@ def test_bounded_delegation_is_decision_specific_and_unbounded_delegation_fails(
         _proposal(
             explicit_user_facts=facts,
             customer_dispositions={
-                "circuit_construction": {
-                    "disposition": "explicitly_bounded_or_delegated"
-                }
+                "circuit_construction": {"disposition": "explicitly_bounded_or_delegated"}
             },
         )
     assert raised.value.recovery["reason_category"] == "unbounded_or_ineligible_delegation"
@@ -225,9 +224,17 @@ def test_confirmation_rederives_identity_and_presentation_envelopes(
 @pytest.mark.parametrize(
     ("field", "replacement", "category"),
     [
-        ("artifact_identity", "proposal-wrongwrongwrongwrong22", "incorrect_confirmation_reference"),
+        (
+            "artifact_identity",
+            "proposal-wrongwrongwrongwrong22",
+            "incorrect_confirmation_reference",
+        ),
         ("artifact_revision", 0, "stale_revision"),
-        ("parent_lineage_identity", "session-artifact-ffffffffffffffff", "missing_or_stale_lineage"),
+        (
+            "parent_lineage_identity",
+            "session-artifact-ffffffffffffffff",
+            "missing_or_stale_lineage",
+        ),
         ("proposal_digest", "0" * 64, "digest_mismatch"),
         ("exact_proposal_reviewed", False, "missing_review_assertion"),
     ],
@@ -253,9 +260,7 @@ def test_confirmation_for_a_cannot_confirm_b_and_changed_proposal_needs_review()
         assistant_structuring={"goal": "changed proposal B"},
     )
     with pytest.raises(D079WorkflowError, match="incorrect_confirmation_reference"):
-        confirm_ide_first_blueprint(
-            proposal=b, confirmation=a["confirmation_requirements"]
-        )
+        confirm_ide_first_blueprint(proposal=b, confirmation=a["confirmation_requirements"])
 
 
 def test_missing_lineage_and_wrong_artifact_layer_recover_fail_closed() -> None:
@@ -343,8 +348,9 @@ def test_blueprint_revision_has_exact_parent_bounded_diff_and_fresh_confirmation
     assert revised_result["semantic_diff"][0]["bounded_field"] == (
         "semantic_layers.assistant_structuring"
     )
-    assert revised["semantic_layers"]["current_step_authority_controls"] == (
-        original["semantic_layers"]["current_step_authority_controls"]
+    assert (
+        revised["semantic_layers"]["current_step_authority_controls"]
+        == (original["semantic_layers"]["current_step_authority_controls"])
     )
     with pytest.raises(D079WorkflowError):
         confirm_ide_first_blueprint(
@@ -435,9 +441,7 @@ def test_continuation_failure_is_not_misreported_as_terminal(tmp_path: Path) -> 
         }
 
     with pytest.raises(D079WorkflowError, match="continuation_failure"):
-        review_selected_files_with_qcoder(
-            selected_paths=[str(selected)], protected_call=incomplete
-        )
+        review_selected_files_with_qcoder(selected_paths=[str(selected)], protected_call=incomplete)
 
 
 def test_scale_limit_receipt_is_explicit_not_silent(tmp_path: Path) -> None:
@@ -454,8 +458,7 @@ def test_real_local_first_path_returns_structured_selected_artifact_limit(tmp_pa
     fixture = tmp_path / "selected-million-scale.qasm"
     gate_count = 20_000
     fixture.write_text(
-        'OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[1];\n'
-        + "x q[0];\n" * gate_count,
+        'OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[1];\n' + "x q[0];\n" * gate_count,
         encoding="utf-8",
     )
     with pytest.raises(D079WorkflowError) as raised:
@@ -482,8 +485,13 @@ def test_public_tool_inventory_remains_exactly_twelve() -> None:
     ]
     assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v24"
     assert descriptor["d079_orchestration"]["public_tool_count"] == 12
-    assert descriptor["d079_orchestration"]["blueprint_workflow"]["decision_aware_by_default"] is True
-    assert descriptor["d079_orchestration"]["evidence_review_workflow"]["repository_discovery"] is False
+    assert (
+        descriptor["d079_orchestration"]["blueprint_workflow"]["decision_aware_by_default"] is True
+    )
+    assert (
+        descriptor["d079_orchestration"]["evidence_review_workflow"]["repository_discovery"]
+        is False
+    )
     invocation = descriptor["d079_orchestration"]["binding_owned_local_invocation"]
     assert invocation["operation"] == "connected-assistant-workflow"
     assert invocation["qcoder_owned_argv"] == [
@@ -542,9 +550,7 @@ def test_m4_blueprint_named_route_precedes_generic_single_capability() -> None:
             "selected circuit. Do not edit or run anything yet."
         )
     )
-    assert scale_decision["matched_named_workflow"] == (
-        "algorithm_blueprint_generation_context"
-    )
+    assert scale_decision["matched_named_workflow"] == ("algorithm_blueprint_generation_context")
 
 
 def test_m4_evidence_named_route_precedes_raw_mcp_and_retains_selection_authority(
@@ -560,9 +566,7 @@ def test_m4_evidence_named_route_precedes_raw_mcp_and_retains_selection_authorit
     assert decision["matched_named_workflow"] == "selected_file_evidence_review"
     assert decision["operation"] == "connected_assistant_workflow"
     assert decision["raw_mcp_default_entrypoint"] is False
-    route = binding_default_routing_contract()["named_workflows"][
-        "selected_file_evidence_review"
-    ]
+    route = binding_default_routing_contract()["named_workflows"]["selected_file_evidence_review"]
     assert route["native_client_selected_paths_required"] is True
     assert route["customer_constructs_operation_envelope"] is False
 
@@ -577,8 +581,9 @@ def test_m4_generic_active_and_inactive_routes_are_deterministic_fallthroughs() 
     active = classify_binding_default_route(
         customer_instruction="Use qCoder for this build. Help me plan the work."
     )
-    assert active["selected_route"] == "active_build"
-    assert active["action"] == "execute_fresh_active_build_bootstrap_invocation"
+    assert active["selected_route"] == "single_capability"
+    assert active["action"] == "use_applicable_mcp_tool"
+    assert active["raw_mcp_default_entrypoint"] is True
     inactive = classify_binding_default_route(customer_instruction="")
     assert inactive["selected_route"] == "available_inactive"
     for decision in (generic, active, inactive):
@@ -641,7 +646,9 @@ def test_production_relevant_coordinator_path_owns_both_workflows(tmp_path: Path
         materialize_canonical_artifacts=False,
     )
     selected = tmp_path / "selected.py"
-    selected.write_text("from qiskit import QuantumCircuit\nqc=QuantumCircuit(1)\n", encoding="utf-8")
+    selected.write_text(
+        "from qiskit import QuantumCircuit\nqc=QuantumCircuit(1)\n", encoding="utf-8"
+    )
     reviewed = coordinator.review_customer_selected_files(selected_paths=[str(selected)])
     assert confirmed["generation_context"]["generation_ready"] is True
     assert reviewed["status"] == "result_review_ready"
@@ -719,7 +726,8 @@ def test_exact_binding_owned_cli_invocation_executes_ordinary_language_route(
     assert result == 0
     output = json.loads(capsys.readouterr().out)
     assert output["selected_workflow"] == "ide_first_blueprint_decision_and_confirmation"
-    assert output["workflow_result"]["semantic_layers"][
-        "original_customer_request_verbatim"
-    ] == instruction
+    assert (
+        output["workflow_result"]["semantic_layers"]["original_customer_request_verbatim"]
+        == instruction
+    )
     assert output["workflow_result"]["temporary_authority_actions"] == ["edit", "run"]
