@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.0a14
+
+- Make ordinary connected-assistant Algorithm Blueprint / Generation Context requests
+  decision-aware by default while preserving exact semantic proposal confirmation, immutable
+  lineage, bounded revision diffs, and separate IDE edit/run authority.
+- Route exact customer-selected Evidence Review artifacts through deterministic local evidence,
+  a separate share-safe derivative, bounded protected enrichment, and Result Review without
+  repository discovery or raw/path transfer.
+- Add deterministic IDE-first request semantics and current-step artifact ceilings so ordinary
+  source-generation requests require one exact native source-write permission and do not imply
+  QASM export, execution, results, or review authority.
+- Preserve exactly twelve public Context Bridge tools, process-and-discard behavior, existing
+  authentication/entitlement/consent meaning, and separate named-client qualification.
+- Use publication-neutral immutable release metadata; publication state and public claims remain
+  governed by external release control.
+
 ## 0.6.0a13
 
 - Preserve the exact qCoder 0.6.0a12 runtime behavior, connected-assistant binding v19,

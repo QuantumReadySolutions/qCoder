@@ -28,3 +28,9 @@ Release proof must record the source commit, wheel hash, source-distribution has
 source. Private artifacts that reuse a published version are obsolete and must be either moved to a
 clearly marked non-installable quarantine or recorded as absent. The official published artifact
 must not be altered, renamed, moved, or quarantined.
+
+Metadata embedded in a frozen plain-version source distribution must describe durable release
+identity, ancestry, and governance only. Mutable lifecycle facts such as "unpublished",
+"never published", "private-only", or a publication Boolean belong in external release-control
+evidence, not in immutable package bytes. The package remains truthful before and after a later
+publication event.

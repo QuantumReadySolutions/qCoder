@@ -13,9 +13,9 @@ from pathlib import Path
 
 OLD_CANDIDATE_VERSION = "0.6.0a1"
 RELEASE_METADATA_FILENAME = "release-version.json"
-RELEASE_METADATA_SCHEMA = "qcoder.release_version_source.v1"
-UNPUBLISHED_CANDIDATE = "unpublished_candidate"
-SUPPORTED_POSTURES = frozenset({UNPUBLISHED_CANDIDATE})
+RELEASE_METADATA_SCHEMA = "qcoder.release_version_source.v2"
+PRERELEASE_SUCCESSOR = "prerelease_successor"
+EXTERNAL_RELEASE_CONTROL = "external_release_control"
 PRIVATE_CANDIDATE_PATTERN = re.compile(
     r"^(?P<public_version>[0-9]+\.[0-9]+\.[0-9]+a[0-9]+)"
     r"\+wi[0-9]+\.[a-z0-9][a-z0-9.]*$"
@@ -67,24 +67,28 @@ def release_metadata(source_root: Path) -> dict[str, object]:
     required = {
         "schema",
         "source_version",
-        "source_posture",
-        "current_public_version",
-        "published",
-        "publicly_installable",
-        "intervening_unpublished_versions",
+        "release_identity_kind",
+        "predecessor_public_version",
+        "publication_state_authority",
+        "intervening_reserved_versions",
     }
     if set(data) != required:
         raise ValueError("release_metadata_fields_invalid")
     if data["schema"] != RELEASE_METADATA_SCHEMA:
         raise ValueError("release_metadata_schema_unsupported")
-    for key in ("source_version", "source_posture", "current_public_version"):
+    for key in (
+        "source_version",
+        "release_identity_kind",
+        "predecessor_public_version",
+        "publication_state_authority",
+    ):
         if not isinstance(data[key], str):
             raise ValueError(f"release_metadata_{key}_invalid")
-    if not isinstance(data["published"], bool) or not isinstance(
-        data["publicly_installable"], bool
-    ):
-        raise ValueError("release_metadata_publication_flags_invalid")
-    intervening = data["intervening_unpublished_versions"]
+    if data["release_identity_kind"] != PRERELEASE_SUCCESSOR:
+        raise ValueError("release_metadata_identity_kind_unsupported")
+    if data["publication_state_authority"] != EXTERNAL_RELEASE_CONTROL:
+        raise ValueError("release_metadata_publication_authority_invalid")
+    intervening = data["intervening_reserved_versions"]
     if not isinstance(intervening, list) or not all(
         isinstance(value, str) for value in intervening
     ):
@@ -161,10 +165,7 @@ def _expected_intervening_alpha_versions(
     if source_identity <= public_identity:
         raise ValueError("candidate_not_newer_than_current_public_version")
     prefix = ".".join(str(part) for part in source_identity[:3])
-    return [
-        f"{prefix}a{serial}"
-        for serial in range(public_identity[3] + 1, source_identity[3])
-    ]
+    return [f"{prefix}a{serial}" for serial in range(public_identity[3] + 1, source_identity[3])]
 
 
 def verify_release_version(
@@ -184,8 +185,8 @@ def verify_release_version(
         versions["wheel"] = wheel_version(wheel)
         versions["sdist"] = sdist_version(sdist)
     local_match = PRIVATE_CANDIDATE_PATTERN.fullmatch(expected)
-    source_posture = str(metadata["source_posture"])
-    current_public_version = str(metadata["current_public_version"])
+    release_identity_kind = str(metadata["release_identity_kind"])
+    predecessor_public_version = str(metadata["predecessor_public_version"])
     pins = _repository_pin_inventory(
         source_root,
         customer_pin_versions([root.resolve() for root in customer_roots]),
@@ -195,19 +196,15 @@ def verify_release_version(
         raise ValueError("candidate_reuses_0.6.0a1")
     if mismatches:
         raise ValueError(f"authoritative_version_mismatch:{mismatches}")
-    if source_posture not in SUPPORTED_POSTURES:
-        raise ValueError(f"unsupported_release_posture:{source_posture}")
-    if metadata["published"] is not False:
-        raise ValueError("unpublished_candidate_marked_published")
-    if metadata["publicly_installable"] is not False:
-        raise ValueError("unpublished_candidate_marked_publicly_installable")
-    if current_public_version == expected:
-        raise ValueError("unpublished_candidate_equals_current_public_version")
-    expected_intervening = _expected_intervening_alpha_versions(current_public_version, expected)
-    declared_intervening = list(metadata["intervening_unpublished_versions"])
+    if predecessor_public_version == expected:
+        raise ValueError("successor_equals_predecessor_version")
+    expected_intervening = _expected_intervening_alpha_versions(
+        predecessor_public_version, expected
+    )
+    declared_intervening = list(metadata["intervening_reserved_versions"])
     if declared_intervening != expected_intervening:
         raise ValueError(
-            "intervening_unpublished_versions_mismatch:"
+            "intervening_reserved_versions_mismatch:"
             f"expected={expected_intervening}:declared={declared_intervening}"
         )
     candidate_pin_occurrences = [
@@ -223,13 +220,13 @@ def verify_release_version(
         if version in declared_intervening
     ]
     if candidate_pin_occurrences:
-        raise ValueError(f"unpublished_candidate_customer_pin:{candidate_pin_occurrences}")
+        raise ValueError(f"release_version_customer_pin:{candidate_pin_occurrences}")
     if intervening_pin_occurrences:
-        raise ValueError(f"unpublished_intervening_customer_pin:{intervening_pin_occurrences}")
+        raise ValueError(f"intervening_reserved_customer_pin:{intervening_pin_occurrences}")
     pin_mismatches = {
         path: values
         for path, values in pins.items()
-        if any(value != current_public_version for value in values)
+        if any(value != predecessor_public_version for value in values)
     }
     if pin_mismatches:
         raise ValueError(f"customer_package_pin_mismatch:{pin_mismatches}")
@@ -239,17 +236,17 @@ def verify_release_version(
         "result": "pass",
         "version": expected,
         "source_version": expected,
-        "source_posture": source_posture,
-        "public_version": current_public_version,
-        "current_public_version": current_public_version,
+        "release_identity_kind": release_identity_kind,
+        "predecessor_public_version": predecessor_public_version,
+        "publication_state_authority": metadata["publication_state_authority"],
         "private_candidate_identity": local_match is not None,
         "authoritative_versions": versions,
         "customer_pin_files": sorted(pins),
         "customer_pins": pins,
         "detected_customer_pin_versions": detected_pin_versions,
         "candidate_pin_occurrences": [],
-        "intervening_unpublished_pin_occurrences": [],
-        "rejected_or_unpublished_pin_occurrences": [],
+        "intervening_reserved_pin_occurrences": [],
+        "reserved_or_rejected_pin_occurrences": [],
         "forbidden_customer_pin_versions": [*declared_intervening, expected],
         "artifact_versions_checked": wheel is not None,
         "old_candidate_identity_absent": True,

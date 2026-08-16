@@ -1,9 +1,8 @@
 {
-  "schema": "qcoder.release_version_source.v1",
-  "source_version": "0.6.0a14+wi0432.wi0433.wi0434.d079.d080",
-  "source_posture": "unpublished_candidate",
-  "current_public_version": "0.6.0a13",
-  "published": false,
-  "publicly_installable": false,
-  "intervening_unpublished_versions": []
+  "schema": "qcoder.release_version_source.v2",
+  "source_version": "0.6.0a14",
+  "release_identity_kind": "prerelease_successor",
+  "predecessor_public_version": "0.6.0a13",
+  "publication_state_authority": "external_release_control",
+  "intervening_reserved_versions": []
 }

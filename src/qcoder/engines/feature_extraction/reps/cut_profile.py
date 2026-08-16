@@ -77,7 +77,7 @@ def compute_cut_profile_stats(ig: InteractionGraph) -> CutProfileStats:
 
     # population std (matches spans.py style: divide by n)
     var = sum((x - cut_mean) ** 2 for x in cut) / len(cut)
-    cut_std = var ** 0.5
+    cut_std = var**0.5
 
     n_active = sum(1 for x in cut if x > 0.0)
 

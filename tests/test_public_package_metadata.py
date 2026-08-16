@@ -19,11 +19,15 @@ def test_readme_is_publication_truthful_and_keeps_client_claims_held() -> None:
     assert 'python -m pip install "qcoder==0.6.0a11"' not in readme
     assert 'python -m pip install "qcoder==0.6.0a12"' not in readme
     assert 'python -m pip install "qcoder==0.6.0a13"' not in readme
+    assert 'python -m pip install "qcoder==0.6.0a14"' not in readme
     assert "**Cursor Desktop:** full active Current Loop support." not in readme
     assert "This package does not activate a named-client support claim." in readme
-    assert "Connection, MCP tool discovery, or evidence for a related client does not establish qualification." in readme
-    assert "0.6.0a13" in readme
-    assert "qcoder 0.6.0a13 is a public pre-release" in lowered
+    assert (
+        "Connection, MCP tool discovery, or evidence for a related client does not establish qualification."
+        in readme
+    )
+    assert "0.6.0a14" in readme
+    assert "qcoder 0.6.0a14 is a pre-release" in lowered
     assert "unpublished successor candidate" not in lowered
     assert "package-index availability requires a separate publication decision" not in lowered
     assert "current public package remains" not in lowered
@@ -39,9 +43,10 @@ def test_readme_is_publication_truthful_and_keeps_client_claims_held() -> None:
     assert "fails closed instead of silently reinterpreting old authority data" in readme
 
 
-def test_changelog_records_a13_metadata_successor_and_a12_history() -> None:
+def test_changelog_records_a14_behavior_successor_and_a13_history() -> None:
     changelog = _normalized(ROOT / "CHANGELOG.md")
     lowered = changelog.lower()
+    assert "## 0.6.0a14" in changelog
     assert "## 0.6.0a13" in changelog
     assert "## 0.6.0a12" in changelog
     assert "## Unreleased integrated source" not in changelog
@@ -53,7 +58,23 @@ def test_changelog_records_a13_metadata_successor_and_a12_history() -> None:
     assert "assistant_context_ready" in changelog
     assert "process_and_discard" in changelog
     assert "qcoder 0.6.0a13 is a public pre-release" in lowered
+    assert "publication-neutral immutable release metadata" in lowered
+    assert "exactly twelve public context bridge tools" in lowered
     assert "preserve the exact qcoder 0.6.0a12 runtime behavior" in lowered
     assert "after `0.6.0a3` was published with stale distribution metadata" in changelog
     assert "unpublished superseded metadata-correction candidate" in changelog
     assert "bounded first-build receipt hardening" in changelog
+
+
+def test_a14_release_note_is_durable_and_keeps_claims_separate() -> None:
+    note = _normalized(ROOT / "docs/releases/0.6.0a14.md")
+    lowered = note.lower()
+    assert "qcoder 0.6.0a14 is a behavior-changing pre-release successor" in lowered
+    assert "exactly twelve public context bridge tools" in lowered
+    assert "package publication does not activate a named-client support claim" in lowered
+    assert (
+        "publication state, deployment state, and qualification claims remain separate" in lowered
+    )
+    assert "unpublished" not in lowered
+    assert "never published" not in lowered
+    assert "private-only" not in lowered

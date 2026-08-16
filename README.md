@@ -55,9 +55,10 @@ Narrowing applies immediately; broadening requires explicit confirmation.
 
 ### Upgrading an active Current Loop
 
-Version 0.6.0a13 preserves the connected-assistant, adaptive-intent input, coordinator-result, and
-vocabulary contracts while adding generic named-workflow completion semantics to the Context
-Bridge binding. qCoder 0.6.0a13 is a public pre-release. Finish or restart an active qCoder loop
+Version 0.6.0a14 preserves the connected-assistant, adaptive-intent input, coordinator-result, and
+vocabulary contracts while adding decision-aware planning, local-first selected-file review, and
+IDE-first current-step authority semantics to the Context Bridge binding. qCoder 0.6.0a14 is a
+pre-release. Finish or restart an active qCoder loop
 before upgrading. An outstanding
 pre-v4 operation receipt cannot be reused. When an old receipt is outstanding, the IDE must
 provide a fresh authority grant for the new runtime. qCoder fails closed instead of silently
@@ -106,7 +107,7 @@ operations, for exactly twelve Context Bridge capability tools:
 
 ### Review local evidence
 
-qCoder 0.6.0a13 composes existing canonical qCoder evidence into one local, account-free review.
+qCoder 0.6.0a14 composes existing canonical qCoder evidence into one local, account-free review.
 It reads only the files named explicitly on the command line; it does not
 accept a directory, expand a glob, recurse, discover hidden files, follow Python imports, scan a
 workspace, start a watcher, or call a network service.
@@ -154,7 +155,7 @@ attributes and alternate data streams are not qualified. See
 [`docs/local-evidence-review.md`](docs/local-evidence-review.md) for the complete commands and
 section meanings.
 
-This section describes behavior present in qCoder 0.6.0a13. Package publication and public client-
+This section describes behavior present in qCoder 0.6.0a14. Package publication and public client-
 claim status remain separate facts governed outside the package documentation.
 
 ### Explorer Evidence Review
@@ -206,9 +207,9 @@ See the synthetic [`Algorithm Blueprint walkthrough`](examples/09_algorithm_blue
 
 ## Quick start
 
-qCoder 0.6.0a13 is a public pre-release. It is not a stable or generally available release, and
-package publication does not activate a named-client support claim. The commands below describe
-behavior provided by this pre-release.
+qCoder 0.6.0a14 is a pre-release. It is not a stable or generally available release. Package
+publication and named-client support claims are governed separately from these immutable package
+bytes. The commands below describe behavior provided by this pre-release.
 
 Analyze a circuit:
 
