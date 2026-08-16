@@ -47,8 +47,7 @@ from qcoder.current_loop_run_summary import (
 from qcoder.current_loop_vocabulary import vocabulary_snapshot
 
 REQUEST = (
-    "Use qCoder for this build. Create and run a straightforward Qiskit Bell-state "
-    "program in this empty workspace using a local simulator and 1024 shots."
+    "Use qCoder for this build context with the established evidence-revision contract."
 )
 
 
@@ -190,7 +189,7 @@ def test_canonical_vocabulary_binding_and_state_v9_are_identical(tmp_path: Path)
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     vocabulary = vocabulary_snapshot()
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v23"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v24"
     assert binding["canonical_current_loop_vocabulary"] == vocabulary
     assert (
         binding["contract_sidecar"]["accepted_domains"]["canonical_evidence_vocabulary"]

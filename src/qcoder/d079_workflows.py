@@ -1191,13 +1191,7 @@ def classify_binding_default_route(
     # contain "build" must never mutate a loop.
     explicit_legacy_build = bool(
         re.match(r"^(?:please\s+)?(?:let(?:'s| us)\s+)?use\s+qcoder\b", normalized)
-        and (
-            request_semantics["requested_operation"] == "bounded_single_capability"
-            or (
-                "build" in normalized
-                and request_semantics["requested_operation"] == "source_and_local_execution"
-            )
-        )
+        and request_semantics["requested_operation"] == "bounded_single_capability"
     )
     if explicit_legacy_build:
         return {

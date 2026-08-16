@@ -24,10 +24,7 @@ from qcoder.current_loop_adaptive_intent import (
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 
 BELL_REQUEST = (
-    "Use qCoder for this build. Create and run a straightforward Qiskit Bell-state "
-    "program in this empty workspace using a local simulator and 1024 shots. Show me "
-    "the measurement counts and briefly explain what they mean. Keep qCoder quiet "
-    "unless a material decision or real blocker requires me."
+    "Use qCoder for this build context with the established adaptive-intent contract."
 )
 
 
@@ -88,7 +85,7 @@ def test_binding_v11_publishes_dedicated_complete_adaptive_intent_contract() -> 
     binding = build_client_binding_descriptor(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v23"
+    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v24"
     contract = binding["adaptive_intent_input_contract"]
     assert contract["schema_id"] == ADAPTIVE_INTENT_INPUT_SCHEMA_ID
     assert set(contract["profiles"]) == {"generic_qiskit", "grover_search", "qaoa"}
@@ -273,7 +270,7 @@ def test_unresolved_material_value_groups_decision_and_blueprint_required_is_gov
 ) -> None:
     coordinator, _, contract = _activate(
         tmp_path,
-        "Use qCoder for this build. Create a Qiskit program, but the algorithm is undecided.",
+        "Use qCoder for this current context; the algorithm decision is undecided.",
     )
     path = _fill_required(contract)
     document = json.loads(path.read_text(encoding="utf-8"))
@@ -323,7 +320,7 @@ def test_non_attributable_material_proposals_group_one_decision(
     workspace.mkdir()
     coordinator, _, contract = _activate(
         workspace,
-        "Use qCoder for this build. Create a Qiskit program, but the algorithm is undecided.",
+        "Use qCoder for this current context; the algorithm decision is undecided.",
     )
     path = _fill_required(contract)
     document = json.loads(path.read_text(encoding="utf-8"))

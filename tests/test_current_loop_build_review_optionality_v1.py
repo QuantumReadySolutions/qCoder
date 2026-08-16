@@ -12,7 +12,9 @@ from qcoder.current_loop_invocation import operation_transport_inventory
 def _evidence_ready(tmp_path: Path) -> CurrentLoopCoordinator:
     coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
     activated = coordinator.activate(
-        original_request="Use qCoder for this build and keep Build Review optional.",
+        original_request=(
+            "Use qCoder for this build context with optional post-build assessment."
+        ),
         explicit_authority=True,
         capture_mode="exact_current_customer_message",
         request_transport="stdin",

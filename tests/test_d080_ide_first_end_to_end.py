@@ -162,7 +162,7 @@ def test_binding_route_and_inventory_are_deterministic_and_keep_twelve_tools() -
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v23"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v24"
     assert (
         descriptor["current_request_semantics_contract"]["temporary_current_step_ceiling"] is True
     )
@@ -559,3 +559,207 @@ def test_active_selected_review_and_diff_execute_through_declared_hosted_continu
     assert calls[-1][0] == "create_single_loop_evidence_diff"
     assert changed["raw_artifact_transferred"] is False
     assert changed["local_path_transferred"] is False
+
+
+def test_review_intent_precedes_artifact_nouns_without_creating_authority(
+    tmp_path: Path,
+) -> None:
+    coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
+    activated = coordinator.activate(
+        original_request=SOURCE_ONLY_REQUESTS[0],
+        explicit_authority=True,
+        capture_mode="exact_current_customer_message",
+    )
+    assert activated["ok"] is True
+    for message in (
+        "Review the source, QASM, and counts.",
+        "Check the circuit and results with qCoder.",
+        "Look at the generated QASM and tell me what the evidence supports.",
+        "Review what we ran.",
+        "Inspect the result evidence.",
+    ):
+        before = deepcopy(coordinator.store.read())
+        result = coordinator.interpret_current_request(exact_message=message)
+        assert result["ok"] is False
+        assert result["customer_summary"] == "Which exact files should qCoder review?"
+        assert result["current_request_semantics"]["requested_operation"] == (
+            "selected_artifact_review"
+        )
+        assert result["state_mutated"] is False
+        assert coordinator.store.read() == before
+        assert not list(tmp_path.glob("*.qasm"))
+        assert not list(tmp_path.glob("*result*"))
+
+
+def test_review_intent_with_native_selection_uses_only_wi0433_selected_files(
+    tmp_path: Path,
+) -> None:
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    class Transport:
+        def call(self, name: str, arguments: object) -> dict[str, object]:
+            calls.append((name, deepcopy(dict(arguments))))  # type: ignore[arg-type]
+            return {
+                "tool_name": name,
+                "ok": True,
+                "context_status": (
+                    "assistant_context_ready"
+                    if name == "get_guided_evidence_context"
+                    else "result_review_context_card_ready"
+                ),
+                "retention": "process_and_discard",
+                "retained_artifacts": [],
+            }
+
+    coordinator = CurrentLoopCoordinator(workspace_root=tmp_path, transport=Transport())
+    coordinator.activate(
+        original_request=SOURCE_ONLY_REQUESTS[0],
+        explicit_authority=True,
+        capture_mode="exact_current_customer_message",
+    )
+    selected = tmp_path / "only-selected.py"
+    selected.write_text("SELECTED_SENTINEL = True\n", encoding="utf-8")
+    neighboring = tmp_path / "must-not-be-read.qasm"
+    neighboring.write_text("NEIGHBOR_SENTINEL\n", encoding="utf-8")
+    result = coordinator.interpret_current_request(
+        exact_message="Review the source, QASM, and counts.",
+        selected_paths=(str(selected),),
+    )
+    assert result["ok"] is True
+    assert result["workflow"] == "local_first_evidence_review"
+    assert result["result_review"]["status"] == "result_review_ready"
+    protected = json.dumps(calls)
+    assert str(selected) not in protected
+    assert str(neighboring) not in protected
+    assert "SELECTED_SENTINEL" not in protected
+    assert "NEIGHBOR_SENTINEL" not in protected
+
+
+def test_orderly_close_and_explicit_abandon_are_distinct_terminal_actions(
+    tmp_path: Path,
+) -> None:
+    close_messages = (
+        "Close qCoder for this build.",
+        "Finish this qCoder loop.",
+        "End the current qCoder session.",
+        "We’re done with this loop.",
+    )
+    for index, message in enumerate(close_messages):
+        workspace = tmp_path / f"close-{index}"
+        workspace.mkdir()
+        coordinator = CurrentLoopCoordinator(workspace_root=workspace)
+        coordinator.activate(
+            original_request=SOURCE_ONLY_REQUESTS[0],
+            explicit_authority=True,
+            capture_mode="exact_current_customer_message",
+        )
+        result = coordinator.interpret_current_request(exact_message=message)
+        assert result["ok"] is True
+        assert result["phase"] == "completed"
+        assert result["ordinary_language_close"] is True
+        assert result["ordinary_language_abandonment"] is False
+        assert result["details"]["completion_receipt"]["resulting_disposition"] == "stop_loop"
+        assert result["details"]["abandonment_selected"] is False
+        assert "abandon" not in result["customer_summary"].casefold()
+
+    for index, message in enumerate(
+        ("Abandon this loop.", "Discard this qCoder loop.", "Throw away this current loop.")
+    ):
+        workspace = tmp_path / f"abandon-{index}"
+        workspace.mkdir()
+        coordinator = CurrentLoopCoordinator(workspace_root=workspace)
+        coordinator.activate(
+            original_request=SOURCE_ONLY_REQUESTS[0],
+            explicit_authority=True,
+            capture_mode="exact_current_customer_message",
+        )
+        result = coordinator.interpret_current_request(exact_message=message)
+        assert result["ok"] is True
+        assert result["phase"] == "abandoned"
+        assert result["ordinary_language_abandonment"] is True
+        assert "completion_receipt" not in result["details"]
+
+
+def test_polite_modal_tasks_are_tasks_and_modal_discussion_stays_informational() -> None:
+    source_tasks = (
+        "Could you use qCoder to make a teleportation program? Create only the Python file for now.",
+        "Can you have qCoder draft a GHZ-state Qiskit example, code only?",
+        "Would you use qCoder to create the source for a small QFT example?",
+        "Could qCoder generate the Python implementation and stop before QASM?",
+        "Can you use qCoder to write this algorithm, but do not run it yet?",
+        "CODE ONLY, please: could you use qCoder to draft a variational-circuit Python example?",
+    )
+    for message in source_tasks:
+        result = classify_current_request(message)
+        assert result["requested_operation"] == "source_generation"
+        assert result["requested_artifact_roles"] == ["source"]
+        assert result["clarification_required"] is False
+
+    for message in (
+        "Can qCoder help with teleportation?",
+        "Could qCoder be useful for this algorithm?",
+        "Would qCoder work with GHZ circuits?",
+        "What does qCoder do?",
+        "How does qCoder work?",
+        "Can you show me the qCoder setup instructions?",
+    ):
+        result = classify_current_request(message)
+        assert result["requested_operation"] in {"informational", "setup_guidance"}
+        assert result["loop_mutation_permitted"] is False
+
+
+def test_unseen_generation_requests_default_to_exact_source_only_d080_semantics() -> None:
+    messages = (
+        "Use qCoder to write a Qiskit program that prepares a Bell state.",
+        "Use qCoder to create a teleportation program.",
+        "Have qCoder generate a GHZ-state Python example.",
+        "Could you use qCoder to make the source for a QFT circuit?",
+        "qCoder, write a Deutsch–Jozsa implementation.",
+        "Use qCoder to build the Python for this algorithm.",
+        "Use qCoder to generate the program. We are not reviewing results yet.",
+        "Use qCoder to draft Python for a Grover setup; we can run it later.",
+        "Use qCoder to create a variational-circuit source. We’ll inspect QASM afterward.",
+    )
+    for message in messages:
+        semantics = classify_current_request(message)
+        assert semantics["route"] == "active_build"
+        assert semantics["requested_operation"] == "source_generation"
+        assert semantics["requested_artifact_roles"] == ["source"]
+        assert semantics["prohibited_artifact_roles"] == ["circuit_qasm", "results"]
+        assert semantics["execution_disposition"] == "prohibited_for_current_step"
+        assert semantics["evidence_review_disposition"] == "prohibited_for_current_step"
+        route = classify_binding_default_route(customer_instruction=message)
+        assert route["matched_named_workflow"] == "d080_current_request_semantics"
+        assert route["request_semantics"]["semantics_digest"] == semantics["semantics_digest"]
+
+
+def test_explicit_generation_bootstrap_never_uses_legacy_broad_role_ceiling(
+    tmp_path: Path,
+) -> None:
+    coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
+    activated = coordinator.activate(
+        original_request="Use qCoder to create a teleportation program.",
+        explicit_authority=True,
+        capture_mode="exact_current_customer_message",
+    )
+    semantics = activated["current_request_semantics"]
+    assert activated["phase"] == "generation_ready"
+    assert semantics["requested_operation"] == "source_generation"
+    assert semantics["current_step_ceiling"]["allowed_artifact_roles"] == ["source"]
+    assert semantics["current_step_ceiling"]["artifact_role_cardinality"] == {
+        "source": "exactly_one"
+    }
+    assert activated["next_invocation"]["fixed_argument_values"] == {
+        "--operation-category": "ide_write",
+        "--output-role": "source",
+    }
+    before = deepcopy(coordinator.store.read())
+    execution = coordinator.record_ide_authority(
+        allowed=True,
+        explicit_user_action=True,
+        operation_category="ide_execute",
+        output_role_ceiling=("results",),
+    )
+    assert execution["ok"] is False
+    assert execution["category"] == "current_step_authority_mismatch"
+    assert coordinator.store.read() == before

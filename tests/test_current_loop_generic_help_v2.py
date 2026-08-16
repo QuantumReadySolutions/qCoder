@@ -35,8 +35,7 @@ from qcoder.current_loop_result_envelope import (
 )
 
 REQUEST = (
-    "Use qCoder for this build. Create and run a straightforward Qiskit Bell-state "
-    "program in this empty workspace using a local simulator and 1024 shots."
+    "Use qCoder for this build context with the established generic-help contract."
 )
 
 
@@ -143,7 +142,7 @@ def test_binding_v18_steers_generic_help_to_exactly_one_local_call(tmp_path: Pat
     binding = build_client_binding_descriptor(
         coordinator_prefix=[sys.executable, "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v23"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v24"
     assert binding["generic_help"]["generic_request_topic"] == "overview"
     assert binding["generic_help"]["exactly_one_qcoder_operation"] is True
     assert binding["generic_help"]["automatic_status_call"] is False

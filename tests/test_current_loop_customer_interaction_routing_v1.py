@@ -188,7 +188,7 @@ def test_direct_finish_cancels_pending_proposal_and_returns_completion_receipt(
     )
     assert result["ok"] is True
     assert result["operation"] == "complete_instruction"
-    assert result["phase"] == "abandoned"
+    assert result["phase"] == "completed"
     assert "closed" in result["customer_summary"].lower()
     assert "abandon" not in result["customer_summary"].lower()
     assert result["details"]["abandonment_selected"] is False
@@ -217,7 +217,7 @@ def test_direct_finish_cancels_pending_proposal_and_returns_completion_receipt(
         sidecar.validate_live_binding()
 
 
-def test_complete_and_abandon_share_cleanup_but_keep_distinct_customer_copy(
+def test_complete_and_abandon_share_cleanup_but_keep_distinct_terminal_dispositions(
     tmp_path: Path,
 ) -> None:
     finish_workspace = tmp_path / "finish"
@@ -242,7 +242,11 @@ def test_complete_and_abandon_share_cleanup_but_keep_distinct_customer_copy(
         assert cleanup["directory_discovery_performed"] is False
     assert "closed" in finished["customer_summary"].lower()
     assert "abandon" not in finished["customer_summary"].lower()
+    assert finished["phase"] == "completed"
+    assert finished["details"]["completion_receipt"]["resulting_disposition"] == "stop_loop"
     assert "abandoned" in abandoned["customer_summary"].lower()
+    assert abandoned["phase"] == "abandoned"
+    assert "completion_receipt" not in abandoned["details"]
     assert finish_project.exists()
     assert abandon_project.exists()
 
@@ -278,7 +282,7 @@ def test_binding_v18_routes_governance_and_finish_without_document_fanout() -> N
         python_executable="/runtime/python",
     )
     normalized_instructions = " ".join(instructions.split())
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v23"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v24"
     assert binding["schema_version"] == 23
     assert len(EXPECTED_TOOLS) == 12
     assert "contract-set-generation-governance" in normalized_instructions

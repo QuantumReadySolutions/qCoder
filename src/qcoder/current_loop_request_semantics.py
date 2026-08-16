@@ -31,6 +31,7 @@ STAGE_OPERATIONS = (
     "selected_artifact_review",
     "current_loop_evidence_diff",
     "close_current_loop",
+    "abandon_current_loop",
     "bounded_single_capability",
     "informational",
     "setup_guidance",
@@ -39,9 +40,22 @@ STAGE_OPERATIONS = (
 )
 
 _WORD = r"[\w+.-]+"
-_SOURCE_ACTIONS = frozenset({"write", "create", "make", "generate", "produce", "build"})
+_SOURCE_ACTIONS = frozenset(
+    {"write", "create", "make", "generate", "produce", "build", "draft"}
+)
 _SOURCE_NOUNS = frozenset(
-    {"code", "source", "python", "file", "program", "script", "qiskit", "example"}
+    {
+        "algorithm",
+        "code",
+        "example",
+        "file",
+        "implementation",
+        "program",
+        "python",
+        "qiskit",
+        "script",
+        "source",
+    }
 )
 _EXECUTION_WORDS = frozenset(
     {
@@ -57,7 +71,7 @@ _EXECUTION_WORDS = frozenset(
 )
 _RESULT_WORDS = frozenset({"count", "counts", "result", "results", "shots", "shot"})
 _QASM_WORDS = frozenset({"qasm", "openqasm"})
-_REVIEW_WORDS = frozenset({"review", "inspect", "analyze", "analyse"})
+_REVIEW_WORDS = frozenset({"review", "inspect", "analyze", "analyse", "check"})
 _DEFERRED_MARKERS = ("later", "afterward", "afterwards", "next step", "another step")
 
 
@@ -94,6 +108,7 @@ def _negated(normalized: str, terms: Sequence[str]) -> bool:
     patterns = (
         rf"\b(?:do not|don't|dont|not|never|without|no)\b[^.!?;]{{0,42}}\b(?:{joined})\b",
         rf"\b(?:{joined})\b[^.!?;]{{0,24}}\b(?:prohibited|forbidden|later)\b",
+        rf"\b(?:stop|pause)\b[^.!?;]{{0,32}}\bbefore\b[^.!?;]{{0,16}}\b(?:{joined})\b",
     )
     return any(re.search(pattern, normalized) for pattern in patterns)
 
@@ -111,25 +126,28 @@ def _explicit_qcoder_request(normalized: str) -> bool:
     return bool(re.search(r"\bqcoder\b", normalized))
 
 
-def _question_or_information(normalized: str) -> tuple[bool, str | None]:
+def _question_or_information(
+    normalized: str, *, concrete_supported_task: bool
+) -> tuple[bool, str | None]:
     candidate = re.sub(r"^(?:please\s+|kindly\s+)", "", normalized)
-    if re.match(r"^(?:can|could|would|is|does|what|why|how)\b", candidate):
-        return True, "capability_or_information_question"
-    if "what does qcoder do" in normalized:
-        return True, "product_information"
-    if re.search(r"\b(?:setup|install|configure|configuration)\b", normalized):
+    if re.search(r"\b(?:setup|install|configure|configuration)\b", normalized) and not (
+        concrete_supported_task
+    ):
         return True, "setup_guidance"
+    if re.match(r"^(?:can|could|would|is|does|what|why|how)\b", candidate) and not (
+        concrete_supported_task
+    ):
+        return True, "capability_or_information_question"
     return False, None
 
 
-def _selected_review(normalized: str, words: Sequence[str], selected_paths: Sequence[str]) -> bool:
-    if not _has_any(words, _REVIEW_WORDS):
-        return False
-    exact_selection_language = bool(
-        re.search(r"\b(?:these|this|selected|chosen|attached)\b[^.!?;]{0,24}\bfiles?\b", normalized)
-        or "selected artifacts" in normalized
+def _review_intent(normalized: str, words: Sequence[str]) -> bool:
+    if _has_any(words, _REVIEW_WORDS):
+        return True
+    return bool(
+        re.search(r"\blook\s+(?:at|over)\b", normalized)
+        or re.search(r"\btell\s+me\b[^.!?;]{0,48}\b(?:evidence|results?)\b", normalized)
     )
-    return exact_selection_language or bool(selected_paths)
 
 
 def _semantic_recovery(
@@ -194,6 +212,8 @@ def _stage_ceiling(
         "durable_blueprint_constraint": False,
         "allowed_operations": allowed_operations,
         "allowed_artifact_roles": roles,
+        "artifact_role_cardinality": {role: "exactly_one" for role in roles},
+        "maximum_artifacts_per_authorized_substage": 1 if roles else 0,
         "prohibited_artifact_roles": prohibited,
         "execution_disposition": execution,
         "evidence_review_disposition": evidence_review,
@@ -286,8 +306,11 @@ def classify_current_request(
     normalized = _normalized(exact_message)
     words = _words(normalized)
     explicit_qcoder = _explicit_qcoder_request(normalized)
-    informational, information_category = _question_or_information(normalized)
-    selected_review = _selected_review(normalized, words, selected_paths)
+    review_intent = _review_intent(normalized, words)
+    review_deferred = _deferred(
+        normalized,
+        tuple(_REVIEW_WORDS | frozenset({"look", "reviewing", "inspection"})),
+    )
     diff_request = bool(
         active_loop
         and re.search(
@@ -298,7 +321,24 @@ def classify_current_request(
     close_request = bool(
         active_loop
         and re.search(
-            r"\b(?:close|finish|end|stop)\b[^.!?;]{0,32}\b(?:qcoder|loop|build|work)\b",
+            r"\b(?:close|finish|end)\b[^.!?;]{0,32}\b(?:qcoder|loop|build|work|session)\b",
+            normalized,
+        )
+        or (
+            active_loop
+            and bool(
+                re.search(
+                    r"\bwe(?:'re| are)\s+done\b[^.!?;]{0,24}(?:\b(?:loop|qcoder|build)\b)?",
+                    normalized,
+                )
+            )
+        )
+    )
+    abandon_request = bool(
+        active_loop
+        and re.search(
+            r"\b(?:abandon|discard|throw\s+away)\b[^.!?;]{0,32}"
+            r"\b(?:(?:this|the)\s+)?(?:current\s+)?(?:qcoder|loop|build|work|session)\b",
             normalized,
         )
     )
@@ -316,7 +356,23 @@ def classify_current_request(
     results_prohibited = results_mentioned and (
         _negated(normalized, tuple(_RESULT_WORDS)) or _deferred(normalized, tuple(_RESULT_WORDS))
     )
-    source_action = _has_any(words, _SOURCE_ACTIONS) and _has_any(words, _SOURCE_NOUNS)
+    source_action = _has_any(words, _SOURCE_ACTIONS) and (
+        _has_any(words, _SOURCE_NOUNS)
+        or (
+            (active_loop or explicit_qcoder)
+            and bool(
+                re.search(
+                    r"\b(?:write|create|make|generate|produce|build|draft)\b"
+                    r"[^.!?;]{0,28}\b(?:it|this)\b",
+                    normalized,
+                )
+            )
+        )
+    )
+    informational, information_category = _question_or_information(
+        normalized,
+        concrete_supported_task=source_action or (review_intent and not review_deferred),
+    )
     qasm_requested = qasm_mentioned and not qasm_prohibited
     execution_requested = execution_mentioned and not execution_prohibited
     results_requested = results_mentioned and not results_prohibited
@@ -372,7 +428,14 @@ def classify_current_request(
         execution = "not_requested"
         evidence_review = "not_requested"
         stop_after = "no_qcoder_operation"
-    elif selected_review:
+    elif diff_request:
+        operation = "current_loop_evidence_diff"
+        route = "active_loop_continuation"
+        allowed_roles = []
+        execution = "prohibited_for_current_step"
+        evidence_review = "existing_canonical_evidence_only"
+        stop_after = "bounded_difference_ready"
+    elif review_intent and not review_deferred:
         operation = "selected_artifact_review"
         route = "named_d079_workflow"
         allowed_roles = []
@@ -386,13 +449,13 @@ def classify_current_request(
                 category="selected_artifact_required",
                 clarification=clarification,
             )
-    elif diff_request:
-        operation = "current_loop_evidence_diff"
+    elif abandon_request:
+        operation = "abandon_current_loop"
         route = "active_loop_continuation"
         allowed_roles = []
         execution = "prohibited_for_current_step"
-        evidence_review = "existing_canonical_evidence_only"
-        stop_after = "bounded_difference_ready"
+        evidence_review = "prohibited_for_current_step"
+        stop_after = "current_loop_abandoned"
     elif close_request:
         operation = "close_current_loop"
         route = "active_loop_continuation"
@@ -427,7 +490,7 @@ def classify_current_request(
             allowed_roles = ["source", "circuit_qasm"]
             execution = "prohibited_for_current_step"
             stop_after = "qasm_registered"
-        elif source_stop or later_evidence or execution_prohibited or qasm_prohibited:
+        else:
             route = "active_loop_continuation" if active_loop else "active_build"
             operation = "source_generation"
             allowed_roles = ["source"]
@@ -435,13 +498,6 @@ def classify_current_request(
             stop_after = "source_registered"
             qasm_prohibited = True
             results_prohibited = True
-        else:
-            operation = "bounded_single_capability"
-            route = "single_capability"
-            allowed_roles = []
-            execution = "prohibited_for_current_step"
-            evidence_review = "bounded_capability_only"
-            stop_after = "bounded_customer_outcome"
     elif active_loop and qasm_requested:
         operation = "qasm_export"
         route = "active_loop_continuation"

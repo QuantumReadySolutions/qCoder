@@ -73,6 +73,7 @@ COMPLETION_STATES = (
     "in_progress",
     "completed_unchanged",
     "completed_changed",
+    "completed_requested_close",
     "abandoned",
 )
 CONTINUATION_OUTCOMES = (
@@ -2697,6 +2698,7 @@ def complete_current_loop(
     if completion_state not in {
         "completed_unchanged",
         "completed_changed",
+        "completed_requested_close",
         "abandoned",
     }:
         raise CurrentLoopError("completion_state_invalid")
@@ -2712,6 +2714,10 @@ def complete_current_loop(
         next_loop_seed is None or next_loop_seed_error(next_loop_seed)
     ):
         raise CurrentLoopError("changed_completion_seed_required")
+    if completion_state == "completed_requested_close" and (
+        continuation_artifact is not None or next_loop_seed is not None
+    ):
+        raise CurrentLoopError("requested_close_completion_artifacts_forbidden")
     if completion_state == "abandoned" and (
         continuation_artifact is not None or next_loop_seed is not None
     ):

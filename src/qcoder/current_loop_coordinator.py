@@ -2784,12 +2784,27 @@ class CurrentLoopCoordinator:
                 "loop_state_mutated": False,
             }
         if semantics["requested_operation"] == "close_current_loop":
-            closed = self.abandon(explicit_authority=True)
+            closed = self.complete_instruction(
+                exact_instruction=exact_message,
+                stop_loop=True,
+            )
             return {
                 **closed,
                 "operation": "interpret_current_request",
                 "current_request_semantics": semantics,
                 "ordinary_language_close": True,
+                "ordinary_language_abandonment": False,
+                "request_baseline_recreated": False,
+                "rebootstrap_performed": False,
+            }
+        if semantics["requested_operation"] == "abandon_current_loop":
+            abandoned = self.abandon(explicit_authority=True)
+            return {
+                **abandoned,
+                "operation": "interpret_current_request",
+                "current_request_semantics": semantics,
+                "ordinary_language_close": False,
+                "ordinary_language_abandonment": True,
                 "request_baseline_recreated": False,
                 "rebootstrap_performed": False,
             }
@@ -3559,11 +3574,9 @@ class CurrentLoopCoordinator:
                             r"^(?:please\s+)?(?:let(?:'s| us)\s+)?use\s+qcoder\b",
                             normalized_request,
                         )
-                        and (
-                            "build" in normalized_request
-                            and request_semantics.get("requested_operation")
-                            == "source_and_local_execution"
-                        )
+                        and "build" in normalized_request
+                        and request_semantics.get("requested_operation")
+                        == "source_and_local_execution"
                     )
                     and request_semantics.get("clarification_required") is False
                 )
@@ -3626,7 +3639,12 @@ class CurrentLoopCoordinator:
                 coordinator["assist_ready"] = True
                 coordinator["effective_generation_posture"] = "exploratory_first_pass"
                 coordinator["request_baseline_reference"] = _artifact_reference(baseline)
-                if not legacy_explicit_active_build:
+                d080_build_semantics = request_semantics.get("requested_operation") in {
+                    "source_generation",
+                    "source_and_qasm_generation",
+                    "source_and_local_execution",
+                }
+                if d080_build_semantics:
                     coordinator["current_request_semantics"] = deepcopy(request_semantics)
                     coordinator["request_semantics_history"] = [
                         {
@@ -3669,10 +3687,10 @@ class CurrentLoopCoordinator:
                         "ide_write_or_run_authorized": False,
                         "artifact_review_authorized": False,
                         "current_request_semantics": (
-                            None if legacy_explicit_active_build else deepcopy(request_semantics)
+                            deepcopy(request_semantics) if d080_build_semantics else None
                         ),
                         "request_semantics_contract": (
-                            None if legacy_explicit_active_build else semantics_contract_snapshot()
+                            semantics_contract_snapshot() if d080_build_semantics else None
                         ),
                         "bootstrap_count": 1,
                         "request_baseline_count": 1,
@@ -5528,12 +5546,12 @@ class CurrentLoopCoordinator:
             if stop_loop:
                 state = complete_current_loop(
                     store=self.store,
-                    completion_state="abandoned",
+                    completion_state="completed_requested_close",
                     continuation_artifact=None,
                     next_loop_seed=None,
                     expected_revision=int(state["state_revision"]),
                 )
-                phase = "abandoned"
+                phase = "completed"
                 if hosted_disposition in {
                     "not_requested",
                     "skipped",
@@ -11284,6 +11302,10 @@ class CurrentLoopCoordinator:
             previous_phase != phase
             and phase not in _PHASE_TRANSITIONS.get(previous_phase, ())
             and not (previous_phase == "activated" and phase == "generation_ready")
+            and not (
+                phase == "completed"
+                and previous_phase not in {"completed", "abandoned"}
+            )
         ):
             raise CurrentLoopError("coordinator_transition_invalid")
         updated = deepcopy(dict(coordinator))

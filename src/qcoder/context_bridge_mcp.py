@@ -155,7 +155,7 @@ EXPECTED_TOOLS = (
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
 CLIENT_BINDING_SCHEMA_VERSION = 23
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v23"
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v24"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint

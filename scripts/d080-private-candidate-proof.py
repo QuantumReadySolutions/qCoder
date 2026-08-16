@@ -32,6 +32,23 @@ SOURCE_ONLY_REQUESTS = (
     "Use qcoder to make the Python for a local Bell example—code only for now.",
 )
 
+UNSEEN_SOURCE_REQUESTS = (
+    "Use qCoder to create a teleportation program.",
+    "Have qCoder generate a GHZ-state Python example.",
+    "Could you use qCoder to make the source for a QFT circuit?",
+    "qCoder, write a Deutsch–Jozsa implementation.",
+    "Use qCoder to draft Python for a Grover setup; we can run it later.",
+    "Use qCoder to create a variational-circuit source. We’ll inspect QASM afterward.",
+)
+
+REVIEW_INTENT_REQUESTS = (
+    "Review the source, QASM, and counts.",
+    "Check the circuit and results with qCoder.",
+    "Look at the generated QASM and tell me what the evidence supports.",
+    "Review what we ran.",
+    "Inspect the result evidence.",
+)
+
 BELL_SOURCE = (
     "from qiskit import QuantumCircuit\n"
     "circuit = QuantumCircuit(2)\n"
@@ -188,6 +205,15 @@ def one_acceptance(workspace: Path) -> dict[str, Any]:
     )
     if not closed["ok"]:
         raise RuntimeError("d080_explicit_close_failed")
+    if (
+        closed.get("phase") != "completed"
+        or closed.get("ordinary_language_abandonment") is not False
+        or closed.get("details", {})
+        .get("completion_receipt", {})
+        .get("resulting_disposition")
+        != "stop_loop"
+    ):
+        raise RuntimeError("d080_orderly_close_disposition_invalid")
     inventory = registration["details"]["exact_artifact_inventory"]
     if inventory != {
         "source": 1,
@@ -294,6 +320,35 @@ def main() -> int:
     if any(not value["clarification_required"] for value in ambiguities.values()):
         raise RuntimeError("ambiguity_control_not_closed")
 
+    unseen_source = {
+        message: classify_current_request(message) for message in UNSEEN_SOURCE_REQUESTS
+    }
+    if any(
+        value["requested_operation"] != "source_generation"
+        or value["requested_artifact_roles"] != ["source"]
+        for value in unseen_source.values()
+    ):
+        raise RuntimeError("unseen_source_generation_not_safely_bounded")
+    review_without_selection = {
+        message: classify_current_request(message, active_loop=True)
+        for message in REVIEW_INTENT_REQUESTS
+    }
+    if any(
+        value["requested_operation"] != "selected_artifact_review"
+        or value["customer_clarification"] != "Which exact files should qCoder review?"
+        or value["loop_mutation_permitted"] is not False
+        for value in review_without_selection.values()
+    ):
+        raise RuntimeError("review_intent_created_artifact_authority")
+    polite_modal = classify_current_request(
+        "Could you use qCoder to make a teleportation program? Create only the Python file for now."
+    )
+    informational_modal = classify_current_request("Can qCoder help with teleportation?")
+    if polite_modal["requested_operation"] != "source_generation":
+        raise RuntimeError("polite_modal_task_misclassified")
+    if informational_modal["requested_operation"] != "informational":
+        raise RuntimeError("polite_modal_information_misclassified")
+
     acceptance_rows: list[dict[str, Any]] = []
     baseline_rows: list[float] = []
     with tempfile.TemporaryDirectory(prefix="qcoder-wi0434-proof-") as temp:
@@ -313,7 +368,12 @@ def main() -> int:
     timing = {
         "runs": len(acceptance_rows),
         "total_wall_seconds": [round(row["total_wall_seconds"], 6) for row in acceptance_rows],
-        "ordinary_matched_client_baseline_seconds": [round(value, 6) for value in baseline_rows],
+        "ordinary_client_noop_measurement_floor_seconds": [
+            round(value, 6) for value in baseline_rows
+        ],
+        "ordinary_client_measurement_disposition": (
+            "local file-write measurement floor; not a realistic Cursor wall-clock control"
+        ),
         "direct_qcoder_lifecycle_seconds": [round(value, 6) for value in direct_times],
         "direct_qcoder_lifecycle_p95_seconds": round(direct_times[p95_index], 6),
         "client_orchestration_residual_seconds": [
@@ -322,6 +382,8 @@ def main() -> int:
         "explicit_close_seconds": [
             round(row["explicit_close_seconds"], 6) for row in acceptance_rows
         ],
+        "reviewed_pre_correction_measured_close_range_seconds": [0.387893, 0.422813],
+        "unsupported_0_361555_lower_bound_retained": False,
         "direct_qcoder_p95_limit_seconds": 60,
         "explicit_close_limit_seconds": 15,
         "median_total_wall_seconds": round(
@@ -391,6 +453,17 @@ def main() -> int:
         "broader_positive_semantics": broader,
         "negative_controls": negatives,
         "ambiguity_controls": ambiguities,
+        "premium_review_corrections": {
+            "m1_review_intent_without_selection": review_without_selection,
+            "m2_orderly_close_uses_canonical_completion": all(
+                row.get("bound_operation_sequence", [])[-1:] == ["interpret_current_request"]
+                for row in acceptance_rows
+            ),
+            "m3_polite_task": polite_modal,
+            "m3_informational_control": informational_modal,
+            "m4_unseen_source_generation": unseen_source,
+            "result": "pass",
+        },
         "acceptance_runs": acceptance_rows,
         "timing_and_interaction": timing,
         "scale_and_boundedness": scale,

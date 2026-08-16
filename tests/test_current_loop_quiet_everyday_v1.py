@@ -26,9 +26,7 @@ from qcoder.current_loop_iteration import parent_digest_failure_details
 
 
 REQUEST = (
-    "Use qCoder for this build. Create and run a straightforward Qiskit Bell-state "
-    "program in this empty workspace using a local simulator and 1024 shots. Show me "
-    "the measurement counts and briefly explain what they mean."
+    "Use qCoder for this build context with the established quiet-workflow contract."
 )
 
 
@@ -84,7 +82,9 @@ def _ordinary_fields(*, material: bool = False) -> dict[str, dict[str, Any]]:
 
 def _write_run(workspace: Path, *, counts: Mapping[str, int]) -> list[dict[str, str]]:
     source = workspace / "bell.py"
-    source.write_text("from qiskit import QuantumCircuit\ncircuit = QuantumCircuit(2, 2)\n")
+    source.write_text(
+        "from qiskit import QuantumCircuit\ncircuit = QuantumCircuit(2, 2)\n"
+    )
     qasm = workspace / "bell.qasm"
     qasm.write_text(
         'OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[2];\ncreg c[2];\n'
@@ -335,7 +335,8 @@ def test_receipt_style_stop_has_no_restage_next_loop_or_carryover(tmp_path: Path
     assert receipt["blueprint_unchanged"] is True
     assert receipt["next_loop_disposition"] == "do_not_start"
     assert receipt["cross_loop_carryover"] is False
-    assert result["phase"] == "abandoned"
+    assert result["phase"] == "completed"
+    assert receipt["resulting_disposition"] == "stop_loop"
 
 
 def test_build_review_decline_returns_to_quiet_iteration_ready(tmp_path: Path) -> None:
@@ -462,7 +463,7 @@ def test_sidecar_and_binding_share_v2_governance_and_quiet_contract(tmp_path: Pa
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v23"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v24"
     quiet = descriptor["quiet_everyday_workflow_contract"]
     assert quiet["customer_interaction_schema_id"] == CUSTOMER_INTERACTION_SCHEMA_ID
     assert quiet["assist_default"] == "quiet_everyday"
