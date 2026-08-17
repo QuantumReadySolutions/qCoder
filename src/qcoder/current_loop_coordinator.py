@@ -12952,6 +12952,26 @@ class CurrentLoopCoordinator:
         details = deepcopy(dict(result.get("details", {})))
         semantics = deepcopy(dict(result["current_request_semantics"]))
         action = deepcopy(dict(result["compact_next_action"]))
+        full_invocation = action.get("operation_specific_invocation")
+        compact_invocation: dict[str, Any] | None = None
+        if isinstance(full_invocation, Mapping):
+            compact_invocation = {
+                "schema_id": "qcoder.current_loop.compact_executable_invocation.v1",
+                "schema_version": 1,
+                "operation": full_invocation["operation"],
+                "structured_argv": deepcopy(list(full_invocation["structured_argv"])),
+                "dynamic_argument_contract": deepcopy(
+                    list(full_invocation.get("dynamic_argument_contract", []))
+                ),
+                "fixed_argument_values": deepcopy(
+                    dict(full_invocation.get("fixed_argument_values", {}))
+                ),
+                "state_binding": deepcopy(dict(full_invocation.get("state_binding", {}))),
+                "canonical_full_invocation_sha256": sha256(
+                    canonical_bytes(full_invocation)
+                ).hexdigest(),
+                "assistant_modification_permitted": False,
+            }
         if operation == "activate":
             details.pop("current_request_semantics", None)
             details.pop("request_semantics_contract", None)
@@ -12964,21 +12984,30 @@ class CurrentLoopCoordinator:
             }
             semantics.pop("exact_original_message", None)
             semantics.pop("original_message_utf8_sha256", None)
+            if compact_invocation is not None:
+                action["operation_specific_invocation"] = compact_invocation
+                action["operation_invocation_digest"] = sha256(
+                    canonical_bytes(compact_invocation)
+                ).hexdigest()
+                action.pop("action_digest", None)
+                action["action_digest"] = sha256(canonical_bytes(action)).hexdigest()
         else:
             request_projection = {
                 "original_message_utf8_sha256": semantics["original_message_utf8_sha256"],
                 "semantics_digest": semantics["semantics_digest"],
                 "exact_message_retained_in_canonical_state": True,
             }
-            invocation = action.pop("operation_specific_invocation", None)
+            action.pop("operation_specific_invocation", None)
             action.pop("operation_invocation_digest", None)
-            if isinstance(invocation, Mapping):
-                action["continuation_reference"] = {
-                    "operation": invocation.get("operation", "interpret_current_request"),
+            if compact_invocation is not None:
+                compact_invocation.update(
+                    {
                     "transport": "binding_owned_on_next_exact_customer_instruction",
                     "exact_customer_message_required": True,
                     "native_selected_paths_required_only_for_selected_file_review": True,
-                }
+                    }
+                )
+                action["continuation_reference"] = compact_invocation
             action.pop("action_digest", None)
             action["action_digest"] = sha256(canonical_bytes(action)).hexdigest()
         compact = {

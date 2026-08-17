@@ -74,8 +74,11 @@ def main() -> int:
         parser.error("--runs must be at least 20")
 
     prefix = ["python", "-m", "qcoder", "current-loop"]
-    full_descriptor = build_client_binding_descriptor(coordinator_prefix=prefix)
-    inline_descriptor = build_inline_client_binding_descriptor(coordinator_prefix=prefix)
+    full_descriptor = build_client_binding_descriptor(coordinator_prefix=prefix)[
+        "client_binding_contract"
+    ]
+    inline_descriptor_envelope = build_inline_client_binding_descriptor(coordinator_prefix=prefix)
+    inline_descriptor = inline_descriptor_envelope["client_binding_contract"]
     instructions = build_client_activation_instructions(
         base_url="https://context.qcoder.ai",
         token_file="/sanitized/context-bridge/token.txt",

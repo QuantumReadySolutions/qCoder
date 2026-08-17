@@ -195,7 +195,7 @@ def one_acceptance(workspace: Path) -> dict[str, Any]:
         raise RuntimeError("d080_registration_failed")
     total_seconds = time.perf_counter() - started
     direct_qcoder_seconds = activation_seconds + compressed_seconds
-    continuation = registration["compact_next_action"]["operation_specific_invocation"]
+    continuation = registration["compact_next_action"]["continuation_reference"]
     closed, close_seconds = _run_invocation(
         continuation,
         stdin=b"Close qCoder for this build.",
@@ -243,7 +243,7 @@ def one_acceptance(workspace: Path) -> dict[str, Any]:
             "relative_path": source.name,
         },
         "request_message_preserved": (
-            registration["current_request_semantics"]["exact_original_message"] == request
+            activation["request_identity"]["exact_original_message"] == request
         ),
         "compact_next_action_used": all(
             item.get("procedural_source_of_truth") is True
