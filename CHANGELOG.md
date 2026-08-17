@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.0a16
+
+- Preserve the a15 source-only stage ceiling, exact native source-write authority, one-source
+  cardinality, receipt-bound registration, and twelve-tool Context Bridge surface.
+- Tier the connected-assistant binding so initialization contains only the load-bearing operational
+  core while specialized contracts remain digest-addressed and fail closed on unavailable or
+  mismatched references.
+- Project normal successful Current Loop results without duplicate semantics, invocation, and
+  customer-envelope copies, while retaining full checkpoint, failure, ambiguity, and recovery
+  controls.
+- Direct the native source write and exact post-action registration to complete in one assistant
+  turn, preserving two qCoder control cycles while removing a deterministic model re-entry.
+- Add prominent minimal Blueprint call shapes and bounded field/type recovery without weakening
+  schema validation or exposing submitted values.
+
 ## 0.6.0a15
 
 - Preserve the complete decision-aware Blueprint, local-first selected-file Evidence Review,

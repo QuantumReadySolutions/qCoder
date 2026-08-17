@@ -154,8 +154,10 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 24
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v25"
+CLIENT_BINDING_SCHEMA_VERSION = 25
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v26"
+CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
+CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
 qCoder provides exactly twelve Context Bridge MCP tools. They are qCoder's bounded hosted
 capability and evidence surface for source review, circuit analysis, result review, Blueprint
@@ -737,6 +739,178 @@ def build_client_binding_descriptor(
     }
 
 
+_INLINE_BINDING_KEYS = (
+    "schema_id",
+    "schema_version",
+    "contract_id",
+    "package_version",
+    "coordinator_contract_digest",
+    "bootstrap_invocation_contract",
+    "qcoder_domain_tool_count",
+    "supported_workstyles",
+    "required_client_capability",
+    "surfaces",
+    "workstyle_routes",
+    "manual_active_build_tool_sequencing_prohibited",
+)
+
+
+def _binding_reference_uri(name: str, digest: str) -> str:
+    return f"qcoder://connected-assistant-contract/{name}?sha256={digest}"
+
+
+def _binding_contract_tiers(*, coordinator_prefix: list[str]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Return the load-bearing inline tier and digest-addressed specialized contracts."""
+
+    full = build_client_binding_descriptor(coordinator_prefix=coordinator_prefix)[
+        "client_binding_contract"
+    ]
+    inline = {key: deepcopy(full[key]) for key in _INLINE_BINDING_KEYS}
+    referenced: dict[str, Any] = {}
+    references: list[dict[str, Any]] = []
+    for name in sorted(set(full) - set(_INLINE_BINDING_KEYS)):
+        value = deepcopy(full[name])
+        digest = hashlib.sha256(
+            json.dumps(
+                value,
+                ensure_ascii=True,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        uri = _binding_reference_uri(name, digest)
+        referenced[uri] = value
+        references.append(
+            {
+                "contract_name": name,
+                "sha256": digest,
+                "uri": uri,
+            }
+        )
+    reference_catalog = {
+        "schema_id": "qcoder.connected_assistant.contract_reference_catalog.v1",
+        "schema_version": 1,
+        "binding_contract_id": CLIENT_BINDING_CONTRACT_ID,
+        "contracts": references,
+    }
+    catalog_digest = hashlib.sha256(
+        json.dumps(
+            reference_catalog,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    catalog_uri = _binding_reference_uri("reference_catalog", catalog_digest)
+    referenced[catalog_uri] = reference_catalog
+    inline.update(
+        {
+            "inline_tier_schema_id": CLIENT_BINDING_INLINE_TIER_SCHEMA_ID,
+            "descriptor_tier": "load_bearing_inline_operational_core",
+            "specialized_contracts_inline": False,
+            "referenced_contracts": {
+                "catalog_uri": catalog_uri,
+                "catalog_sha256": catalog_digest,
+                "contract_names": [row["contract_name"] for row in references],
+            },
+            "reference_resolution": {
+                "transport": "mcp_resources_read",
+                "fetch_only_when_selected_workflow_requires_contract": True,
+                "verify_exact_advertised_sha256_before_use": True,
+                "unavailable_or_digest_mismatch_disposition": "fail_closed_without_inference",
+                "reference_is_not_alternate_source_of_truth": True,
+            },
+            "normal_source_only_choreography": {
+                "qcoder_control_cycles": 2,
+                "expected_model_turns": 3,
+                "cycle_1": "activate_and_receive_exact_compact_native_action",
+                "native_action": "one_action_specific_source_write_permission_and_exactly_one_source_write",
+                "cycle_2": "immediately_complete_and_register_exact_output_in_same_assistant_turn",
+                "intermediate_customer_narration": False,
+                "failed_native_write_may_be_registered": False,
+                "registration_failure_preserves_exact_recovery": True,
+                "compact_next_action_is_sole_procedural_source": True,
+            },
+        }
+    )
+    inline_digest = hashlib.sha256(
+        json.dumps(inline, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+    return {
+        "client_binding_contract": inline,
+        "inline_descriptor_sha256": inline_digest,
+        "reference_schema_id": CLIENT_BINDING_REFERENCE_SCHEMA_ID,
+    }, referenced
+
+
+def build_inline_client_binding_descriptor(*, coordinator_prefix: list[str]) -> dict[str, Any]:
+    """Build the compact descriptor used during normal MCP initialization."""
+
+    inline, _ = _binding_contract_tiers(coordinator_prefix=coordinator_prefix)
+    return inline
+
+
+def _compact_client_activation_instructions() -> str:
+    return """QCODER ASSISTANT SURFACES
+qCoder exposes exactly twelve Context Bridge MCP tools as bounded capabilities and a separate binding-owned local
+Current Loop. Current Loop is not an MCP tool.
+
+WORKSTYLE ROUTING
+Before generic tool routing, apply the inline machine-readable route. Do nothing when qCoder was
+not explicitly requested. Route concrete source/QASM/execution requests through the D-080 local
+bootstrap. Route Algorithm Blueprint / Generation Context and exact-selected-file Evidence Review
+through the D-079 binding-owned workflow. Only unrelated bounded single capabilities fall through
+to an applicable MCP tool. Never silently activate or replace local orchestration with raw MCP
+choreography.
+
+ACTIVE-BUILD LOCAL EXECUTION
+Use only qCoder-supplied exact structured invocations. The customer never types the command. The
+bootstrap entrypoint fresh_active_build_request_baseline_staging receives the exact UTF-8 stdin
+request and runs once. Never construct a command from coordinator_prefix; it and inventories are
+diagnostics only. Do not run current-loop --help, qcoder --help, inspect package/source/binding
+files, .qcoder state, old conversations, sibling workspaces, transcripts, or remembered examples
+to discover procedure.
+
+REQUEST FIDELITY
+Preserve the exact customer message. Activation grants only this request's bounded loop; it does
+not grant a write, execution, Evidence Review, or governing change. A source-only ceiling permits
+exactly one source artifact and prohibits QASM, execution, results, and review.
+
+ACTIVATION PROTOCOL
+Execute the supplied bootstrap invocation exactly. After its first actionable success,
+compact_next_action is the sole procedural source. Do not use sibling next-invocation projections,
+catalogs, help, or prose to reconstruct it.
+
+CHECKPOINT PROTOCOL
+At ambiguity, failure, recovery, or a real customer authority boundary, retain the inline bounded
+controls and follow only the qCoder-supplied recovery or clarification. If a referenced specialized
+contract is required, fetch its exact advertised MCP resource URI, verify SHA-256, and fail closed
+without inference if unavailable or mismatched.
+
+IDE WORK AND ARTIFACT HANDOFF
+For the exact source action, obtain the one action-specific native permission, perform only that
+write, and—without an intermediate customer message or model re-entry—immediately execute the
+bound complete_native_action invocation with the exact created path. This second qCoder cycle both
+records permission and registers the artifact. Never register a failed write. If completion fails,
+report the bounded recovery truth; do not claim registration.
+
+D-079 WORKFLOWS
+Algorithm Blueprint / Generation Context is decision-aware by default. Review these selected files
+with qCoder uses only native-client exact selection, processes raw artifacts locally, sends only a
+share-safe projection protected-side, and stops at Result Review. Never scan the repository or
+send local paths/raw artifacts protected-side. For tool calls, use each descriptor's MINIMAL HAPPY
+PATH shape first and treat bounded field errors as correction instructions, not permission to
+inspect schemas or source.
+
+QUIET COMPLETION
+After successful exact registration, give one concise truthful final and stop. Do not narrate
+receipts, registration procedure, QASM, execution, results, or closing ceremony. Keep the loop
+quietly resumable for a later natural-language request.
+"""
+
+
 def build_client_activation_instructions(
     *,
     base_url: str,
@@ -770,13 +944,13 @@ def build_client_activation_instructions(
             "assistant_routes_transport": False,
         },
     }
-    binding = build_client_binding_descriptor(
+    binding = build_inline_client_binding_descriptor(
         coordinator_prefix=runtime["coordinator_prefix"],
     )
     runtime_block = json.dumps(runtime, indent=2, sort_keys=False)
     binding_block = json.dumps(binding, indent=2, sort_keys=False)
     return (
-        f"{CLIENT_ACTIVATION_INSTRUCTIONS}\n"
+        f"{_compact_client_activation_instructions()}\n"
         "CONFIGURED RUNTIME\n"
         "Use the supplied python_executable only through qCoder's exact bootstrap and post-result "
         "invocation contracts. qCoder owns operation routing and invocation construction: execute "
@@ -794,7 +968,12 @@ def build_client_activation_instructions(
         "Never execute coordinator_prefix as an invocation or derive flags from it.\n\n"
         "Connected-assistant client binding (JSON values are the versioned routing descriptor):\n"
         f"{binding_block}\n\n"
-        f"{CLIENT_AUTHORITY_AND_PROHIBITED_INSTRUCTIONS}"
+        "AUTHORITY BOUNDARIES\nActivation, qCoder bounded action, native permission, and later "
+        "artifact/review/governing authority remain distinct. Blueprint confirmation is not write "
+        "permission; write permission is not execution or review authority.\n\n"
+        "PROHIBITED ACTIONS\nNever expose credentials, scan repositories, inspect unrelated state, "
+        "transfer raw artifacts protected-side, invent authority, broaden artifact roles, or use "
+        "an unverified referenced contract."
     )
 
 
@@ -1254,7 +1433,14 @@ def _expand_selected_portable_bundle(
     return dict(exact_input), digest, None
 
 
-def safe_error(error_category: str, *, status_category: str = "adapter_rejected") -> dict[str, Any]:
+def safe_error(
+    error_category: str,
+    *,
+    status_category: str = "adapter_rejected",
+    field: str | None = None,
+    expected_shape: object | None = None,
+    offending_fields: list[str] | None = None,
+) -> dict[str, Any]:
     payload = {
         "ok": False,
         "error_category": error_category,
@@ -1265,6 +1451,15 @@ def safe_error(error_category: str, *, status_category: str = "adapter_rejected"
         "raw_payload_printed": False,
         "raw_response_printed": False,
     }
+    if field is not None:
+        payload["field"] = field
+    if expected_shape is not None:
+        payload["expected_shape"] = expected_shape
+    if offending_fields:
+        payload["offending_fields"] = sorted(set(offending_fields))
+    if field is not None or offending_fields:
+        payload["recovery_category"] = "correct_bounded_argument_shape_and_retry"
+        payload["valid_portions_may_be_retained"] = True
     if error_category == "working_blueprint_not_decision_ready":
         payload["message"] = (
             "This Working Blueprint does not contain the decision inventory required "
@@ -1959,8 +2154,16 @@ def post_context_bridge(
     if artifact_text is not None:
         supplied_fields.add("artifact_text")
     supplied_fields.update({"artifact_kind", "client_context"})
-    if supplied_fields - TOOL_INPUT_FIELDS[canonical_tool_name]:
-        return safe_error("unsupported_tool_argument")
+    unsupported_fields = supplied_fields - TOOL_INPUT_FIELDS[canonical_tool_name]
+    if unsupported_fields:
+        return safe_error(
+            "unsupported_tool_argument",
+            offending_fields=sorted(unsupported_fields),
+            expected_shape={
+                "allowed_fields": sorted(TOOL_INPUT_FIELDS[canonical_tool_name]),
+                "additional_properties": False,
+            },
+        )
     if mode is not None:
         if canonical_tool_name != "create_prompt_context":
             return safe_error("mode_not_supported_for_tool")
@@ -1991,7 +2194,16 @@ def post_context_bridge(
             or required_value == []
             or required_value == {}
         ):
-            return safe_error(f"missing_{required_field}")
+            property_schema = _tool_property_schemas().get(required_field, {})
+            return safe_error(
+                f"missing_{required_field}",
+                field=required_field,
+                expected_shape={
+                    key: deepcopy(property_schema[key])
+                    for key in ("type", "enum", "required")
+                    if key in property_schema
+                },
+            )
     decision_loop_enabled = arguments.get("decision_loop") == DECISION_LOOP_GATE
     for payload in arguments.values():
         payload_validation = validate_optional_payload(
@@ -2890,7 +3102,62 @@ def _tool_schema(tool_name: str) -> dict[str, Any]:
     return schema
 
 
+def _assistant_facing_tool_schema(tool_name: str) -> dict[str, Any]:
+    """Keep validation exact while omitting non-load-bearing property prose."""
+
+    schema = _tool_schema(tool_name)
+    retained_descriptions = set(TOOL_REQUIRED_FIELDS[tool_name]) | {
+        "before",
+        "after",
+        "evidence_parent_artifacts",
+    }
+
+    def compact(value: object, *, property_name: str | None = None) -> object:
+        if isinstance(value, dict):
+            result: dict[str, object] = {}
+            for key, item in value.items():
+                if key == "description" and property_name not in retained_descriptions:
+                    continue
+                if key == "properties" and isinstance(item, dict):
+                    result[key] = {
+                        name: compact(child, property_name=name) for name, child in item.items()
+                    }
+                else:
+                    result[key] = compact(item, property_name=property_name)
+            return result
+        if isinstance(value, list):
+            return [compact(item, property_name=property_name) for item in value]
+        return value
+
+    projected = compact(schema)
+    if not isinstance(projected, dict):
+        raise TypeError("assistant_tool_schema_projection_invalid")
+    return projected
+
+
 def tool_descriptors() -> list[dict[str, Any]]:
+    minimal_happy_paths: dict[str, dict[str, Any]] = {
+        "create_algorithm_intent_card": {
+            "original_user_intent": "<exact customer algorithm request>",
+            "profile_id": "generic_qiskit",
+        },
+        "create_implementation_blueprint": {
+            "algorithm_intent_card": "<exact returned confirmed Algorithm Intent Card object>",
+            "intent_relationship": {
+                "relationship_type": "represented_by",
+                "parent_artifact_digest": "<exact returned parent digest>",
+            },
+        },
+        "create_generation_context_pack": {
+            "implementation_blueprint": "<exact returned Implementation Blueprint object>",
+            "output_evidence_contract": "<exact returned Output Evidence Contract object>",
+        },
+        "create_source_blueprint_alignment_review": {
+            "implementation_blueprint": "<exact confirmed Blueprint object>",
+            "output_evidence_contract": "<exact matching evidence contract object>",
+            "selected_python_source_evidence": "<bounded local selected-source evidence object>",
+        },
+    }
     descriptions = {
         "get_guided_evidence_context": (
             "Create bounded assistant context from share-safe current qCoder evidence. For a named Evidence "
@@ -2952,10 +3219,28 @@ def tool_descriptors() -> list[dict[str, Any]]:
             "to supplied static evidence; no paths, raw source, execution, or correctness claim."
         ),
     }
-    return [
-        {"name": name, "description": descriptions[name], "inputSchema": _tool_schema(name)}
-        for name in EXPECTED_TOOLS
-    ]
+    descriptors: list[dict[str, Any]] = []
+    for name in EXPECTED_TOOLS:
+        descriptor: dict[str, Any] = {
+            "name": name,
+            "description": descriptions[name],
+            "inputSchema": _assistant_facing_tool_schema(name),
+        }
+        if name in minimal_happy_paths:
+            descriptor["description"] = (
+                "MINIMAL HAPPY PATH: supply exactly the fields shown in "
+                "x-qcoder-minimal-happy-path, using exact returned parent objects for later stages. "
+                + descriptor["description"]
+            )
+            descriptor["x-qcoder-minimal-happy-path"] = minimal_happy_paths[name]
+            descriptor["x-qcoder-shape-error-contract"] = {
+                "names_offending_or_missing_field": True,
+                "provides_expected_type_or_domain": True,
+                "echoes_argument_values": False,
+                "full_validation_retained": True,
+            }
+        descriptors.append(descriptor)
+    return descriptors
 
 
 def _jsonrpc_result(message_id: object, result: dict[str, Any]) -> dict[str, Any]:
@@ -2985,7 +3270,11 @@ def handle_jsonrpc_message(
             message_id,
             {
                 "protocolVersion": "2024-11-05",
-                "capabilities": {"tools": {"listChanged": False}, "resources": {}, "prompts": {}},
+                "capabilities": {
+                    "tools": {"listChanged": False},
+                    "resources": {"listChanged": False},
+                    "prompts": {},
+                },
                 "serverInfo": {"name": "qcoder-context-bridge", "version": __version__},
                 "instructions": build_client_activation_instructions(
                     base_url=base_url,
@@ -2998,7 +3287,59 @@ def handle_jsonrpc_message(
     if method == "prompts/list":
         return _jsonrpc_result(message_id, {"prompts": []})
     if method == "resources/list":
-        return _jsonrpc_result(message_id, {"resources": []})
+        executable = _resolved_configuration_path(sys.executable, preserve_symlink_identity=True)
+        _, referenced = _binding_contract_tiers(
+            coordinator_prefix=[executable, "-m", "qcoder", "current-loop"]
+        )
+        return _jsonrpc_result(
+            message_id,
+            {
+                "resources": [
+                    {
+                        "uri": uri,
+                        "name": uri.split("/", 3)[-1].split("?", 1)[0],
+                        "description": "Digest-addressed qCoder connected-assistant contract",
+                        "mimeType": "application/json",
+                    }
+                    for uri in sorted(referenced)
+                ]
+            },
+        )
+    if method == "resources/read":
+        params = message.get("params") if isinstance(message.get("params"), dict) else {}
+        uri = params.get("uri")
+        executable = _resolved_configuration_path(sys.executable, preserve_symlink_identity=True)
+        _, referenced = _binding_contract_tiers(
+            coordinator_prefix=[executable, "-m", "qcoder", "current-loop"]
+        )
+        if not isinstance(uri, str) or uri not in referenced:
+            return _jsonrpc_error(message_id, -32602, "unknown_digest_addressed_contract")
+        value = referenced[uri]
+        expected = uri.rsplit("sha256=", 1)[-1]
+        actual = hashlib.sha256(
+            json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        if actual != expected:
+            return _jsonrpc_error(message_id, -32603, "contract_digest_verification_failed")
+        return _jsonrpc_result(
+            message_id,
+            {
+                "contents": [
+                    {
+                        "uri": uri,
+                        "mimeType": "application/json",
+                        "text": json.dumps(
+                            value,
+                            ensure_ascii=True,
+                            separators=(",", ":"),
+                            sort_keys=True,
+                        ),
+                    }
+                ]
+            },
+        )
     if method == "tools/call":
         params = message.get("params") if isinstance(message.get("params"), dict) else {}
         tool_name = params.get("name")
@@ -3009,7 +3350,15 @@ def handle_jsonrpc_message(
             canonical_tool_name in TOOL_INPUT_FIELDS
             and set(arguments) - TOOL_INPUT_FIELDS[canonical_tool_name]
         ):
-            payload = safe_error("unsupported_tool_argument")
+            unsupported = sorted(set(arguments) - TOOL_INPUT_FIELDS[canonical_tool_name])
+            payload = safe_error(
+                "unsupported_tool_argument",
+                offending_fields=unsupported,
+                expected_shape={
+                    "allowed_fields": sorted(TOOL_INPUT_FIELDS[canonical_tool_name]),
+                    "additional_properties": False,
+                },
+            )
             return _jsonrpc_result(
                 message_id,
                 {

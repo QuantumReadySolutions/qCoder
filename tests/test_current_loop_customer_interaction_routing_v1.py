@@ -282,12 +282,11 @@ def test_binding_v18_routes_governance_and_finish_without_document_fanout() -> N
         python_executable="/runtime/python",
     )
     normalized_instructions = " ".join(instructions.split())
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v25"
-    assert binding["schema_version"] == 24
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v26"
+    assert binding["schema_version"] == 25
     assert len(EXPECTED_TOOLS) == 12
-    assert "contract-set-generation-governance" in normalized_instructions
-    assert "Do not call contract status first" in normalized_instructions
-    assert "complete-instruction" in normalized_instructions
-    assert "Do not decline Build Review separately" in normalized_instructions
-    assert "route the normal finish through abandon" in normalized_instructions
-    assert "Fetch that catalog only" in normalized_instructions
+    assert "contract_management" in normalized_instructions
+    assert "quiet_iteration_routing_contract" in normalized_instructions
+    assert "referenced specialized contract" in normalized_instructions
+    assert "verify SHA-256" in normalized_instructions
+    assert "fail closed without inference" in normalized_instructions

@@ -224,55 +224,18 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
     }
     normalized_instructions = " ".join(instructions.split())
     for required in (
-        "explicitly asks to use qCoder",
-        "Never activate silently",
+        "Do nothing when qCoder was not explicitly requested",
+        "Never silently activate",
         "Use the supplied python_executable only through qCoder's exact bootstrap",
-        "Never run `which` or `where`",
-        "inspect PATH or environment variables",
-        "Never inspect Cursor, Claude Code, or Codex configuration",
-        "Never list, browse, or inspect the executable path's parent directories",
-        "Never open, read, print, copy, hash, or validate the token-file contents",
-        "authorize only invoking the declared qCoder runtime",
-        "grant no general access outside the active workspace",
         "Do not run current-loop --help",
-        "Stop on authentication, entitlement, or hosted-service failure",
-        "Never manually sequence Context Bridge tools",
-        "never substitute a local or manual review fallback",
-        "Conversational approval and canonical confirmation are distinct",
-        "required_authority_input",
-        "Follow supported_next_action and next_invocation exactly",
-        "Never repeat an identical invocation after an unchanged checkpoint",
-        "awaiting_confirmation_fields",
+        "Never silently activate or replace local orchestration with raw MCP choreography",
+        "compact_next_action is the sole procedural source",
         "IDE WORK AND ARTIFACT HANDOFF",
-        "Retain exact paths returned by your own write or modify operations",
-        "truthful created, modified, or selected event disposition",
-        "Never inspect .qcoder",
-        "exclude .qcoder from every ordinary project inspection",
-        "Do not use a glob, find, directory listing, Git status, repository map, or search result",
-        "Ordinary inspection of relevant non-qCoder project files",
-        "does not register a file or authorize qCoder review",
-        "supported exact outputs attributable to a single-use operation receipt",
-        "Never enumerate, list, search, open, read, copy, hash, parse, inspect, summarize, or reverse-engineer .qcoder",
-        "home-directory qCoder state",
-        "sibling repositories",
-        "Do not replace coordinator truth with a locally assembled review",
-        "Workspace freshness is not intent",
-        "adaptive or Blueprint-required governance",
-        "Preserve exact user-stated decision answers",
-        "is not a full Generation Context Pack",
-        "decision_resolution checkpoint",
-        "exact decision-disposition authority channel",
-        "do not ask a routine posture question",
-        "immediate narrowing and explicit broadening confirmation",
-        "QUIET EVERYDAY ASSIST",
-        "customer_interaction envelope",
-        "Hosted enrichment and Build Review are on request",
-        "non-null permitted_input_source",
-        "machine-readable no_action_disposition",
-        "inspect proof records",
-        "qCoder activation, IDE write/run permission, exact artifact-review permission",
-        "does not grant IDE permission to write or run",
-        "does not authorize artifact review",
+        "without an intermediate customer message or model re-entry",
+        "Never register a failed write",
+        "Never scan the repository",
+        "fail closed without inference",
+        "Blueprint confirmation is not write permission",
     ):
         assert required in normalized_instructions
     assert token_secret not in instructions
@@ -297,36 +260,16 @@ def test_initialize_binds_two_surfaces_and_three_workstyles_without_new_tool(
     for required in (
         "QCODER ASSISTANT SURFACES",
         "exactly twelve Context Bridge MCP tools",
-        "bounded hosted capability and evidence surface",
-        "separate supported local orchestration and continuity surface",
-        "intentionally not one of the twelve MCP tools",
+        "separate binding-owned local Current Loop",
+        "Current Loop is not an MCP tool",
         "WORKSTYLE ROUTING",
-        "Available but inactive",
-        "Single capability",
-        "Active build",
         "ACTIVE-BUILD LOCAL EXECUTION",
-        "ordinary local command-execution capability",
         "fresh_active_build_request_baseline_staging",
-        "client_execution_working_directory",
         "exact UTF-8 stdin",
-        "Do not inspect help",
         "construct a command from coordinator_prefix",
-        "supported qCoder active-build route",
-        "not a local fallback",
-        "customer-authored CLI choreography",
         "The customer never types the command",
-        "explicit wording equivalent to “Use qCoder for this build.”",
-        "local coordinator first",
-        "never invent a hosted-tool order",
-        "does not prohibit legitimate direct use of one applicable MCP tool",
-        "Do not call one of the twelve domain tools in place of local coordinator activation",
-        "Never embed arbitrary user-approved free text in shell argv",
-        "approval only",
-        "next_loop_ready",
-        "governing-change branch is closed",
-        "non-null permitted_input_source",
-        "bounded input semantics",
-        "machine-readable no_action_disposition",
+        "Only unrelated bounded single capabilities fall through",
+        "immediately execute the bound complete_native_action invocation",
     ):
         assert required in normalized
     assert len(tool_descriptors()) == 12
@@ -504,7 +447,7 @@ def test_positive_local_execution_guidance_precedes_and_is_outside_prohibitions(
         .split()
     )
     prohibited_section = instructions.split("PROHIBITED ACTIONS", 1)[1]
-    assert "ordinary local command-execution capability" in active_section
+    assert "qCoder-supplied exact structured invocations" in active_section
     assert "customer never types the command" in active_section
     assert "first execute coordinator_prefix with --help" not in instructions
     assert "Do not run current-loop --help" in instructions
@@ -576,21 +519,11 @@ def test_activation_instruction_preserves_lossless_request_baseline_protocol(
     )
     normalized = " ".join(instructions.split())
     for required in (
-        "complete governing customer message verbatim as original_request",
-        "Do not summarize",
-        "abbreviate",
-        "paraphrase",
-        "reword",
-        "is additive and never removes wording from original_request",
-        "Stop before activation if exact transfer cannot be completed",
-        "exact fresh-active-build bootstrap invocation",
-        "exact UTF-8 stdin channel",
-        "returned complete capture",
-        "Do not ask the user to repeat the task",
-        "never use a later one-word “Yes” as original_request",
-        "exact authority-only invocation returned by qCoder",
-        "Do not resend or reconstruct the request",
-        "Material Blueprint decisions and action-specific authority remain separate",
+        "Preserve the exact customer message",
+        "receives the exact UTF-8 stdin request",
+        "compact_next_action is the sole procedural source",
+        "Activation grants only this request's bounded loop",
+        "Blueprint confirmation is not write permission",
     ):
         assert required in normalized
     assert "Claude-specific prompt hook" not in instructions
@@ -656,7 +589,11 @@ def test_initialize_adds_no_mcp_operation_or_domain_tool(tmp_path: Path) -> None
     assert len(listed["result"]["tools"]) == 12
     assert [tool["name"] for tool in listed["result"]["tools"]] == list(EXPECTED_TOOLS)
     assert prompts["result"]["prompts"] == []
-    assert resources["result"]["resources"] == []
+    assert resources["result"]["resources"]
+    assert all(
+        item["uri"].startswith("qcoder://connected-assistant-contract/")
+        for item in resources["result"]["resources"]
+    )
     assert unknown["error"] == {"code": -32601, "message": "method_not_supported"}
 
 
@@ -2457,43 +2394,18 @@ def test_mcp_stdio_content_length_lists_exact_tools(tmp_path: Path) -> None:
         assert runtime["base_url"] == "https://preview-api.qcoder.ai"
         assert runtime["token_file_path"] == str(token_file.resolve())
         for required in (
-            "explicitly asks to use qCoder",
+            "Do nothing when qCoder was not explicitly requested",
             "Use the supplied python_executable only through qCoder's exact bootstrap",
             "coordinator_prefix is diagnostics-only metadata",
             "fresh_active_build_request_baseline_staging",
             "Do not run current-loop --help",
-            "Never run `which` or `where`",
-            "Request Baseline",
-            "Never manually sequence Context Bridge tools",
-            "Never reconstruct canonical artifacts",
-            "Conversational approval and canonical confirmation are distinct",
-            "Follow supported_next_action and next_invocation exactly",
-            "Never repeat an identical invocation after an unchanged checkpoint",
+            "compact_next_action is the sole procedural source",
             "IDE WORK AND ARTIFACT HANDOFF",
-            "Retain exact paths returned by your own write or modify operations",
-            "truthful created, modified, or selected event disposition",
-            "Never inspect .qcoder",
-            "exclude .qcoder from every ordinary project inspection",
-            "Do not use a glob, find, directory listing, Git status, repository map, or search result",
-            "Ordinary inspection of relevant non-qCoder project files",
-            "does not register a file or authorize qCoder review",
-            "supported exact outputs attributable to a single-use operation receipt",
-            "home-directory qCoder state",
-            "client configuration",
-            "sibling repositories",
-            "Workspace freshness is not intent",
-            "adaptive or Blueprint-required governance",
-            "Preserve exact user-stated decision answers",
-            "is not a full Generation Context Pack",
-            "decision_resolution checkpoint",
-            "exact decision-disposition authority channel",
-            "do not ask a routine posture question",
-            "does not grant IDE permission to write or run",
-            "exact artifact candidates",
-            "proposal-specific explicit confirmation",
-            "local or manual review fallback",
-            "Unchanged Continuation creates no Evolved Blueprint",
-            "Never activate silently",
+            "without an intermediate customer message or model re-entry",
+            "Never register a failed write",
+            "Never scan the repository",
+            "Blueprint confirmation is not write permission",
+            "Never silently activate",
         ):
             assert required in normalized_instructions
         assert SYNTHETIC_CANONICAL_TOKEN not in instructions

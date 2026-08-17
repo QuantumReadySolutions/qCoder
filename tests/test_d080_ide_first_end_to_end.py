@@ -162,7 +162,7 @@ def test_binding_route_and_inventory_are_deterministic_and_keep_twelve_tools() -
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v25"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v26"
     assert (
         descriptor["current_request_semantics_contract"]["temporary_current_step_ceiling"] is True
     )
@@ -202,10 +202,11 @@ def test_source_only_real_coordinator_path_enforces_one_write_and_resumable_stop
     assert action["operation_invocation_digest"]
     assert action["authority_receipt_and_registration_same_process"] is True
     assert action["normal_path_qcoder_serial_cycles_including_bootstrap"] == 2
-    invocation = activated["next_invocation"]
+    invocation = action["operation_specific_invocation"]
     assert invocation["fixed_argument_values"] == {
         "--provenance": "assistant_created",
     }
+    assert "next_invocation" not in activated
 
     before_broadened = deepcopy(coordinator.store.read())
     broadened = coordinator.record_ide_authority(
@@ -465,9 +466,12 @@ def test_binding_owned_black_box_bootstrap_reaches_d080_compact_action(tmp_path:
     assert result["current_request_semantics"]["requested_operation"] == "source_generation"
     assert result["compact_next_action"]["artifact_role"] == "source"
     assert result["compact_next_action_is_sole_procedural_source"] is True
-    assert result["next_invocation"]["fixed_argument_values"] == {
+    assert result["compact_next_action"]["operation_specific_invocation"][
+        "fixed_argument_values"
+    ] == {
         "--provenance": "assistant_created",
     }
+    assert "next_invocation" not in result
 
 
 def test_binding_owned_black_box_compressed_post_write_handoff(tmp_path: Path) -> None:
@@ -1003,7 +1007,9 @@ def test_explicit_generation_bootstrap_never_uses_legacy_broad_role_ceiling(
     assert semantics["current_step_ceiling"]["artifact_role_cardinality"] == {
         "source": "exactly_one"
     }
-    assert activated["next_invocation"]["fixed_argument_values"] == {
+    assert activated["compact_next_action"]["operation_specific_invocation"][
+        "fixed_argument_values"
+    ] == {
         "--provenance": "assistant_created",
     }
     before = deepcopy(coordinator.store.read())

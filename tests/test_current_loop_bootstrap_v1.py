@@ -144,8 +144,8 @@ def test_bootstrap_owns_platform_serialization_and_cwd_semantics() -> None:
 
 def test_binding_v7_delivers_bootstrap_and_complete_lifecycle() -> None:
     binding = _descriptor("/runtime/python")
-    assert binding["schema_version"] == 24
-    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v25"
+    assert binding["schema_version"] == 25
+    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v26"
     bootstrap = binding["bootstrap_invocation_contract"]
     assert bootstrap["schema_id"] == BOOTSTRAP_INVOCATION_SCHEMA_ID
     assert bootstrap["supported_entrypoints"][FRESH_ACTIVE_BUILD_ENTRYPOINT][
@@ -233,8 +233,12 @@ def test_black_box_bootstrap_activates_assist_with_exact_receipt(
     result = json.loads(completed.stdout)
     display = result["details"]
     exact = request.decode("utf-8")
-    assert display["original_request"] == exact
-    assert display["original_request_utf8_sha256"] == hashlib.sha256(request).hexdigest()
+    assert result["request_identity"]["exact_original_message"] == exact
+    assert result["request_identity"]["original_message_utf8_sha256"] == hashlib.sha256(
+        request
+    ).hexdigest()
+    assert "original_request" not in display
+    assert "exact_original_message" not in result["current_request_semantics"]
     assert display["assist_ready"] is True
     assert display["request_baseline_saved"] is True
     assert display["posture_deferred"] is False
@@ -244,9 +248,10 @@ def test_black_box_bootstrap_activates_assist_with_exact_receipt(
         "source_and_local_execution"
     )
     assert (
-        result["next_invocation"]["operation_specific_invocation"]["operation"]
+        result["compact_next_action"]["operation_specific_invocation"]["operation"]
         == "complete_native_action"
     )
+    assert "next_invocation" not in result
 
 
 def test_duplicate_exact_message_bootstrap_fails_without_duplicate_activation(

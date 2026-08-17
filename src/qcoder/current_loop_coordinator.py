@@ -239,8 +239,8 @@ from qcoder.current_loop_iteration import (
 )
 from qcoder.context_loop import CONTEXT_LOOP_GATE
 
-COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v17"
-COORDINATOR_RESULT_SCHEMA_VERSION = 17
+COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v18"
+COORDINATOR_RESULT_SCHEMA_VERSION = 18
 
 RESULT_SEMANTIC_CLASSES = (
     "pure_observation",
@@ -7010,6 +7010,8 @@ class CurrentLoopCoordinator:
             if registered.get("ok") is not True:
                 details["compressed_handoff_stage"] = "receipt_bound_registration"
                 details["issued_authority_retained_for_exact_recovery"] = True
+            elif isinstance(registered.get("current_request_semantics"), Mapping):
+                registered = self._normal_d080_success_projection(registered)
             return registered
         except (CurrentLoopError, EventReceiptError, ValueError) as exc:
             return self._exception_result("complete_native_action", exc, started)
@@ -12935,7 +12937,98 @@ class CurrentLoopCoordinator:
             if result["performance_diagnostics"]["final_result_bytes"] == exact_size:
                 break
             result["performance_diagnostics"]["final_result_bytes"] = exact_size
+        if ok and isinstance(request_semantics, Mapping) and operation in {
+            "activate",
+            "complete_native_action",
+        }:
+            return self._normal_d080_success_projection(result)
         return result
+
+    @staticmethod
+    def _normal_d080_success_projection(result: Mapping[str, Any]) -> dict[str, Any]:
+        """Project the normal D-080 success without duplicate assistant-facing contracts."""
+
+        operation = str(result["operation"])
+        details = deepcopy(dict(result.get("details", {})))
+        semantics = deepcopy(dict(result["current_request_semantics"]))
+        action = deepcopy(dict(result["compact_next_action"]))
+        if operation == "activate":
+            details.pop("current_request_semantics", None)
+            details.pop("request_semantics_contract", None)
+            details.pop("original_request", None)
+            details.pop("original_request_utf8_sha256", None)
+            request_projection: dict[str, Any] = {
+                "exact_original_message": semantics["exact_original_message"],
+                "original_message_utf8_sha256": semantics["original_message_utf8_sha256"],
+                "semantics_digest": semantics["semantics_digest"],
+            }
+            semantics.pop("exact_original_message", None)
+            semantics.pop("original_message_utf8_sha256", None)
+        else:
+            request_projection = {
+                "original_message_utf8_sha256": semantics["original_message_utf8_sha256"],
+                "semantics_digest": semantics["semantics_digest"],
+                "exact_message_retained_in_canonical_state": True,
+            }
+            invocation = action.pop("operation_specific_invocation", None)
+            action.pop("operation_invocation_digest", None)
+            if isinstance(invocation, Mapping):
+                action["continuation_reference"] = {
+                    "operation": invocation.get("operation", "interpret_current_request"),
+                    "transport": "binding_owned_on_next_exact_customer_instruction",
+                    "exact_customer_message_required": True,
+                    "native_selected_paths_required_only_for_selected_file_review": True,
+                }
+            action.pop("action_digest", None)
+            action["action_digest"] = sha256(canonical_bytes(action)).hexdigest()
+        compact = {
+            "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
+            "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
+            "projection_schema_id": "qcoder.current_loop.normal_success_projection.v1",
+            "operation": operation,
+            "ok": True,
+            "category": result.get("category"),
+            "result_semantic_classification": result["result_semantic_classification"],
+            "phase": result["phase"],
+            "state_status": result["state_status"],
+            "checkpoint_kind": result["checkpoint_kind"],
+            "current_step_status": result.get("current_step_status"),
+            "customer_summary": result["customer_summary"],
+            "request_identity": request_projection,
+            "current_request_semantics": semantics if operation == "activate" else None,
+            "compact_next_action": action,
+            "compact_next_action_is_sole_procedural_source": True,
+            "details": details,
+            "bootstrap_count": result.get("bootstrap_count", 0),
+            "request_baseline_count": result.get("request_baseline_count", 0),
+            "required_authority": result["required_authority"],
+            "terminal": result.get("terminal"),
+            "no_action_reason": result.get("no_action_reason"),
+            "raw_protected_payload_included": False,
+            "token_contents_included": False,
+            "local_paths_transmitted": False,
+            "assistant_reconstruction_performed": False,
+            "normal_success_projection": {
+                "specialized_controls_inline": False,
+                "duplicate_semantics_contract_omitted": True,
+                "duplicate_next_invocation_omitted": True,
+                "duplicate_customer_envelopes_omitted": True,
+                "full_continuation_invocation_omitted_after_step_completion": (
+                    operation != "activate"
+                ),
+                "checkpoint_failure_ambiguity_and_recovery_remain_full": True,
+            },
+        }
+        if compact["current_request_semantics"] is None:
+            compact.pop("current_request_semantics")
+        performance = deepcopy(dict(result["performance_diagnostics"]))
+        compact["performance_diagnostics"] = performance
+        while True:
+            exact_size = len(json.dumps(compact, indent=2, sort_keys=True).encode())
+            if performance.get("final_result_bytes") == exact_size:
+                break
+            performance["final_result_bytes"] = exact_size
+        return compact
 
     def _attach_executable_recovery_alternatives(
         self,

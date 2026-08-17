@@ -126,7 +126,7 @@ def test_binding_v10_delivers_sidecar_run_summary_and_evidence_domains(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     assert descriptor["contract_id"] == CLIENT_BINDING_CONTRACT_ID
-    assert descriptor["contract_id"].endswith(".v25")
+    assert descriptor["contract_id"].endswith(".v26")
     assert descriptor["contract_sidecar"]["schema_id"] == SIDECAR_SCHEMA_ID
     assert descriptor["run_summary_contract"]["schema_id"] == ("qcoder.current_loop.run_summary.v2")
     assert descriptor["evidence_view_contract"]["schema_id"] == (
@@ -143,9 +143,10 @@ def test_binding_v10_delivers_sidecar_run_summary_and_evidence_domains(
         token_file=tmp_path / "token.txt",
         python_executable=tmp_path / "python",
     ).lower()
-    assert "optional loopback editor" in instructions
-    assert "never inspect result files" in instructions
-    assert "never edits policy json" in instructions
+    assert "specialized_contracts_inline\": false" in instructions
+    assert "contract_sidecar" in instructions
+    assert "contract_management" in instructions
+    assert "fail closed" in instructions
 
 
 def test_sidecar_headers_capability_origin_and_cas(tmp_path: Path) -> None:
