@@ -1519,6 +1519,18 @@ def _cmd_current_loop(argv: list[str]) -> int:
         required=True,
     )
 
+    sub.add_parser(
+        "install-cursor-post-write-hook",
+        help=(
+            "Install the exact project-scoped Cursor write-success completion hook "
+            "for this qCoder runtime. This is workspace setup, not customer workflow choreography."
+        ),
+    )
+    sub.add_parser(
+        "cursor-post-write-hook",
+        help=argparse.SUPPRESS,
+    )
+
     register = sub.add_parser(
         "register-artifacts",
         help="Register only exact candidate paths; no scan or discovery.",
@@ -1951,6 +1963,33 @@ def _cmd_current_loop(argv: list[str]) -> int:
     if args.current_loop_command is None:
         parser.print_help()
         return 0
+    if args.current_loop_command == "install-cursor-post-write-hook":
+        from qcoder.cursor_post_write_hook import (
+            CursorPostWriteHookError,
+            install_cursor_post_write_hook,
+        )
+
+        try:
+            result = install_cursor_post_write_hook(
+                workspace_root=args.workspace,
+                executable=sys.executable,
+            )
+        except CursorPostWriteHookError as exc:
+            print(json.dumps({"ok": False, "category": exc.category}, sort_keys=True))
+            return 2
+        print(json.dumps(result, sort_keys=True))
+        return 0
+    if args.current_loop_command == "cursor-post-write-hook":
+        from qcoder.cursor_post_write_hook import (
+            CURSOR_POST_WRITE_HOOK_MAX_INPUT_BYTES,
+            run_cursor_post_write_hook,
+        )
+
+        raw_event = sys.stdin.buffer.read(CURSOR_POST_WRITE_HOOK_MAX_INPUT_BYTES + 1)
+        return run_cursor_post_write_hook(
+            workspace_root=args.workspace,
+            raw_event=raw_event,
+        )
     transport = None
     if hasattr(args, "base_url"):
         transport = ContextBridgeTransport(

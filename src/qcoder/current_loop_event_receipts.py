@@ -12,8 +12,8 @@ from typing import Any, Mapping, Sequence
 
 from qcoder.current_loop_evidence_processing import artifact_format_contract_snapshot
 
-EVENT_RECEIPT_SCHEMA_ID = "qcoder.current_loop.operation_receipt.v4"
-EVENT_RECEIPT_SCHEMA_VERSION = 4
+EVENT_RECEIPT_SCHEMA_ID = "qcoder.current_loop.operation_receipt.v5"
+EVENT_RECEIPT_SCHEMA_VERSION = 5
 ACTIVITY_RECEIPT_SCHEMA_ID = "qcoder.current_loop.activity_receipt.v3"
 ACTIVITY_RECEIPT_SCHEMA_VERSION = 3
 OPERATION_RECEIPT_LIFETIME_SECONDS = 15 * 60
@@ -232,6 +232,18 @@ def consume_operation_receipt(
         "issued_receipt_digest": receipt.get("receipt_digest"),
         "consumed_state_revision": consumed_state_revision,
         "registered_artifact_count": len(registered_artifacts),
+        "authority_binding_digest": _digest(receipt.get("authority_binding", {})),
+        "authority_evidence_source": receipt.get("authority_binding", {}).get(
+            "authority_evidence_source"
+        ),
+        "native_client_event_binding_digest": (
+            _digest(receipt.get("authority_binding", {}).get("native_client_event_binding"))
+            if isinstance(
+                receipt.get("authority_binding", {}).get("native_client_event_binding"),
+                Mapping,
+            )
+            else None
+        ),
         "causal_continuation_used": isinstance(
             receipt.get("causal_continuation"), Mapping
         ),

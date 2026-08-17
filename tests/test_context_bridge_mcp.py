@@ -269,7 +269,8 @@ def test_initialize_binds_two_surfaces_and_three_workstyles_without_new_tool(
         "construct a command from coordinator_prefix",
         "The customer never types the command",
         "Only unrelated bounded single capabilities fall through",
-        "immediately execute the bound complete_native_action invocation",
+        "project-scoped postToolUse hook",
+        "Do not issue or expose a Shell/CLI completion command",
     ):
         assert required in normalized
     assert len(tool_descriptors()) == 12
@@ -333,21 +334,36 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
         "single_capability",
         "active_build",
     ]
-    assert binding["required_client_capability"] == "ordinary_local_command_execution"
-    assert binding["surfaces"] == {
-        "hosted_capability": {
-            "transport": "mcp_tools",
-            "tool_count": 12,
-            "single_capability_supported": True,
-        },
-        "local_orchestration": {
-            "transport": "local_command",
-            "command_prefix": prefix,
-            "command_prefix_diagnostics_only": True,
-            "assistant_constructs_commands_from_prefix": False,
-            "orchestration_surface_is_not_an_mcp_tool": True,
-            "customer_never_types_command": True,
-        },
+    assert binding["required_client_capability"] == "binding_owned_local_orchestration"
+    assert binding["surfaces"]["hosted_capability"] == {
+        "transport": "mcp_tools",
+        "tool_count": 12,
+        "single_capability_supported": True,
+    }
+    assert binding["surfaces"]["local_orchestration"] == {
+        "transport": "local_command",
+        "command_prefix": prefix,
+        "command_prefix_diagnostics_only": True,
+        "assistant_constructs_commands_from_prefix": False,
+        "orchestration_surface_is_not_an_mcp_tool": True,
+        "customer_never_types_command": True,
+    }
+    assert binding["surfaces"]["cursor_post_write_completion"] == {
+        "transport": "cursor_project_post_tool_use_hook",
+        "hook_event": "postToolUse",
+        "matcher": "Write",
+        "project_scope_required": True,
+        "exact_runtime_binding_required": True,
+        "assistant_constructs_or_invokes_command": False,
+        "model_shell_tool_call": False,
+        "second_native_approval_required": False,
+        "trigger_requires_successful_native_write": True,
+        "mutates_customer_artifact": False,
+        "executes_customer_code": False,
+        "broadens_output_roles": False,
+        "mandatory_active_request_completion": True,
+        "failure_disposition": "retain_exact_recoverable_state_and_fail_closed",
+        "public_context_bridge_tool": False,
     }
     assert binding["workstyle_routes"]["available_inactive"] == {
         "trigger": "no_explicit_qcoder_request",

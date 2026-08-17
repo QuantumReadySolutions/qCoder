@@ -21,6 +21,10 @@ from qcoder.context_bridge_mcp import (
     tool_descriptors,
 )
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
+from qcoder.cursor_post_write_hook import (
+    handle_cursor_post_write_event,
+    install_cursor_post_write_hook,
+)
 
 
 REQUEST = (
@@ -92,6 +96,7 @@ def main() -> int:
     for _ in range(args.runs):
         with tempfile.TemporaryDirectory() as directory:
             workspace = Path(directory)
+            install_cursor_post_write_hook(workspace_root=workspace)
             coordinator = CurrentLoopCoordinator(workspace_root=workspace)
             started = time.perf_counter()
             activated = coordinator.activate(
@@ -110,17 +115,18 @@ def main() -> int:
                 encoding="utf-8",
             )
             started = time.perf_counter()
-            completed = coordinator.complete_native_action(
-                allowed=True,
-                explicit_user_action=True,
-                candidates=(
-                    {
-                        "role": "source",
-                        "path": str(source),
-                        "provenance": "assistant_created",
-                        "explicit_external": False,
-                    },
-                ),
+            completed = handle_cursor_post_write_event(
+                workspace_root=workspace,
+                event={
+                    "hook_event_name": "postToolUse",
+                    "tool_name": "Write",
+                    "conversation_id": "sanitized-proof-conversation",
+                    "generation_id": "sanitized-proof-generation",
+                    "tool_use_id": "sanitized-proof-write",
+                    "cwd": str(workspace),
+                    "workspace_roots": [str(workspace)],
+                    "tool_input": {"file_path": str(source)},
+                },
             )
             completion_seconds.append(time.perf_counter() - started)
             activation_sizes.append(wire_size(activated))
@@ -143,6 +149,9 @@ def main() -> int:
         "completion_p95_milliseconds": round(percentile_95(completion_seconds) * 1000, 3),
         "expected_model_turns": 3,
         "qcoder_control_cycles": 2,
+        "post_write_model_shell_calls": 0,
+        "post_write_native_approvals": 0,
+        "post_write_transport": "cursor_project_post_tool_use_hook",
         "public_context_bridge_tools": list(EXPECTED_TOOLS),
         "public_context_bridge_tool_count": len(EXPECTED_TOOLS),
     }
@@ -153,6 +162,8 @@ def main() -> int:
         "expected_model_turns_reduced_4_to_3": after["expected_model_turns"] == 3,
         "exactly_two_qcoder_control_cycles": after["qcoder_control_cycles"] == 2,
         "exactly_twelve_public_tools": len(EXPECTED_TOOLS) == 12,
+        "no_post_write_model_shell_call": after["post_write_model_shell_calls"] == 0,
+        "no_second_native_approval": after["post_write_native_approvals"] == 0,
     }
     if not all(checks.values()):
         raise SystemExit(f"a16_latency_target_failed:{checks}")

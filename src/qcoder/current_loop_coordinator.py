@@ -6604,6 +6604,7 @@ class CurrentLoopCoordinator:
         operation_category: str = "ide_write",
         output_role_ceiling: Sequence[str] = ("source", "circuit_qasm", "results"),
         exact_iteration_instruction: str | None = None,
+        native_client_event_binding: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         started = self.clock()
         try:
@@ -6626,10 +6627,52 @@ class CurrentLoopCoordinator:
                     phase=self._coordinator_state(state)["phase"],
                     elapsed=self.clock() - started,
                 )
+            normalized_native_binding: dict[str, Any] | None = None
+            if native_client_event_binding is not None:
+                normalized_native_binding = dict(native_client_event_binding)
+                required_native_binding = {
+                    "schema_id": "qcoder.current_loop.native_client_write_event.v1",
+                    "schema_version": 1,
+                    "transport": "cursor_project_post_tool_use_hook",
+                    "hook_event_name": "postToolUse",
+                    "tool_category": "native_write",
+                    "tool_succeeded_before_hook": True,
+                    "source_bytes_returned": False,
+                }
+                if any(
+                    normalized_native_binding.get(key) != value
+                    for key, value in required_native_binding.items()
+                ) or any(
+                    not isinstance(normalized_native_binding.get(key), str)
+                    or len(str(normalized_native_binding[key])) != 64
+                    for key in (
+                        "conversation_identity_sha256",
+                        "generation_identity_sha256",
+                        "tool_use_identity_sha256",
+                        "exact_path_sha256",
+                        "expected_artifact_sha256",
+                    )
+                ):
+                    raise CurrentLoopError("native_client_write_event_binding_invalid")
+                if operation_category != "ide_write" or tuple(output_role_ceiling) != ("source",):
+                    raise CurrentLoopError("native_client_write_event_authority_mismatch")
             coordinator = self._coordinator_state(state)
             request_semantics = coordinator.get("current_request_semantics")
             if isinstance(request_semantics, Mapping):
                 validate_request_semantics(request_semantics)
+                if normalized_native_binding is not None and (
+                    normalized_native_binding.get("bound_loop_identity_sha256")
+                    != sha256(str(state["loop_ref"]).encode("utf-8")).hexdigest()
+                    or normalized_native_binding.get("bound_state_revision")
+                    != state["state_revision"]
+                    or normalized_native_binding.get("current_request_semantics_digest")
+                    != request_semantics.get("semantics_digest")
+                    or normalized_native_binding.get("current_step_ceiling_digest")
+                    != request_semantics.get("current_step_ceiling", {}).get("ceiling_digest")
+                    or normalized_native_binding.get("artifact_role") != "source"
+                    or normalized_native_binding.get("artifact_cardinality") != "exactly_one"
+                ):
+                    raise CurrentLoopError("native_client_write_event_state_binding_mismatch")
                 requested_operation = str(request_semantics["requested_operation"])
                 current_substage = coordinator.get("current_step_substage")
                 expected_category, expected_roles = (
@@ -6760,6 +6803,12 @@ class CurrentLoopCoordinator:
                             else "bounded_by_role_ceiling"
                         ),
                         "authority_layer": "native_client_permission",
+                        "authority_evidence_source": (
+                            "cursor_successful_native_write_event"
+                            if normalized_native_binding is not None
+                            else "explicit_native_client_permission"
+                        ),
+                        "native_client_event_binding": deepcopy(normalized_native_binding),
                     },
                 )
                 committed_receipt_id = str(issued["receipt_id"])
@@ -6859,6 +6908,14 @@ class CurrentLoopCoordinator:
                     "build_review_implicitly_deferred": (committed_iteration_receipt is not None),
                     "governing_blueprint_unchanged": True,
                     "continuation_artifact_created": False,
+                    "native_client_event_binding_recorded": (
+                        normalized_native_binding is not None
+                    ),
+                    "native_permission_channel": (
+                        "cursor_successful_native_write_event"
+                        if normalized_native_binding is not None
+                        else "explicit_native_client_permission"
+                    ),
                 },
                 persist_performance=False,
             )
@@ -6890,6 +6947,7 @@ class CurrentLoopCoordinator:
         allowed: bool,
         explicit_user_action: bool,
         candidates: Sequence[Mapping[str, Any]],
+        native_client_event_binding: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Record one native permission and register its exact output in one process.
 
@@ -6956,6 +7014,25 @@ class CurrentLoopCoordinator:
                     "local_path_included": False,
                     "secret_included": False,
                 }
+            if native_client_event_binding is not None:
+                binding = dict(native_client_event_binding)
+                expected_digest = binding.get("expected_artifact_sha256")
+                expected_path_digest = binding.get("exact_path_sha256")
+                candidate_path = Path(str(normalized[0]["path"]))
+                if (
+                    expected_role != "source"
+                    or not isinstance(expected_digest, str)
+                    or sha256(candidate_path.read_bytes()).hexdigest() != expected_digest
+                    or not isinstance(expected_path_digest, str)
+                    or sha256(str(candidate_path).encode("utf-8")).hexdigest()
+                    != expected_path_digest
+                ):
+                    return self._recovery_result(
+                        operation="complete_native_action",
+                        category="native_client_write_event_artifact_mismatch",
+                        phase=str(coordinator["phase"]),
+                        elapsed=self.clock() - started,
+                    )
             ceiling_operation = (
                 "ide_write_source"
                 if expected_role == "source"
@@ -6975,6 +7052,7 @@ class CurrentLoopCoordinator:
                 explicit_user_action=explicit_user_action,
                 operation_category=expected_category,
                 output_role_ceiling=(expected_role,),
+                native_client_event_binding=native_client_event_binding,
             )
             if authority.get("ok") is not True:
                 authority["operation"] = "complete_native_action"
@@ -7512,6 +7590,15 @@ class CurrentLoopCoordinator:
                     raw = Path(str(item["path"])).read_bytes()
                     if len(raw) > 8 * 1024 * 1024:
                         raise CurrentLoopError("artifact_candidate_file_too_large")
+                    expected_content_digest = item.get("expected_content_digest")
+                    if (
+                        expected_content_digest is not None
+                        and (
+                            not isinstance(expected_content_digest, str)
+                            or sha256(raw).hexdigest() != expected_content_digest
+                        )
+                    ):
+                        raise CurrentLoopError("native_client_write_event_artifact_changed")
                     item["content_digest"] = sha256(raw).hexdigest()
                     item["operation_receipt_id"] = operation_receipt_id
                 consumed, activity_receipt = consume_operation_receipt(
@@ -10991,6 +11078,7 @@ class CurrentLoopCoordinator:
                     "explicit_external": external,
                     "event_disposition": event_disposition,
                     "related_circuit_ref": candidate.get("related_circuit_ref"),
+                    "expected_content_digest": candidate.get("content_digest"),
                 }
             )
         return normalized
@@ -11693,9 +11781,23 @@ class CurrentLoopCoordinator:
                 invocation["fixed_argument_values"] = {
                     "--provenance": "assistant_created",
                 }
+                from qcoder.cursor_post_write_hook import (
+                    CURSOR_POST_WRITE_TRANSPORT,
+                    cursor_post_write_hook_status,
+                )
+
+                cursor_hook = cursor_post_write_hook_status(
+                    workspace_root=self.workspace_root,
+                    executable=self.runtime_executable,
+                )
+                cursor_hook_ready = (
+                    output_role == "source"
+                    and cursor_hook.get("configured") is True
+                    and cursor_hook.get("exact_runtime_bound") is True
+                )
                 compact_action = {
-                    "schema_id": "qcoder.current_loop.compact_next_action.v1",
-                    "schema_version": 1,
+                    "schema_id": "qcoder.current_loop.compact_next_action.v2",
+                    "schema_version": 2,
                     "action": operation_category,
                     "artifact_role": output_role,
                     "customer_facing_permission": customer_label,
@@ -11710,13 +11812,38 @@ class CurrentLoopCoordinator:
                     "native_action_sequence": [
                         "obtain_action_specific_native_permission",
                         "perform_exact_native_action",
-                        "execute_single_bound_post_action_invocation",
+                        (
+                            "cursor_project_hook_completes_exact_registration_after_successful_write"
+                            if cursor_hook_ready
+                            else "execute_single_bound_post_action_invocation"
+                        ),
                     ],
                     "post_action_operation": "complete_native_action",
+                    "post_action_transport": (
+                        CURSOR_POST_WRITE_TRANSPORT if cursor_hook_ready else "local_command"
+                    ),
+                    "post_action_trigger": (
+                        "successful_native_write_postToolUse"
+                        if cursor_hook_ready
+                        else "assistant_invocation_after_successful_native_action"
+                    ),
+                    "post_action_mutates_customer_artifact": False,
+                    "post_action_executes_customer_code": False,
+                    "post_action_broadens_output_roles": False,
+                    "post_action_is_required_active_request_completion": True,
+                    "registration_result_delivery": (
+                        "same_turn_additional_context"
+                        if cursor_hook_ready
+                        else "local_command_result"
+                    ),
+                    "model_shell_invocation_required": not cursor_hook_ready,
+                    "customer_visible_cli_permitted": False,
+                    "second_native_approval_required": False,
                     "authority_receipt_and_registration_same_process": True,
                     "separate_authority_receipt_call_required": False,
                     "separate_registration_call_required": False,
                     "normal_path_qcoder_serial_cycles_including_bootstrap": 2,
+                    "normal_path_expected_model_turns": 3,
                     "procedural_source_of_truth": True,
                     "transcript_or_repository_reconstruction_permitted": False,
                 }
@@ -11726,7 +11853,14 @@ class CurrentLoopCoordinator:
                 protocol.update(
                     {
                         "supported_next_action": "obtain_action_specific_native_permission",
-                        "next_invocation": invocation,
+                        "next_invocation": (
+                            _invocation_template(
+                                "cursor-post-write-hook",
+                                new_inputs=("cursor_successful_native_write_event",),
+                            )
+                            if cursor_hook_ready
+                            else invocation
+                        ),
                         "compact_next_action": compact_action,
                         "compact_next_action_is_sole_procedural_source": True,
                         "required_authority_input": _authority_input(
@@ -12693,6 +12827,8 @@ class CurrentLoopCoordinator:
             and isinstance(compact_action, Mapping)
             and isinstance(bound_next, Mapping)
             and isinstance(bound_next.get("operation_specific_invocation"), Mapping)
+            and compact_action.get("post_action_transport")
+            != "cursor_project_post_tool_use_hook"
         ):
             compact = deepcopy(dict(compact_action))
             compact.pop("action_digest", None)

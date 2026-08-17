@@ -154,8 +154,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 25
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v26"
+CLIENT_BINDING_SCHEMA_VERSION = 26
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v27"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -184,11 +184,13 @@ Activation, qCoder's bounded action, native action-specific permission, and late
 governing authority are separate. A later exact customer instruction uses interpret-current-request
 without bootstrap or Request Baseline recreation.
 
-For an exact native action, ask for the one action-specific native permission shown by
-compact_next_action, perform only that native action, and then execute its single binding-owned
-post-action invocation. That invocation records the permission receipt and registers the exact
-output together; do not insert separate authority-recording, receipt-reading, help, package,
-binding-source, or registration-discovery calls on the normal path.
+For an exact Cursor-native source write, ask for the one action-specific native permission shown by
+compact_next_action and perform only that native write. The exact project postToolUse hook then
+records the permission receipt and registers that exact successful output in the same assistant
+turn. Do not invoke or expose a Shell command, request a second approval, narrate registration, or
+insert separate authority-recording, receipt-reading, help, package, binding-source, or
+registration-discovery calls. A supplied local-command invocation is recovery/non-Cursor fallback,
+not Cursor's normal path.
 
 Named D-079 workflow override: before applying the generic single-capability route, classify
 whether ordinary customer language requests “Algorithm Blueprint / Generation Context” or
@@ -640,7 +642,7 @@ def build_client_binding_descriptor(
             "active_build_activation_phrase_category": (
                 "explicit_use_qcoder_for_this_build_or_accepted_offer"
             ),
-            "required_client_capability": "ordinary_local_command_execution",
+            "required_client_capability": "binding_owned_local_orchestration",
             "surfaces": {
                 "hosted_capability": {
                     "transport": "mcp_tools",
@@ -654,6 +656,23 @@ def build_client_binding_descriptor(
                     "assistant_constructs_commands_from_prefix": False,
                     "orchestration_surface_is_not_an_mcp_tool": True,
                     "customer_never_types_command": True,
+                },
+                "cursor_post_write_completion": {
+                    "transport": "cursor_project_post_tool_use_hook",
+                    "hook_event": "postToolUse",
+                    "matcher": "Write",
+                    "project_scope_required": True,
+                    "exact_runtime_binding_required": True,
+                    "assistant_constructs_or_invokes_command": False,
+                    "model_shell_tool_call": False,
+                    "second_native_approval_required": False,
+                    "trigger_requires_successful_native_write": True,
+                    "mutates_customer_artifact": False,
+                    "executes_customer_code": False,
+                    "broadens_output_roles": False,
+                    "mandatory_active_request_completion": True,
+                    "failure_disposition": "retain_exact_recoverable_state_and_fail_closed",
+                    "public_context_bridge_tool": False,
                 },
             },
             "workstyle_routes": {
@@ -826,7 +845,10 @@ def _binding_contract_tiers(*, coordinator_prefix: list[str]) -> tuple[dict[str,
                 "cycle_1": "activate_and_receive_exact_compact_native_action",
                 "native_action": "one_action_specific_source_write_permission_and_exactly_one_source_write",
                 "cycle_2": "immediately_complete_and_register_exact_output_in_same_assistant_turn",
+                "cycle_2_cursor_transport": "cursor_project_post_tool_use_hook",
                 "intermediate_customer_narration": False,
+                "model_shell_invocation": False,
+                "second_native_approval": False,
                 "failed_native_write_may_be_registered": False,
                 "registration_failure_preserves_exact_recovery": True,
                 "compact_next_action_is_sole_procedural_source": True,
@@ -891,10 +913,14 @@ without inference if unavailable or mismatched.
 
 IDE WORK AND ARTIFACT HANDOFF
 For the exact source action, obtain the one action-specific native permission, perform only that
-write, and—without an intermediate customer message or model re-entry—immediately execute the
-bound complete_native_action invocation with the exact created path. This second qCoder cycle both
-records permission and registers the artifact. Never register a failed write. If completion fails,
-report the bounded recovery truth; do not claim registration.
+write, and remain in the same assistant turn. The required project-scoped postToolUse hook observes
+only a successful native Write and performs qCoder's receipt-bound exact registration through the
+configured runtime. This hook is qCoder workflow bookkeeping: it does not mutate the source,
+execute customer code, broaden roles, or require another native approval. Do not issue or expose a
+Shell/CLI completion command and do not narrate registration. Wait for the hook's bounded
+additional_context without an intermediate customer message or model re-entry before the final
+response. Never register a failed write. If the hook reports
+failure, retain its exact recovery truth and do not claim success.
 
 D-079 WORKFLOWS
 Algorithm Blueprint / Generation Context is decision-aware by default. Review these selected files

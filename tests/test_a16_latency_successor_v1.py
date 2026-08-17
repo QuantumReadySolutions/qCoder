@@ -13,6 +13,7 @@ from qcoder.context_bridge_mcp import (
     tool_descriptors,
 )
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
+from qcoder.cursor_post_write_hook import install_cursor_post_write_hook
 
 
 REQUEST = (
@@ -33,6 +34,7 @@ def _wire_bytes(value: object) -> int:
 
 
 def _activate(tmp_path: Path) -> tuple[CurrentLoopCoordinator, dict[str, object]]:
+    install_cursor_post_write_hook(workspace_root=tmp_path)
     coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
     result = coordinator.activate(
         original_request=REQUEST,
@@ -51,7 +53,7 @@ def test_inline_binding_is_compact_tiered_digest_verified_and_keeps_twelve_tools
         token_file=tmp_path / "token.txt",
     )
     assert len(instructions.encode("utf-8")) <= 50_000
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v26"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v27"
     assert len(tool_descriptors()) == len(EXPECTED_TOOLS) == 12
     listed = handle_jsonrpc_message(
         {"jsonrpc": "2.0", "id": 1, "method": "resources/list"},
@@ -110,11 +112,14 @@ def test_normal_source_only_results_are_compact_single_source_of_truth(tmp_path:
     ):
         assert duplicate not in activated
     action = activated["compact_next_action"]
-    assert action["operation_specific_invocation"]["operation"] == "complete_native_action"
+    assert "operation_specific_invocation" not in action
+    assert action["post_action_transport"] == "cursor_project_post_tool_use_hook"
+    assert action["model_shell_invocation_required"] is False
+    assert action["second_native_approval_required"] is False
     assert action["native_action_sequence"] == [
         "obtain_action_specific_native_permission",
         "perform_exact_native_action",
-        "execute_single_bound_post_action_invocation",
+        "cursor_project_hook_completes_exact_registration_after_successful_write",
     ]
     source = tmp_path / "bell.py"
     source.write_text("from qiskit import QuantumCircuit\n", encoding="utf-8")
@@ -208,9 +213,9 @@ def test_binding_explicitly_requires_same_turn_completion_without_narration(tmp_
         base_url="https://example.invalid",
         token_file=tmp_path / "token.txt",
     )
-    assert "without an intermediate customer message or model re-entry" in instructions
     normalized = " ".join(instructions.split())
-    assert "immediately execute the bound complete_native_action invocation" in normalized
+    assert "project-scoped postToolUse hook" in normalized
+    assert "Do not issue or expose a Shell/CLI completion command" in normalized
     assert '"expected_model_turns": 3' in instructions
     assert '"qcoder_control_cycles": 2' in instructions
 
