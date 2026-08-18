@@ -9,6 +9,7 @@ import pytest
 from qcoder.context_bridge_mcp import EXPECTED_TOOLS
 from qcoder.current_loop_binding_mcp import (
     BEGIN_CURRENT_LOOP_TOOL_NAME,
+    COMPLETE_CURRENT_STEP_TOOL_NAME,
     binding_tool_descriptors,
     handle_binding_jsonrpc_message,
 )
@@ -159,7 +160,8 @@ def test_each_event_can_register_without_native_permission_receipt(
     assert receipt["user_approval_click_inferred"] is False
     activity = state["activity_receipts"][-1]
     evidence = activity["native_action_completion_evidence"]
-    assert evidence["hook_event_name"] == event_name
+    assert evidence["transport_event"] == event_name
+    assert evidence["transport"] == "client_hook_adapter"
     assert evidence["client_approval_telemetry"] is None
     assert evidence["raw_path_retained"] is False
     assert evidence["raw_source_retained"] is False
@@ -286,8 +288,11 @@ def test_missing_file_excess_cardinality_and_stale_expectation_fail_closed(
 def test_public_private_tool_inventories_remain_exact() -> None:
     assert len(EXPECTED_TOOLS) == 12
     private = binding_tool_descriptors()
-    assert [item["name"] for item in private] == [BEGIN_CURRENT_LOOP_TOOL_NAME]
-    assert private[0]["x-qcoder-public-context-bridge-tool"] is False
+    assert [item["name"] for item in private] == [
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        COMPLETE_CURRENT_STEP_TOOL_NAME,
+    ]
+    assert all(item["x-qcoder-public-context-bridge-tool"] is False for item in private)
 
 
 def test_prefreeze_request_semantics_migrate_without_changing_stage_meaning() -> None:

@@ -10,7 +10,6 @@ from qcoder.context_bridge_mcp import EXPECTED_TOOLS, build_client_activation_in
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.current_loop_invocation import operation_transport_inventory
 from qcoder.cursor_post_write_hook import (
-    CURSOR_POST_WRITE_TRANSPORT,
     cursor_post_write_hook_status,
     handle_cursor_after_file_edit_event,
     handle_cursor_post_tool_use_event,
@@ -144,8 +143,11 @@ def test_semantic_after_file_edit_registers_fresh_or_existing_authorized_source(
         source.write_text("# existing\n", encoding="utf-8")
     coordinator, activation = _activate(tmp_path)
     action = activation["compact_next_action"]
-    assert action["post_action_transport"] == CURSOR_POST_WRITE_TRANSPORT
-    assert action["post_action_trigger"] == "first_valid_afterFileEdit_or_postToolUse_event"
+    assert action["post_action_transport"] == "private_current_loop_binding"
+    assert action["hooks_required_for_correctness"] is False
+    assert action["post_action_trigger"] == (
+        "first_valid_hook_event_accelerates_typed_completion"
+    )
     assert action["tool_name_matcher_required"] is False
     assert action["model_shell_invocation_required"] is False
     assert action["second_native_approval_required"] is False
@@ -309,7 +311,8 @@ def test_binding_declares_authoritative_semantic_hook_and_retains_size_target(
     )
     assert len(instructions.encode("utf-8")) <= 50_000
     normalized = " ".join(instructions.split())
-    assert "matcher-free afterFileEdit and unfiltered postToolUse hooks" in normalized
+    assert "matcher-free afterFileEdit and unfiltered postToolUse hooks are optional" in normalized
+    assert "never required for correctness" in normalized
     assert "Hook output is not required for correctness" in normalized
     assert "Do not issue or expose a Shell/CLI completion command" in normalized
     assert '"model_shell_invocation": false' in instructions
@@ -322,8 +325,10 @@ def test_v27_tool_name_matcher_failure_fixture_is_obsolete_on_v29(tmp_path: Path
     workspace.mkdir()
     _, corrected = _activate(workspace)
     action = corrected["compact_next_action"]
-    assert action["post_action_transport"] == CURSOR_POST_WRITE_TRANSPORT
-    assert action["post_action_trigger"] == "first_valid_afterFileEdit_or_postToolUse_event"
+    assert action["post_action_transport"] == "private_current_loop_binding"
+    assert action["post_action_trigger"] == (
+        "first_valid_hook_event_accelerates_typed_completion"
+    )
     assert action["tool_name_matcher_required"] is False
     assert not _contains_cli(corrected)
     config = json.loads((workspace / ".cursor" / "hooks.json").read_text(encoding="utf-8"))

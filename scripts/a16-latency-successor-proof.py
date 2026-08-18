@@ -159,7 +159,7 @@ def main() -> int:
         "post_write_native_approvals": 0,
         "activation_transport": "project_local_binding_mcp_typed_request_text",
         "activation_shell_or_stdin": False,
-        "post_write_transport": "cursor_project_redundant_native_edit_hooks",
+        "post_write_transport": ("typed_private_binding_with_optional_native_event_acceleration"),
         "public_context_bridge_tools": list(EXPECTED_TOOLS),
         "public_context_bridge_tool_count": len(EXPECTED_TOOLS),
     }

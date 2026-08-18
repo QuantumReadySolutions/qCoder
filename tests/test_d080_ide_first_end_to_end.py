@@ -166,14 +166,14 @@ def test_binding_route_and_inventory_are_deterministic_and_keep_twelve_tools() -
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v30"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v31"
     assert (
         descriptor["current_request_semantics_contract"]["temporary_current_step_ceiling"] is True
     )
     handoff = descriptor["workstyle_routes"]["d080_current_request"][
         "normal_path_native_action_handoff"
     ]
-    assert handoff["post_action_operation"] == "complete_external_native_action"
+    assert handoff["post_action_operation"] == "complete_current_step"
     assert handoff["qcoder_serial_control_cycles"] == 2
     assert handoff["bounded_action_expectation_and_registration_composed"] is True
     assert handoff["native_client_permission_owner"] == "native_client"
@@ -206,7 +206,7 @@ def test_source_only_real_coordinator_path_enforces_one_write_and_resumable_stop
     assert action["artifact_role"] == "source"
     assert action["procedural_source_of_truth"] is True
     assert "operation_specific_invocation" not in action
-    assert action["post_action_operation"] == "complete_external_native_action"
+    assert action["post_action_operation"] == "complete_current_step"
     assert action["bounded_action_expectation_preissued_by_qcoder"] is True
     assert action["native_client_permission_owner"] == "native_client"
     assert action["native_client_permission_granted_by_qcoder"] is False
@@ -278,7 +278,7 @@ def test_compressed_native_action_preserves_receipt_and_exact_registration(
         request_transport="stdin",
     )
     assert activated["compact_next_action"]["post_action_operation"] == (
-        "complete_external_native_action"
+        "complete_current_step"
     )
     source = tmp_path / "bell.py"
     source.write_text(
@@ -379,11 +379,13 @@ def test_binding_owned_black_box_bootstrap_reaches_d080_compact_action(tmp_path:
     assert result["current_request_semantics"]["requested_operation"] == "source_generation"
     assert result["compact_next_action"]["artifact_role"] == "source"
     assert result["compact_next_action_is_sole_procedural_source"] is True
-    assert result["compact_next_action"]["operation_specific_invocation"][
-        "fixed_argument_values"
-    ] == {
-        "--provenance": "assistant_created",
-    }
+    assert result["current_step_contract"]["completion"]["operation"] == (
+        "complete_current_step"
+    )
+    assert result["current_step_contract"]["completion"]["required_arguments"] == [
+        "current_action_handle",
+        "artifact_path",
+    ]
     assert "next_invocation" not in result
 
 
@@ -901,11 +903,9 @@ def test_explicit_generation_bootstrap_never_uses_legacy_broad_role_ceiling(
     assert semantics["current_step_ceiling"]["artifact_role_cardinality"] == {
         "source": "exactly_one"
     }
-    assert activated["compact_next_action"]["operation_specific_invocation"][
-        "fixed_argument_values"
-    ] == {
-        "--provenance": "assistant_created",
-    }
+    assert activated["current_step_contract"]["completion"]["operation"] == (
+        "complete_current_step"
+    )
     before = deepcopy(coordinator.store.read())
     execution = coordinator.record_ide_authority(
         allowed=True,

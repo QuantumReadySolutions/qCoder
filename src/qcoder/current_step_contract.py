@@ -1,0 +1,161 @@
+"""Compact stage-specific projection of canonical Current Loop state."""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from hashlib import sha256
+import json
+from typing import Any, Mapping
+
+
+CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v1"
+CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 1
+COMPLETE_CURRENT_STEP_OPERATION = "complete_current_step"
+
+
+def _canonical_bytes(value: object) -> bytes:
+    return json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode(
+        "utf-8"
+    )
+
+
+def _digest_text(value: object) -> str:
+    return sha256(str(value).encode("utf-8")).hexdigest()
+
+
+def _evidence_references(state: Mapping[str, Any]) -> list[dict[str, Any]]:
+    references: list[dict[str, Any]] = []
+    baseline = state.get("saved_artifacts", {}).get("request_baseline")
+    if isinstance(baseline, Mapping):
+        references.append(
+            {
+                "role": "request_baseline",
+                "identity": baseline.get("artifact_reference"),
+                "digest": baseline.get("artifact_digest"),
+            }
+        )
+    registry = state.get("evidence_registry")
+    if not isinstance(registry, Mapping):
+        return references
+    heads = registry.get("role_heads")
+    revisions = registry.get("artifact_revisions")
+    if not isinstance(heads, Mapping) or not isinstance(revisions, Mapping):
+        return references
+    for role, revision_id in sorted(heads.items()):
+        revision = revisions.get(revision_id)
+        if isinstance(revision, Mapping):
+            references.append(
+                {
+                    "role": str(role),
+                    "identity": str(revision_id),
+                    "digest": revision.get("content_digest"),
+                }
+            )
+    return references
+
+
+def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
+    """Derive the only assistant-facing current-stage contract from canonical state."""
+
+    coordinator = state.get("coordinator")
+    if not isinstance(coordinator, Mapping):
+        raise ValueError("current_step_contract_coordinator_required")
+    semantics = coordinator.get("current_request_semantics")
+    if not isinstance(semantics, Mapping):
+        raise ValueError("current_step_contract_semantics_required")
+    handle = coordinator.get("current_step_bounded_action_expectation_id")
+    receipt = state.get("operation_receipts", {}).get(handle) if isinstance(handle, str) else None
+    if not isinstance(receipt, Mapping) or receipt.get("status") != "issued":
+        raise ValueError("current_step_contract_active_action_required")
+    binding = receipt.get("authority_binding")
+    if not isinstance(binding, Mapping):
+        raise ValueError("current_step_contract_action_binding_required")
+    role = str(binding.get("authorized_artifact_role"))
+    operation = str(binding.get("requested_operation"))
+    prohibited_roles = list(binding.get("prohibited_artifact_roles", ()))
+    prohibited_actions = [
+        value
+        for value in ("circuit_qasm", "execution", "results", "evidence_review")
+        if value != role and value not in prohibited_roles
+    ]
+    prohibited_actions = sorted(set(prohibited_roles + prohibited_actions))
+    contract = {
+        "schema_id": CURRENT_STEP_CONTRACT_SCHEMA_ID,
+        "schema_version": CURRENT_STEP_CONTRACT_SCHEMA_VERSION,
+        "binding": {
+            "loop_identity_sha256": _digest_text(state.get("loop_ref")),
+            "workspace_identity_sha256": _digest_text(state.get("workspace_root")),
+            "request_identity_sha256": semantics.get("original_message_utf8_sha256"),
+            "state_revision": state.get("state_revision"),
+            "stage": coordinator.get("current_step_substage") or role,
+            "fresh_until_epoch": receipt.get("expires_at"),
+        },
+        "current_customer_goal": semantics.get("exact_original_message"),
+        "authoritative_evidence_references": _evidence_references(state),
+        "permitted_native_action": {
+            "current_action_handle": handle,
+            "operation": operation,
+            "artifact_role": role,
+            "cardinality": "exactly_one",
+        },
+        "prohibited_current_actions": prohibited_actions,
+        "native_client_authority": {
+            "owner": "native_client",
+            "qcoder_grants_permission": False,
+            "qcoder_observes_permission": False,
+            "qcoder_infers_approval_click": False,
+            "approval_telemetry": "optional_client_provenance_only",
+        },
+        "completion": {
+            "operation": COMPLETE_CURRENT_STEP_OPERATION,
+            "required_arguments": ["current_action_handle", "artifact_path"],
+            "qcoder_computes_artifact_digest": True,
+            "condition": "exact_completed_native_action_validates_against_canonical_state",
+            "success_state": "complete_resumable",
+            "customer_artifact_mutated_by_completion": False,
+            "customer_code_executed_by_completion": False,
+        },
+        "recovery": {
+            "policy": "fail_closed",
+            "mismatch": "retain_active_action_for_exact_retry_when_safe",
+            "duplicate": "return_existing_completion_without_duplicate_mutation",
+            "clarification": semantics.get("customer_clarification"),
+        },
+        "privacy": {
+            "raw_artifact_or_path_inline": False,
+            "process_and_discard": True,
+        },
+    }
+    contract["contract_digest"] = sha256(_canonical_bytes(contract)).hexdigest()
+    return contract
+
+
+def validate_current_step_contract(
+    contract: Mapping[str, Any], *, state: Mapping[str, Any]
+) -> None:
+    expected = derive_current_step_contract(state)
+    if deepcopy(dict(contract)) != expected:
+        raise ValueError("current_step_contract_mismatch")
+
+
+def current_step_contract_snapshot() -> dict[str, Any]:
+    return {
+        "schema_id": CURRENT_STEP_CONTRACT_SCHEMA_ID,
+        "schema_version": CURRENT_STEP_CONTRACT_SCHEMA_VERSION,
+        "projection_source": "canonical_current_loop_state",
+        "completion_operation": COMPLETE_CURRENT_STEP_OPERATION,
+        "bounded_independent_of_artifact_size": True,
+        "native_permission_owner": "native_client",
+        "hooks_optional_accelerators": True,
+        "fail_closed": True,
+    }
+
+
+__all__ = [
+    "COMPLETE_CURRENT_STEP_OPERATION",
+    "CURRENT_STEP_CONTRACT_SCHEMA_ID",
+    "CURRENT_STEP_CONTRACT_SCHEMA_VERSION",
+    "current_step_contract_snapshot",
+    "derive_current_step_contract",
+    "validate_current_step_contract",
+]

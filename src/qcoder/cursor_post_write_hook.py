@@ -590,9 +590,7 @@ def _pending_source_action(state: Mapping[str, Any]) -> bool:
         else None
     )
     authority_binding = (
-        expectation.get("authority_binding")
-        if isinstance(expectation, Mapping)
-        else None
+        expectation.get("authority_binding") if isinstance(expectation, Mapping) else None
     )
     return bool(
         coordinator.get("phase") == "generation_ready"
@@ -600,9 +598,7 @@ def _pending_source_action(state: Mapping[str, Any]) -> bool:
         and coordinator.get("current_step_status") == "awaiting_external_client_action"
         and coordinator.get("current_step_substage") in {None, "source", "qasm"}
         and isinstance(expectation_id, str)
-        and isinstance(
-            coordinator.get("current_step_bounded_action_expectation_digest"), str
-        )
+        and isinstance(coordinator.get("current_step_bounded_action_expectation_digest"), str)
         and isinstance(semantics, Mapping)
         and semantics.get("requested_operation")
         in {
@@ -640,16 +636,14 @@ def _event_binding(
     ]
     artifact_role = expectation["authority_binding"]["authorized_artifact_role"]
     return {
-        "schema_id": "qcoder.current_loop.native_client_write_event.v4",
-        "schema_version": 4,
-        "transport": CURSOR_POST_WRITE_TRANSPORT,
-        "hook_event_name": event_name,
+        "schema_id": "qcoder.current_loop.native_action_completion_handoff.v1",
+        "schema_version": 1,
+        "transport": "client_hook_adapter",
+        "transport_event": event_name,
         "semantic_event": "native_file_edit_completed",
         "tool_name_match_required": False,
-        "native_write_completed_before_hook": True,
-        "bounded_action_expectation_id": coordinator[
-            "current_step_bounded_action_expectation_id"
-        ],
+        "native_write_completed_before_handoff": True,
+        "bounded_action_expectation_id": coordinator["current_step_bounded_action_expectation_id"],
         "bounded_action_expectation_digest": coordinator[
             "current_step_bounded_action_expectation_digest"
         ],
@@ -657,17 +651,16 @@ def _event_binding(
         "native_client_permission_granted_by_qcoder": False,
         "native_client_permission_telemetry_required": False,
         "user_approval_click_inferred": False,
-        "conversation_identity_sha256": _digest_text(str(event["conversation_id"])),
-        "generation_identity_sha256": _digest_text(str(event["generation_id"])),
+        "client_event_identity_sha256": _digest_text(
+            f"{event_name}:{event['conversation_id']}:{event['generation_id']}"
+        ),
         "exact_path_sha256": _digest_text(str(path)),
         "expected_artifact_sha256": sha256(raw).hexdigest(),
         "expected_artifact_bytes": len(raw),
         "bound_loop_identity_sha256": _digest_text(str(state["loop_ref"])),
         "bound_workspace_identity_sha256": _digest_text(str(state["workspace_root"])),
         "bound_state_revision": state["state_revision"],
-        "current_request_identity_sha256": semantics[
-            "original_message_utf8_sha256"
-        ],
+        "current_request_identity_sha256": semantics["original_message_utf8_sha256"],
         "current_request_semantics_digest": semantics["semantics_digest"],
         "current_step_ceiling_digest": semantics["current_step_ceiling"]["ceiling_digest"],
         "artifact_role": artifact_role,
@@ -722,18 +715,15 @@ def handle_cursor_native_edit_event(
     ]
     if path is None or not _is_supported_file(path, role=role):
         return {"output": {}, "disposition": "unrelated_native_event_ignored", "ok": True}
-    binding = _event_binding(parsed, path, state, event_name=event_name)
-    result = coordinator.complete_external_native_action(
-        candidates=(
-            {
-                "role": role,
-                "path": str(path),
-                "provenance": provenance,
-                "explicit_external": False,
-                "content_digest": binding["expected_artifact_sha256"],
-            },
+    result = coordinator.complete_current_step(
+        current_action_handle=expectation_id,
+        artifact_path=str(path),
+        transport="client_hook_adapter",
+        transport_event=event_name,
+        artifact_disposition=provenance,
+        client_event_identity_sha256=_digest_text(
+            f"{event_name}:{parsed['conversation_id']}:{parsed['generation_id']}"
         ),
-        native_client_event_binding=binding,
     )
     if result.get("ok") is True:
         _clear_recovery_marker(workspace)

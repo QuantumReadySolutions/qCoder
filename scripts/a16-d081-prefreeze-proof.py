@@ -21,6 +21,7 @@ from qcoder.context_bridge_mcp import (
 )
 from qcoder.current_loop_binding_mcp import (
     BEGIN_CURRENT_LOOP_TOOL_NAME,
+    COMPLETE_CURRENT_STEP_TOOL_NAME,
     binding_tool_descriptors,
     handle_binding_jsonrpc_message,
 )
@@ -35,16 +36,14 @@ REQUEST = (
 
 
 def canonical(value: object) -> bytes:
-    return json.dumps(
-        value, ensure_ascii=True, separators=(",", ":"), sort_keys=True
-    ).encode("utf-8")
+    return json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode(
+        "utf-8"
+    )
 
 
 def wire_size(value: object) -> int:
     return len(
-        json.dumps(
-            value, ensure_ascii=False, separators=(",", ":"), sort_keys=True
-        ).encode("utf-8")
+        json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
     )
 
 
@@ -103,9 +102,7 @@ def main() -> int:
                 "file_path": str(source),
                 "edits": [{"old_string": "", "new_string": "not-retained"}],
             }
-            binding = _event_binding(
-                event, source, state, event_name="afterFileEdit"
-            )
+            binding = _event_binding(event, source, state, event_name="afterFileEdit")
             started = time.perf_counter()
             completed = coordinator.complete_external_native_action(
                 candidates=(
@@ -124,8 +121,7 @@ def main() -> int:
             final_state = coordinator.store.read()
             if (
                 completed.get("ok") is not True
-                or final_state["coordinator"]["current_step_status"]
-                != "complete_resumable"
+                or final_state["coordinator"]["current_step_status"] != "complete_resumable"
             ):
                 raise SystemExit("d081_normal_completion_failed")
 
@@ -163,17 +159,14 @@ def main() -> int:
         "qcoder_control_cycles": 2,
     }
     checks = {
-        "instructions_at_most_50000": measurements[
-            "initialization_instruction_bytes"
-        ]
-        <= 50_000,
+        "instructions_at_most_50000": measurements["initialization_instruction_bytes"] <= 50_000,
         "activation_at_most_15000": max(activation_sizes) <= 15_000,
         "completion_at_most_15000": max(completion_sizes) <= 15_000,
         "exactly_twelve_public_tools": len(EXPECTED_TOOLS) == 12,
-        "exactly_one_private_binding_tool": [
+        "exactly_two_private_binding_operations": [
             item["name"] for item in binding_tool_descriptors()
         ]
-        == [BEGIN_CURRENT_LOOP_TOOL_NAME],
+        == [BEGIN_CURRENT_LOOP_TOOL_NAME, COMPLETE_CURRENT_STEP_TOOL_NAME],
         "native_permission_owned_by_client": True,
         "qcoder_does_not_grant_or_observe_native_permission": True,
         "qcoder_does_not_infer_user_approval_click": True,

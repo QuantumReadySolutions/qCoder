@@ -11,6 +11,7 @@ from qcoder.context_bridge_mcp import EXPECTED_TOOLS
 from qcoder.context_bridge_mcp import build_inline_client_binding_descriptor
 from qcoder.current_loop_binding_mcp import (
     BEGIN_CURRENT_LOOP_TOOL_NAME,
+    COMPLETE_CURRENT_STEP_TOOL_NAME,
     binding_tool_descriptors,
     handle_binding_jsonrpc_message,
 )
@@ -219,10 +220,14 @@ def test_stop_recovery_is_exceptional_and_success_adds_no_followup(
 
 def test_private_binding_operation_does_not_expand_public_context_bridge_inventory() -> None:
     descriptors = binding_tool_descriptors()
-    assert [item["name"] for item in descriptors] == [BEGIN_CURRENT_LOOP_TOOL_NAME]
-    assert descriptors[0]["x-qcoder-public-context-bridge-tool"] is False
+    assert [item["name"] for item in descriptors] == [
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        COMPLETE_CURRENT_STEP_TOOL_NAME,
+    ]
+    assert all(item["x-qcoder-public-context-bridge-tool"] is False for item in descriptors)
     assert len(EXPECTED_TOOLS) == 12
     assert BEGIN_CURRENT_LOOP_TOOL_NAME not in EXPECTED_TOOLS
+    assert COMPLETE_CURRENT_STEP_TOOL_NAME not in EXPECTED_TOOLS
     inline = build_inline_client_binding_descriptor(
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]

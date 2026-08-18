@@ -154,8 +154,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 29
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v30"
+CLIENT_BINDING_SCHEMA_VERSION = 30
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v31"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -177,8 +177,8 @@ contract. A concrete explicit qCoder source, QASM, execution, or selected-file r
 the project-local binding-owned begin_current_loop MCP operation. Pass the exact complete current
 customer message once as request_text; do not construct Shell, CLI, stdin, flags, JSON envelopes,
 IDs, digests, or lineage. One structured activation preserves the exact Request Baseline
-and activates Assist for this request only. After the first actionable result, compact_next_action
-is the sole procedural construction source. Never reconstruct procedure from chats, workspaces,
+and activates Assist for this request only. The returned current_step_contract is the sole
+current-stage construction source. Never reconstruct procedure from chats, workspaces,
 .qcoder state, package/source inspection, or remembered tool choreography. The temporary stage
 ceiling mechanically limits operation, output roles, registration, and authority receipts.
 Activation, qCoder's bounded action, native-client-owned controls, native-action completion
@@ -186,16 +186,17 @@ evidence, and later artifact or governing authority are separate. A later exact 
 instruction uses interpret-current-request
 without bootstrap or Request Baseline recreation.
 
-For an exact Cursor-native source write, follow the native client's own controls and perform only
-that native write. qCoder defines what completed evidence it will accept; it does not grant or
-observe Cursor permission and never infers an approval click. The trusted project's matcher-free
-afterFileEdit and unfiltered postToolUse events feed one idempotent receipt-bound broker. qCoder
-uses semantic edit evidence rather than a generic tool name and completes only when the exact path
-and bytes match the active bounded-action expectation. Whichever valid event arrives first wins;
-duplicate or unrelated events are no-ops. Explicit native approval telemetry is optional
-client-provided provenance only. Correctness does not depend on model feedback, a Shell command,
-or another approval. Do not invoke or expose a completion command, narrate registration, or insert
-separate authority-recording, receipt-reading, help, package, binding-source, or discovery calls.
+For an exact native source write, follow the native client's own controls and perform only that
+write. qCoder defines what completed evidence it will accept; it does not grant or observe native
+permission and never infers an approval click. After the write, call the private typed
+complete_current_step operation once with only the opaque current_action_handle from the Current
+Step Contract and the exact resulting artifact path. qCoder computes and validates the bytes and
+digest. Matcher-free afterFileEdit and unfiltered postToolUse adapters may accelerate the same
+typed transaction, but hooks, Workspace Trust, and hook dispatch are never correctness
+requirements. Duplicate or unrelated deliveries are no-ops. Explicit native approval telemetry
+is optional client-provided provenance only. Do not expose completion procedure, narrate
+registration, or insert separate authority-recording, receipt-reading, help, package,
+binding-source, or discovery calls.
 The stop hook is recovery-only: successful registration is silent; an incomplete active source
 step gets at most one bounded follow-up and must not be presented as complete.
 
@@ -655,11 +656,12 @@ def build_client_binding_descriptor(
                     "transport": "project_local_binding_mcp",
                     "server_name": "qcoder-current-loop",
                     "structured_activation_operation": "begin_current_loop",
+                    "typed_completion_operation": "complete_current_step",
                     "structured_activation_argument": "request_text",
                     "exact_request_transported_once": True,
                     "normal_path_shell_or_cli": False,
                     "normal_path_stdin_plumbing": False,
-                    "binding_internal_tool_count": 1,
+                    "binding_internal_tool_count": 2,
                     "public_context_bridge_tool_count_unchanged": len(EXPECTED_TOOLS),
                     "command_prefix": list(coordinator_prefix),
                     "command_prefix_diagnostics_only": True,
@@ -667,8 +669,21 @@ def build_client_binding_descriptor(
                     "orchestration_surface_is_public_context_bridge_tool": False,
                     "customer_never_types_command": True,
                 },
+                "current_step_transaction": {
+                    "transport": "project_local_binding_mcp",
+                    "operations": ["begin_current_loop", "complete_current_step"],
+                    "begin_returns": "canonical_current_step_contract",
+                    "complete_inputs": ["current_action_handle", "artifact_path"],
+                    "assistant_supplies_qcoder_owned_digests_or_revisions": False,
+                    "correctness_depends_on_hooks": False,
+                    "native_client_permission_owner": "native_client",
+                    "native_client_permission_granted_by_qcoder": False,
+                    "user_approval_click_inferred": False,
+                    "at_most_once": True,
+                    "public_context_bridge_tool": False,
+                },
                 "cursor_post_write_completion": {
-                    "transport": "cursor_project_redundant_native_edit_hooks",
+                    "transport": "optional_cursor_native_event_adapters",
                     "hook_events": ["afterFileEdit", "postToolUse"],
                     "single_event_dependency": False,
                     "first_valid_event_wins": True,
@@ -678,7 +693,8 @@ def build_client_binding_descriptor(
                     "generic_tool_name_dependency": False,
                     "post_tool_use_structured_mutation_evidence_required": True,
                     "project_scope_required": True,
-                    "trusted_workspace_required": True,
+                    "trusted_workspace_required_for_hook_acceleration": True,
+                    "trusted_workspace_required_for_correctness": False,
                     "exact_runtime_binding_required": True,
                     "assistant_constructs_or_invokes_command": False,
                     "model_shell_tool_call": False,
@@ -881,10 +897,10 @@ def _binding_contract_tiers(
             "normal_source_only_choreography": {
                 "qcoder_control_cycles": 2,
                 "expected_model_turns": 3,
-                "cycle_1": "structured_begin_current_loop_and_receive_exact_compact_native_action",
+                "cycle_1": "structured_begin_current_loop_and_receive_current_step_contract",
                 "native_action": "one_action_specific_source_write_permission_and_exactly_one_source_write",
-                "cycle_2": "immediately_complete_and_register_exact_output_in_same_assistant_turn",
-                "cycle_2_cursor_transport": "first_valid_redundant_native_edit_event",
+                "cycle_2": "typed_complete_current_step_after_exact_native_action",
+                "cycle_2_hook_acceleration": "first_valid_redundant_native_edit_event_optional",
                 "intermediate_customer_narration": False,
                 "model_shell_invocation": False,
                 "second_native_approval": False,
@@ -914,8 +930,8 @@ def build_inline_client_binding_descriptor(*, coordinator_prefix: list[str]) -> 
 def _compact_client_activation_instructions() -> str:
     return """QCODER ASSISTANT SURFACES
 qCoder exposes exactly twelve Context Bridge MCP tools as bounded capabilities and a separate project-local
-binding server with one private structured Current Loop activation operation. That internal operation does not
-change the public twelve-tool Context Bridge inventory.
+binding server with two private Current Step operations: begin_current_loop and complete_current_step. Those operations do not
+change the public twelve-tool Context Bridge inventory; this does not change the public twelve-tool Context Bridge inventory.
 
 WORKSTYLE ROUTING
 Before generic tool routing, apply the inline machine-readable route. Do nothing when qCoder was
@@ -940,8 +956,9 @@ not grant a write, execution, Evidence Review, or governing change. A source-onl
 exactly one source artifact and prohibits QASM, execution, results, and review.
 
 ACTIVATION PROTOCOL
-Use only the structured begin_current_loop call. After its first actionable success,
-compact_next_action is the sole procedural source. Do not use sibling next-invocation projections,
+Use structured begin_current_loop. After its first actionable success, current_step_contract is
+the sole current-stage contract, and compact_next_action is the sole procedural source projected
+from it. Do not use sibling next-invocation projections,
 catalogs, help, or prose to reconstruct it.
 
 CHECKPOINT PROTOCOL
@@ -951,18 +968,19 @@ contract is required, fetch its exact advertised MCP resource URI, verify SHA-25
 without inference if unavailable or mismatched.
 
 IDE WORK AND ARTIFACT HANDOFF
+BEGIN / NATIVE ACTION / TYPED COMPLETE
 For the exact source action, let the native client apply its own controls and perform only that
-write. qCoder publishes one exact acceptance contract, but does not grant or observe native
-permission and does not infer an approval click. The trusted project's matcher-free afterFileEdit
-and unfiltered postToolUse hooks feed one
-idempotent completion broker. qCoder ignores generic tool names and matches structured mutation
-evidence against the pending bounded-action expectation, exact loop, revision, ceiling, path, and
-bytes, then consumes the expectation and registers the artifact. Explicit native approval
-telemetry is optional client-provided provenance only. Whichever valid event arrives first wins;
-the other is a no-op. It does not
-mutate source, execute code, broaden roles, invoke the model, or require another approval. Do not
-issue or expose a Shell/CLI completion command and do not narrate registration. Hook output is not
-required for correctness. The stop recovery hook is silent after success and supplies at most one
+write. qCoder publishes one exact Current Step Contract, but does not grant or observe native
+permission and does not infer an approval click. After the native action, call
+complete_current_step with the contract's opaque current_action_handle and the exact resulting
+artifact_path. Do not supply a digest, role, receipt, revision, ceiling, or approval state. qCoder
+computes and validates the actual bytes before one atomic registration. The matcher-free afterFileEdit and unfiltered postToolUse hooks
+are optional adapters to this same typed completion transaction;
+they are never required for correctness. Duplicate equivalent delivery is a no-op. Completion
+does not mutate source, execute code, broaden roles, or require another approval. Do not issue or
+expose a Shell/CLI completion command and do not narrate registration. The stop recovery hook is
+not required for correctness. Hook output is not required for correctness. The stop recovery hook is
+silent after success and supplies at most one
 bounded follow-up only when registration remains incomplete. Never register a failed write and
 never claim success while qCoder state remains incomplete.
 
