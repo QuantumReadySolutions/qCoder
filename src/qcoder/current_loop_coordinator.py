@@ -6631,12 +6631,13 @@ class CurrentLoopCoordinator:
             if native_client_event_binding is not None:
                 normalized_native_binding = dict(native_client_event_binding)
                 required_native_binding = {
-                    "schema_id": "qcoder.current_loop.native_client_write_event.v1",
-                    "schema_version": 1,
-                    "transport": "cursor_project_post_tool_use_hook",
-                    "hook_event_name": "postToolUse",
-                    "tool_category": "native_write",
-                    "tool_succeeded_before_hook": True,
+                    "schema_id": "qcoder.current_loop.native_client_write_event.v2",
+                    "schema_version": 2,
+                    "transport": "cursor_project_after_file_edit_hook",
+                    "hook_event_name": "afterFileEdit",
+                    "semantic_event": "agent_file_edit_completed",
+                    "tool_name_match_required": False,
+                    "native_write_completed_before_hook": True,
                     "source_bytes_returned": False,
                 }
                 if any(
@@ -6648,7 +6649,6 @@ class CurrentLoopCoordinator:
                     for key in (
                         "conversation_identity_sha256",
                         "generation_identity_sha256",
-                        "tool_use_identity_sha256",
                         "exact_path_sha256",
                         "expected_artifact_sha256",
                     )
@@ -6804,7 +6804,7 @@ class CurrentLoopCoordinator:
                         ),
                         "authority_layer": "native_client_permission",
                         "authority_evidence_source": (
-                            "cursor_successful_native_write_event"
+                            "cursor_after_file_edit_event"
                             if normalized_native_binding is not None
                             else "explicit_native_client_permission"
                         ),
@@ -6908,11 +6908,9 @@ class CurrentLoopCoordinator:
                     "build_review_implicitly_deferred": (committed_iteration_receipt is not None),
                     "governing_blueprint_unchanged": True,
                     "continuation_artifact_created": False,
-                    "native_client_event_binding_recorded": (
-                        normalized_native_binding is not None
-                    ),
+                    "native_client_event_binding_recorded": (normalized_native_binding is not None),
                     "native_permission_channel": (
-                        "cursor_successful_native_write_event"
+                        "cursor_after_file_edit_event"
                         if normalized_native_binding is not None
                         else "explicit_native_client_permission"
                     ),
@@ -7027,12 +7025,32 @@ class CurrentLoopCoordinator:
                     or sha256(str(candidate_path).encode("utf-8")).hexdigest()
                     != expected_path_digest
                 ):
-                    return self._recovery_result(
-                        operation="complete_native_action",
-                        category="native_client_write_event_artifact_mismatch",
-                        phase=str(coordinator["phase"]),
-                        elapsed=self.clock() - started,
-                    )
+                    return {
+                        "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
+                        "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
+                        "operation": "complete_native_action",
+                        "ok": False,
+                        "category": "native_client_write_event_artifact_mismatch",
+                        "state_revision": state["state_revision"],
+                        "loop_ref": state["loop_ref"],
+                        "customer_summary": (
+                            "The edited file no longer matches qCoder's exact native event."
+                        ),
+                        "recovery": {
+                            "schema_id": "qcoder.current_loop.stage_recovery.v1",
+                            "schema_version": 1,
+                            "recovery_category": "retain_step_and_retry_exact_native_write",
+                            "expected_artifact_role": expected_role,
+                            "expected_artifact_count": 1,
+                            "state_mutated": False,
+                            "authority_recorded": False,
+                            "authority_broadened": False,
+                            "fail_closed": True,
+                        },
+                        "raw_artifact_included": False,
+                        "local_path_included": False,
+                        "secret_included": False,
+                    }
             ceiling_operation = (
                 "ide_write_source"
                 if expected_role == "source"
@@ -7591,12 +7609,9 @@ class CurrentLoopCoordinator:
                     if len(raw) > 8 * 1024 * 1024:
                         raise CurrentLoopError("artifact_candidate_file_too_large")
                     expected_content_digest = item.get("expected_content_digest")
-                    if (
-                        expected_content_digest is not None
-                        and (
-                            not isinstance(expected_content_digest, str)
-                            or sha256(raw).hexdigest() != expected_content_digest
-                        )
+                    if expected_content_digest is not None and (
+                        not isinstance(expected_content_digest, str)
+                        or sha256(raw).hexdigest() != expected_content_digest
                     ):
                         raise CurrentLoopError("native_client_write_event_artifact_changed")
                     item["content_digest"] = sha256(raw).hexdigest()
@@ -11813,7 +11828,7 @@ class CurrentLoopCoordinator:
                         "obtain_action_specific_native_permission",
                         "perform_exact_native_action",
                         (
-                            "cursor_project_hook_completes_exact_registration_after_successful_write"
+                            "cursor_after_file_edit_completes_exact_registration"
                             if cursor_hook_ready
                             else "execute_single_bound_post_action_invocation"
                         ),
@@ -11823,7 +11838,7 @@ class CurrentLoopCoordinator:
                         CURSOR_POST_WRITE_TRANSPORT if cursor_hook_ready else "local_command"
                     ),
                     "post_action_trigger": (
-                        "successful_native_write_postToolUse"
+                        "semantic_afterFileEdit_event"
                         if cursor_hook_ready
                         else "assistant_invocation_after_successful_native_action"
                     ),
@@ -11832,9 +11847,16 @@ class CurrentLoopCoordinator:
                     "post_action_broadens_output_roles": False,
                     "post_action_is_required_active_request_completion": True,
                     "registration_result_delivery": (
-                        "same_turn_additional_context"
+                        "authoritative_state_transition_no_model_feedback_required"
                         if cursor_hook_ready
                         else "local_command_result"
+                    ),
+                    "tool_name_matcher_required": False if cursor_hook_ready else None,
+                    "workspace_trust_required": True if cursor_hook_ready else None,
+                    "stop_recovery_guard": (
+                        "one_bounded_followup_only_if_registration_incomplete"
+                        if cursor_hook_ready
+                        else None
                     ),
                     "model_shell_invocation_required": not cursor_hook_ready,
                     "customer_visible_cli_permitted": False,
@@ -11855,8 +11877,8 @@ class CurrentLoopCoordinator:
                         "supported_next_action": "obtain_action_specific_native_permission",
                         "next_invocation": (
                             _invocation_template(
-                                "cursor-post-write-hook",
-                                new_inputs=("cursor_successful_native_write_event",),
+                                "cursor-after-file-edit-hook",
+                                new_inputs=("cursor_afterFileEdit_event",),
                             )
                             if cursor_hook_ready
                             else invocation
@@ -12827,8 +12849,7 @@ class CurrentLoopCoordinator:
             and isinstance(compact_action, Mapping)
             and isinstance(bound_next, Mapping)
             and isinstance(bound_next.get("operation_specific_invocation"), Mapping)
-            and compact_action.get("post_action_transport")
-            != "cursor_project_post_tool_use_hook"
+            and compact_action.get("post_action_transport") != "cursor_project_after_file_edit_hook"
         ):
             compact = deepcopy(dict(compact_action))
             compact.pop("action_digest", None)
@@ -13073,10 +13094,15 @@ class CurrentLoopCoordinator:
             if result["performance_diagnostics"]["final_result_bytes"] == exact_size:
                 break
             result["performance_diagnostics"]["final_result_bytes"] = exact_size
-        if ok and isinstance(request_semantics, Mapping) and operation in {
-            "activate",
-            "complete_native_action",
-        }:
+        if (
+            ok
+            and isinstance(request_semantics, Mapping)
+            and operation
+            in {
+                "activate",
+                "complete_native_action",
+            }
+        ):
             return self._normal_d080_success_projection(result)
         return result
 
@@ -13138,9 +13164,9 @@ class CurrentLoopCoordinator:
             if compact_invocation is not None:
                 compact_invocation.update(
                     {
-                    "transport": "binding_owned_on_next_exact_customer_instruction",
-                    "exact_customer_message_required": True,
-                    "native_selected_paths_required_only_for_selected_file_review": True,
+                        "transport": "binding_owned_on_next_exact_customer_instruction",
+                        "exact_customer_message_required": True,
+                        "native_selected_paths_required_only_for_selected_file_review": True,
                     }
                 )
                 action["continuation_reference"] = compact_invocation

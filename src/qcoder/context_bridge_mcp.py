@@ -154,8 +154,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 26
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v27"
+CLIENT_BINDING_SCHEMA_VERSION = 27
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v28"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -185,12 +185,14 @@ governing authority are separate. A later exact customer instruction uses interp
 without bootstrap or Request Baseline recreation.
 
 For an exact Cursor-native source write, ask for the one action-specific native permission shown by
-compact_next_action and perform only that native write. The exact project postToolUse hook then
-records the permission receipt and registers that exact successful output in the same assistant
-turn. Do not invoke or expose a Shell command, request a second approval, narrate registration, or
-insert separate authority-recording, receipt-reading, help, package, binding-source, or
-registration-discovery calls. A supplied local-command invocation is recovery/non-Cursor fallback,
-not Cursor's normal path.
+compact_next_action and perform only that native write. The trusted project's matcher-free
+afterFileEdit hook is the authoritative semantic event: it receives the absolute edited path and
+qCoder completes receipt-bound registration only when that path and its bytes match the pending
+source action. Correctness does not depend on a generic tool name, model feedback, a Shell command,
+or another approval. Do not invoke or expose a completion command, narrate registration, or insert
+separate authority-recording, receipt-reading, help, package, binding-source, or discovery calls.
+The stop hook is recovery-only: successful registration is silent; an incomplete active source
+step gets at most one bounded follow-up and must not be presented as complete.
 
 Named D-079 workflow override: before applying the generic single-capability route, classify
 whether ordinary customer language requests “Algorithm Blueprint / Generation Context” or
@@ -658,20 +660,34 @@ def build_client_binding_descriptor(
                     "customer_never_types_command": True,
                 },
                 "cursor_post_write_completion": {
-                    "transport": "cursor_project_post_tool_use_hook",
-                    "hook_event": "postToolUse",
-                    "matcher": "Write",
+                    "transport": "cursor_project_after_file_edit_hook",
+                    "hook_event": "afterFileEdit",
+                    "absolute_file_path_supplied_by_client": True,
+                    "matcher_required": False,
+                    "generic_tool_name_dependency": False,
                     "project_scope_required": True,
+                    "trusted_workspace_required": True,
                     "exact_runtime_binding_required": True,
                     "assistant_constructs_or_invokes_command": False,
                     "model_shell_tool_call": False,
+                    "model_feedback_required_for_correctness": False,
                     "second_native_approval_required": False,
-                    "trigger_requires_successful_native_write": True,
+                    "trigger_is_semantic_native_file_edit_event": True,
                     "mutates_customer_artifact": False,
                     "executes_customer_code": False,
                     "broadens_output_roles": False,
                     "mandatory_active_request_completion": True,
                     "failure_disposition": "retain_exact_recoverable_state_and_fail_closed",
+                    "public_context_bridge_tool": False,
+                },
+                "cursor_stop_recovery": {
+                    "transport": "cursor_project_stop_hook",
+                    "normal_success": "no_op",
+                    "no_active_request": "no_op",
+                    "incomplete_registration": "one_bounded_recovery_followup",
+                    "loop_limit": 1,
+                    "customer_artifact_mutation": False,
+                    "authority_broadened": False,
                     "public_context_bridge_tool": False,
                 },
             },
@@ -778,7 +794,9 @@ def _binding_reference_uri(name: str, digest: str) -> str:
     return f"qcoder://connected-assistant-contract/{name}?sha256={digest}"
 
 
-def _binding_contract_tiers(*, coordinator_prefix: list[str]) -> tuple[dict[str, Any], dict[str, Any]]:
+def _binding_contract_tiers(
+    *, coordinator_prefix: list[str]
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """Return the load-bearing inline tier and digest-addressed specialized contracts."""
 
     full = build_client_binding_descriptor(coordinator_prefix=coordinator_prefix)[
@@ -845,7 +863,7 @@ def _binding_contract_tiers(*, coordinator_prefix: list[str]) -> tuple[dict[str,
                 "cycle_1": "activate_and_receive_exact_compact_native_action",
                 "native_action": "one_action_specific_source_write_permission_and_exactly_one_source_write",
                 "cycle_2": "immediately_complete_and_register_exact_output_in_same_assistant_turn",
-                "cycle_2_cursor_transport": "cursor_project_post_tool_use_hook",
+                "cycle_2_cursor_transport": "cursor_project_after_file_edit_hook",
                 "intermediate_customer_narration": False,
                 "model_shell_invocation": False,
                 "second_native_approval": False,
@@ -856,9 +874,7 @@ def _binding_contract_tiers(*, coordinator_prefix: list[str]) -> tuple[dict[str,
         }
     )
     inline_digest = hashlib.sha256(
-        json.dumps(inline, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode(
-            "utf-8"
-        )
+        json.dumps(inline, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode("utf-8")
     ).hexdigest()
     return {
         "client_binding_contract": inline,
@@ -912,15 +928,15 @@ contract is required, fetch its exact advertised MCP resource URI, verify SHA-25
 without inference if unavailable or mismatched.
 
 IDE WORK AND ARTIFACT HANDOFF
-For the exact source action, obtain the one action-specific native permission, perform only that
-write, and remain in the same assistant turn. The required project-scoped postToolUse hook observes
-only a successful native Write and performs qCoder's receipt-bound exact registration through the
-configured runtime. This hook is qCoder workflow bookkeeping: it does not mutate the source,
-execute customer code, broaden roles, or require another native approval. Do not issue or expose a
-Shell/CLI completion command and do not narrate registration. Wait for the hook's bounded
-additional_context without an intermediate customer message or model re-entry before the final
-response. Never register a failed write. If the hook reports
-failure, retain its exact recovery truth and do not claim success.
+For the exact source action, obtain the one action-specific native permission and perform only that
+write. The trusted project's matcher-free afterFileEdit hook is the authoritative completion seam.
+It receives the absolute edited path; qCoder itself matches the pending source action, exact loop,
+revision, ceiling, path, and bytes, then issues and consumes the single-use receipt. It does not
+mutate source, execute code, broaden roles, invoke the model, or require another approval. Do not
+issue or expose a Shell/CLI completion command and do not narrate registration. Hook output is not
+required for correctness. The stop recovery hook is silent after success and supplies at most one
+bounded follow-up only when registration remains incomplete. Never register a failed write and
+never claim success while qCoder state remains incomplete.
 
 D-079 WORKFLOWS
 Algorithm Blueprint / Generation Context is decision-aware by default. Review these selected files

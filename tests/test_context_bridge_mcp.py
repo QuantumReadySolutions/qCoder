@@ -231,7 +231,7 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
         "Never silently activate or replace local orchestration with raw MCP choreography",
         "compact_next_action is the sole procedural source",
         "IDE WORK AND ARTIFACT HANDOFF",
-        "without an intermediate customer message or model re-entry",
+        "Hook output is not required for correctness",
         "Never register a failed write",
         "Never scan the repository",
         "fail closed without inference",
@@ -269,7 +269,7 @@ def test_initialize_binds_two_surfaces_and_three_workstyles_without_new_tool(
         "construct a command from coordinator_prefix",
         "The customer never types the command",
         "Only unrelated bounded single capabilities fall through",
-        "project-scoped postToolUse hook",
+        "matcher-free afterFileEdit hook",
         "Do not issue or expose a Shell/CLI completion command",
     ):
         assert required in normalized
@@ -349,20 +349,34 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
         "customer_never_types_command": True,
     }
     assert binding["surfaces"]["cursor_post_write_completion"] == {
-        "transport": "cursor_project_post_tool_use_hook",
-        "hook_event": "postToolUse",
-        "matcher": "Write",
+        "transport": "cursor_project_after_file_edit_hook",
+        "hook_event": "afterFileEdit",
+        "absolute_file_path_supplied_by_client": True,
+        "matcher_required": False,
+        "generic_tool_name_dependency": False,
         "project_scope_required": True,
+        "trusted_workspace_required": True,
         "exact_runtime_binding_required": True,
         "assistant_constructs_or_invokes_command": False,
         "model_shell_tool_call": False,
+        "model_feedback_required_for_correctness": False,
         "second_native_approval_required": False,
-        "trigger_requires_successful_native_write": True,
+        "trigger_is_semantic_native_file_edit_event": True,
         "mutates_customer_artifact": False,
         "executes_customer_code": False,
         "broadens_output_roles": False,
         "mandatory_active_request_completion": True,
         "failure_disposition": "retain_exact_recoverable_state_and_fail_closed",
+        "public_context_bridge_tool": False,
+    }
+    assert binding["surfaces"]["cursor_stop_recovery"] == {
+        "transport": "cursor_project_stop_hook",
+        "normal_success": "no_op",
+        "no_active_request": "no_op",
+        "incomplete_registration": "one_bounded_recovery_followup",
+        "loop_limit": 1,
+        "customer_artifact_mutation": False,
+        "authority_broadened": False,
         "public_context_bridge_tool": False,
     }
     assert binding["workstyle_routes"]["available_inactive"] == {
@@ -387,15 +401,20 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
     assert named["named_workflow_precedence"]["precedes"] == (
         "generic_single_capability_fallthrough"
     )
-    assert named["named_workflows"]["algorithm_blueprint_generation_context"][
-        "operation"
-    ] == "connected_assistant_workflow"
-    assert named["named_workflows"]["selected_file_evidence_review"][
-        "raw_mcp_default_entrypoint"
-    ] is False
-    assert binding["workstyle_routes"]["d080_current_request"][
-        "compact_next_action_is_sole_procedural_source"
-    ] is True
+    assert (
+        named["named_workflows"]["algorithm_blueprint_generation_context"]["operation"]
+        == "connected_assistant_workflow"
+    )
+    assert (
+        named["named_workflows"]["selected_file_evidence_review"]["raw_mcp_default_entrypoint"]
+        is False
+    )
+    assert (
+        binding["workstyle_routes"]["d080_current_request"][
+            "compact_next_action_is_sole_procedural_source"
+        ]
+        is True
+    )
     assert binding["workstyle_routes"]["active_build"] == {
         "trigger": "explicit_use_qcoder_for_this_build_or_accepted_offer",
         "action": "execute_fresh_active_build_bootstrap_invocation",
@@ -2417,7 +2436,7 @@ def test_mcp_stdio_content_length_lists_exact_tools(tmp_path: Path) -> None:
             "Do not run current-loop --help",
             "compact_next_action is the sole procedural source",
             "IDE WORK AND ARTIFACT HANDOFF",
-            "without an intermediate customer message or model re-entry",
+            "Hook output is not required for correctness",
             "Never register a failed write",
             "Never scan the repository",
             "Blueprint confirmation is not write permission",

@@ -118,14 +118,12 @@ def main() -> int:
             completed = handle_cursor_post_write_event(
                 workspace_root=workspace,
                 event={
-                    "hook_event_name": "postToolUse",
-                    "tool_name": "Write",
+                    "hook_event_name": "afterFileEdit",
                     "conversation_id": "sanitized-proof-conversation",
                     "generation_id": "sanitized-proof-generation",
-                    "tool_use_id": "sanitized-proof-write",
-                    "cwd": str(workspace),
                     "workspace_roots": [str(workspace)],
-                    "tool_input": {"file_path": str(source)},
+                    "file_path": str(source),
+                    "edits": [{"old_string": "", "new_string": "bounded-fixture"}],
                 },
             )
             completion_seconds.append(time.perf_counter() - started)
@@ -151,7 +149,7 @@ def main() -> int:
         "qcoder_control_cycles": 2,
         "post_write_model_shell_calls": 0,
         "post_write_native_approvals": 0,
-        "post_write_transport": "cursor_project_post_tool_use_hook",
+        "post_write_transport": "cursor_project_after_file_edit_hook",
         "public_context_bridge_tools": list(EXPECTED_TOOLS),
         "public_context_bridge_tool_count": len(EXPECTED_TOOLS),
     }

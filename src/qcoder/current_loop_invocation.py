@@ -27,10 +27,10 @@ from qcoder.current_loop_bounded_control import (
 )
 from qcoder.current_loop_iteration import ITERATION_AUTHORITY_RECEIPT_SCHEMA_ID
 
-INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v8"
-INVOCATION_CONTRACT_SCHEMA_VERSION = 8
-OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v8"
-OPERATION_INVENTORY_SCHEMA_VERSION = 8
+INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v9"
+INVOCATION_CONTRACT_SCHEMA_VERSION = 9
+OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v9"
+OPERATION_INVENTORY_SCHEMA_VERSION = 9
 
 LOCAL_ONLY = "local_only"
 HOSTED_CAPABLE = "hosted_capable"
@@ -83,19 +83,36 @@ _OPERATION_ROWS: tuple[dict[str, Any], ...] = (
         "customer_constructs_command": False,
     },
     {
-        "operation": "cursor_post_write_hook",
-        "subcommand": "cursor-post-write-hook",
+        "operation": "cursor_after_file_edit_hook",
+        "subcommand": "cursor-after-file-edit-hook",
         "transport": CURSOR_PROJECT_HOOK,
         "binding_owned_internal_operation": True,
         "public_context_bridge_tool": False,
-        "input_channel": "cursor_successful_postToolUse_write_event_stdin",
+        "input_channel": "cursor_afterFileEdit_event_stdin",
         "assistant_constructs_or_invokes_command": False,
+        "authoritative_registration_trigger": True,
+        "generic_tool_name_matcher_required": False,
         "native_permission_precedes_invocation": True,
         "customer_artifact_mutation": False,
         "customer_code_execution": False,
         "broadens_output_roles": False,
-        "same_assistant_turn": True,
+        "model_feedback_required_for_correctness": False,
         "second_native_approval_required": False,
+    },
+    {
+        "operation": "cursor_stop_recovery_hook",
+        "subcommand": "cursor-stop-recovery-hook",
+        "transport": CURSOR_PROJECT_HOOK,
+        "binding_owned_internal_operation": True,
+        "public_context_bridge_tool": False,
+        "input_channel": "cursor_stop_event_stdin",
+        "assistant_constructs_or_invokes_command": False,
+        "normal_success_noop": True,
+        "incomplete_registration_bounded_followup": True,
+        "loop_limit": 1,
+        "customer_artifact_mutation": False,
+        "customer_code_execution": False,
+        "broadens_output_roles": False,
     },
     {
         "operation": "register_artifacts",

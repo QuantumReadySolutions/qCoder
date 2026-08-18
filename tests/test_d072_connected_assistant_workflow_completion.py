@@ -110,9 +110,7 @@ def test_actual_adapter_results_drive_evidence_review_to_exact_customer_outcome(
             "method": "tools/call",
             "params": {
                 "name": first_state["next_tool_name"],
-                "arguments": {
-                    "artifact_text": "synthetic share-safe selected result evidence"
-                },
+                "arguments": {"artifact_text": "synthetic share-safe selected result evidence"},
             },
         },
         base_url="https://example.invalid",
@@ -398,15 +396,14 @@ def test_distributed_binding_and_tool_descriptions_expose_shared_d072_semantics(
     workflow = descriptor["named_workflow_completion"]
     descriptions = {item["name"]: item["description"] for item in tool_descriptors()}
 
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v27"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v28"
     assert len(EXPECTED_TOOLS) == 12
     assert workflow["preparatory_success_is_completion"] is False
     assert workflow["automatic_continuation_scope"] == "already_selected_named_workflow_only"
-    assert "assistant_context_ready is preparatory and non-terminal" in descriptions[
-        "get_guided_evidence_context"
-    ]
-    assert "create_result_review_context_card" in descriptions[
-        "get_guided_evidence_context"
-    ]
+    assert (
+        "assistant_context_ready is preparatory and non-terminal"
+        in descriptions["get_guided_evidence_context"]
+    )
+    assert "create_result_review_context_card" in descriptions["get_guided_evidence_context"]
     assert "customer-terminal outcome" in descriptions["create_result_review_context_card"]
     assert "claude" not in descriptions["get_guided_evidence_context"].casefold()

@@ -1527,6 +1527,14 @@ def _cmd_current_loop(argv: list[str]) -> int:
         ),
     )
     sub.add_parser(
+        "cursor-after-file-edit-hook",
+        help=argparse.SUPPRESS,
+    )
+    sub.add_parser(
+        "cursor-stop-recovery-hook",
+        help=argparse.SUPPRESS,
+    )
+    sub.add_parser(
         "cursor-post-write-hook",
         help=argparse.SUPPRESS,
     )
@@ -1979,14 +1987,27 @@ def _cmd_current_loop(argv: list[str]) -> int:
             return 2
         print(json.dumps(result, sort_keys=True))
         return 0
-    if args.current_loop_command == "cursor-post-write-hook":
+    if args.current_loop_command in {
+        "cursor-after-file-edit-hook",
+        "cursor-stop-recovery-hook",
+        "cursor-post-write-hook",
+    }:
         from qcoder.cursor_post_write_hook import (
             CURSOR_POST_WRITE_HOOK_MAX_INPUT_BYTES,
+            run_cursor_after_file_edit_hook,
             run_cursor_post_write_hook,
+            run_cursor_stop_recovery_hook,
         )
 
         raw_event = sys.stdin.buffer.read(CURSOR_POST_WRITE_HOOK_MAX_INPUT_BYTES + 1)
-        return run_cursor_post_write_hook(
+        runner = (
+            run_cursor_stop_recovery_hook
+            if args.current_loop_command == "cursor-stop-recovery-hook"
+            else run_cursor_after_file_edit_hook
+            if args.current_loop_command == "cursor-after-file-edit-hook"
+            else run_cursor_post_write_hook
+        )
+        return runner(
             workspace_root=args.workspace,
             raw_event=raw_event,
         )
