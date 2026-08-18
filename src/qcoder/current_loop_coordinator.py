@@ -6631,26 +6631,33 @@ class CurrentLoopCoordinator:
             if native_client_event_binding is not None:
                 normalized_native_binding = dict(native_client_event_binding)
                 required_native_binding = {
-                    "schema_id": "qcoder.current_loop.native_client_write_event.v2",
-                    "schema_version": 2,
-                    "transport": "cursor_project_after_file_edit_hook",
-                    "hook_event_name": "afterFileEdit",
+                    "schema_id": "qcoder.current_loop.native_client_write_event.v3",
+                    "schema_version": 3,
+                    "transport": "cursor_project_redundant_native_edit_hooks",
                     "semantic_event": "agent_file_edit_completed",
                     "tool_name_match_required": False,
                     "native_write_completed_before_hook": True,
                     "source_bytes_returned": False,
                 }
-                if any(
-                    normalized_native_binding.get(key) != value
-                    for key, value in required_native_binding.items()
-                ) or any(
-                    not isinstance(normalized_native_binding.get(key), str)
-                    or len(str(normalized_native_binding[key])) != 64
-                    for key in (
-                        "conversation_identity_sha256",
-                        "generation_identity_sha256",
-                        "exact_path_sha256",
-                        "expected_artifact_sha256",
+                if (
+                    any(
+                        normalized_native_binding.get(key) != value
+                        for key, value in required_native_binding.items()
+                    )
+                    or normalized_native_binding.get("hook_event_name")
+                    not in {
+                        "afterFileEdit",
+                        "postToolUse",
+                    }
+                    or any(
+                        not isinstance(normalized_native_binding.get(key), str)
+                        or len(str(normalized_native_binding[key])) != 64
+                        for key in (
+                            "conversation_identity_sha256",
+                            "generation_identity_sha256",
+                            "exact_path_sha256",
+                            "expected_artifact_sha256",
+                        )
                     )
                 ):
                     raise CurrentLoopError("native_client_write_event_binding_invalid")
@@ -11828,7 +11835,7 @@ class CurrentLoopCoordinator:
                         "obtain_action_specific_native_permission",
                         "perform_exact_native_action",
                         (
-                            "cursor_after_file_edit_completes_exact_registration"
+                            "first_valid_native_edit_event_completes_exact_registration"
                             if cursor_hook_ready
                             else "execute_single_bound_post_action_invocation"
                         ),
@@ -11838,7 +11845,7 @@ class CurrentLoopCoordinator:
                         CURSOR_POST_WRITE_TRANSPORT if cursor_hook_ready else "local_command"
                     ),
                     "post_action_trigger": (
-                        "semantic_afterFileEdit_event"
+                        "first_valid_afterFileEdit_or_postToolUse_event"
                         if cursor_hook_ready
                         else "assistant_invocation_after_successful_native_action"
                     ),
@@ -11877,8 +11884,8 @@ class CurrentLoopCoordinator:
                         "supported_next_action": "obtain_action_specific_native_permission",
                         "next_invocation": (
                             _invocation_template(
-                                "cursor-after-file-edit-hook",
-                                new_inputs=("cursor_afterFileEdit_event",),
+                                None,
+                                new_inputs=("cursor_native_edit_event",),
                             )
                             if cursor_hook_ready
                             else invocation
@@ -12849,7 +12856,8 @@ class CurrentLoopCoordinator:
             and isinstance(compact_action, Mapping)
             and isinstance(bound_next, Mapping)
             and isinstance(bound_next.get("operation_specific_invocation"), Mapping)
-            and compact_action.get("post_action_transport") != "cursor_project_after_file_edit_hook"
+            and compact_action.get("post_action_transport")
+            != "cursor_project_redundant_native_edit_hooks"
         ):
             compact = deepcopy(dict(compact_action))
             compact.pop("action_digest", None)

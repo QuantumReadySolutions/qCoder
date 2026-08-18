@@ -139,7 +139,7 @@ def test_binding_route_and_inventory_are_deterministic_and_keep_twelve_tools() -
     for message in SOURCE_ONLY_REQUESTS:
         route = classify_binding_default_route(customer_instruction=message)
         assert route["selected_route"] == "active_build"
-        assert route["operation"] == "activate"
+        assert route["operation"] == "begin_current_loop"
         assert route["raw_mcp_default_entrypoint"] is False
     generic = classify_binding_default_route(
         customer_instruction="Create a prompt context with qCoder."
@@ -162,7 +162,7 @@ def test_binding_route_and_inventory_are_deterministic_and_keep_twelve_tools() -
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v28"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v29"
     assert (
         descriptor["current_request_semantics_contract"]["temporary_current_step_ceiling"] is True
     )

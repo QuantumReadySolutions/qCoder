@@ -20,9 +20,9 @@ from qcoder.context_bridge_mcp import (
     build_inline_client_binding_descriptor,
     tool_descriptors,
 )
-from qcoder.current_loop_coordinator import CurrentLoopCoordinator
+from qcoder.current_loop_binding_mcp import handle_binding_jsonrpc_message
 from qcoder.cursor_post_write_hook import (
-    handle_cursor_post_write_event,
+    handle_cursor_after_file_edit_event,
     install_cursor_post_write_hook,
 )
 
@@ -97,14 +97,22 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as directory:
             workspace = Path(directory)
             install_cursor_post_write_hook(workspace_root=workspace)
-            coordinator = CurrentLoopCoordinator(workspace_root=workspace)
             started = time.perf_counter()
-            activated = coordinator.activate(
-                original_request=REQUEST,
-                explicit_authority=True,
-                capture_mode="exact_current_customer_message",
-                request_transport="stdin",
+            response = handle_binding_jsonrpc_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "begin_current_loop",
+                        "arguments": {"request_text": REQUEST},
+                    },
+                },
+                workspace_root=workspace,
             )
+            if response is None:
+                raise SystemExit("structured_activation_response_missing")
+            activated = response["result"]["structuredContent"]
             activation_seconds.append(time.perf_counter() - started)
             source = workspace / "bell.py"
             source.write_text(
@@ -115,7 +123,7 @@ def main() -> int:
                 encoding="utf-8",
             )
             started = time.perf_counter()
-            completed = handle_cursor_post_write_event(
+            completed = handle_cursor_after_file_edit_event(
                 workspace_root=workspace,
                 event={
                     "hook_event_name": "afterFileEdit",
@@ -149,7 +157,9 @@ def main() -> int:
         "qcoder_control_cycles": 2,
         "post_write_model_shell_calls": 0,
         "post_write_native_approvals": 0,
-        "post_write_transport": "cursor_project_after_file_edit_hook",
+        "activation_transport": "project_local_binding_mcp_typed_request_text",
+        "activation_shell_or_stdin": False,
+        "post_write_transport": "cursor_project_redundant_native_edit_hooks",
         "public_context_bridge_tools": list(EXPECTED_TOOLS),
         "public_context_bridge_tool_count": len(EXPECTED_TOOLS),
     }

@@ -226,7 +226,7 @@ def test_initialize_supplies_exact_runtime_without_reading_token_or_environment(
     for required in (
         "Do nothing when qCoder was not explicitly requested",
         "Never silently activate",
-        "Use the supplied python_executable only through qCoder's exact bootstrap",
+        "Use the project-local qcoder-current-loop begin_current_loop MCP operation",
         "Do not run current-loop --help",
         "Never silently activate or replace local orchestration with raw MCP choreography",
         "compact_next_action is the sole procedural source",
@@ -260,16 +260,16 @@ def test_initialize_binds_two_surfaces_and_three_workstyles_without_new_tool(
     for required in (
         "QCODER ASSISTANT SURFACES",
         "exactly twelve Context Bridge MCP tools",
-        "separate binding-owned local Current Loop",
-        "Current Loop is not an MCP tool",
+        "separate project-local binding server",
+        "does not change the public twelve-tool Context Bridge inventory",
         "WORKSTYLE ROUTING",
-        "ACTIVE-BUILD LOCAL EXECUTION",
-        "fresh_active_build_request_baseline_staging",
-        "exact UTF-8 stdin",
+        "ACTIVE-BUILD STRUCTURED ACTIVATION",
+        "begin_current_loop",
+        "request_text",
         "construct a command from coordinator_prefix",
         "The customer never types the command",
         "Only unrelated bounded single capabilities fall through",
-        "matcher-free afterFileEdit hook",
+        "matcher-free afterFileEdit and unfiltered postToolUse hooks",
         "Do not issue or expose a Shell/CLI completion command",
     ):
         assert required in normalized
@@ -341,19 +341,31 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
         "single_capability_supported": True,
     }
     assert binding["surfaces"]["local_orchestration"] == {
-        "transport": "local_command",
+        "transport": "project_local_binding_mcp",
+        "server_name": "qcoder-current-loop",
+        "structured_activation_operation": "begin_current_loop",
+        "structured_activation_argument": "request_text",
+        "exact_request_transported_once": True,
+        "normal_path_shell_or_cli": False,
+        "normal_path_stdin_plumbing": False,
+        "binding_internal_tool_count": 1,
+        "public_context_bridge_tool_count_unchanged": 12,
         "command_prefix": prefix,
         "command_prefix_diagnostics_only": True,
         "assistant_constructs_commands_from_prefix": False,
-        "orchestration_surface_is_not_an_mcp_tool": True,
+        "orchestration_surface_is_public_context_bridge_tool": False,
         "customer_never_types_command": True,
     }
     assert binding["surfaces"]["cursor_post_write_completion"] == {
-        "transport": "cursor_project_after_file_edit_hook",
-        "hook_event": "afterFileEdit",
+        "transport": "cursor_project_redundant_native_edit_hooks",
+        "hook_events": ["afterFileEdit", "postToolUse"],
+        "single_event_dependency": False,
+        "first_valid_event_wins": True,
+        "duplicate_valid_event": "idempotent_no_op",
         "absolute_file_path_supplied_by_client": True,
         "matcher_required": False,
         "generic_tool_name_dependency": False,
+        "post_tool_use_structured_mutation_evidence_required": True,
         "project_scope_required": True,
         "trusted_workspace_required": True,
         "exact_runtime_binding_required": True,
@@ -417,7 +429,8 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
     )
     assert binding["workstyle_routes"]["active_build"] == {
         "trigger": "explicit_use_qcoder_for_this_build_or_accepted_offer",
-        "action": "execute_fresh_active_build_bootstrap_invocation",
+        "action": "call_binding_owned_begin_current_loop",
+        "argument": "exact_current_customer_message_as_request_text",
         "then": "follow_coordinator_directed_local_and_hosted_actions",
     }
     assert binding["manual_active_build_tool_sequencing_prohibited"] is True
@@ -464,7 +477,7 @@ def test_positive_local_execution_guidance_precedes_and_is_outside_prohibitions(
     headings = [
         "QCODER ASSISTANT SURFACES",
         "WORKSTYLE ROUTING",
-        "ACTIVE-BUILD LOCAL EXECUTION",
+        "ACTIVE-BUILD STRUCTURED ACTIVATION",
         "REQUEST FIDELITY",
         "ACTIVATION PROTOCOL",
         "CHECKPOINT PROTOCOL",
@@ -477,16 +490,16 @@ def test_positive_local_execution_guidance_precedes_and_is_outside_prohibitions(
         instructions.index(heading) for heading in headings
     )
     active_section = " ".join(
-        instructions.split("ACTIVE-BUILD LOCAL EXECUTION", 1)[1]
+        instructions.split("ACTIVE-BUILD STRUCTURED ACTIVATION", 1)[1]
         .split("REQUEST FIDELITY", 1)[0]
         .split()
     )
     prohibited_section = instructions.split("PROHIBITED ACTIONS", 1)[1]
-    assert "qCoder-supplied exact structured invocations" in active_section
+    assert "qcoder-current-loop begin_current_loop" in active_section
     assert "customer never types the command" in active_section
     assert "first execute coordinator_prefix with --help" not in instructions
     assert "Do not run current-loop --help" in instructions
-    assert "fresh_active_build_request_baseline_staging" in instructions
+    assert "request_text" in instructions
     assert "diagnostics only" in instructions
     assert "Use the supplied python_executable exactly" not in prohibited_section
 
@@ -555,7 +568,7 @@ def test_activation_instruction_preserves_lossless_request_baseline_protocol(
     normalized = " ".join(instructions.split())
     for required in (
         "Preserve the exact customer message",
-        "receives the exact UTF-8 stdin request",
+        "request_text set to the exact complete current customer message",
         "compact_next_action is the sole procedural source",
         "Activation grants only this request's bounded loop",
         "Blueprint confirmation is not write permission",
@@ -2430,9 +2443,9 @@ def test_mcp_stdio_content_length_lists_exact_tools(tmp_path: Path) -> None:
         assert runtime["token_file_path"] == str(token_file.resolve())
         for required in (
             "Do nothing when qCoder was not explicitly requested",
-            "Use the supplied python_executable only through qCoder's exact bootstrap",
+            "Use the project-local qcoder-current-loop begin_current_loop MCP operation",
             "coordinator_prefix is diagnostics-only metadata",
-            "fresh_active_build_request_baseline_staging",
+            "request_text",
             "Do not run current-loop --help",
             "compact_next_action is the sole procedural source",
             "IDE WORK AND ARTIFACT HANDOFF",

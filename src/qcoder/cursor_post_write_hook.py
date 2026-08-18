@@ -1,10 +1,9 @@
-"""Cursor-native completion for an active qCoder source action.
+"""Cursor-native integration for structured activation and exact completion.
 
-The authoritative seam is Cursor's semantic ``afterFileEdit`` event.  It is a
-configured client lifecycle hook, not a model tool and not a generic tool-name
-matcher.  For the one pending source action it binds the absolute edited path
-and current bytes to the existing Current Loop authority receipt, registers the
-artifact, and consumes the receipt in one local process.
+Two matcher-free project events, ``afterFileEdit`` and ``postToolUse``, feed one
+idempotent receipt-bound completion broker.  Neither event name nor a generic
+tool name carries product authority.  qCoder validates structured mutation
+evidence, the absolute path, current bytes, active loop, ceiling, and receipt.
 
 Cursor's ``stop`` hook is recovery-only.  It is silent when there is no pending
 qCoder source action or registration already completed, and supplies one
@@ -26,15 +25,17 @@ from pathlib import Path
 from typing import Any
 
 from qcoder.current_loop import CurrentLoopError, canonical_bytes
+from qcoder.current_loop_binding_mcp import BINDING_MCP_SERVER_NAME
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.current_loop_evidence_processing import registration_format_outcome
 
-CURSOR_POST_WRITE_HOOK_SCHEMA_ID = "qcoder.current_loop.cursor_after_file_edit_hook.v2"
-CURSOR_POST_WRITE_HOOK_SCHEMA_VERSION = 2
-CURSOR_POST_WRITE_TRANSPORT = "cursor_project_after_file_edit_hook"
+CURSOR_POST_WRITE_HOOK_SCHEMA_ID = "qcoder.current_loop.cursor_native_edit_broker.v3"
+CURSOR_POST_WRITE_HOOK_SCHEMA_VERSION = 3
+CURSOR_POST_WRITE_TRANSPORT = "cursor_project_redundant_native_edit_hooks"
 CURSOR_POST_WRITE_HOOK_MAX_INPUT_BYTES = 1_048_576
 
 _AFTER_FILE_EDIT_SUBCOMMAND = "cursor-after-file-edit-hook"
+_POST_TOOL_USE_SUBCOMMAND = "cursor-post-tool-use-hook"
 _STOP_RECOVERY_SUBCOMMAND = "cursor-stop-recovery-hook"
 _LEGACY_POST_TOOL_USE_SUBCOMMAND = "cursor-post-write-hook"
 _INSTALL_SUBCOMMAND = "install-cursor-post-write-hook"
@@ -70,10 +71,20 @@ def _hook_command(executable: str | Path, subcommand: str) -> str:
 
 
 def cursor_after_file_edit_hook_definition(*, executable: str | Path) -> dict[str, Any]:
-    """Return the matcher-free authoritative Agent file-edit hook."""
+    """Return one matcher-free semantic Agent file-edit signal."""
 
     return {
         "command": _hook_command(executable, _AFTER_FILE_EDIT_SUBCOMMAND),
+        "timeout": 30,
+        "failClosed": True,
+    }
+
+
+def cursor_post_tool_use_hook_definition(*, executable: str | Path) -> dict[str, Any]:
+    """Return the unfiltered redundant generic-tool signal."""
+
+    return {
+        "command": _hook_command(executable, _POST_TOOL_USE_SUBCOMMAND),
         "timeout": 30,
         "failClosed": True,
     }
@@ -91,13 +102,103 @@ def cursor_stop_recovery_hook_definition(*, executable: str | Path) -> dict[str,
 
 
 def cursor_post_write_hook_definition(*, executable: str | Path) -> dict[str, Any]:
-    """Compatibility name for the authoritative after-file-edit definition."""
+    """Compatibility name for the semantic after-file-edit definition."""
 
     return cursor_after_file_edit_hook_definition(executable=executable)
 
 
 def _hooks_path(workspace_root: str | Path) -> Path:
     return Path(workspace_root).expanduser().absolute() / ".cursor" / "hooks.json"
+
+
+def _mcp_path(workspace_root: str | Path) -> Path:
+    return Path(workspace_root).expanduser().absolute() / ".cursor" / "mcp.json"
+
+
+def _recovery_marker_path(workspace_root: str | Path) -> Path:
+    return (
+        Path(workspace_root).expanduser().absolute()
+        / ".qcoder"
+        / "current-loop"
+        / "native-edit-recovery.json"
+    )
+
+
+def _record_recovery_marker(
+    *, workspace: Path, event: Mapping[str, Any], path: Path, state: Mapping[str, Any]
+) -> None:
+    marker = _recovery_marker_path(workspace)
+    if marker.is_symlink() or marker.parent.is_symlink():
+        return
+    payload = {
+        "schema_id": "qcoder.current_loop.native_edit_recovery_marker.v1",
+        "hook_event_name": event.get("hook_event_name"),
+        "conversation_identity_sha256": _digest_text(str(event.get("conversation_id"))),
+        "generation_identity_sha256": _digest_text(str(event.get("generation_id"))),
+        "exact_path_sha256": _digest_text(str(path)),
+        "observed_state_revision": state.get("state_revision"),
+        "raw_path_retained": False,
+        "raw_source_retained": False,
+    }
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(
+        prefix="native-edit.", suffix=".json", dir=marker.parent
+    )
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(canonical_bytes(payload))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, marker)
+    finally:
+        try:
+            Path(temporary).unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _clear_recovery_marker(workspace: Path) -> None:
+    marker = _recovery_marker_path(workspace)
+    if marker.is_symlink():
+        return
+    try:
+        marker.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _recovery_marker_present(workspace: Path) -> bool:
+    marker = _recovery_marker_path(workspace)
+    if marker.is_symlink() or not marker.is_file():
+        return False
+    try:
+        value = json.loads(marker.read_bytes().decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    return bool(
+        isinstance(value, Mapping)
+        and value.get("schema_id") == "qcoder.current_loop.native_edit_recovery_marker.v1"
+        and value.get("raw_path_retained") is False
+        and value.get("raw_source_retained") is False
+    )
+
+
+def cursor_binding_mcp_server_definition(
+    *, executable: str | Path, workspace_root: str | Path
+) -> dict[str, Any]:
+    """Return the project-local private structured-activation MCP server."""
+
+    return {
+        "command": str(Path(executable).expanduser().absolute()),
+        "args": [
+            "-m",
+            "qcoder",
+            "current-loop",
+            "--workspace",
+            str(Path(workspace_root).expanduser().absolute()),
+            "serve-binding-mcp",
+        ],
+    }
 
 
 def _hook_entries(value: object, event: str) -> list[object]:
@@ -118,6 +219,7 @@ def _is_qcoder_completion_command(value: object) -> bool:
         marker in command
         for marker in (
             _AFTER_FILE_EDIT_SUBCOMMAND,
+            _POST_TOOL_USE_SUBCOMMAND,
             _STOP_RECOVERY_SUBCOMMAND,
             _LEGACY_POST_TOOL_USE_SUBCOMMAND,
         )
@@ -131,7 +233,11 @@ def cursor_post_write_hook_status(
 
     path = _hooks_path(workspace_root)
     expected_edit = cursor_after_file_edit_hook_definition(executable=executable)
+    expected_post = cursor_post_tool_use_hook_definition(executable=executable)
     expected_stop = cursor_stop_recovery_hook_definition(executable=executable)
+    expected_binding = cursor_binding_mcp_server_definition(
+        executable=executable, workspace_root=workspace_root
+    )
     result = {
         "schema_id": CURSOR_POST_WRITE_HOOK_SCHEMA_ID,
         "schema_version": CURSOR_POST_WRITE_HOOK_SCHEMA_VERSION,
@@ -140,10 +246,14 @@ def cursor_post_write_hook_status(
         "exact_runtime_bound": False,
         "project_scope": True,
         "trusted_workspace_required": True,
-        "authoritative_hook_event": "afterFileEdit",
+        "authoritative_hook_events": ["afterFileEdit", "postToolUse"],
+        "first_valid_event_wins": True,
+        "single_event_dependency": False,
         "tool_name_matcher_required": False,
         "stop_recovery_configured": False,
-        "post_tool_use_required_for_correctness": False,
+        "unfiltered_post_tool_use_configured": False,
+        "structured_activation_configured": False,
+        "structured_activation_server": BINDING_MCP_SERVER_NAME,
         "model_invocation_required": False,
         "shell_tool_invocation_required": False,
         "second_native_approval_required": False,
@@ -165,17 +275,39 @@ def cursor_post_write_hook_status(
     stop_entries = _hook_entries(value, "stop")
     post_entries = _hook_entries(value, "postToolUse")
     exact_edit = [entry for entry in edit_entries if entry == expected_edit]
+    exact_post = [entry for entry in post_entries if entry == expected_post]
     exact_stop = [entry for entry in stop_entries if entry == expected_stop]
     stale_qcoder = [
         entry
         for entry in (*edit_entries, *stop_entries, *post_entries)
-        if _is_qcoder_completion_command(entry) and entry not in (expected_edit, expected_stop)
+        if _is_qcoder_completion_command(entry)
+        and entry not in (expected_edit, expected_post, expected_stop)
     ]
-    result["configured"] = len(exact_edit) == 1 and len(exact_stop) == 1 and not stale_qcoder
+    mcp_path = _mcp_path(workspace_root)
+    binding_exact = False
+    if mcp_path.is_file() and not mcp_path.is_symlink():
+        try:
+            mcp_value = json.loads(mcp_path.read_bytes().decode("utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            mcp_value = None
+        servers = mcp_value.get("mcpServers") if isinstance(mcp_value, Mapping) else None
+        binding_exact = bool(
+            isinstance(servers, Mapping)
+            and servers.get(BINDING_MCP_SERVER_NAME) == expected_binding
+        )
+    result["configured"] = bool(
+        len(exact_edit) == 1
+        and len(exact_post) == 1
+        and len(exact_stop) == 1
+        and not stale_qcoder
+        and binding_exact
+    )
     result["exact_runtime_bound"] = result["configured"]
     result["stop_recovery_configured"] = len(exact_stop) == 1
-    result["legacy_post_tool_use_qcoder_hook_absent"] = not any(
-        _is_qcoder_completion_command(entry) for entry in post_entries
+    result["unfiltered_post_tool_use_configured"] = len(exact_post) == 1
+    result["structured_activation_configured"] = binding_exact
+    result["legacy_tool_name_filtered_qcoder_hook_absent"] = not any(
+        _is_qcoder_completion_command(entry) and entry != expected_post for entry in post_entries
     )
     if result["configured"]:
         result["configuration_sha256"] = sha256(canonical_bytes(value)).hexdigest()
@@ -192,7 +324,7 @@ def _validated_hook_list(hooks: dict[str, Any], event: str) -> list[dict[str, An
 def install_cursor_post_write_hook(
     *, workspace_root: str | Path, executable: str | Path | None = None
 ) -> dict[str, Any]:
-    """Install matcher-free edit completion and stop recovery, preserving unrelated hooks."""
+    """Install structured activation, redundant edit signals, and bounded recovery."""
 
     workspace = Path(workspace_root).expanduser().absolute()
     if not workspace.is_dir() or workspace.is_symlink():
@@ -204,6 +336,7 @@ def install_cursor_post_write_hook(
     if not isinstance(runtime, (str, Path)) or not str(runtime):
         raise CursorPostWriteHookError("cursor_hook_runtime_missing")
     expected_edit = cursor_after_file_edit_hook_definition(executable=runtime)
+    expected_post = cursor_post_tool_use_hook_definition(executable=runtime)
     expected_stop = cursor_stop_recovery_hook_definition(executable=runtime)
     value: dict[str, Any] = {"version": 1, "hooks": {}}
     if path.exists():
@@ -234,6 +367,7 @@ def install_cursor_post_write_hook(
         entries = _validated_hook_list(hooks, event)
         entries[:] = [item for item in entries if not _is_qcoder_completion_command(item)]
     hooks["afterFileEdit"].append(expected_edit)
+    hooks["postToolUse"].append(expected_post)
     hooks["stop"].append(expected_stop)
 
     encoded = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
@@ -250,15 +384,61 @@ def install_cursor_post_write_hook(
             Path(temporary).unlink()
         except FileNotFoundError:
             pass
+
+    mcp_path = _mcp_path(workspace)
+    if mcp_path.is_symlink() or mcp_path.parent.is_symlink():
+        raise CursorPostWriteHookError("cursor_mcp_symlink_rejected")
+    mcp_value: dict[str, Any] = {"mcpServers": {}}
+    if mcp_path.exists():
+        try:
+            raw_mcp = mcp_path.read_bytes()
+        except OSError as exc:
+            raise CursorPostWriteHookError("cursor_mcp_configuration_unreadable") from exc
+        if len(raw_mcp) > 65_536:
+            raise CursorPostWriteHookError("cursor_mcp_configuration_too_large")
+        try:
+            supplied_mcp = json.loads(raw_mcp.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise CursorPostWriteHookError("cursor_mcp_configuration_invalid") from exc
+        if not isinstance(supplied_mcp, dict) or not isinstance(
+            supplied_mcp.get("mcpServers"), dict
+        ):
+            raise CursorPostWriteHookError("cursor_mcp_configuration_invalid")
+        mcp_value = deepcopy(supplied_mcp)
+    mcp_servers = mcp_value["mcpServers"]
+    expected_binding = cursor_binding_mcp_server_definition(
+        executable=runtime, workspace_root=workspace
+    )
+    existing_binding = mcp_servers.get(BINDING_MCP_SERVER_NAME)
+    if existing_binding is not None and existing_binding != expected_binding:
+        raise CursorPostWriteHookError("cursor_binding_mcp_name_conflict")
+    mcp_servers[BINDING_MCP_SERVER_NAME] = expected_binding
+    mcp_encoded = (json.dumps(mcp_value, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    mcp_path.parent.mkdir(parents=True, exist_ok=True)
+    mcp_descriptor, mcp_temporary = tempfile.mkstemp(
+        prefix="mcp.", suffix=".json", dir=mcp_path.parent
+    )
+    try:
+        with os.fdopen(mcp_descriptor, "wb") as handle:
+            handle.write(mcp_encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(mcp_temporary, mcp_path)
+    finally:
+        try:
+            Path(mcp_temporary).unlink()
+        except FileNotFoundError:
+            pass
     status = cursor_post_write_hook_status(workspace_root=workspace, executable=runtime)
     if status.get("configured") is not True:
         raise CursorPostWriteHookError("cursor_hook_installation_verification_failed")
     return {
         **status,
         "ok": True,
-        "result": "cursor_project_after_file_edit_completion_ready",
+        "result": "cursor_project_structured_activation_and_redundant_completion_ready",
         "existing_unrelated_hooks_preserved": True,
-        "legacy_qcoder_post_tool_use_hook_removed": True,
+        "existing_unrelated_mcp_servers_preserved": True,
+        "legacy_qcoder_tool_name_filtered_hook_removed": True,
         "workspace_trust_must_be_established_before_use": True,
         "credentials_included": False,
         "customer_source_modified": False,
@@ -287,8 +467,7 @@ def _workspace_matches_event(event: Mapping[str, Any], workspace: Path) -> bool:
     return str(workspace) in normalized
 
 
-def _event_path(event: Mapping[str, Any], workspace: Path) -> Path | None:
-    value = event.get("file_path")
+def _validated_event_path(value: object, workspace: Path) -> Path | None:
     if not isinstance(value, str) or not value:
         raise CursorPostWriteHookError("cursor_hook_exact_path_missing")
     path = Path(value).expanduser()
@@ -302,6 +481,95 @@ def _event_path(event: Mapping[str, Any], workspace: Path) -> Path | None:
     if ".qcoder" in path.parts or ".cursor" in path.parts:
         return None
     return path
+
+
+def _after_file_edit_path(event: Mapping[str, Any], workspace: Path) -> Path | None:
+    return _validated_event_path(event.get("file_path"), workspace)
+
+
+def _mapping_path_values(value: Mapping[str, Any]) -> list[str]:
+    return [
+        str(value[key])
+        for key in ("file_path", "path", "target_file", "target_path")
+        if isinstance(value.get(key), str) and value[key]
+    ]
+
+
+def _structured_tool_output(event: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    value = event.get("tool_output")
+    if isinstance(value, Mapping):
+        return value
+    if not isinstance(value, str) or len(value.encode("utf-8")) > 262_144:
+        return None
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, Mapping) else None
+
+
+def _post_tool_use_path(
+    event: Mapping[str, Any], workspace: Path
+) -> tuple[Path | None, str | None]:
+    """Return a path only when structured fields prove a successful mutation.
+
+    No tool-name value participates. A path-only tool event is insufficient;
+    it could be a read. Exact full-content evidence must match current bytes,
+    or structured edit/write-success evidence must be present.
+    """
+
+    tool_input = event.get("tool_input")
+    if not isinstance(tool_input, Mapping):
+        return None, None
+    output = _structured_tool_output(event)
+    values = _mapping_path_values(tool_input)
+    if isinstance(output, Mapping):
+        values.extend(_mapping_path_values(output))
+    normalized: dict[str, Path] = {}
+    for value in values:
+        try:
+            candidate = _validated_event_path(value, workspace)
+        except CursorPostWriteHookError:
+            continue
+        if candidate is not None:
+            normalized[str(candidate)] = candidate
+    if not normalized:
+        return None, None
+    if len(normalized) != 1:
+        raise CursorPostWriteHookError("cursor_post_tool_use_path_ambiguous")
+    path = next(iter(normalized.values()))
+    raw = path.read_bytes()
+
+    content_values = [
+        tool_input[key]
+        for key in ("content", "contents", "new_content", "code")
+        if isinstance(tool_input.get(key), str)
+    ]
+    if content_values:
+        if not any(value.encode("utf-8") == raw for value in content_values):
+            raise CursorPostWriteHookError("cursor_post_tool_use_content_mismatch")
+        return path, "assistant_created"
+
+    edits = tool_input.get("edits")
+    structured_edits = (
+        isinstance(edits, list) and bool(edits) and all(isinstance(item, Mapping) for item in edits)
+    )
+    output_write_success = bool(
+        isinstance(output, Mapping)
+        and (
+            output.get("written") is True
+            or output.get("edit_applied") is True
+            or output.get("file_updated") is True
+            or (
+                output.get("success") is True
+                and isinstance(output.get("bytes_written"), int)
+                and output["bytes_written"] == len(raw)
+            )
+        )
+    )
+    if not structured_edits and not output_write_success:
+        return None, None
+    return path, "assistant_modified" if structured_edits else "assistant_created"
 
 
 def _pending_source_action(state: Mapping[str, Any]) -> bool:
@@ -335,16 +603,16 @@ def _is_supported_source_file(path: Path) -> bool:
 
 
 def _event_binding(
-    event: Mapping[str, Any], path: Path, state: Mapping[str, Any]
+    event: Mapping[str, Any], path: Path, state: Mapping[str, Any], *, event_name: str
 ) -> dict[str, Any]:
     raw = path.read_bytes()
     coordinator = state["coordinator"]
     semantics = coordinator["current_request_semantics"]
     return {
-        "schema_id": "qcoder.current_loop.native_client_write_event.v2",
-        "schema_version": 2,
+        "schema_id": "qcoder.current_loop.native_client_write_event.v3",
+        "schema_version": 3,
         "transport": CURSOR_POST_WRITE_TRANSPORT,
-        "hook_event_name": "afterFileEdit",
+        "hook_event_name": event_name,
         "semantic_event": "agent_file_edit_completed",
         "tool_name_match_required": False,
         "native_write_completed_before_hook": True,
@@ -378,13 +646,15 @@ def _event_provenance(event: Mapping[str, Any]) -> str:
     return "assistant_created"
 
 
-def handle_cursor_after_file_edit_event(
-    *, workspace_root: str | Path, event: object
+def handle_cursor_native_edit_event(
+    *, workspace_root: str | Path, event: object, event_name: str
 ) -> dict[str, Any]:
-    """Complete one exact pending source write; unrelated edits are no-ops."""
+    """Complete one exact pending source write from either native event signal."""
 
     workspace = Path(workspace_root).expanduser().absolute()
-    parsed = _event_object(event, event_name="afterFileEdit")
+    if event_name not in {"afterFileEdit", "postToolUse"}:
+        raise CursorPostWriteHookError("cursor_hook_event_name_invalid")
+    parsed = _event_object(event, event_name=event_name)
     if not _workspace_matches_event(parsed, workspace):
         return {"output": {}, "disposition": "unrelated_workspace_edit_ignored", "ok": True}
     state_path = workspace / ".qcoder" / "current-loop" / "state.json"
@@ -396,10 +666,14 @@ def handle_cursor_after_file_edit_event(
     state = coordinator.store.read()
     if not _pending_source_action(state):
         return {"output": {}, "disposition": "no_pending_qcoder_source_write", "ok": True}
-    path = _event_path(parsed, workspace)
+    if event_name == "afterFileEdit":
+        path = _after_file_edit_path(parsed, workspace)
+        provenance = _event_provenance(parsed)
+    else:
+        path, provenance = _post_tool_use_path(parsed, workspace)
     if path is None or not _is_supported_source_file(path):
-        return {"output": {}, "disposition": "unrelated_file_edit_ignored", "ok": True}
-    binding = _event_binding(parsed, path, state)
+        return {"output": {}, "disposition": "unrelated_native_event_ignored", "ok": True}
+    binding = _event_binding(parsed, path, state, event_name=event_name)
     result = coordinator.complete_native_action(
         allowed=True,
         explicit_user_action=True,
@@ -407,7 +681,7 @@ def handle_cursor_after_file_edit_event(
             {
                 "role": "source",
                 "path": str(path),
-                "provenance": _event_provenance(parsed),
+                "provenance": provenance,
                 "explicit_external": False,
                 "content_digest": binding["expected_artifact_sha256"],
             },
@@ -415,6 +689,7 @@ def handle_cursor_after_file_edit_event(
         native_client_event_binding=binding,
     )
     if result.get("ok") is True:
+        _clear_recovery_marker(workspace)
         return {
             "output": {},
             "disposition": _SUCCESS_DISPOSITION,
@@ -426,6 +701,20 @@ def handle_cursor_after_file_edit_event(
             "raw_path_returned": False,
             "raw_source_returned": False,
         }
+    current = coordinator.store.read()
+    current_coordinator = current.get("coordinator", {})
+    if current_coordinator.get(
+        "current_step_status"
+    ) == "complete_resumable" and not _pending_source_action(current):
+        _clear_recovery_marker(workspace)
+        return {
+            "output": {},
+            "disposition": "equivalent_native_event_already_completed",
+            "ok": True,
+            "registration_completed": True,
+            "duplicate_delivery_noop": True,
+        }
+    _record_recovery_marker(workspace=workspace, event=parsed, path=path, state=current)
     return {
         "output": {},
         "disposition": "registration_recovery_required",
@@ -438,8 +727,24 @@ def handle_cursor_after_file_edit_event(
     }
 
 
+def handle_cursor_after_file_edit_event(
+    *, workspace_root: str | Path, event: object
+) -> dict[str, Any]:
+    return handle_cursor_native_edit_event(
+        workspace_root=workspace_root, event=event, event_name="afterFileEdit"
+    )
+
+
+def handle_cursor_post_tool_use_event(
+    *, workspace_root: str | Path, event: object
+) -> dict[str, Any]:
+    return handle_cursor_native_edit_event(
+        workspace_root=workspace_root, event=event, event_name="postToolUse"
+    )
+
+
 def handle_cursor_post_write_event(*, workspace_root: str | Path, event: object) -> dict[str, Any]:
-    """Compatibility adapter; only the semantic afterFileEdit event is accepted."""
+    """Compatibility adapter for the afterFileEdit event."""
 
     return handle_cursor_after_file_edit_event(workspace_root=workspace_root, event=event)
 
@@ -474,7 +779,7 @@ def handle_cursor_stop_event(*, workspace_root: str | Path, event: object) -> di
         in {"source_generation", "source_and_qasm_generation", "source_and_local_execution"}
         and coordinator.get("current_step_substage") in {None, "source"}
     )
-    if not pending or loop_count > 0:
+    if not pending or not _recovery_marker_present(workspace) or loop_count > 0:
         return {"output": {}, "disposition": "no_recovery_followup_required", "ok": True}
     return {
         "output": {"followup_message": _RECOVERY_MESSAGE},
@@ -507,15 +812,19 @@ def _decode_hook_input(raw_event: bytes | bytearray | memoryview | None) -> obje
 
 
 def _run_hook(
-    *, workspace_root: str | Path, raw_event: bytes | bytearray | memoryview | None, stop: bool
+    *,
+    workspace_root: str | Path,
+    raw_event: bytes | bytearray | memoryview | None,
+    event_name: str,
 ) -> int:
     try:
         event = _decode_hook_input(raw_event)
-        result = (
-            handle_cursor_stop_event(workspace_root=workspace_root, event=event)
-            if stop
-            else handle_cursor_after_file_edit_event(workspace_root=workspace_root, event=event)
-        )
+        if event_name == "stop":
+            result = handle_cursor_stop_event(workspace_root=workspace_root, event=event)
+        else:
+            result = handle_cursor_native_edit_event(
+                workspace_root=workspace_root, event=event, event_name=event_name
+            )
     except (
         CursorPostWriteHookError,
         CurrentLoopError,
@@ -531,13 +840,19 @@ def _run_hook(
 def run_cursor_after_file_edit_hook(
     *, workspace_root: str | Path, raw_event: bytes | bytearray | memoryview | None
 ) -> int:
-    return _run_hook(workspace_root=workspace_root, raw_event=raw_event, stop=False)
+    return _run_hook(workspace_root=workspace_root, raw_event=raw_event, event_name="afterFileEdit")
+
+
+def run_cursor_post_tool_use_hook(
+    *, workspace_root: str | Path, raw_event: bytes | bytearray | memoryview | None
+) -> int:
+    return _run_hook(workspace_root=workspace_root, raw_event=raw_event, event_name="postToolUse")
 
 
 def run_cursor_stop_recovery_hook(
     *, workspace_root: str | Path, raw_event: bytes | bytearray | memoryview | None
 ) -> int:
-    return _run_hook(workspace_root=workspace_root, raw_event=raw_event, stop=True)
+    return _run_hook(workspace_root=workspace_root, raw_event=raw_event, event_name="stop")
 
 
 def run_cursor_post_write_hook(
@@ -553,14 +868,19 @@ __all__ = [
     "CURSOR_POST_WRITE_TRANSPORT",
     "CursorPostWriteHookError",
     "cursor_after_file_edit_hook_definition",
+    "cursor_binding_mcp_server_definition",
+    "cursor_post_tool_use_hook_definition",
     "cursor_post_write_hook_definition",
     "cursor_post_write_hook_status",
     "cursor_stop_recovery_hook_definition",
     "handle_cursor_after_file_edit_event",
+    "handle_cursor_native_edit_event",
+    "handle_cursor_post_tool_use_event",
     "handle_cursor_post_write_event",
     "handle_cursor_stop_event",
     "install_cursor_post_write_hook",
     "run_cursor_after_file_edit_hook",
+    "run_cursor_post_tool_use_hook",
     "run_cursor_post_write_hook",
     "run_cursor_stop_recovery_hook",
 ]

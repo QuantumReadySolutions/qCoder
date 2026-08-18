@@ -1531,7 +1531,15 @@ def _cmd_current_loop(argv: list[str]) -> int:
         help=argparse.SUPPRESS,
     )
     sub.add_parser(
+        "cursor-post-tool-use-hook",
+        help=argparse.SUPPRESS,
+    )
+    sub.add_parser(
         "cursor-stop-recovery-hook",
+        help=argparse.SUPPRESS,
+    )
+    sub.add_parser(
+        "serve-binding-mcp",
         help=argparse.SUPPRESS,
     )
     sub.add_parser(
@@ -1989,6 +1997,7 @@ def _cmd_current_loop(argv: list[str]) -> int:
         return 0
     if args.current_loop_command in {
         "cursor-after-file-edit-hook",
+        "cursor-post-tool-use-hook",
         "cursor-stop-recovery-hook",
         "cursor-post-write-hook",
     }:
@@ -1996,6 +2005,7 @@ def _cmd_current_loop(argv: list[str]) -> int:
             CURSOR_POST_WRITE_HOOK_MAX_INPUT_BYTES,
             run_cursor_after_file_edit_hook,
             run_cursor_post_write_hook,
+            run_cursor_post_tool_use_hook,
             run_cursor_stop_recovery_hook,
         )
 
@@ -2003,6 +2013,8 @@ def _cmd_current_loop(argv: list[str]) -> int:
         runner = (
             run_cursor_stop_recovery_hook
             if args.current_loop_command == "cursor-stop-recovery-hook"
+            else run_cursor_post_tool_use_hook
+            if args.current_loop_command == "cursor-post-tool-use-hook"
             else run_cursor_after_file_edit_hook
             if args.current_loop_command == "cursor-after-file-edit-hook"
             else run_cursor_post_write_hook
@@ -2011,6 +2023,10 @@ def _cmd_current_loop(argv: list[str]) -> int:
             workspace_root=args.workspace,
             raw_event=raw_event,
         )
+    if args.current_loop_command == "serve-binding-mcp":
+        from qcoder.current_loop_binding_mcp import serve_binding_mcp_stdio
+
+        return serve_binding_mcp_stdio(workspace_root=args.workspace)
     transport = None
     if hasattr(args, "base_url"):
         transport = ContextBridgeTransport(

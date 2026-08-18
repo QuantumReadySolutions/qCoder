@@ -82,7 +82,7 @@ def test_binding_v11_publishes_dedicated_complete_adaptive_intent_contract() -> 
     binding = build_client_binding_descriptor(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v28"
+    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v29"
     contract = binding["adaptive_intent_input_contract"]
     assert contract["schema_id"] == ADAPTIVE_INTENT_INPUT_SCHEMA_ID
     assert set(contract["profiles"]) == {"generic_qiskit", "grover_search", "qaoa"}

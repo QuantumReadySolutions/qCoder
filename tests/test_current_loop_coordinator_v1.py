@@ -659,7 +659,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("cd56c4df66e822f235cbc8444a79b0c84c4509a678c46f0248d76d71b6a62470")
+    assert contract_digest == ("d7ea7de60df2198d8687fcad4a58ddd8df63813e430ec8ef0e5ec69ca79e40d7")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)

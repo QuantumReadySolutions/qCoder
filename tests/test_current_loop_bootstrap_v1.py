@@ -144,8 +144,8 @@ def test_bootstrap_owns_platform_serialization_and_cwd_semantics() -> None:
 
 def test_binding_v7_delivers_bootstrap_and_complete_lifecycle() -> None:
     binding = _descriptor("/runtime/python")
-    assert binding["schema_version"] == 27
-    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v28"
+    assert binding["schema_version"] == 28
+    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v29"
     bootstrap = binding["bootstrap_invocation_contract"]
     assert bootstrap["schema_id"] == BOOTSTRAP_INVOCATION_SCHEMA_ID
     assert bootstrap["supported_entrypoints"][FRESH_ACTIVE_BUILD_ENTRYPOINT][
@@ -206,8 +206,9 @@ def test_binding_prohibits_help_and_prefix_command_construction(tmp_path: Path) 
     ):
         assert prohibited not in lowered
     for required in (
-        "fresh_active_build_request_baseline_staging",
-        "exact utf-8 stdin",
+        "begin_current_loop",
+        "request_text",
+        "never construct a shell, cli, or stdin bootstrap",
         "do not run current-loop --help",
         "coordinator_prefix and both inventories are diagnostics only",
         "never execute coordinator_prefix as an invocation",

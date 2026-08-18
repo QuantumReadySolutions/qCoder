@@ -13,6 +13,7 @@ from qcoder.cursor_post_write_hook import (
     CURSOR_POST_WRITE_TRANSPORT,
     cursor_post_write_hook_status,
     handle_cursor_after_file_edit_event,
+    handle_cursor_post_tool_use_event,
     handle_cursor_stop_event,
     install_cursor_post_write_hook,
     run_cursor_after_file_edit_hook,
@@ -108,20 +109,28 @@ def test_installer_upgrades_v27_to_matcher_free_after_file_edit_and_stop_guard(
         workspace_root=tmp_path, executable=Path(__import__("sys").executable)
     )
     assert installed["ok"] is status["configured"] is status["exact_runtime_bound"] is True
-    assert status["authoritative_hook_event"] == "afterFileEdit"
+    assert status["authoritative_hook_events"] == ["afterFileEdit", "postToolUse"]
+    assert status["single_event_dependency"] is False
     assert status["tool_name_matcher_required"] is False
     assert status["trusted_workspace_required"] is True
-    assert status["legacy_post_tool_use_qcoder_hook_absent"] is True
+    assert status["legacy_tool_name_filtered_qcoder_hook_absent"] is True
+    assert status["structured_activation_configured"] is True
     config = json.loads(hooks_path.read_text(encoding="utf-8"))
-    assert config["hooks"]["postToolUse"] == [
-        {"command": "existing-safe-hook", "matcher": "Read", "timeout": 5}
-    ]
+    assert config["hooks"]["postToolUse"][0] == {
+        "command": "existing-safe-hook",
+        "matcher": "Read",
+        "timeout": 5,
+    }
+    assert len(config["hooks"]["postToolUse"]) == 2
+    assert "matcher" not in config["hooks"]["postToolUse"][1]
     assert len(config["hooks"]["afterFileEdit"]) == 1
     assert "matcher" not in config["hooks"]["afterFileEdit"][0]
     assert config["hooks"]["afterFileEdit"][0]["failClosed"] is True
     assert config["hooks"]["stop"][0]["loop_limit"] == 1
     inventory = {item["operation"]: item for item in operation_transport_inventory()["operations"]}
     assert inventory["cursor_after_file_edit_hook"]["public_context_bridge_tool"] is False
+    assert inventory["cursor_post_tool_use_hook"]["public_context_bridge_tool"] is False
+    assert inventory["begin_current_loop"]["public_context_bridge_tool"] is False
     assert inventory["cursor_stop_recovery_hook"]["public_context_bridge_tool"] is False
     assert len(EXPECTED_TOOLS) == 12
 
@@ -136,7 +145,7 @@ def test_semantic_after_file_edit_registers_fresh_or_existing_authorized_source(
     coordinator, activation = _activate(tmp_path)
     action = activation["compact_next_action"]
     assert action["post_action_transport"] == CURSOR_POST_WRITE_TRANSPORT
-    assert action["post_action_trigger"] == "semantic_afterFileEdit_event"
+    assert action["post_action_trigger"] == "first_valid_afterFileEdit_or_postToolUse_event"
     assert action["tool_name_matcher_required"] is False
     assert action["model_shell_invocation_required"] is False
     assert action["second_native_approval_required"] is False
@@ -178,7 +187,7 @@ def test_unrelated_file_edits_and_no_active_request_are_silent_noops(tmp_path: P
     ignored = handle_cursor_after_file_edit_event(
         workspace_root=tmp_path, event=_edit_event(tmp_path, unrelated)
     )
-    assert ignored == {"output": {}, "disposition": "unrelated_file_edit_ignored", "ok": True}
+    assert ignored == {"output": {}, "disposition": "unrelated_native_event_ignored", "ok": True}
     assert coordinator.store.read() == before
 
 
@@ -206,7 +215,7 @@ def test_mismatched_path_or_changed_bytes_fail_closed_without_false_completion(
     ignored = handle_cursor_after_file_edit_event(
         workspace_root=tmp_path, event=_edit_event(tmp_path, outside)
     )
-    assert ignored["disposition"] == "unrelated_file_edit_ignored"
+    assert ignored["disposition"] == "unrelated_native_event_ignored"
     assert coordinator.store.read() == before
 
     source = tmp_path / "bell.py"
@@ -234,9 +243,8 @@ def test_stop_recovery_only_follows_up_for_incomplete_registration(tmp_path: Pat
 
     coordinator, _ = _activate(tmp_path)
     pending = handle_cursor_stop_event(workspace_root=tmp_path, event=_stop_event(tmp_path))
-    assert pending["disposition"] == "bounded_registration_recovery_followup"
-    assert "followup_message" in pending["output"]
-    assert pending["authority_broadened"] is False
+    assert pending["disposition"] == "no_recovery_followup_required"
+    assert pending["output"] == {}
     repeated = handle_cursor_stop_event(
         workspace_root=tmp_path, event=_stop_event(tmp_path, loop_count=1)
     )
@@ -294,7 +302,7 @@ def test_binding_declares_authoritative_semantic_hook_and_retains_size_target(
     )
     assert len(instructions.encode("utf-8")) <= 50_000
     normalized = " ".join(instructions.split())
-    assert "matcher-free afterFileEdit hook" in normalized
+    assert "matcher-free afterFileEdit and unfiltered postToolUse hooks" in normalized
     assert "Hook output is not required for correctness" in normalized
     assert "Do not issue or expose a Shell/CLI completion command" in normalized
     assert '"model_shell_invocation": false' in instructions
@@ -302,16 +310,67 @@ def test_binding_declares_authoritative_semantic_hook_and_retains_size_target(
     assert len(EXPECTED_TOOLS) == 12
 
 
-def test_v27_tool_name_matcher_failure_fixture_is_obsolete_on_v28(tmp_path: Path) -> None:
-    workspace = tmp_path / "cursor-v28-shape"
+def test_v27_tool_name_matcher_failure_fixture_is_obsolete_on_v29(tmp_path: Path) -> None:
+    workspace = tmp_path / "cursor-v29-shape"
     workspace.mkdir()
     _, corrected = _activate(workspace)
     action = corrected["compact_next_action"]
     assert action["post_action_transport"] == CURSOR_POST_WRITE_TRANSPORT
-    assert action["post_action_trigger"] == "semantic_afterFileEdit_event"
+    assert action["post_action_trigger"] == "first_valid_afterFileEdit_or_postToolUse_event"
     assert action["tool_name_matcher_required"] is False
     assert not _contains_cli(corrected)
     config = json.loads((workspace / ".cursor" / "hooks.json").read_text(encoding="utf-8"))
-    assert not any(
-        "qcoder" in str(item.get("command", "")) for item in config["hooks"].get("postToolUse", [])
-    )
+    qcoder_post = [
+        item
+        for item in config["hooks"].get("postToolUse", [])
+        if "qcoder" in str(item.get("command", ""))
+    ]
+    assert len(qcoder_post) == 1
+    assert "matcher" not in qcoder_post[0]
+
+
+def test_unfiltered_unknown_post_tool_use_can_register_from_exact_structured_evidence(
+    tmp_path: Path,
+) -> None:
+    coordinator, _ = _activate(tmp_path)
+    source = tmp_path / "bell.py"
+    content = "from qiskit import QuantumCircuit\n"
+    source.write_text(content, encoding="utf-8")
+    event = {
+        "hook_event_name": "postToolUse",
+        "conversation_id": "conversation-safe",
+        "generation_id": "generation-safe",
+        "cursor_version": "3.16.17",
+        "workspace_roots": [str(tmp_path)],
+        "tool_name": "UnknownNativeFileMutation",
+        "tool_input": {"file_path": str(source), "contents": content},
+        "tool_output": json.dumps(
+            {
+                "success": True,
+                "file_path": str(source),
+                "bytes_written": len(content.encode("utf-8")),
+            }
+        ),
+    }
+    completed = handle_cursor_post_tool_use_event(workspace_root=tmp_path, event=event)
+    assert completed["ok"] is completed["registration_completed"] is True
+    assert coordinator.store.read()["coordinator"]["current_step_status"] == "complete_resumable"
+
+
+def test_path_only_post_tool_use_is_not_mistaken_for_a_mutation(tmp_path: Path) -> None:
+    coordinator, _ = _activate(tmp_path)
+    source = tmp_path / "bell.py"
+    source.write_text("print('existing')\n", encoding="utf-8")
+    before = deepcopy(coordinator.store.read())
+    event = {
+        "hook_event_name": "postToolUse",
+        "conversation_id": "conversation-safe",
+        "generation_id": "generation-safe",
+        "workspace_roots": [str(tmp_path)],
+        "tool_name": "UnknownReadLikeTool",
+        "tool_input": {"file_path": str(source)},
+        "tool_output": json.dumps({"success": True}),
+    }
+    ignored = handle_cursor_post_tool_use_event(workspace_root=tmp_path, event=event)
+    assert ignored["disposition"] == "unrelated_native_event_ignored"
+    assert coordinator.store.read() == before

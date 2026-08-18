@@ -53,7 +53,7 @@ def test_inline_binding_is_compact_tiered_digest_verified_and_keeps_twelve_tools
         token_file=tmp_path / "token.txt",
     )
     assert len(instructions.encode("utf-8")) <= 50_000
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v28"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v29"
     assert len(tool_descriptors()) == len(EXPECTED_TOOLS) == 12
     listed = handle_jsonrpc_message(
         {"jsonrpc": "2.0", "id": 1, "method": "resources/list"},
@@ -111,13 +111,13 @@ def test_normal_source_only_results_are_compact_single_source_of_truth(tmp_path:
         assert duplicate not in activated
     action = activated["compact_next_action"]
     assert "operation_specific_invocation" not in action
-    assert action["post_action_transport"] == "cursor_project_after_file_edit_hook"
+    assert action["post_action_transport"] == "cursor_project_redundant_native_edit_hooks"
     assert action["model_shell_invocation_required"] is False
     assert action["second_native_approval_required"] is False
     assert action["native_action_sequence"] == [
         "obtain_action_specific_native_permission",
         "perform_exact_native_action",
-        "cursor_after_file_edit_completes_exact_registration",
+        "first_valid_native_edit_event_completes_exact_registration",
     ]
     source = tmp_path / "bell.py"
     source.write_text("from qiskit import QuantumCircuit\n", encoding="utf-8")
@@ -212,7 +212,7 @@ def test_binding_explicitly_requires_same_turn_completion_without_narration(tmp_
         token_file=tmp_path / "token.txt",
     )
     normalized = " ".join(instructions.split())
-    assert "matcher-free afterFileEdit hook" in normalized
+    assert "matcher-free afterFileEdit and unfiltered postToolUse hooks" in normalized
     assert "Do not issue or expose a Shell/CLI completion command" in normalized
     assert '"expected_model_turns": 3' in instructions
     assert '"qcoder_control_cycles": 2' in instructions

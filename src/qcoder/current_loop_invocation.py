@@ -27,20 +27,32 @@ from qcoder.current_loop_bounded_control import (
 )
 from qcoder.current_loop_iteration import ITERATION_AUTHORITY_RECEIPT_SCHEMA_ID
 
-INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v9"
-INVOCATION_CONTRACT_SCHEMA_VERSION = 9
-OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v9"
-OPERATION_INVENTORY_SCHEMA_VERSION = 9
+INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v10"
+INVOCATION_CONTRACT_SCHEMA_VERSION = 10
+OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v10"
+OPERATION_INVENTORY_SCHEMA_VERSION = 10
 
 LOCAL_ONLY = "local_only"
 HOSTED_CAPABLE = "hosted_capable"
 DYNAMIC_STAGED_OPERATION = "staged_operation_scoped"
 CURSOR_PROJECT_HOOK = "cursor_project_hook"
+BINDING_PROJECT_MCP = "binding_project_mcp"
 
 
 _OPERATION_ROWS: tuple[dict[str, Any], ...] = (
     {"operation": "status", "subcommand": "status", "transport": LOCAL_ONLY},
     {"operation": "activate", "subcommand": "activate", "transport": LOCAL_ONLY},
+    {
+        "operation": "begin_current_loop",
+        "subcommand": "serve-binding-mcp",
+        "transport": BINDING_PROJECT_MCP,
+        "binding_owned_internal_operation": True,
+        "public_context_bridge_tool": False,
+        "input_channel": "typed_mcp_request_text_argument",
+        "exact_request_transported_once": True,
+        "assistant_constructs_shell_or_stdin": False,
+        "grants_native_write_authority": False,
+    },
     {
         "operation": "interpret_current_request",
         "subcommand": "interpret-current-request",
@@ -91,8 +103,29 @@ _OPERATION_ROWS: tuple[dict[str, Any], ...] = (
         "input_channel": "cursor_afterFileEdit_event_stdin",
         "assistant_constructs_or_invokes_command": False,
         "authoritative_registration_trigger": True,
+        "redundant_with": "cursor_post_tool_use_hook",
         "generic_tool_name_matcher_required": False,
         "native_permission_precedes_invocation": True,
+        "customer_artifact_mutation": False,
+        "customer_code_execution": False,
+        "broadens_output_roles": False,
+        "model_feedback_required_for_correctness": False,
+        "second_native_approval_required": False,
+    },
+    {
+        "operation": "cursor_post_tool_use_hook",
+        "subcommand": "cursor-post-tool-use-hook",
+        "transport": CURSOR_PROJECT_HOOK,
+        "binding_owned_internal_operation": True,
+        "public_context_bridge_tool": False,
+        "input_channel": "cursor_unfiltered_postToolUse_event_stdin",
+        "assistant_constructs_or_invokes_command": False,
+        "authoritative_registration_trigger": True,
+        "redundant_with": "cursor_after_file_edit_hook",
+        "generic_tool_name_matcher_required": False,
+        "tool_name_used_for_authority": False,
+        "structured_mutation_evidence_required": True,
+        "first_valid_event_wins": True,
         "customer_artifact_mutation": False,
         "customer_code_execution": False,
         "broadens_output_roles": False,
