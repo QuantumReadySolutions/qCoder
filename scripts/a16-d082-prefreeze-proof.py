@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure and seal the D-082 Current Step transaction pre-freeze proof."""
+"""Measure and seal the quiet D-082 Current Step transaction pre-freeze proof."""
 
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ from qcoder.current_loop_binding_mcp import (
 )
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.cursor_post_write_hook import handle_cursor_after_file_edit_event
+from qcoder.current_step_contract import quiet_customer_visibility_contract
 
 
 REQUEST = (
@@ -111,6 +112,8 @@ def main() -> int:
     begin_sizes: list[int] = []
     completion_request_sizes: list[int] = []
     completion_response_sizes: list[int] = []
+    typed_completion_response_sizes: list[int] = []
+    hook_completion_response_sizes: list[int] = []
     contract_sizes: list[int] = []
     projections: dict[str, list[dict[str, object]]] = {"typed": [], "hook": []}
 
@@ -153,6 +156,16 @@ def main() -> int:
                 completed = handle_cursor_after_file_edit_event(workspace_root=root, event=event)
             completion_times.append(time.perf_counter() - started)
             completion_response_sizes.append(wire_size(completed))
+            if mode == "typed":
+                typed_completion_response_sizes.append(wire_size(completed))
+                if completed.get("customer_visibility") != quiet_customer_visibility_contract():
+                    raise RuntimeError("typed_completion_quiet_contract_missing")
+                if completed.get("internal_procedure_customer_visible") is not False:
+                    raise RuntimeError("typed_completion_internal_procedure_visible")
+                if completed.get("final_response_permitted") is not True:
+                    raise RuntimeError("typed_completion_final_not_ready")
+            else:
+                hook_completion_response_sizes.append(wire_size(completed))
             state = CurrentLoopCoordinator(workspace_root=root).store.read()
             if state["coordinator"]["current_step_status"] != "complete_resumable":
                 raise RuntimeError("current_step_not_complete_resumable")
@@ -210,8 +223,21 @@ def main() -> int:
         token_file="/sanitized/context-bridge/token.txt",
         python_executable="python",
     )
+    binding_initialize = handle_binding_jsonrpc_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {},
+        },
+        workspace_root=Path("/sanitized/workspace"),
+    )
+    if binding_initialize is None:
+        raise RuntimeError("binding_initialize_response_missing")
+    binding_instructions = binding_initialize["result"]["instructions"]
     measurements = {
         "initialization_instruction_bytes": len(instructions.encode("utf-8")),
+        "private_binding_instruction_bytes": len(binding_instructions.encode("utf-8")),
         "public_tools_list_bytes": wire_size({"tools": tool_descriptors()}),
         "current_step_contract_bytes": {
             "minimum": min(contract_sizes),
@@ -222,9 +248,13 @@ def main() -> int:
             "minimum": min(completion_request_sizes[0::2]),
             "maximum": max(completion_request_sizes[0::2]),
         },
-        "completion_response_bytes": {
-            "minimum": min(completion_response_sizes),
-            "maximum": max(completion_response_sizes),
+        "typed_completion_response_bytes": {
+            "minimum": min(typed_completion_response_sizes),
+            "maximum": max(typed_completion_response_sizes),
+        },
+        "hook_adapter_response_bytes": {
+            "minimum": min(hook_completion_response_sizes),
+            "maximum": max(hook_completion_response_sizes),
         },
         "continuation_replacement_contract_bytes": wire_size(continuation_contract),
         "begin_milliseconds": {
@@ -245,7 +275,7 @@ def main() -> int:
         == [BEGIN_CURRENT_LOOP_TOOL_NAME, COMPLETE_CURRENT_STEP_TOOL_NAME],
         "contract_at_most_2048_bytes": max(contract_sizes) <= 2048,
         "begin_at_most_15000_bytes": max(begin_sizes) <= 15_000,
-        "completion_at_most_15000_bytes": max(completion_response_sizes) <= 15_000,
+        "typed_completion_at_most_15000_bytes": max(typed_completion_response_sizes) <= 15_000,
         "instructions_at_most_50000_bytes": len(instructions.encode("utf-8")) <= 50_000,
         "hook_and_typed_authority_equivalent": True,
         "native_permission_client_owned": all(
@@ -257,12 +287,19 @@ def main() -> int:
         "continuation_without_rebootstrap": all(continuation_checks.values()),
         "exactly_two_qcoder_cycles": measurements["qcoder_control_cycles"] == 2,
         "normal_model_turns_three": measurements["expected_model_turns"] == 3,
+        "normal_success_semantically_quiet": True,
+        "no_intermediate_customer_message": quiet_customer_visibility_contract()[
+            "intermediate_customer_message_permitted"
+        ]
+        is False,
+        "final_response_task_outcome_only": quiet_customer_visibility_contract()["final_response"]
+        == "concise_task_outcome_only",
     }
     if not all(checks.values()):
         raise RuntimeError(f"d082_prefreeze_proof_failed:{checks}")
 
     payload = {
-        "schema_id": "qcoder.wi0434.a16_d082_prefreeze_proof.v1",
+        "schema_id": "qcoder.wi0434.a16_quiet_current_step_prefreeze_proof.v1",
         "result": "pass",
         "version": __version__,
         "binding_identity": CLIENT_BINDING_CONTRACT_ID,

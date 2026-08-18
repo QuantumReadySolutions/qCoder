@@ -108,7 +108,10 @@ from qcoder.current_loop_request_semantics import (
     semantics_contract_snapshot,
     validate_request_semantics,
 )
-from qcoder.current_step_contract import derive_current_step_contract
+from qcoder.current_step_contract import (
+    derive_current_step_contract,
+    quiet_customer_visibility_contract,
+)
 from qcoder.current_loop_bootstrap import (
     BOOTSTRAP_INVOCATION_SCHEMA_ID,
     INVOCATION_LIFECYCLE_SCHEMA_ID,
@@ -7581,7 +7584,11 @@ class CurrentLoopCoordinator:
                     "user_approval_click_inferred": False,
                 }
             )
-            return result
+            return (
+                self._typed_completion_success_projection(result)
+                if result.get("ok") is True
+                else result
+            )
         except (CurrentLoopError, OSError, ValueError) as exc:
             state = self.store.read()
             coordinator = self._coordinator_state(state)
@@ -7598,6 +7605,10 @@ class CurrentLoopCoordinator:
                     "The completed native action did not match the active Current Step "
                     "Contract. Nothing was registered."
                 ),
+                "customer_visibility": {
+                    "disposition": "surface_bounded_recovery",
+                    "normal_success_policy_applies": False,
+                },
                 "recovery": {
                     "policy": "fail_closed",
                     "active_action_retained_when_safe": True,
@@ -7973,15 +7984,16 @@ class CurrentLoopCoordinator:
                             "state_status": "ready",
                             "checkpoint_kind": "none",
                             "customer_summary": (
-                                "The exact bounded artifact was registered. qCoder stopped at "
-                                "the requested current-step ceiling without Evidence Review. "
-                                "The loop remains ready for a later exact customer instruction."
-                                if step_complete
-                                else (
-                                    "The exact source artifact was registered. qCoder prepared "
-                                    "the separately authorized next action already requested by "
-                                    "the customer; no broader authority was inferred."
+                                {
+                                    "source": "The requested source artifact is ready.",
+                                    "qasm": "The requested QASM artifact is ready.",
+                                    "execution": "The requested local result artifact is ready.",
+                                }.get(
+                                    str(completed_substage),
+                                    "The requested artifact is ready.",
                                 )
+                                if step_complete
+                                else "The requested source artifact is ready for the next explicitly requested task."
                             ),
                             "artifact_candidates": deepcopy(normalized),
                             "evidence_processing_complete": False,
@@ -13872,6 +13884,79 @@ class CurrentLoopCoordinator:
             return self._normal_d080_success_projection(result)
         return result
 
+    def _typed_completion_success_projection(self, result: Mapping[str, Any]) -> dict[str, Any]:
+        """Return only what is needed for a truthful, quiet task-level final."""
+
+        state = self.store.read()
+        coordinator = self._coordinator_state(state)
+        details = result.get("details")
+        activity = details.get("activity_receipt") if isinstance(details, Mapping) else None
+        registered = (
+            activity.get("registered_artifacts", []) if isinstance(activity, Mapping) else []
+        )
+        artifact = registered[0] if len(registered) == 1 else {}
+        evidence = (
+            activity.get("native_action_completion_evidence")
+            if isinstance(activity, Mapping)
+            else None
+        )
+        role = str(artifact.get("role") or "artifact")
+        task_summary = {
+            "source": "The requested source artifact is ready.",
+            "circuit_qasm": "The requested QASM artifact is ready.",
+            "results": "The requested local result artifact is ready.",
+        }.get(role, "The requested artifact is ready.")
+        projection = {
+            "schema_id": "qcoder.current_loop.typed_completion_result.v2",
+            "schema_version": 2,
+            "operation": "complete_current_step",
+            "ok": True,
+            "category": result.get("category"),
+            "state_revision": state["state_revision"],
+            "current_step_status": coordinator.get("current_step_status"),
+            "customer_summary": task_summary,
+            "customer_visibility": quiet_customer_visibility_contract(),
+            "final_response_permitted": (
+                coordinator.get("current_step_status") == "complete_resumable"
+            ),
+            "completion": {
+                "exact_artifact_registered": True,
+                "bounded_action_consumed": True,
+                "single_use": True,
+                "loop_resumable": coordinator.get("current_step_status") == "complete_resumable",
+                "transport": (evidence.get("transport") if isinstance(evidence, Mapping) else None),
+            },
+            "artifact": {
+                "role": role,
+                "revision_identity": artifact.get("artifact_revision_id"),
+                "content_digest": artifact.get("content_digest"),
+                "cardinality": "exactly_one",
+            },
+            "authority": {
+                "native_client_permission_owner": "native_client",
+                "native_client_permission_granted_by_qcoder": False,
+                "user_approval_click_inferred": False,
+                "later_stage_authority_granted": False,
+            },
+            "continuation": {
+                "on_next_customer_instruction": "begin_current_loop",
+                "transport": "private_current_loop_binding",
+                "rebootstrap": False,
+                "request_baseline_recreated": False,
+            },
+            "raw_path_included": False,
+            "raw_artifact_included": False,
+            "internal_procedure_customer_visible": False,
+        }
+        if coordinator.get("current_step_status") == "awaiting_external_client_action":
+            projection["current_step_contract"] = derive_current_step_contract(state)
+            projection["continuation"] = {
+                "disposition": "continue_already_requested_multi_stage_task",
+                "rebootstrap": False,
+                "request_baseline_recreated": False,
+            }
+        return projection
+
     @staticmethod
     def _normal_d080_success_projection(result: Mapping[str, Any]) -> dict[str, Any]:
         """Project the normal D-080 success without duplicate assistant-facing contracts."""
@@ -13927,15 +14012,14 @@ class CurrentLoopCoordinator:
             }
             action.pop("operation_specific_invocation", None)
             action.pop("operation_invocation_digest", None)
-            if compact_invocation is not None:
-                compact_invocation.update(
-                    {
-                        "transport": "binding_owned_on_next_exact_customer_instruction",
-                        "exact_customer_message_required": True,
-                        "native_selected_paths_required_only_for_selected_file_review": True,
-                    }
-                )
-                action["continuation_reference"] = compact_invocation
+            action["continuation_reference"] = {
+                "operation": "begin_current_loop",
+                "transport": "private_current_loop_binding",
+                "request_text": "exact_next_customer_message",
+                "active_loop_reused": True,
+                "rebootstrap_permitted": False,
+                "request_baseline_recreation_permitted": False,
+            }
             action.pop("action_digest", None)
             action["action_digest"] = sha256(canonical_bytes(action)).hexdigest()
         compact = {
@@ -13977,6 +14061,17 @@ class CurrentLoopCoordinator:
                 "checkpoint_failure_ambiguity_and_recovery_remain_full": True,
             },
         }
+        if operation == "activate":
+            role = str(
+                compact.get("current_step_contract", {})
+                .get("permitted_native_action", {})
+                .get("artifact_role", "task")
+            )
+            compact["customer_summary"] = {
+                "source": "Proceed with the requested source task.",
+                "circuit_qasm": "Proceed with the requested QASM task.",
+                "results": "Proceed with the requested local execution task.",
+            }.get(role, "Proceed with the requested task.")
         if compact["current_request_semantics"] is None:
             compact.pop("current_request_semantics")
         if compact["current_step_contract"] is None:

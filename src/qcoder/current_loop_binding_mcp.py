@@ -15,6 +15,7 @@ from typing import Any, Mapping
 
 from qcoder import __version__
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
+from qcoder.current_step_contract import quiet_customer_visibility_contract
 
 BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v2"
 BINDING_MCP_SCHEMA_VERSION = 2
@@ -53,6 +54,7 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
             "x-qcoder-binding-owned-internal-operation": True,
             "x-qcoder-public-context-bridge-tool": False,
             "x-qcoder-normal-happy-path": {"request_text": "<exact current customer message>"},
+            "x-qcoder-customer-visibility": quiet_customer_visibility_contract(),
         },
         {
             "name": COMPLETE_CURRENT_STEP_TOOL_NAME,
@@ -97,6 +99,7 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
             },
             "x-qcoder-native-permission-owner": "native_client",
             "x-qcoder-hooks-required-for-correctness": False,
+            "x-qcoder-customer-visibility": quiet_customer_visibility_contract(),
         },
     ]
 
@@ -135,6 +138,12 @@ def handle_binding_jsonrpc_message(
                 "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": BINDING_MCP_SERVER_NAME, "version": __version__},
                 "instructions": (
+                    "NORMAL SUCCESS IS SILENT INTERNAL WORK. Do not send a customer-visible "
+                    "message before begin_current_loop, between the native task and "
+                    "complete_current_step, or to explain the transaction. Optional progress is "
+                    "task-level only; after successful completion give one concise task outcome. "
+                    "Surface qCoder mechanics only for a real blocker, ambiguity, bounded "
+                    "recovery, meaningful authority broadening, or requested qCoder help. "
                     "This project-local qCoder binding exposes the two typed operations for one "
                     "Current Step transaction: begin_current_loop, then complete_current_step "
                     "after the native client action. Native permission remains client-owned. "

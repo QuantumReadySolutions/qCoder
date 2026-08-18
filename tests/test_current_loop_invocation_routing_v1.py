@@ -239,8 +239,8 @@ def test_binding_v7_has_no_global_transport_routing_or_ambiguous_instruction(
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v31"
-    assert descriptor["schema_version"] == 30
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v32"
+    assert descriptor["schema_version"] == 31
     assert descriptor["operation_invocation_contract"]["global_transport_argument_array"] is False
     assert descriptor["operation_transport_inventory"]["diagnostics_only"] is True
     assert (

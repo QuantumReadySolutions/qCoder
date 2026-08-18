@@ -8,9 +8,40 @@ import json
 from typing import Any, Mapping
 
 
-CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v1"
-CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 1
+CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v2"
+CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 2
 COMPLETE_CURRENT_STEP_OPERATION = "complete_current_step"
+
+
+def quiet_customer_visibility_contract() -> dict[str, Any]:
+    """Return the semantic visibility policy for one clean Current Step."""
+
+    return {
+        "normal_success": "internal_transaction_silent",
+        "progress": "none_or_task_level_only",
+        "intermediate_customer_message_permitted": False,
+        "final_response": "concise_task_outcome_only",
+        "internal_mechanics_customer_visible": False,
+        "surface_when": [
+            "blocking_failure",
+            "ambiguity",
+            "bounded_recovery",
+            "meaningful_authority_broadening",
+            "customer_requested_qcoder_help",
+        ],
+    }
+
+
+def quiet_customer_visibility_projection() -> dict[str, Any]:
+    """Return the bounded Current Step projection of the visibility policy."""
+
+    return {
+        "policy": "quiet_current_step_v1",
+        "normal_success": "task_only",
+        "intermediate_message": False,
+        "internal_procedure": False,
+        "surface_non_success": True,
+    }
 
 
 def _canonical_bytes(value: object) -> bytes:
@@ -104,21 +135,22 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
             "qcoder_grants_permission": False,
             "qcoder_observes_permission": False,
             "qcoder_infers_approval_click": False,
-            "approval_telemetry": "optional_client_provenance_only",
+            "approval_telemetry": "optional",
         },
         "completion": {
             "operation": COMPLETE_CURRENT_STEP_OPERATION,
             "required_arguments": ["current_action_handle", "artifact_path"],
             "qcoder_computes_artifact_digest": True,
-            "condition": "exact_completed_native_action_validates_against_canonical_state",
+            "condition": "validated_exact_postcondition",
             "success_state": "complete_resumable",
             "customer_artifact_mutated_by_completion": False,
             "customer_code_executed_by_completion": False,
         },
+        "customer_visibility": quiet_customer_visibility_projection(),
         "recovery": {
             "policy": "fail_closed",
-            "mismatch": "retain_active_action_for_exact_retry_when_safe",
-            "duplicate": "return_existing_completion_without_duplicate_mutation",
+            "mismatch": "retain_for_exact_retry",
+            "duplicate": "idempotent_existing_completion",
             "clarification": semantics.get("customer_clarification"),
         },
         "privacy": {
@@ -147,6 +179,7 @@ def current_step_contract_snapshot() -> dict[str, Any]:
         "bounded_independent_of_artifact_size": True,
         "native_permission_owner": "native_client",
         "hooks_optional_accelerators": True,
+        "normal_success_customer_visibility": quiet_customer_visibility_contract(),
         "fail_closed": True,
     }
 
@@ -157,5 +190,7 @@ __all__ = [
     "CURRENT_STEP_CONTRACT_SCHEMA_VERSION",
     "current_step_contract_snapshot",
     "derive_current_step_contract",
+    "quiet_customer_visibility_contract",
+    "quiet_customer_visibility_projection",
     "validate_current_step_contract",
 ]

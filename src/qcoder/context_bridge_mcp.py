@@ -91,6 +91,7 @@ from qcoder.current_loop_evidence_processing import (
     recovery_action_contract_snapshot,
 )
 from qcoder.current_loop_registration import registration_contract_snapshot
+from qcoder.current_step_contract import quiet_customer_visibility_contract
 from qcoder.current_loop_derivation import derivation_contract_snapshot
 from qcoder.current_loop_freshness import freshness_contract_snapshot
 from qcoder.current_loop_retention import retention_contract_snapshot
@@ -154,8 +155,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 30
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v31"
+CLIENT_BINDING_SCHEMA_VERSION = 31
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v32"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -164,6 +165,14 @@ capability and evidence surface for source review, circuit analysis, result revi
 preparation, and the other supported bounded operations. qcoder current-loop is qCoder's separate
 supported local orchestration and continuity surface for an active build. Current Loop is
 intentionally not one of the twelve MCP tools; both surfaces belong to qCoder.
+
+QUIET CURRENT STEP
+Treat a clean begin / native action / typed complete transaction as silent internal work. Do not
+announce activation, contracts, completion, registration, receipts, hooks, adapters, state, or
+other qCoder procedure. Emit no intermediate customer message for internal transitions. Optional
+progress is task-level only. After success, give one concise customer task outcome. Surface qCoder
+mechanics only for a real blocker, ambiguity, bounded recovery, meaningful authority broadening,
+or customer-requested qCoder help.
 
 WORKSTYLE ROUTING
 Available but inactive: when there is no explicit qCoder request, no accepted qCoder activation
@@ -681,6 +690,7 @@ def build_client_binding_descriptor(
                     "user_approval_click_inferred": False,
                     "at_most_once": True,
                     "public_context_bridge_tool": False,
+                    "customer_visibility": quiet_customer_visibility_contract(),
                 },
                 "cursor_post_write_completion": {
                     "transport": "optional_cursor_native_event_adapters",
@@ -907,6 +917,7 @@ def _binding_contract_tiers(
                 "failed_native_write_may_be_registered": False,
                 "registration_failure_preserves_exact_recovery": True,
                 "compact_next_action_is_sole_procedural_source": True,
+                "customer_visibility": quiet_customer_visibility_contract(),
             },
         }
     )
@@ -932,6 +943,13 @@ def _compact_client_activation_instructions() -> str:
 qCoder exposes exactly twelve Context Bridge MCP tools as bounded capabilities and a separate project-local
 binding server with two private Current Step operations: begin_current_loop and complete_current_step. Those operations do not
 change the public twelve-tool Context Bridge inventory; this does not change the public twelve-tool Context Bridge inventory.
+
+QUIET CURRENT STEP
+Normal begin / native action / typed complete success is silent internal work. Send no customer
+message to announce or explain qCoder activation, contracts, completion, registration, receipts,
+hooks, adapters, or state. Optional progress is task-level only. After completion, give one
+concise task outcome. Surface qCoder mechanics only for a blocker, ambiguity, bounded recovery,
+meaningful authority broadening, or requested qCoder help.
 
 WORKSTYLE ROUTING
 Before generic tool routing, apply the inline machine-readable route. Do nothing when qCoder was
