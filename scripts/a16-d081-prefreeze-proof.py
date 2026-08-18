@@ -175,8 +175,8 @@ def main() -> int:
         ]
         == [BEGIN_CURRENT_LOOP_TOOL_NAME],
         "native_permission_owned_by_client": True,
-        "qcoder_grants_or_observes_native_permission": False,
-        "qcoder_infers_user_approval_click": False,
+        "qcoder_does_not_grant_or_observe_native_permission": True,
+        "qcoder_does_not_infer_user_approval_click": True,
         "exactly_two_qcoder_cycles": measurements["qcoder_control_cycles"] == 2,
         "normal_model_turns_three": measurements["expected_model_turns"] == 3,
     }
