@@ -244,8 +244,8 @@ from qcoder.current_loop_iteration import (
 )
 from qcoder.context_loop import CONTEXT_LOOP_GATE
 
-COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v19"
-COORDINATOR_RESULT_SCHEMA_VERSION = 19
+COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v20"
+COORDINATOR_RESULT_SCHEMA_VERSION = 20
 
 RESULT_SEMANTIC_CLASSES = (
     "pure_observation",
@@ -13878,6 +13878,7 @@ class CurrentLoopCoordinator:
             and operation
             in {
                 "activate",
+                "interpret_current_request",
                 "complete_native_action",
             }
         ):
@@ -13962,6 +13963,7 @@ class CurrentLoopCoordinator:
         """Project the normal D-080 success without duplicate assistant-facing contracts."""
 
         operation = str(result["operation"])
+        active_loop_continuation = operation == "interpret_current_request"
         details = deepcopy(dict(result.get("details", {})))
         semantics = deepcopy(dict(result["current_request_semantics"]))
         action = deepcopy(dict(result["compact_next_action"]))
@@ -14012,20 +14014,21 @@ class CurrentLoopCoordinator:
             }
             action.pop("operation_specific_invocation", None)
             action.pop("operation_invocation_digest", None)
-            action["continuation_reference"] = {
-                "operation": "begin_current_loop",
-                "transport": "private_current_loop_binding",
-                "request_text": "exact_next_customer_message",
-                "active_loop_reused": True,
-                "rebootstrap_permitted": False,
-                "request_baseline_recreation_permitted": False,
-            }
+            if not active_loop_continuation:
+                action["continuation_reference"] = {
+                    "operation": "begin_current_loop",
+                    "transport": "private_current_loop_binding",
+                    "request_text": "exact_next_customer_message",
+                    "active_loop_reused": True,
+                    "rebootstrap_permitted": False,
+                    "request_baseline_recreation_permitted": False,
+                }
             action.pop("action_digest", None)
             action["action_digest"] = sha256(canonical_bytes(action)).hexdigest()
         compact = {
             "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
             "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
-            "projection_schema_id": "qcoder.current_loop.normal_success_projection.v1",
+            "projection_schema_id": "qcoder.current_loop.normal_success_projection.v2",
             "operation": operation,
             "ok": True,
             "category": result.get("category"),
@@ -14061,7 +14064,7 @@ class CurrentLoopCoordinator:
                 "checkpoint_failure_ambiguity_and_recovery_remain_full": True,
             },
         }
-        if operation == "activate":
+        if operation in {"activate", "interpret_current_request"}:
             role = str(
                 compact.get("current_step_contract", {})
                 .get("permitted_native_action", {})
@@ -14072,6 +14075,27 @@ class CurrentLoopCoordinator:
                 "circuit_qasm": "Proceed with the requested QASM task.",
                 "results": "Proceed with the requested local execution task.",
             }.get(role, "Proceed with the requested task.")
+        if active_loop_continuation:
+            compact["normal_success_projection"].update(
+                {
+                    "active_loop_generic_coordinator_envelope_omitted": True,
+                    "active_loop_procedural_summary_omitted": True,
+                }
+            )
+            compact.pop("compact_next_action")
+            compact.pop("compact_next_action_is_sole_procedural_source")
+            compact["current_step_contract_is_sole_action_source"] = True
+            compact["current_request_semantics"] = {
+                "projection": "active_loop_requested_operation_only",
+                "requested_operation": semantics["requested_operation"],
+                "semantics_digest": semantics["semantics_digest"],
+            }
+            compact["active_loop_transition"] = {
+                "rebootstrap_performed": False,
+                "request_baseline_recreated": False,
+                "prior_canonical_evidence_preserved": True,
+                "customer_visible_procedure": False,
+            }
         if compact["current_request_semantics"] is None:
             compact.pop("current_request_semantics")
         if compact["current_step_contract"] is None:

@@ -54,10 +54,12 @@ def _digest_text(value: object) -> str:
     return sha256(str(value).encode("utf-8")).hexdigest()
 
 
-def _evidence_references(state: Mapping[str, Any]) -> list[dict[str, Any]]:
+def _evidence_references(state: Mapping[str, Any], *, active_role: str) -> list[dict[str, Any]]:
+    """Project only canonical evidence needed by the current artifact stage."""
+
     references: list[dict[str, Any]] = []
     baseline = state.get("saved_artifacts", {}).get("request_baseline")
-    if isinstance(baseline, Mapping):
+    if active_role == "source" and isinstance(baseline, Mapping):
         references.append(
             {
                 "role": "request_baseline",
@@ -72,7 +74,14 @@ def _evidence_references(state: Mapping[str, Any]) -> list[dict[str, Any]]:
     revisions = registry.get("artifact_revisions")
     if not isinstance(heads, Mapping) or not isinstance(revisions, Mapping):
         return references
+    relevant_roles = {
+        "source": set(),
+        "circuit_qasm": {"source"},
+        "results": {"source", "circuit_qasm"},
+    }.get(active_role, set())
     for role, revision_id in sorted(heads.items()):
+        if str(role) not in relevant_roles:
+            continue
         revision = revisions.get(revision_id)
         if isinstance(revision, Mapping):
             references.append(
@@ -122,7 +131,7 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
             "fresh_until_epoch": receipt.get("expires_at"),
         },
         "current_customer_goal": semantics.get("exact_original_message"),
-        "authoritative_evidence_references": _evidence_references(state),
+        "authoritative_evidence_references": _evidence_references(state, active_role=role),
         "permitted_native_action": {
             "current_action_handle": handle,
             "operation": operation,

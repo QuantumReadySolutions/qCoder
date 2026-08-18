@@ -166,7 +166,7 @@ def test_binding_route_and_inventory_are_deterministic_and_keep_twelve_tools() -
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v32"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v33"
     assert (
         descriptor["current_request_semantics_contract"]["temporary_current_step_ceiling"] is True
     )
@@ -438,6 +438,7 @@ def test_active_continuation_does_not_mutate_on_ambiguity_or_rebootstrap(tmp_pat
     qasm = coordinator.interpret_current_request(exact_message="Now export the circuit as QASM.")
     assert qasm["ok"] is True
     assert qasm["current_request_semantics"]["requested_operation"] == "qasm_export"
+    assert qasm["current_step_contract_is_sole_action_source"] is True
     assert qasm["bootstrap_count"] == 1
     assert qasm["request_baseline_count"] == 1
     assert qasm["details"]["rebootstrap_performed"] is False

@@ -155,8 +155,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 31
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v32"
+CLIENT_BINDING_SCHEMA_VERSION = 32
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v33"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -173,6 +173,13 @@ other qCoder procedure. Emit no intermediate customer message for internal trans
 progress is task-level only. After success, give one concise customer task outcome. Surface qCoder
 mechanics only for a real blocker, ambiguity, bounded recovery, meaningful authority broadening,
 or customer-requested qCoder help.
+
+ACTIVE-LOOP CONTINUATION
+When a completed loop receives a concrete next instruction, call the private begin_current_loop
+operation immediately with that exact message. It interprets against canonical active state and
+returns a compact replacement Current Step Contract; it is not a re-bootstrap. Do not narrate,
+reconstruct, or explain the transition. Use the replacement contract directly, perform its one
+native action, complete_current_step in the same work turn, then give one concise task outcome.
 
 WORKSTYLE ROUTING
 Available but inactive: when there is no explicit qCoder request, no accepted qCoder activation
@@ -919,6 +926,19 @@ def _binding_contract_tiers(
                 "compact_next_action_is_sole_procedural_source": True,
                 "customer_visibility": quiet_customer_visibility_contract(),
             },
+            "active_loop_continuation_choreography": {
+                "operation": "begin_current_loop",
+                "request_argument": "exact_next_customer_message",
+                "interpret_against": "canonical_active_loop_state",
+                "rebootstrap": False,
+                "request_baseline_recreated": False,
+                "prior_registered_evidence_reused": True,
+                "return_projection": "compact_replacement_current_step_contract",
+                "pre_contract_procedure_reasoning": False,
+                "customer_visible_transition_narration": False,
+                "native_action_and_typed_completion_same_work_turn": True,
+                "qcoder_control_cycles": 2,
+            },
         }
     )
     inline_digest = hashlib.sha256(
@@ -950,6 +970,13 @@ message to announce or explain qCoder activation, contracts, completion, registr
 hooks, adapters, or state. Optional progress is task-level only. After completion, give one
 concise task outcome. Surface qCoder mechanics only for a blocker, ambiguity, bounded recovery,
 meaningful authority broadening, or requested qCoder help.
+
+ACTIVE-LOOP CONTINUATION
+For a concrete next instruction on a complete-resumable loop, call begin_current_loop immediately
+with the exact message. Silently use its compact replacement Current Step Contract; do not
+re-bootstrap, recreate the Request Baseline, explain the transition, or reason from old procedure.
+Perform the one native action and complete_current_step in the same work turn, then give one concise
+task outcome.
 
 WORKSTYLE ROUTING
 Before generic tool routing, apply the inline machine-readable route. Do nothing when qCoder was

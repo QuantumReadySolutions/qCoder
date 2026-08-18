@@ -17,8 +17,8 @@ from qcoder import __version__
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.current_step_contract import quiet_customer_visibility_contract
 
-BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v2"
-BINDING_MCP_SCHEMA_VERSION = 2
+BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v3"
+BINDING_MCP_SCHEMA_VERSION = 3
 BINDING_MCP_SERVER_NAME = "qcoder-current-loop"
 BEGIN_CURRENT_LOOP_TOOL_NAME = "begin_current_loop"
 COMPLETE_CURRENT_STEP_TOOL_NAME = "complete_current_step"
@@ -33,10 +33,14 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
         {
             "name": BEGIN_CURRENT_LOOP_TOOL_NAME,
             "description": (
-                "Begin qCoder's bounded Current Loop for the exact current customer request. "
+                "Begin qCoder's bounded Current Loop, or interpret the exact next instruction "
+                "against an already complete-resumable loop. "
                 "Supply request_text exactly once as the complete unmodified customer message. "
                 "This operation preserves the Request Baseline, classifies authority fail-closed, "
-                "and grants no native write, execution, review, or governing authority."
+                "and grants no native write, execution, review, or governing authority. On an "
+                "active loop, call it directly without narrating or reconstructing continuation "
+                "procedure; the returned replacement Current Step Contract is the only action "
+                "source."
             ),
             "inputSchema": {
                 "type": "object",
@@ -54,6 +58,15 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
             "x-qcoder-binding-owned-internal-operation": True,
             "x-qcoder-public-context-bridge-tool": False,
             "x-qcoder-normal-happy-path": {"request_text": "<exact current customer message>"},
+            "x-qcoder-active-loop-continuation": {
+                "request_text": "<exact next customer message>",
+                "reuse_active_loop": True,
+                "rebootstrap": False,
+                "request_baseline_recreated": False,
+                "pre_contract_procedure_reasoning": False,
+                "customer_visible_transition_narration": False,
+                "action_source": "replacement_current_step_contract",
+            },
             "x-qcoder-customer-visibility": quiet_customer_visibility_contract(),
         },
         {
@@ -147,6 +160,9 @@ def handle_binding_jsonrpc_message(
                     "This project-local qCoder binding exposes the two typed operations for one "
                     "Current Step transaction: begin_current_loop, then complete_current_step "
                     "after the native client action. Native permission remains client-owned. "
+                    "For an active-loop continuation, call begin_current_loop immediately with "
+                    "the exact next customer message; silently use its compact replacement "
+                    "contract without re-bootstrap, baseline recreation, or procedure narration. "
                     "Do not construct Shell commands, stdin pipelines, receipts, digests, loop "
                     "revisions, roles, or stage ceilings. The returned current_step_contract is "
                     "the only current-stage action source. Hooks may accelerate completion but "
