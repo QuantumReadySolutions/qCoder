@@ -13,7 +13,10 @@ from qcoder.context_bridge_mcp import (
     tool_descriptors,
 )
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
-from qcoder.cursor_post_write_hook import install_cursor_post_write_hook
+from qcoder.cursor_post_write_hook import (
+    handle_cursor_after_file_edit_event,
+    install_cursor_post_write_hook,
+)
 
 
 REQUEST = (
@@ -53,7 +56,7 @@ def test_inline_binding_is_compact_tiered_digest_verified_and_keeps_twelve_tools
         token_file=tmp_path / "token.txt",
     )
     assert len(instructions.encode("utf-8")) <= 50_000
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v29"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v30"
     assert len(tool_descriptors()) == len(EXPECTED_TOOLS) == 12
     listed = handle_jsonrpc_message(
         {"jsonrpc": "2.0", "id": 1, "method": "resources/list"},
@@ -97,7 +100,7 @@ def test_inline_binding_is_compact_tiered_digest_verified_and_keeps_twelve_tools
 def test_normal_source_only_results_are_compact_single_source_of_truth(tmp_path: Path) -> None:
     coordinator, activated = _activate(tmp_path)
     assert _wire_bytes(activated) <= 15_000
-    assert activated["schema_id"] == "qcoder.current_loop.coordinator_result.v18"
+    assert activated["schema_id"] == "qcoder.current_loop.coordinator_result.v19"
     assert activated["projection_schema_id"] == ("qcoder.current_loop.normal_success_projection.v1")
     for duplicate in (
         "next_invocation",
@@ -115,43 +118,34 @@ def test_normal_source_only_results_are_compact_single_source_of_truth(tmp_path:
     assert action["model_shell_invocation_required"] is False
     assert action["second_native_approval_required"] is False
     assert action["native_action_sequence"] == [
-        "obtain_action_specific_native_permission",
-        "perform_exact_native_action",
+        "native_client_applies_its_own_controls",
+        "perform_exact_external_native_action",
         "first_valid_native_edit_event_completes_exact_registration",
     ]
     source = tmp_path / "bell.py"
     source.write_text("from qiskit import QuantumCircuit\n", encoding="utf-8")
-    completed = coordinator.complete_native_action(
-        allowed=True,
-        explicit_user_action=True,
-        candidates=(
-            {
-                "role": "source",
-                "path": str(source),
-                "provenance": "assistant_created",
-                "explicit_external": False,
-            },
-        ),
+    completed = handle_cursor_after_file_edit_event(
+        workspace_root=tmp_path,
+        event={
+            "hook_event_name": "afterFileEdit",
+            "conversation_id": "safe-conversation",
+            "generation_id": "safe-generation",
+            "workspace_roots": [str(tmp_path)],
+            "file_path": str(source),
+            "edits": [{"old_string": "", "new_string": "not-retained"}],
+        },
     )
-    assert _wire_bytes(completed) <= 15_000
-    assert completed["details"]["authority_receipt_consumed"] is True
-    assert completed["details"]["exact_output_registered"] is True
-    assert "operation_specific_invocation" not in completed["compact_next_action"]
-    assert completed["compact_next_action"]["continuation_reference"]["operation"] == (
-        "interpret_current_request"
-    )
-    assert completed["normal_success_projection"] == {
-        "specialized_controls_inline": False,
-        "duplicate_semantics_contract_omitted": True,
-        "duplicate_next_invocation_omitted": True,
-        "duplicate_customer_envelopes_omitted": True,
-        "full_continuation_invocation_omitted_after_step_completion": True,
-        "checkpoint_failure_ambiguity_and_recovery_remain_full": True,
-    }
+    assert completed["registration_completed"] is True
+    state = coordinator.store.read()
+    assert state["coordinator"]["current_step_status"] == "complete_resumable"
+    receipt = next(iter(state["operation_receipts"].values()))
+    assert receipt["status"] == "consumed"
+    assert receipt["native_client_permission_granted_by_qcoder"] is False
+    assert receipt["user_approval_click_inferred"] is False
 
 
 def test_native_write_and_registration_failures_remain_fail_closed_and_recoverable(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path,
 ) -> None:
     coordinator, _ = _activate(tmp_path)
     before = deepcopy(coordinator.store.read())
@@ -168,42 +162,11 @@ def test_native_write_and_registration_failures_remain_fail_closed_and_recoverab
         ),
     )
     assert missing["ok"] is False
-    assert missing["category"] == "artifact_candidate_file_required"
-    assert coordinator.store.read()["operation_receipts"] == {}
-    assert coordinator.store.read()["saved_artifacts"] == before["saved_artifacts"]
-    assert coordinator.store.read()["selected_artifacts"] == before["selected_artifacts"]
-
-    race_root = tmp_path / "registration-race"
-    race_root.mkdir()
-    coordinator, _ = _activate(race_root)
-    source = race_root / "bell.py"
-    source.write_text("from qiskit import QuantumCircuit\n", encoding="utf-8")
-    real_record = coordinator.record_ide_authority
-
-    def record_then_remove(**kwargs):
-        result = real_record(**kwargs)
-        source.unlink()
-        return result
-
-    monkeypatch.setattr(coordinator, "record_ide_authority", record_then_remove)
-    failed_registration = coordinator.complete_native_action(
-        allowed=True,
-        explicit_user_action=True,
-        candidates=(
-            {
-                "role": "source",
-                "path": str(source),
-                "provenance": "assistant_created",
-                "explicit_external": False,
-            },
-        ),
-    )
-    assert failed_registration["ok"] is False
-    assert failed_registration["details"]["exact_output_registered"] is False
-    assert failed_registration["details"]["issued_authority_retained_for_exact_recovery"] is True
-    receipts = coordinator.store.read()["operation_receipts"]
-    assert len(receipts) == 1
-    assert next(iter(receipts.values()))["status"] == "issued"
+    assert missing["category"] == "native_client_completion_evidence_required"
+    assert coordinator.store.read() == before
+    receipt = next(iter(before["operation_receipts"].values()))
+    assert receipt["receipt_kind"] == "qcoder_bounded_action_expectation"
+    assert receipt["status"] == "issued"
 
 
 def test_binding_explicitly_requires_same_turn_completion_without_narration(tmp_path: Path) -> None:

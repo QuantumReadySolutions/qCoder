@@ -12,13 +12,17 @@ from typing import Any, Mapping, Sequence
 
 from qcoder.current_loop_evidence_processing import artifact_format_contract_snapshot
 
-EVENT_RECEIPT_SCHEMA_ID = "qcoder.current_loop.operation_receipt.v5"
-EVENT_RECEIPT_SCHEMA_VERSION = 5
+EVENT_RECEIPT_SCHEMA_ID = "qcoder.current_loop.operation_receipt.v6"
+EVENT_RECEIPT_SCHEMA_VERSION = 6
 ACTIVITY_RECEIPT_SCHEMA_ID = "qcoder.current_loop.activity_receipt.v3"
 ACTIVITY_RECEIPT_SCHEMA_VERSION = 3
 OPERATION_RECEIPT_LIFETIME_SECONDS = 15 * 60
 SUPPORTED_OPERATION_CATEGORIES = ("ide_write", "ide_modify", "ide_execute")
 SUPPORTED_OUTPUT_ROLES = ("source", "circuit_qasm", "results")
+SUPPORTED_RECEIPT_KINDS = (
+    "explicit_client_authority_record",
+    "qcoder_bounded_action_expectation",
+)
 
 
 class EventReceiptError(ValueError):
@@ -42,9 +46,12 @@ def issue_operation_receipt(
     operation_category: str,
     output_role_ceiling: Sequence[str],
     authority_binding: Mapping[str, Any] | None = None,
+    receipt_kind: str = "explicit_client_authority_record",
     issued_at: float | None = None,
     lifetime_seconds: float = OPERATION_RECEIPT_LIFETIME_SECONDS,
 ) -> dict[str, Any]:
+    if receipt_kind not in SUPPORTED_RECEIPT_KINDS:
+        raise EventReceiptError("operation_receipt_kind_invalid")
     if operation_category not in SUPPORTED_OPERATION_CATEGORIES:
         raise EventReceiptError("operation_receipt_category_invalid")
     roles = sorted(set(output_role_ceiling))
@@ -62,10 +69,30 @@ def issue_operation_receipt(
         or float(lifetime_seconds) <= 0
     ):
         raise EventReceiptError("operation_receipt_expiry_invalid")
+    authority_effect = {
+        "native_client_permission_granted_by_qcoder": False,
+        "user_approval_click_inferred": False,
+        "artifact_review_authorized": False,
+        "raw_exposure_authorized": False,
+    }
+    if receipt_kind == "qcoder_bounded_action_expectation":
+        authority_effect.update(
+            {
+                "qcoder_bounded_action_contract": True,
+                "native_client_permission_observed": False,
+            }
+        )
+    else:
+        authority_effect["explicit_client_authority_recorded"] = True
     receipt = {
         "schema_id": EVENT_RECEIPT_SCHEMA_ID,
         "schema_version": EVENT_RECEIPT_SCHEMA_VERSION,
-        "receipt_id": f"operation-receipt-{secrets.token_hex(16)}",
+        "receipt_id": (
+            f"bounded-action-{secrets.token_hex(16)}"
+            if receipt_kind == "qcoder_bounded_action_expectation"
+            else f"operation-receipt-{secrets.token_hex(16)}"
+        ),
+        "receipt_kind": receipt_kind,
         "loop_ref": loop_ref,
         "workspace_binding": workspace_binding,
         "issued_state_revision": state_revision,
@@ -85,11 +112,7 @@ def issue_operation_receipt(
         "stale_after_loop_or_workspace_change": True,
         "stale_after_any_authoritative_revision_change": True,
         "authority_binding": deepcopy(dict(authority_binding or {})),
-        "authority_effect": {
-            "ide_operation_recorded": True,
-            "artifact_review_authorized": False,
-            "raw_exposure_authorized": False,
-        },
+        "authority_effect": authority_effect,
     }
     receipt["receipt_digest"] = _digest(receipt)
     return receipt
@@ -219,6 +242,7 @@ def consume_operation_receipt(
     *,
     registered_artifacts: Sequence[Mapping[str, Any]],
     consumed_state_revision: int,
+    native_action_completion_evidence: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     if receipt.get("status") != "issued":
         raise EventReceiptError("operation_receipt_replay_rejected")
@@ -233,9 +257,14 @@ def consume_operation_receipt(
         "consumed_state_revision": consumed_state_revision,
         "registered_artifact_count": len(registered_artifacts),
         "authority_binding_digest": _digest(receipt.get("authority_binding", {})),
-        "authority_evidence_source": receipt.get("authority_binding", {}).get(
-            "authority_evidence_source"
+        "authority_evidence_source": (
+            "qcoder_bounded_action_and_client_completion_evidence"
+            if receipt.get("receipt_kind") == "qcoder_bounded_action_expectation"
+            and isinstance(native_action_completion_evidence, Mapping)
+            else receipt.get("authority_binding", {}).get("authority_evidence_source")
         ),
+        "native_client_permission_granted_by_qcoder": False,
+        "user_approval_click_inferred": False,
         "native_client_event_binding_digest": (
             _digest(receipt.get("authority_binding", {}).get("native_client_event_binding"))
             if isinstance(
@@ -248,6 +277,16 @@ def consume_operation_receipt(
             receipt.get("causal_continuation"), Mapping
         ),
     }
+    if receipt.get("receipt_kind") == "qcoder_bounded_action_expectation":
+        updated["receipt_kind"] = "qcoder_bounded_action_expectation"
+        updated["bounded_action_contract_source"] = receipt.get(
+            "authority_binding", {}
+        ).get("authority_evidence_source")
+        updated["native_action_completion_evidence_digest"] = (
+            _digest(native_action_completion_evidence)
+            if isinstance(native_action_completion_evidence, Mapping)
+            else None
+        )
     updated["receipt_digest"] = _digest(updated)
     activity = {
         "schema_id": ACTIVITY_RECEIPT_SCHEMA_ID,
@@ -273,7 +312,16 @@ def consume_operation_receipt(
         "glob_performed": False,
         "watcher_active": False,
         "artifact_review_authorized": False,
+        "native_client_permission_granted_by_qcoder": False,
+        "user_approval_click_inferred": False,
     }
+    if receipt.get("receipt_kind") == "qcoder_bounded_action_expectation":
+        activity["receipt_kind"] = "qcoder_bounded_action_expectation"
+        activity["native_action_completion_evidence"] = (
+            deepcopy(dict(native_action_completion_evidence))
+            if isinstance(native_action_completion_evidence, Mapping)
+            else None
+        )
     activity["activity_digest"] = _digest(activity)
     return updated, activity
 

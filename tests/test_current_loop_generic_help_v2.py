@@ -139,7 +139,7 @@ def test_binding_v18_steers_generic_help_to_exactly_one_local_call(tmp_path: Pat
     binding = build_client_binding_descriptor(
         coordinator_prefix=[sys.executable, "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v29"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v30"
     assert binding["generic_help"]["generic_request_topic"] == "overview"
     assert binding["generic_help"]["exactly_one_qcoder_operation"] is True
     assert binding["generic_help"]["automatic_status_call"] is False
@@ -294,12 +294,14 @@ def test_machine_json_stdout_is_exactly_one_json_document(tmp_path: Path) -> Non
             str(tmp_path),
             *operation_args,
         ]
+        environment = dict(os.environ)
+        environment["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
         completed = subprocess.run(
             command,
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env=dict(os.environ),
+            env=environment,
         )
         parsed = json.loads(completed.stdout)
         assert parsed["operation"] == expected_operation

@@ -1039,12 +1039,12 @@ def test_binding_v18_delta_preserves_exact_twelve_tool_inventory() -> None:
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v29"
-    assert descriptor["schema_version"] == 28
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v30"
+    assert descriptor["schema_version"] == 29
     assert len(EXPECTED_TOOLS) == 12
     assert descriptor["qcoder_domain_tool_count"] == 12
     receipt = event_receipt_snapshot()
-    assert receipt["schema_id"] == "qcoder.current_loop.operation_receipt.v5"
+    assert receipt["schema_id"] == "qcoder.current_loop.operation_receipt.v6"
     assert receipt["revision_binding"] == "exact_authoritative_revision"
     assert receipt["time_expiry_required"] is True
     recovery = recovery_contract_snapshot()

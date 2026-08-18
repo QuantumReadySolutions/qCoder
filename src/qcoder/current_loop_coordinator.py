@@ -104,6 +104,7 @@ from qcoder.current_loop_invocation import (
 from qcoder.current_loop_request_semantics import (
     ceiling_allows,
     classify_current_request,
+    migrate_request_semantics,
     semantics_contract_snapshot,
     validate_request_semantics,
 )
@@ -239,8 +240,8 @@ from qcoder.current_loop_iteration import (
 )
 from qcoder.context_loop import CONTEXT_LOOP_GATE
 
-COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v18"
-COORDINATOR_RESULT_SCHEMA_VERSION = 18
+COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v19"
+COORDINATOR_RESULT_SCHEMA_VERSION = 19
 
 RESULT_SEMANTIC_CLASSES = (
     "pure_observation",
@@ -328,11 +329,12 @@ def result_semantic_classification(
     return "authoritative_mutation"
 
 
-COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v14"
-PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v13"
+COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v15"
+PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v14"
 OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
     {
         "qcoder.current_loop.coordinator_state.v9",
+        "qcoder.current_loop.coordinator_state.v13",
         "qcoder.current_loop.coordinator_state.v12",
         "qcoder.current_loop.coordinator_state.v10",
         "qcoder.current_loop.coordinator_state.v6",
@@ -345,7 +347,7 @@ OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
         "qcoder.current_loop.coordinator_state.v3",
     }
 )
-COORDINATOR_STATE_SCHEMA_VERSION = 14
+COORDINATOR_STATE_SCHEMA_VERSION = 15
 RECOVERY_SCHEMA_ID = "qcoder.current_loop.recovery.v5"
 RECOVERY_SCHEMA_VERSION = 5
 CONSEQUENCE_PROJECTION_SCHEMA_ID = "qcoder.current_loop.consequence_projection.v1"
@@ -362,6 +364,7 @@ PERMITTED_INPUT_SOURCE_CATEGORIES = (
     "exact_customer_selected_workspace",
     "exact_request_capture_transport",
     "qcoder_declared_attributable_value",
+    "native_client_action_completion_evidence",
     "no_input_permitted_or_required",
 )
 
@@ -479,6 +482,7 @@ _PHASE_TRANSITIONS = {
         "intent_review",
         "awaiting_local_artifacts",
         "artifact_authorization",
+        "evidence_processing",
         "abandoned",
     ),
     "awaiting_local_artifacts": (
@@ -1790,6 +1794,11 @@ def coordinator_contract_snapshot() -> dict[str, Any]:
             "operation_receipt_single_use_meaning": (
                 "consumed_after_successful_atomic_canonical_registration"
             ),
+            "bounded_action_expectation_supported": True,
+            "native_client_permission_owner": "native_client",
+            "native_client_permission_granted_or_observed_by_qcoder": False,
+            "native_action_completion_evidence_required_for_d081": True,
+            "explicit_client_approval_telemetry": "optional_provenance_only",
             "authorization_source_client_supplied": False,
             "registered_and_presentation_currentness_separate": True,
         },
@@ -2204,6 +2213,9 @@ _ACTION_INPUT_SOURCE_CATEGORIES = {
     ),
     "obtain_separate_ide_write_or_run_authority": ("authority_only_approval",),
     "obtain_action_specific_native_permission": ("authority_only_approval",),
+    "perform_exact_external_client_action": (
+        "native_client_action_completion_evidence",
+    ),
     "await_exact_customer_continuation": ("exact_request_capture_transport",),
     "assist_iteration_ready": (
         "exact_request_capture_transport",
@@ -2253,6 +2265,9 @@ def _default_permitted_input_source(action: str) -> str:
         ),
         "obtain_separate_ide_write_or_run_authority": ("explicit_user_authority_only"),
         "obtain_action_specific_native_permission": ("explicit_action_specific_native_permission"),
+        "perform_exact_external_client_action": (
+            "native_client_owned_controls_and_exact_completion_evidence"
+        ),
         "await_exact_customer_continuation": "exact_current_customer_message",
         "assist_iteration_ready": (
             "exact_current_customer_development_instruction_and_native_ide_authority"
@@ -2393,7 +2408,9 @@ def _causal_registration_action(
         "execution_requested": receipt.get("operation_category") == "ide_execute",
         "hosted_activity_requested": False,
         "raw_exposure_requested": False,
-        "native_permission_already_recorded": True,
+        "explicit_client_authority_record_present": True,
+        "native_client_permission_granted_by_qcoder": False,
+        "user_approval_click_inferred": False,
     }
     action["binding_digest"] = sha256(
         json.dumps(
@@ -2858,7 +2875,7 @@ class CurrentLoopCoordinator:
                 ),
                 "current_request_semantics": deepcopy(semantics),
                 "request_semantics_history": history[-32:],
-                "current_step_status": "awaiting_native_permission",
+                "current_step_status": "awaiting_external_client_action",
                 "current_step_substage": (
                     "qasm"
                     if semantics["requested_operation"] == "qasm_export"
@@ -2871,10 +2888,11 @@ class CurrentLoopCoordinator:
             }
         )
         self._replace_coordinator(coordinator)
+        state = self._install_bounded_action_expectation()
         return self._result(
             operation="interpret_current_request",
             ok=True,
-            state=self.store.read(),
+            state=state,
             summary=coordinator["customer_summary"],
             elapsed=self.clock() - started,
             details={
@@ -3655,7 +3673,7 @@ class CurrentLoopCoordinator:
                             "active_loop_at_classification": False,
                         }
                     ]
-                    coordinator["current_step_status"] = "awaiting_native_permission"
+                    coordinator["current_step_status"] = "awaiting_external_client_action"
                     coordinator["current_step_substage"] = "source"
                 coordinator["bootstrap_count"] = 1
                 coordinator["request_baseline_count"] = 1
@@ -3664,10 +3682,15 @@ class CurrentLoopCoordinator:
                 )
                 coordinator["procedural_archaeology_permitted"] = False
                 self._replace_coordinator(coordinator)
+                activated_state = (
+                    self._install_bounded_action_expectation()
+                    if d080_build_semantics
+                    else self.store.read()
+                )
                 return self._result(
                     operation="activate",
                     ok=True,
-                    state=self.store.read(),
+                    state=activated_state,
                     summary=coordinator["customer_summary"],
                     elapsed=self.clock() - started,
                     details={
@@ -6665,6 +6688,36 @@ class CurrentLoopCoordinator:
                     raise CurrentLoopError("native_client_write_event_authority_mismatch")
             coordinator = self._coordinator_state(state)
             request_semantics = coordinator.get("current_request_semantics")
+            if isinstance(
+                coordinator.get("current_step_bounded_action_expectation_id"), str
+            ):
+                return {
+                    "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
+                    "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
+                    "operation": "record_ide_authority",
+                    "ok": False,
+                    "category": "native_client_permission_not_qcoder_state",
+                    "state_revision": state["state_revision"],
+                    "loop_ref": state["loop_ref"],
+                    "customer_summary": (
+                        "The native client owns its permission state. qCoder retained its "
+                        "exact bounded-action expectation without recording a permission."
+                    ),
+                    "recovery": {
+                        "schema_id": "qcoder.current_loop.stage_recovery.v1",
+                        "schema_version": 1,
+                        "recovery_category": (
+                            "retain_bounded_action_and_wait_for_client_completion_evidence"
+                        ),
+                        "state_mutated": False,
+                        "native_client_permission_granted_by_qcoder": False,
+                        "user_approval_click_inferred": False,
+                        "fail_closed": True,
+                    },
+                    "raw_artifact_included": False,
+                    "local_path_included": False,
+                    "secret_included": False,
+                }
             if isinstance(request_semantics, Mapping):
                 validate_request_semantics(request_semantics)
                 if normalized_native_binding is not None and (
@@ -6954,18 +7007,51 @@ class CurrentLoopCoordinator:
         candidates: Sequence[Mapping[str, Any]],
         native_client_event_binding: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Record one native permission and register its exact output in one process.
+        """Retain the legacy explicit-authority seam outside D-081 normal actions.
 
-        This binding-owned normal-path seam composes the existing receipt issuance
-        and receipt-bound registration boundaries.  It grants neither authority
-        implicitly and keeps both lower-level operations available for bounded
-        recovery without making them normal customer choreography.
+        D-081 actions must arrive through native client completion evidence. They
+        cannot be converted back into a qCoder-side permission record by calling
+        this compatibility operation.
         """
 
         started = self.clock()
+        if native_client_event_binding is not None:
+            return self.complete_external_native_action(
+                candidates=candidates,
+                native_client_event_binding=native_client_event_binding,
+            )
         try:
             state = self._require_phase("complete_native_action", {"generation_ready"})
             coordinator = self._coordinator_state(state)
+            if isinstance(
+                coordinator.get("current_step_bounded_action_expectation_id"), str
+            ):
+                return {
+                    "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
+                    "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
+                    "operation": "complete_native_action",
+                    "ok": False,
+                    "category": "native_client_completion_evidence_required",
+                    "state_revision": state["state_revision"],
+                    "loop_ref": state["loop_ref"],
+                    "customer_summary": (
+                        "qCoder is waiting for exact native-action completion evidence; "
+                        "it does not grant or infer native-client permission."
+                    ),
+                    "recovery": {
+                        "schema_id": "qcoder.current_loop.stage_recovery.v1",
+                        "schema_version": 1,
+                        "recovery_category": "retain_bounded_action_and_wait_for_client_event",
+                        "state_mutated": False,
+                        "bounded_action_expectation_retained": True,
+                        "native_client_permission_granted_by_qcoder": False,
+                        "user_approval_click_inferred": False,
+                        "fail_closed": True,
+                    },
+                    "raw_artifact_included": False,
+                    "local_path_included": False,
+                    "secret_included": False,
+                }
             request_semantics = coordinator.get("current_request_semantics")
             if not isinstance(request_semantics, Mapping):
                 raise CurrentLoopError("compressed_native_action_semantics_required")
@@ -7119,11 +7205,255 @@ class CurrentLoopCoordinator:
         except (CurrentLoopError, EventReceiptError, ValueError) as exc:
             return self._exception_result("complete_native_action", exc, started)
 
+    def complete_external_native_action(
+        self,
+        *,
+        candidates: Sequence[Mapping[str, Any]],
+        native_client_event_binding: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Validate client completion evidence and consume qCoder's expectation.
+
+        The native client owns its permission and action. This operation neither grants
+        nor reconstructs that permission; it validates exact completion evidence against
+        qCoder's already-issued one-use bounded-action contract.
+        """
+
+        started = self.clock()
+        try:
+            state = self._require_phase(
+                "complete_external_native_action", {"generation_ready"}
+            )
+            coordinator = self._coordinator_state(state)
+            semantics = coordinator.get("current_request_semantics")
+            if not isinstance(semantics, Mapping):
+                raise CurrentLoopError("bounded_action_expectation_semantics_required")
+            validate_request_semantics(semantics)
+            expectation_id = coordinator.get(
+                "current_step_bounded_action_expectation_id"
+            )
+            expectation_digest = coordinator.get(
+                "current_step_bounded_action_expectation_digest"
+            )
+            expectation = (
+                state.get("operation_receipts", {}).get(expectation_id)
+                if isinstance(expectation_id, str)
+                else None
+            )
+            if (
+                coordinator.get("current_step_status")
+                != "awaiting_external_client_action"
+                or not isinstance(expectation, Mapping)
+                or expectation.get("receipt_kind")
+                != "qcoder_bounded_action_expectation"
+                or expectation.get("status") != "issued"
+                or expectation.get("receipt_digest") != expectation_digest
+            ):
+                raise CurrentLoopError("bounded_action_expectation_not_active")
+            binding = dict(native_client_event_binding)
+            required_binding = {
+                "schema_id": "qcoder.current_loop.native_client_write_event.v4",
+                "schema_version": 4,
+                "transport": "cursor_project_redundant_native_edit_hooks",
+                "semantic_event": "native_file_edit_completed",
+                "tool_name_match_required": False,
+                "native_write_completed_before_hook": True,
+                "source_bytes_returned": False,
+                "native_client_permission_owned_by_client": True,
+                "native_client_permission_granted_by_qcoder": False,
+                "native_client_permission_telemetry_required": False,
+                "user_approval_click_inferred": False,
+            }
+            if (
+                any(binding.get(key) != value for key, value in required_binding.items())
+                or binding.get("hook_event_name") not in {"afterFileEdit", "postToolUse"}
+                or binding.get("bounded_action_expectation_id") != expectation_id
+                or binding.get("bounded_action_expectation_digest") != expectation_digest
+            ):
+                raise CurrentLoopError("native_action_completion_evidence_invalid")
+            authority_binding = expectation.get("authority_binding")
+            if not isinstance(authority_binding, Mapping):
+                raise CurrentLoopError("bounded_action_expectation_invalid")
+            expected_role = authority_binding.get("authorized_artifact_role")
+            normalized = self._normalize_candidates(candidates)
+            if (
+                len(normalized) != 1
+                or normalized[0].get("role") != expected_role
+                or binding.get("artifact_role") != expected_role
+                or binding.get("artifact_cardinality") != "exactly_one"
+            ):
+                raise CurrentLoopError("bounded_action_completion_cardinality_or_role_mismatch")
+            candidate_path = Path(str(normalized[0]["path"]))
+            raw = candidate_path.read_bytes()
+            expected_checks = {
+                "bound_loop_identity_sha256": sha256(
+                    str(state["loop_ref"]).encode("utf-8")
+                ).hexdigest(),
+                "bound_workspace_identity_sha256": sha256(
+                    str(state["workspace_root"]).encode("utf-8")
+                ).hexdigest(),
+                "bound_state_revision": state["state_revision"],
+                "current_request_identity_sha256": semantics[
+                    "original_message_utf8_sha256"
+                ],
+                "current_request_semantics_digest": semantics["semantics_digest"],
+                "current_step_ceiling_digest": semantics["current_step_ceiling"][
+                    "ceiling_digest"
+                ],
+                "exact_path_sha256": sha256(
+                    str(candidate_path).encode("utf-8")
+                ).hexdigest(),
+                "expected_artifact_sha256": sha256(raw).hexdigest(),
+                "expected_artifact_bytes": len(raw),
+            }
+            if any(binding.get(key) != value for key, value in expected_checks.items()):
+                raise CurrentLoopError("native_action_completion_state_or_artifact_mismatch")
+            if any(
+                authority_binding.get(key) != value
+                for key, value in {
+                    "bound_loop_identity_sha256": expected_checks[
+                        "bound_loop_identity_sha256"
+                    ],
+                    "bound_workspace_identity_sha256": expected_checks[
+                        "bound_workspace_identity_sha256"
+                    ],
+                    "bound_state_revision": expected_checks["bound_state_revision"],
+                    "current_request_identity_sha256": expected_checks[
+                        "current_request_identity_sha256"
+                    ],
+                    "current_request_semantics_digest": expected_checks[
+                        "current_request_semantics_digest"
+                    ],
+                    "current_step_ceiling_digest": expected_checks[
+                        "current_step_ceiling_digest"
+                    ],
+                }.items()
+            ):
+                raise CurrentLoopError("bounded_action_expectation_state_mismatch")
+            approval_telemetry = binding.get("explicit_client_approval_telemetry")
+            if approval_telemetry is not None and (
+                not isinstance(approval_telemetry, Mapping)
+                or set(approval_telemetry).difference(
+                    {"observed", "source", "event_identity_sha256"}
+                )
+                or approval_telemetry.get("observed") is not True
+                or approval_telemetry.get("source") != "native_client_supplied"
+                or not isinstance(approval_telemetry.get("event_identity_sha256"), str)
+                or len(approval_telemetry["event_identity_sha256"]) != 64
+            ):
+                raise CurrentLoopError("native_client_approval_telemetry_invalid")
+            completion_evidence = {
+                "schema_id": "qcoder.current_loop.native_action_completion_evidence.v1",
+                "hook_event_name": binding["hook_event_name"],
+                "transport": binding["transport"],
+                "bounded_action_expectation_id": expectation_id,
+                "bounded_action_expectation_digest": expectation_digest,
+                "conversation_identity_sha256": binding["conversation_identity_sha256"],
+                "generation_identity_sha256": binding["generation_identity_sha256"],
+                "exact_path_sha256": binding["exact_path_sha256"],
+                "artifact_sha256": binding["expected_artifact_sha256"],
+                "artifact_bytes": binding["expected_artifact_bytes"],
+                "artifact_role": expected_role,
+                "artifact_cardinality": "exactly_one",
+                "native_client_permission_owned_by_client": True,
+                "native_client_permission_granted_by_qcoder": False,
+                "client_approval_telemetry": (
+                    deepcopy(dict(approval_telemetry))
+                    if isinstance(approval_telemetry, Mapping)
+                    else None
+                ),
+                "user_approval_click_inferred": False,
+                "raw_path_retained": False,
+                "raw_source_retained": False,
+            }
+            registered = self.register_artifacts(
+                candidates=candidates,
+                operation_receipt_id=expectation_id,
+                native_action_completion_evidence=completion_evidence,
+            )
+            registered["operation"] = "complete_external_native_action"
+            details = registered.setdefault("details", {})
+            details.update(
+                {
+                    "qcoder_bounded_action_expectation_consumed": (
+                        registered.get("ok") is True
+                    ),
+                    "native_client_permission_owned_by_client": True,
+                    "native_client_permission_granted_by_qcoder": False,
+                    "native_client_permission_observed": (
+                        isinstance(approval_telemetry, Mapping)
+                    ),
+                    "user_approval_click_inferred": False,
+                    "native_action_completion_evidence_recorded": (
+                        registered.get("ok") is True
+                    ),
+                    "exact_output_registered": registered.get("ok") is True,
+                    "separate_qcoder_native_permission_receipt_required": False,
+                    "public_context_bridge_tool_added": False,
+                }
+            )
+            if registered.get("ok") is not True:
+                details["bounded_action_expectation_retained_for_exact_recovery"] = True
+            elif isinstance(registered.get("current_request_semantics"), Mapping):
+                registered = self._normal_d080_success_projection(registered)
+            return registered
+        except (CurrentLoopError, EventReceiptError, OSError, ValueError) as exc:
+            category = str(
+                getattr(exc, "category", "native_action_completion_file_unavailable")
+            )
+            safe_categories = {
+                "bounded_action_expectation_not_active",
+                "bounded_action_expectation_invalid",
+                "bounded_action_expectation_state_mismatch",
+                "bounded_action_expectation_semantics_required",
+                "bounded_action_completion_cardinality_or_role_mismatch",
+                "native_action_completion_evidence_invalid",
+                "native_action_completion_state_or_artifact_mismatch",
+                "native_client_approval_telemetry_invalid",
+                "artifact_candidate_file_required",
+                "artifact_candidate_path_invalid",
+                "artifact_candidate_role_invalid",
+                "external_artifact_selection_required",
+            }
+            if category not in safe_categories:
+                category = "native_action_completion_file_unavailable"
+            state = self.store.read()
+            coordinator = self._coordinator_state(state)
+            return {
+                "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
+                "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
+                "operation": "complete_external_native_action",
+                "ok": False,
+                "category": category,
+                "state_revision": state["state_revision"],
+                "loop_ref": state["loop_ref"],
+                "current_step_status": coordinator.get("current_step_status"),
+                "customer_summary": (
+                    "The native action evidence did not match qCoder's exact bounded "
+                    "action. Nothing was registered."
+                ),
+                "recovery": {
+                    "schema_id": "qcoder.current_loop.stage_recovery.v1",
+                    "schema_version": 1,
+                    "recovery_category": "retain_expectation_and_require_exact_client_event",
+                    "bounded_action_expectation_retained": True,
+                    "state_mutated": False,
+                    "authority_broadened": False,
+                    "native_client_permission_granted_by_qcoder": False,
+                    "user_approval_click_inferred": False,
+                    "fail_closed": True,
+                },
+                "raw_artifact_included": False,
+                "local_path_included": False,
+                "secret_included": False,
+                "elapsed_seconds": max(0.0, self.clock() - started),
+            }
+
     def register_artifacts(
         self,
         *,
         candidates: Sequence[Mapping[str, Any]],
         operation_receipt_id: str | None = None,
+        native_action_completion_evidence: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         started = self.clock()
         try:
@@ -7139,9 +7469,13 @@ class CurrentLoopCoordinator:
             )
             coordinator = self._coordinator_state(state)
             request_semantics = coordinator.get("current_request_semantics")
+            bounded_expectation = False
             if isinstance(request_semantics, Mapping):
                 validate_request_semantics(request_semantics)
                 expected_receipt_id = coordinator.get("current_step_operation_receipt_id")
+                expected_expectation_id = coordinator.get(
+                    "current_step_bounded_action_expectation_id"
+                )
                 receipt = (
                     state.get("operation_receipts", {}).get(operation_receipt_id)
                     if isinstance(operation_receipt_id, str)
@@ -7150,11 +7484,28 @@ class CurrentLoopCoordinator:
                 authority_binding = (
                     receipt.get("authority_binding") if isinstance(receipt, Mapping) else None
                 )
+                bounded_expectation = bool(
+                    isinstance(receipt, Mapping)
+                    and receipt.get("receipt_kind")
+                    == "qcoder_bounded_action_expectation"
+                )
                 receipt_exact = bool(
-                    coordinator.get("current_step_status") == "awaiting_artifact_registration"
-                    and isinstance(expected_receipt_id, str)
-                    and operation_receipt_id == expected_receipt_id
-                    and isinstance(receipt, Mapping)
+                    (
+                        bounded_expectation
+                        and coordinator.get("current_step_status")
+                        == "awaiting_external_client_action"
+                        and isinstance(expected_expectation_id, str)
+                        and operation_receipt_id == expected_expectation_id
+                    )
+                    or (
+                        not bounded_expectation
+                        and coordinator.get("current_step_status")
+                        == "awaiting_artifact_registration"
+                        and isinstance(expected_receipt_id, str)
+                        and operation_receipt_id == expected_receipt_id
+                    )
+                ) and bool(
+                    isinstance(receipt, Mapping)
                     and receipt.get("status") == "issued"
                     and isinstance(authority_binding, Mapping)
                     and authority_binding.get("current_request_semantics_digest")
@@ -7272,9 +7623,22 @@ class CurrentLoopCoordinator:
                         candidates=normalized,
                         workspace_root=self.workspace_root,
                         operation_receipt_id=operation_receipt_id,
-                        authorization_source="operation_receipt",
-                        enrollment_authority="current_loop_contract_assist",
+                        authorization_source=(
+                            "qcoder_bounded_action_and_client_completion_evidence"
+                            if bounded_expectation
+                            else "operation_receipt"
+                        ),
+                        enrollment_authority=(
+                            "native_client_completed_qcoder_bounded_action"
+                            if bounded_expectation
+                            else "current_loop_contract_assist"
+                        ),
                         collect_permitted_roles=permitted_roles,
+                        native_action_completion_evidence=(
+                            native_action_completion_evidence
+                            if bounded_expectation
+                            else None
+                        ),
                         current_time=self.clock(),
                     )
                     registration = commit_registration_transaction(
@@ -7322,6 +7686,37 @@ class CurrentLoopCoordinator:
                     ValueError,
                 ) as exc:
                     error_category = str(getattr(exc, "category", "unknown_local_internal"))
+                    if bounded_expectation:
+                        current = self.store.read()
+                        return {
+                            "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
+                            "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
+                            "operation": "register_artifacts",
+                            "ok": False,
+                            "category": error_category,
+                            "state_revision": current["state_revision"],
+                            "loop_ref": current["loop_ref"],
+                            "customer_summary": (
+                                "The completed native action did not match qCoder's exact "
+                                "bounded expectation. Nothing was registered."
+                            ),
+                            "recovery": {
+                                "schema_id": "qcoder.current_loop.stage_recovery.v1",
+                                "schema_version": 1,
+                                "recovery_category": (
+                                    "retain_expectation_and_require_exact_client_event"
+                                ),
+                                "bounded_action_expectation_retained": True,
+                                "state_mutated": False,
+                                "authority_broadened": False,
+                                "native_client_permission_granted_by_qcoder": False,
+                                "user_approval_click_inferred": False,
+                                "fail_closed": True,
+                            },
+                            "raw_artifact_included": False,
+                            "local_path_included": False,
+                            "secret_included": False,
+                        }
                     receipt_recovery_context: dict[str, Any] = {
                         "operation_receipt_id": operation_receipt_id,
                         "candidates": [
@@ -7432,20 +7827,27 @@ class CurrentLoopCoordinator:
                             "current_step_status": (
                                 "complete_resumable"
                                 if step_complete
-                                else "awaiting_native_permission"
+                                else "awaiting_external_client_action"
                             ),
                             "current_step_substage": (
                                 completed_substage if step_complete else next_substage
                             ),
                             "current_step_operation_receipt_id": None,
+                            "current_step_bounded_action_expectation_id": None,
+                            "current_step_bounded_action_expectation_digest": None,
                             "assist_iteration_ready": False,
                         }
                     )
                     self._replace_coordinator(coordinator)
+                    resulting_state = (
+                        self.store.read()
+                        if step_complete
+                        else self._install_bounded_action_expectation()
+                    )
                     return self._result(
                         operation="register_artifacts",
                         ok=True,
-                        state=self.store.read(),
+                        state=resulting_state,
                         summary=coordinator["customer_summary"],
                         elapsed=self.clock() - started,
                         details={
@@ -7453,6 +7855,11 @@ class CurrentLoopCoordinator:
                             "artifact_review_performed": False,
                             "local_evidence_processing_performed": False,
                             "operation_receipt_consumed": True,
+                            "receipt_kind": (
+                                registration.get("activity_receipt", {}).get(
+                                    "receipt_kind"
+                                )
+                            ),
                             "activity_receipt": deepcopy(registration["activity_receipt"]),
                             "registered_revision_ids": deepcopy(
                                 registration["registered_revision_ids"]
@@ -11383,6 +11790,8 @@ class CurrentLoopCoordinator:
             "current_step_status": "not_applicable",
             "current_step_substage": None,
             "current_step_operation_receipt_id": None,
+            "current_step_bounded_action_expectation_id": None,
+            "current_step_bounded_action_expectation_digest": None,
             "bootstrap_count": 0,
             "request_baseline_count": 0,
         }
@@ -11400,7 +11809,7 @@ class CurrentLoopCoordinator:
         if result.get("schema_id") in {
             PREVIOUS_COORDINATOR_STATE_SCHEMA_ID,
             *OLDER_COORDINATOR_STATE_SCHEMA_IDS,
-        } and result.get("schema_version") in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}:
+        } and result.get("schema_version") in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}:
             result["schema_id"] = COORDINATOR_STATE_SCHEMA_ID
             result["schema_version"] = COORDINATOR_STATE_SCHEMA_VERSION
             result.setdefault("effective_generation_posture", state.get("generation_posture"))
@@ -11421,8 +11830,14 @@ class CurrentLoopCoordinator:
             result.setdefault("current_step_status", "not_applicable")
             result.setdefault("current_step_substage", None)
             result.setdefault("current_step_operation_receipt_id", None)
+            result.setdefault("current_step_bounded_action_expectation_id", None)
+            result.setdefault("current_step_bounded_action_expectation_digest", None)
             result.setdefault("bootstrap_count", 0)
             result.setdefault("request_baseline_count", 0)
+            if isinstance(result.get("current_request_semantics"), Mapping):
+                result["current_request_semantics"] = migrate_request_semantics(
+                    result["current_request_semantics"]
+                )
             for candidate in result.get("artifact_candidates", []):
                 if (
                     isinstance(candidate, dict)
@@ -11447,6 +11862,8 @@ class CurrentLoopCoordinator:
         result.setdefault("current_step_status", "not_applicable")
         result.setdefault("current_step_substage", None)
         result.setdefault("current_step_operation_receipt_id", None)
+        result.setdefault("current_step_bounded_action_expectation_id", None)
+        result.setdefault("current_step_bounded_action_expectation_digest", None)
         result.setdefault("bootstrap_count", 0)
         result.setdefault("request_baseline_count", 0)
         if (
@@ -11498,6 +11915,9 @@ class CurrentLoopCoordinator:
             "not_applicable",
             "action_ready",
             "awaiting_native_permission",
+            "awaiting_external_client_action",
+            "native_action_completed",
+            "registration_ready",
             "awaiting_artifact_registration",
             "complete_resumable",
         }:
@@ -11513,6 +11933,15 @@ class CurrentLoopCoordinator:
             raise CurrentLoopError("current_loop_state_corrupt")
         if result.get("current_step_operation_receipt_id") is not None and not isinstance(
             result.get("current_step_operation_receipt_id"), str
+        ):
+            raise CurrentLoopError("current_loop_state_corrupt")
+        if result.get("current_step_bounded_action_expectation_id") is not None and not isinstance(
+            result.get("current_step_bounded_action_expectation_id"), str
+        ):
+            raise CurrentLoopError("current_loop_state_corrupt")
+        if result.get("current_step_bounded_action_expectation_digest") is not None and (
+            not isinstance(result.get("current_step_bounded_action_expectation_digest"), str)
+            or len(result["current_step_bounded_action_expectation_digest"]) != 64
         ):
             raise CurrentLoopError("current_loop_state_corrupt")
         if not isinstance(result.get("bootstrap_count"), int) or not isinstance(
@@ -11566,6 +11995,128 @@ class CurrentLoopCoordinator:
             return value
 
         self.store.update(mutator, expected_revision=state["state_revision"])
+
+    def _install_bounded_action_expectation(self) -> dict[str, Any]:
+        """Persist qCoder's one-use acceptance contract, never client permission."""
+
+        state = self.store.read()
+        coordinator = self._coordinator_state(state)
+        semantics = coordinator.get("current_request_semantics")
+        if not isinstance(semantics, Mapping):
+            raise CurrentLoopError("bounded_action_expectation_semantics_required")
+        validate_request_semantics(semantics)
+        requested_operation = str(semantics["requested_operation"])
+        substage = coordinator.get("current_step_substage")
+        operation_category, role = (
+            ("ide_write", "circuit_qasm")
+            if substage == "qasm" or requested_operation == "qasm_export"
+            else ("ide_execute", "results")
+            if substage == "execution" or requested_operation == "local_execution"
+            else ("ide_write", "source")
+        )
+        ceiling_operation = {
+            "source": "ide_write_source",
+            "circuit_qasm": "ide_export_qasm",
+            "results": "ide_execute_local",
+        }[role]
+        if not ceiling_allows(
+            semantics,
+            operation=ceiling_operation,
+            artifact_roles=(role,),
+        ):
+            raise CurrentLoopError("bounded_action_expectation_ceiling_mismatch")
+        existing_id = coordinator.get("current_step_bounded_action_expectation_id")
+        existing = (
+            state.get("operation_receipts", {}).get(existing_id)
+            if isinstance(existing_id, str)
+            else None
+        )
+        if isinstance(existing, Mapping) and existing.get("status") == "issued":
+            return state
+
+        expected_revision = int(state["state_revision"])
+        final_revision = expected_revision + 1
+        # Every public coordinator result persists its bounded performance receipt
+        # before the client can observe or act on the returned expectation. Bind the
+        # expectation to that externally observable revision, not the transient
+        # insertion revision.
+        observable_revision = final_revision + 1
+        ceiling = semantics["current_step_ceiling"]
+        authority_binding = {
+            "schema_id": "qcoder.current_loop.bounded_action_expectation_binding.v1",
+            "authority_layer": "qcoder_bounded_action",
+            "native_client_permission_owner": "native_client",
+            "native_client_permission_granted_by_qcoder": False,
+            "native_client_permission_telemetry_required": False,
+            "user_approval_click_inferred": False,
+            "phase": coordinator["phase"],
+            "checkpoint_kind": coordinator["checkpoint_kind"],
+            "effective_contract_digest": state["current_loop_contract"].get(
+                "effective_policy_digest"
+            ),
+            "requested_operation": operation_category,
+            "requested_destination": "active_loop_canonical_evidence_registry",
+            "current_request_identity_sha256": semantics["original_message_utf8_sha256"],
+            "current_request_semantics_digest": semantics["semantics_digest"],
+            "current_step_ceiling_digest": ceiling["ceiling_digest"],
+            "authorized_artifact_role": role,
+            "authorized_artifact_cardinality": "exactly_one",
+            "prohibited_artifact_roles": list(ceiling["prohibited_artifact_roles"]),
+            "bound_loop_identity_sha256": sha256(
+                str(state["loop_ref"]).encode("utf-8")
+            ).hexdigest(),
+            "bound_workspace_identity_sha256": sha256(
+                str(state["workspace_root"]).encode("utf-8")
+            ).hexdigest(),
+            "bound_state_revision": observable_revision,
+            "single_use": True,
+            "stale_after_any_authoritative_revision_change": True,
+            "authority_evidence_source": "qcoder_bounded_action_expectation",
+        }
+        receipt = issue_operation_receipt(
+            loop_ref=str(state["loop_ref"]),
+            workspace_binding=str(state["workspace_root"]),
+            state_revision=observable_revision,
+            contract_revision=int(state["current_loop_contract"]["contract_revision"]),
+            operation_category=operation_category,
+            output_role_ceiling=(role,),
+            authority_binding=authority_binding,
+            receipt_kind="qcoder_bounded_action_expectation",
+            issued_at=self.clock(),
+        )
+        expectation_id = str(receipt["receipt_id"])
+        expectation_digest = str(receipt["receipt_digest"])
+        coordinator.update(
+            {
+                "current_step_status": "awaiting_external_client_action",
+                "current_step_operation_receipt_id": None,
+                "current_step_bounded_action_expectation_id": expectation_id,
+                "current_step_bounded_action_expectation_digest": expectation_digest,
+                "customer_summary": (
+                    "qCoder prepared one exact bounded action contract. The native client "
+                    "owns any local permission and action; qCoder will accept only matching "
+                    "completion evidence and grants no native permission."
+                ),
+            }
+        )
+        coordinator["authority_separation"]["ide_write_or_run"] = (
+            "owned_by_native_client_not_observed_or_granted_by_qcoder"
+        )
+
+        def mutator(value: dict[str, Any]) -> Mapping[str, Any]:
+            value["operation_receipts"][expectation_id] = deepcopy(receipt)
+            value["coordinator"] = deepcopy(coordinator)
+            value["next_operation"] = (
+                _PHASE_TRANSITIONS[coordinator["phase"]][0]
+                if _PHASE_TRANSITIONS[coordinator["phase"]]
+                else None
+            )
+            return value
+
+        updated = self.store.update(mutator, expected_revision=expected_revision)
+        if updated["state_revision"] != final_revision:
+            raise CurrentLoopError("bounded_action_expectation_issuance_incomplete")
+        return updated
 
     def _saved_references(self, state: Mapping[str, Any]) -> list[dict[str, Any]]:
         result = []
@@ -11753,11 +12304,11 @@ class CurrentLoopCoordinator:
                 if current_substage == "qasm":
                     operation_category = "ide_write"
                     output_role = "circuit_qasm"
-                    customer_label = "Allow this QASM export"
+                    customer_label = "Complete this QASM export using the native client"
                 elif current_substage == "execution":
                     operation_category = "ide_execute"
                     output_role = "results"
-                    customer_label = "Allow this local execution"
+                    customer_label = "Complete this local execution using the native client"
                 elif requested_operation in {
                     "source_generation",
                     "source_and_qasm_generation",
@@ -11765,15 +12316,15 @@ class CurrentLoopCoordinator:
                 }:
                     operation_category = "ide_write"
                     output_role = "source"
-                    customer_label = "Allow this source write"
+                    customer_label = "Complete this source write using the native client"
                 elif requested_operation == "qasm_export":
                     operation_category = "ide_write"
                     output_role = "circuit_qasm"
-                    customer_label = "Allow this QASM export"
+                    customer_label = "Complete this QASM export using the native client"
                 elif requested_operation == "local_execution":
                     operation_category = "ide_execute"
                     output_role = "results"
-                    customer_label = "Allow this local execution"
+                    customer_label = "Complete this local execution using the native client"
                 else:
                     raise CurrentLoopError("current_request_stage_unsupported")
                 path_flag = {
@@ -11817,30 +12368,47 @@ class CurrentLoopCoordinator:
                     and cursor_hook.get("configured") is True
                     and cursor_hook.get("exact_runtime_bound") is True
                 )
+                expectation_id = coordinator.get(
+                    "current_step_bounded_action_expectation_id"
+                )
+                expectation_digest = coordinator.get(
+                    "current_step_bounded_action_expectation_digest"
+                )
+                if not isinstance(expectation_id, str) or not isinstance(
+                    expectation_digest, str
+                ):
+                    raise CurrentLoopError("bounded_action_expectation_missing")
                 compact_action = {
-                    "schema_id": "qcoder.current_loop.compact_next_action.v2",
-                    "schema_version": 2,
+                    "schema_id": "qcoder.current_loop.compact_next_action.v3",
+                    "schema_version": 3,
                     "action": operation_category,
                     "artifact_role": output_role,
-                    "customer_facing_permission": customer_label,
+                    "customer_facing_action": customer_label,
                     "current_request_semantics_digest": request_semantics["semantics_digest"],
                     "current_step_ceiling_digest": request_semantics["current_step_ceiling"][
                         "ceiling_digest"
                     ],
-                    "native_permission_required": True,
+                    "bounded_action_expectation_id": expectation_id,
+                    "bounded_action_expectation_digest": expectation_digest,
+                    "native_client_permission_owner": "native_client",
+                    "native_client_permission_requirement": "client_determined",
+                    "native_client_permission_granted_by_qcoder": False,
+                    "native_client_permission_observed_by_qcoder": False,
+                    "native_client_approval_telemetry_required": False,
+                    "user_approval_click_inferred": False,
                     "grants_execution": operation_category == "ide_execute",
                     "grants_evidence_review": False,
                     "grants_governing_change": False,
                     "native_action_sequence": [
-                        "obtain_action_specific_native_permission",
-                        "perform_exact_native_action",
+                        "native_client_applies_its_own_controls",
+                        "perform_exact_external_native_action",
                         (
                             "first_valid_native_edit_event_completes_exact_registration"
                             if cursor_hook_ready
                             else "execute_single_bound_post_action_invocation"
                         ),
                     ],
-                    "post_action_operation": "complete_native_action",
+                    "post_action_operation": "complete_external_native_action",
                     "post_action_transport": (
                         CURSOR_POST_WRITE_TRANSPORT if cursor_hook_ready else "local_command"
                     ),
@@ -11868,8 +12436,8 @@ class CurrentLoopCoordinator:
                     "model_shell_invocation_required": not cursor_hook_ready,
                     "customer_visible_cli_permitted": False,
                     "second_native_approval_required": False,
-                    "authority_receipt_and_registration_same_process": True,
-                    "separate_authority_receipt_call_required": False,
+                    "bounded_action_expectation_preissued_by_qcoder": True,
+                    "separate_qcoder_native_permission_receipt_required": False,
                     "separate_registration_call_required": False,
                     "normal_path_qcoder_serial_cycles_including_bootstrap": 2,
                     "normal_path_expected_model_turns": 3,
@@ -11881,7 +12449,7 @@ class CurrentLoopCoordinator:
                 ).hexdigest()
                 protocol.update(
                     {
-                        "supported_next_action": "obtain_action_specific_native_permission",
+                        "supported_next_action": "perform_exact_external_client_action",
                         "next_invocation": (
                             _invocation_template(
                                 None,
@@ -11892,10 +12460,10 @@ class CurrentLoopCoordinator:
                         ),
                         "compact_next_action": compact_action,
                         "compact_next_action_is_sole_procedural_source": True,
-                        "required_authority_input": _authority_input(
-                            "--allow", customer_label, additional_flags=("--explicit",)
+                        "required_authority_input": None,
+                        "permitted_input_source": (
+                            "native_client_owned_controls_and_exact_completion_evidence"
                         ),
-                        "permitted_input_source": "explicit_action_specific_native_permission",
                     }
                 )
                 return protocol
@@ -11971,7 +12539,9 @@ class CurrentLoopCoordinator:
                     "current_step_ceiling_digest": request_semantics["current_step_ceiling"][
                         "ceiling_digest"
                     ],
-                    "native_permission_already_recorded": True,
+                    "explicit_client_authority_record_present": True,
+                    "native_client_permission_granted_by_qcoder": False,
+                    "user_approval_click_inferred": False,
                     "grants_evidence_review": False,
                     "procedural_source_of_truth": True,
                     "transcript_or_repository_reconstruction_permitted": False,
@@ -12850,6 +13420,58 @@ class CurrentLoopCoordinator:
         )
         request_semantics = coordinator.get("current_request_semantics")
         compact_action = protocol.get("compact_next_action")
+        expectation_id = coordinator.get("current_step_bounded_action_expectation_id")
+        expectation = (
+            state.get("operation_receipts", {}).get(expectation_id)
+            if isinstance(expectation_id, str)
+            else None
+        )
+        expectation_binding = (
+            expectation.get("authority_binding")
+            if isinstance(expectation, Mapping)
+            else None
+        )
+        if (
+            isinstance(compact_action, Mapping)
+            and isinstance(expectation, Mapping)
+            and expectation.get("receipt_kind") == "qcoder_bounded_action_expectation"
+            and isinstance(expectation_binding, Mapping)
+        ):
+            compact = deepcopy(dict(compact_action))
+            compact.pop("action_digest", None)
+            compact["bounded_action_contract"] = {
+                "schema_id": "qcoder.current_loop.bounded_action_projection.v1",
+                "expectation_id": expectation_id,
+                "expectation_digest": expectation.get("receipt_digest"),
+                "bound_loop_identity_sha256": expectation_binding.get(
+                    "bound_loop_identity_sha256"
+                ),
+                "bound_workspace_identity_sha256": expectation_binding.get(
+                    "bound_workspace_identity_sha256"
+                ),
+                "bound_state_revision": expectation_binding.get("bound_state_revision"),
+                "request_identity_sha256": expectation_binding.get(
+                    "current_request_identity_sha256"
+                ),
+                "current_step_ceiling_digest": expectation_binding.get(
+                    "current_step_ceiling_digest"
+                ),
+                "permitted_artifact_role": expectation_binding.get(
+                    "authorized_artifact_role"
+                ),
+                "permitted_artifact_cardinality": expectation_binding.get(
+                    "authorized_artifact_cardinality"
+                ),
+                "prohibited_artifact_roles": deepcopy(
+                    expectation_binding.get("prohibited_artifact_roles", [])
+                ),
+                "single_use": True,
+                "native_client_permission_owner": "native_client",
+                "native_client_permission_granted_or_observed_by_qcoder": False,
+            }
+            compact["action_digest"] = sha256(canonical_bytes(compact)).hexdigest()
+            protocol["compact_next_action"] = compact
+            compact_action = compact
         bound_next = protocol.get("next_invocation")
         if (
             isinstance(request_semantics, Mapping)
@@ -12988,11 +13610,15 @@ class CurrentLoopCoordinator:
                 if current_substage == "qasm":
                     bounded["object"] = "exact_bounded_qasm_export"
                     native["object"] = "exact_local_file_write"
-                    native["customer_facing_label"] = "Allow this QASM export"
+                    native["customer_facing_label"] = (
+                        "The native client applies its controls to this QASM export"
+                    )
                 else:
                     bounded["object"] = "exact_bounded_local_execution"
                     native["object"] = "exact_local_execution"
-                    native["customer_facing_label"] = "Allow this local execution"
+                    native["customer_facing_label"] = (
+                        "The native client applies its controls to this local execution"
+                    )
                 current_layers["projection_basis"] = "current_step_substage"
                 current_layers["current_step_substage"] = current_substage
             result["authority_layers"] = current_layers

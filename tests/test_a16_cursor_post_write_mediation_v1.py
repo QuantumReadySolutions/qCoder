@@ -169,7 +169,12 @@ def test_semantic_after_file_edit_registers_fresh_or_existing_authorized_source(
     assert len(state["operation_receipts"]) == 1
     receipt = next(iter(state["operation_receipts"].values()))
     assert receipt["status"] == "consumed"
-    assert receipt["authority_evidence_source"] == "cursor_after_file_edit_event"
+    assert receipt["authority_evidence_source"] == (
+        "qcoder_bounded_action_and_client_completion_evidence"
+    )
+    assert receipt["bounded_action_contract_source"] == (
+        "qcoder_bounded_action_expectation"
+    )
     assert len(_sources(coordinator)) == 1
     assert _sources(coordinator)[0]["event_disposition"] == ("modified" if existing else "created")
 
@@ -220,20 +225,22 @@ def test_mismatched_path_or_changed_bytes_fail_closed_without_false_completion(
 
     source = tmp_path / "bell.py"
     source.write_text("print('before')\n", encoding="utf-8")
-    original = CurrentLoopCoordinator.complete_native_action
+    original = CurrentLoopCoordinator.complete_external_native_action
 
     def mutate_before_verification(self, **kwargs):
         source.write_text("print('changed')\n", encoding="utf-8")
         return original(self, **kwargs)
 
     monkeypatch.setattr(
-        CurrentLoopCoordinator, "complete_native_action", mutate_before_verification
+        CurrentLoopCoordinator, "complete_external_native_action", mutate_before_verification
     )
     failed = handle_cursor_after_file_edit_event(
         workspace_root=tmp_path, event=_edit_event(tmp_path, source)
     )
     assert failed["ok"] is failed["registration_completed"] is False
-    assert failed["safe_error_category"] == "native_client_write_event_artifact_mismatch"
+    assert failed["safe_error_category"] == (
+        "native_action_completion_state_or_artifact_mismatch"
+    )
     assert coordinator.store.read() == before
 
 

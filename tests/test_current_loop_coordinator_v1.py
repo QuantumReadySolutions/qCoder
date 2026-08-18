@@ -604,9 +604,9 @@ def _activate_and_prepare(
 
 def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
     snapshot = coordinator_contract_snapshot()
-    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v18"
-    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v14"
-    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 18
+    assert snapshot["schemas"]["result"] == "qcoder.current_loop.coordinator_result.v19"
+    assert snapshot["schemas"]["state"] == "qcoder.current_loop.coordinator_state.v15"
+    assert snapshot["checkpoint_result_protocol"]["schema_version"] == 19
     assert all(snapshot["checkpoint_result_protocol"].values())
     assert snapshot["permitted_input_source_taxonomy"] == {
         "schema_id": INPUT_SOURCE_DISPOSITION_SCHEMA_ID,
@@ -645,10 +645,15 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "registration_authorizes_review": False,
         "operation_receipt_supported": True,
         "operation_receipt_single_use": True,
-        "operation_receipt_single_use_meaning": (
-            "consumed_after_successful_atomic_canonical_registration"
-        ),
-        "authorization_source_client_supplied": False,
+            "operation_receipt_single_use_meaning": (
+                "consumed_after_successful_atomic_canonical_registration"
+            ),
+            "bounded_action_expectation_supported": True,
+            "native_client_permission_owner": "native_client",
+            "native_client_permission_granted_or_observed_by_qcoder": False,
+            "native_action_completion_evidence_required_for_d081": True,
+            "explicit_client_approval_telemetry": "optional_provenance_only",
+            "authorization_source_client_supplied": False,
         "registered_and_presentation_currentness_separate": True,
     }
     contract_digest = hashlib.sha256(
@@ -659,7 +664,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("d7ea7de60df2198d8687fcad4a58ddd8df63813e430ec8ef0e5ec69ca79e40d7")
+    assert contract_digest == ("40eb58268dbf4562793c0b46e319e8899227bacc9f96a52bdda3846facfedab7")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
@@ -2743,8 +2748,8 @@ def test_every_checkpoint_result_is_deterministically_actionable(tmp_path: Path)
             summary="Synthetic checkpoint contract test.",
         )
         _assert_actionable_checkpoint(result)
-        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v18"
-        assert result["schema_version"] == 18
+        assert result["schema_id"] == "qcoder.current_loop.coordinator_result.v19"
+        assert result["schema_version"] == 19
 
 
 @pytest.mark.parametrize(

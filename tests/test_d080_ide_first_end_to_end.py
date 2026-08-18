@@ -12,6 +12,10 @@ from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.current_loop_bootstrap import build_fresh_active_build_bootstrap
 from qcoder.current_loop_invocation import operation_transport_inventory
 from qcoder.current_loop_request_semantics import classify_current_request
+from qcoder.cursor_post_write_hook import (
+    handle_cursor_after_file_edit_event,
+    install_cursor_post_write_hook,
+)
 from qcoder.d079_workflows import classify_binding_default_route
 
 
@@ -162,16 +166,18 @@ def test_binding_route_and_inventory_are_deterministic_and_keep_twelve_tools() -
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v29"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v30"
     assert (
         descriptor["current_request_semantics_contract"]["temporary_current_step_ceiling"] is True
     )
     handoff = descriptor["workstyle_routes"]["d080_current_request"][
         "normal_path_native_action_handoff"
     ]
-    assert handoff["post_action_operation"] == "complete_native_action"
+    assert handoff["post_action_operation"] == "complete_external_native_action"
     assert handoff["qcoder_serial_control_cycles"] == 2
-    assert handoff["authority_receipt_and_registration_composed"] is True
+    assert handoff["bounded_action_expectation_and_registration_composed"] is True
+    assert handoff["native_client_permission_owner"] == "native_client"
+    assert handoff["native_client_permission_granted_or_observed_by_qcoder"] is False
     assert handoff["separate_receipt_read_required"] is False
     assert handoff["separate_registration_discovery_required"] is False
     compressed = next(
@@ -184,6 +190,7 @@ def test_binding_route_and_inventory_are_deterministic_and_keep_twelve_tools() -
 def test_source_only_real_coordinator_path_enforces_one_write_and_resumable_stop(
     tmp_path: Path,
 ) -> None:
+    install_cursor_post_write_hook(workspace_root=tmp_path)
     coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
     activated = coordinator.activate(
         original_request=SOURCE_ONLY_REQUESTS[0],
@@ -198,14 +205,12 @@ def test_source_only_real_coordinator_path_enforces_one_write_and_resumable_stop
     action = activated["compact_next_action"]
     assert action["artifact_role"] == "source"
     assert action["procedural_source_of_truth"] is True
-    assert action["operation_specific_invocation"]["operation"] == "complete_native_action"
-    assert action["operation_invocation_digest"]
-    assert action["authority_receipt_and_registration_same_process"] is True
+    assert "operation_specific_invocation" not in action
+    assert action["post_action_operation"] == "complete_external_native_action"
+    assert action["bounded_action_expectation_preissued_by_qcoder"] is True
+    assert action["native_client_permission_owner"] == "native_client"
+    assert action["native_client_permission_granted_by_qcoder"] is False
     assert action["normal_path_qcoder_serial_cycles_including_bootstrap"] == 2
-    invocation = action["operation_specific_invocation"]
-    assert invocation["fixed_argument_values"] == {
-        "--provenance": "assistant_created",
-    }
     assert "next_invocation" not in activated
 
     before_broadened = deepcopy(coordinator.store.read())
@@ -216,7 +221,7 @@ def test_source_only_real_coordinator_path_enforces_one_write_and_resumable_stop
         output_role_ceiling=("source", "circuit_qasm", "results"),
     )
     assert broadened["ok"] is False
-    assert broadened["category"] == "current_step_authority_mismatch"
+    assert broadened["category"] == "native_client_permission_not_qcoder_state"
     assert coordinator.store.read() == before_broadened
 
     source = tmp_path / "bell.py"
@@ -238,114 +243,33 @@ def test_source_only_real_coordinator_path_enforces_one_write_and_resumable_stop
     assert no_receipt_before_permission["category"] == "current_step_operation_receipt_required"
     assert coordinator.store.read() == before_broadened
 
-    permitted = coordinator.record_ide_authority(
-        allowed=True,
-        explicit_user_action=True,
-        operation_category="ide_write",
-        output_role_ceiling=("source",),
-    )
-    assert permitted["ok"] is True
-    registration_action = permitted["compact_next_action"]
-    assert registration_action["action"] == "register_exact_authorized_output"
-    assert registration_action["artifact_role"] == "source"
-    assert registration_action["artifact_cardinality"] == "exactly_one"
-    assert registration_action["operation_specific_invocation"]["operation"] == (
-        "register_artifacts"
-    )
-    assert "artifact_path_flags" not in permitted["next_invocation"]
-    assert permitted["next_invocation"]["fixed_argument_values"] == {
-        "--operation-receipt-id": permitted["details"]["operation_receipt"]["receipt_id"],
-        "--provenance": "assistant_created",
-    }
-    receipt_id = permitted["details"]["operation_receipt"]["receipt_id"]
     source.write_text(
         "from qiskit import QuantumCircuit\nqc = QuantumCircuit(2)\nqc.h(0)\nqc.cx(0, 1)\n",
         encoding="utf-8",
     )
-    qasm = tmp_path / "unauthorized.qasm"
-    qasm.write_text('OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[2];\n', encoding="utf-8")
-    state_before_invalid_registration = deepcopy(coordinator.store.read())
-    no_receipt_after_permission = coordinator.register_artifacts(
-        candidates=(
-            {
-                "role": "source",
-                "path": str(source),
-                "provenance": "assistant_created",
-                "explicit_external": False,
-            },
-        )
+    registered = handle_cursor_after_file_edit_event(
+        workspace_root=tmp_path,
+        event={
+            "hook_event_name": "afterFileEdit",
+            "conversation_id": "safe-conversation",
+            "generation_id": "safe-generation",
+            "workspace_roots": [str(tmp_path)],
+            "file_path": str(source),
+            "edits": [{"old_string": "", "new_string": "not-retained"}],
+        },
     )
-    assert no_receipt_after_permission["ok"] is False
-    assert no_receipt_after_permission["category"] == "current_step_operation_receipt_required"
-    assert coordinator.store.read() == state_before_invalid_registration
-    prohibited = coordinator.register_artifacts(
-        candidates=(
-            {
-                "role": "circuit_qasm",
-                "path": str(qasm),
-                "provenance": "assistant_created",
-                "explicit_external": False,
-            },
-        ),
-        operation_receipt_id=receipt_id,
-    )
-    assert prohibited["ok"] is False
-    assert prohibited["category"] == "current_step_ceiling_violation"
-    assert prohibited["recovery"]["operation_receipt_retained"] is True
-    assert coordinator.store.read() == state_before_invalid_registration
-
-    second_source = tmp_path / "unrelated.py"
-    second_source.write_text("UNRELATED = True\n", encoding="utf-8")
-    excessive = coordinator.register_artifacts(
-        candidates=(
-            {
-                "role": "source",
-                "path": str(source),
-                "provenance": "assistant_created",
-                "explicit_external": False,
-            },
-            {
-                "role": "source",
-                "path": str(second_source),
-                "provenance": "assistant_created",
-                "explicit_external": False,
-            },
-        ),
-        operation_receipt_id=receipt_id,
-    )
-    assert excessive["ok"] is False
-    assert excessive["category"] == "current_step_artifact_cardinality_invalid"
-    assert coordinator.store.read() == state_before_invalid_registration
-
-    registered = coordinator.register_artifacts(
-        candidates=(
-            {
-                "role": "source",
-                "path": str(source),
-                "provenance": "assistant_created",
-                "explicit_external": False,
-            },
-        ),
-        operation_receipt_id=receipt_id,
-    )
-    assert registered["ok"] is True
-    assert registered["details"]["exact_artifact_inventory"] == {
-        "source": 1,
-        "circuit_qasm": 0,
-        "execution": 0,
-        "results": 0,
-        "unrelated": 0,
-    }
-    assert registered["details"]["artifact_review_performed"] is False
-    assert registered["details"]["forced_close"] is False
-    assert registered["compact_next_action"]["action"] == "await_exact_customer_continuation"
-    assert registered["bootstrap_count"] == 1
-    assert registered["request_baseline_count"] == 1
+    assert registered["registration_completed"] is True
+    state = coordinator.store.read()
+    assert state["coordinator"]["current_step_status"] == "complete_resumable"
+    receipt = next(iter(state["operation_receipts"].values()))
+    assert receipt["receipt_kind"] == "qcoder_bounded_action_expectation"
+    assert receipt["status"] == "consumed"
 
 
 def test_compressed_native_action_preserves_receipt_and_exact_registration(
     tmp_path: Path,
 ) -> None:
+    install_cursor_post_write_hook(workspace_root=tmp_path)
     coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
     activated = coordinator.activate(
         original_request=SOURCE_ONLY_REQUESTS[0],
@@ -353,40 +277,30 @@ def test_compressed_native_action_preserves_receipt_and_exact_registration(
         capture_mode="exact_current_customer_message",
         request_transport="stdin",
     )
-    assert activated["compact_next_action"]["post_action_operation"] == ("complete_native_action")
+    assert activated["compact_next_action"]["post_action_operation"] == (
+        "complete_external_native_action"
+    )
     source = tmp_path / "bell.py"
     source.write_text(
         "from qiskit import QuantumCircuit\nqc = QuantumCircuit(2)\nqc.h(0)\nqc.cx(0, 1)\n",
         encoding="utf-8",
     )
-    completed = coordinator.complete_native_action(
-        allowed=True,
-        explicit_user_action=True,
-        candidates=(
-            {
-                "role": "source",
-                "path": str(source),
-                "provenance": "assistant_created",
-                "explicit_external": False,
-            },
-        ),
+    completed = handle_cursor_after_file_edit_event(
+        workspace_root=tmp_path,
+        event={
+            "hook_event_name": "afterFileEdit",
+            "conversation_id": "safe-conversation",
+            "generation_id": "safe-generation",
+            "workspace_roots": [str(tmp_path)],
+            "file_path": str(source),
+            "edits": [{"old_string": "", "new_string": "not-retained"}],
+        },
     )
     assert completed["ok"] is True
-    assert completed["operation"] == "complete_native_action"
-    assert completed["details"]["native_permission_recorded"] is True
-    assert completed["details"]["authority_receipt_issued"] is True
-    assert completed["details"]["authority_receipt_consumed"] is True
-    assert completed["details"]["exact_output_registered"] is True
-    assert completed["details"]["separate_receipt_read_required"] is False
-    assert completed["details"]["separate_registration_discovery_required"] is False
-    assert completed["details"]["exact_artifact_inventory"] == {
-        "source": 1,
-        "circuit_qasm": 0,
-        "execution": 0,
-        "results": 0,
-        "unrelated": 0,
-    }
-    assert completed["compact_next_action"]["action"] == "await_exact_customer_continuation"
+    assert completed["registration_completed"] is True
+    assert completed["native_client_permission_owned_by_client"] is True
+    assert completed["native_client_permission_granted_by_qcoder"] is False
+    assert completed["user_approval_click_inferred"] is False
     receipts = coordinator.store.read()["operation_receipts"]
     assert len(receipts) == 1
     assert next(iter(receipts.values()))["status"] == "consumed"
@@ -420,8 +334,7 @@ def test_compressed_native_action_rejects_broader_or_multiple_outputs_before_mut
         ),
     )
     assert wrong_role["ok"] is False
-    assert wrong_role["category"] == "compressed_native_action_output_mismatch"
-    assert wrong_role["recovery"]["authority_recorded"] is False
+    assert wrong_role["category"] == "native_client_completion_evidence_required"
     assert coordinator.store.read() == before
     multiple = coordinator.complete_native_action(
         allowed=True,
@@ -442,7 +355,7 @@ def test_compressed_native_action_rejects_broader_or_multiple_outputs_before_mut
         ),
     )
     assert multiple["ok"] is False
-    assert multiple["category"] == "compressed_native_action_output_mismatch"
+    assert multiple["category"] == "native_client_completion_evidence_required"
     assert coordinator.store.read() == before
 
 
@@ -475,49 +388,35 @@ def test_binding_owned_black_box_bootstrap_reaches_d080_compact_action(tmp_path:
 
 
 def test_binding_owned_black_box_compressed_post_write_handoff(tmp_path: Path) -> None:
-    bootstrap = build_fresh_active_build_bootstrap(executable=sys.executable)
-    environment = dict(os.environ)
-    source_root = Path(__file__).resolve().parents[1] / "src"
-    environment["PYTHONPATH"] = str(source_root)
-    activated = subprocess.run(
-        [str(value) for value in bootstrap["qcoder_owned_structured_argv"]],
-        cwd=tmp_path,
-        input=SOURCE_ONLY_REQUESTS[0].encode("utf-8"),
-        capture_output=True,
-        check=False,
-        env=environment,
+    install_cursor_post_write_hook(workspace_root=tmp_path)
+    coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
+    activation = coordinator.activate(
+        original_request=SOURCE_ONLY_REQUESTS[0],
+        explicit_authority=True,
+        capture_mode="exact_current_customer_message",
+        request_transport="structured_binding_argument",
     )
-    assert activated.returncode == 0, activated.stderr.decode("utf-8", errors="replace")
-    activation = json.loads(activated.stdout)
     source = tmp_path / "bell.py"
     source.write_text(
         "from qiskit import QuantumCircuit\nqc = QuantumCircuit(2)\nqc.h(0)\nqc.cx(0, 1)\n",
         encoding="utf-8",
     )
-    invocation = activation["compact_next_action"]["operation_specific_invocation"]
-    assert invocation["operation"] == "complete_native_action"
-    argv = list(invocation["structured_argv"])
-    source_slot = argv.index("--source") + 1
-    assert isinstance(argv[source_slot], dict)
-    argv[source_slot] = str(source)
-    completed = subprocess.run(
-        [str(value) for value in argv],
-        cwd=tmp_path,
-        capture_output=True,
-        check=False,
-        env=environment,
+    assert "operation_specific_invocation" not in activation["compact_next_action"]
+    result = handle_cursor_after_file_edit_event(
+        workspace_root=tmp_path,
+        event={
+            "hook_event_name": "afterFileEdit",
+            "conversation_id": "safe-conversation",
+            "generation_id": "safe-generation",
+            "workspace_roots": [str(tmp_path)],
+            "file_path": str(source),
+            "edits": [{"old_string": "", "new_string": "not-retained"}],
+        },
     )
-    assert completed.returncode == 0, completed.stderr.decode("utf-8", errors="replace")
-    result = json.loads(completed.stdout)
-    assert result["ok"] is True
-    assert result["operation"] == "complete_native_action"
-    assert result["details"]["authority_receipt_consumed"] is True
-    assert result["details"]["exact_artifact_inventory"]["source"] == 1
-    assert result["details"]["exact_artifact_inventory"]["circuit_qasm"] == 0
-    assert result["details"]["exact_artifact_inventory"]["execution"] == 0
-    assert result["details"]["exact_artifact_inventory"]["results"] == 0
-    assert result["assistant_reconstruction_performed"] is False
-    assert result["bootstrap_count"] == 1
+    assert result["registration_completed"] is True
+    state = coordinator.store.read()
+    assert state["coordinator"]["current_step_status"] == "complete_resumable"
+    assert state["coordinator"]["bootstrap_count"] == 1
 
 
 def test_active_continuation_does_not_mutate_on_ambiguity_or_rebootstrap(tmp_path: Path) -> None:
@@ -544,6 +443,7 @@ def test_active_continuation_does_not_mutate_on_ambiguity_or_rebootstrap(tmp_pat
 
 
 def test_source_plus_qasm_uses_two_exact_native_actions_and_never_runs(tmp_path: Path) -> None:
+    install_cursor_post_write_hook(workspace_root=tmp_path)
     coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
     activated = coordinator.activate(
         original_request=(
@@ -556,61 +456,55 @@ def test_source_plus_qasm_uses_two_exact_native_actions_and_never_runs(tmp_path:
         "source_and_qasm_generation"
     )
     assert activated["compact_next_action"]["artifact_role"] == "source"
-    source_permission = coordinator.record_ide_authority(
-        allowed=True,
-        explicit_user_action=True,
-        operation_category="ide_write",
-        output_role_ceiling=("source",),
-    )
     source = tmp_path / "bell.py"
     source.write_text(
         "from qiskit import QuantumCircuit\nqc = QuantumCircuit(2)\nqc.h(0)\nqc.cx(0, 1)\n",
         encoding="utf-8",
     )
-    source_registered = coordinator.register_artifacts(
-        candidates=(
-            {
-                "role": "source",
-                "path": str(source),
-                "provenance": "assistant_created",
-                "explicit_external": False,
-            },
-        ),
-        operation_receipt_id=source_permission["details"]["operation_receipt"]["receipt_id"],
+    source_registered = handle_cursor_after_file_edit_event(
+        workspace_root=tmp_path,
+        event={
+            "hook_event_name": "afterFileEdit",
+            "conversation_id": "safe-conversation",
+            "generation_id": "safe-generation",
+            "workspace_roots": [str(tmp_path)],
+            "file_path": str(source),
+            "edits": [{"old_string": "", "new_string": "not-retained"}],
+        },
     )
-    assert source_registered["details"]["next_substage"] == "qasm"
-    assert source_registered["compact_next_action"]["artifact_role"] == "circuit_qasm"
-    assert source_registered["compact_next_action"]["grants_execution"] is False
-    qasm_permission = coordinator.record_ide_authority(
-        allowed=True,
-        explicit_user_action=True,
-        operation_category="ide_write",
-        output_role_ceiling=("circuit_qasm",),
-    )
+    assert source_registered["registration_completed"] is True
+    intermediate = coordinator.store.read()
+    assert intermediate["coordinator"]["current_step_substage"] == "qasm"
+    expectation_id = intermediate["coordinator"][
+        "current_step_bounded_action_expectation_id"
+    ]
+    assert intermediate["operation_receipts"][expectation_id]["authority_binding"][
+        "authorized_artifact_role"
+    ] == "circuit_qasm"
     qasm = tmp_path / "bell.qasm"
     qasm.write_text(
         'OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[2];\nh q[0];\ncx q[0],q[1];\n',
         encoding="utf-8",
     )
-    qasm_registered = coordinator.register_artifacts(
-        candidates=(
-            {
-                "role": "circuit_qasm",
-                "path": str(qasm),
-                "provenance": "assistant_created",
-                "explicit_external": False,
-            },
-        ),
-        operation_receipt_id=qasm_permission["details"]["operation_receipt"]["receipt_id"],
+    qasm_registered = handle_cursor_after_file_edit_event(
+        workspace_root=tmp_path,
+        event={
+            "hook_event_name": "afterFileEdit",
+            "conversation_id": "safe-conversation",
+            "generation_id": "safe-generation-2",
+            "workspace_roots": [str(tmp_path)],
+            "file_path": str(qasm),
+            "edits": [{"old_string": "", "new_string": "not-retained"}],
+        },
     )
-    assert qasm_registered["ok"] is True
-    assert qasm_registered["details"]["current_step_complete"] is True
-    assert qasm_registered["details"]["artifact_review_performed"] is False
-    assert qasm_registered["details"]["exact_artifact_inventory"]["execution"] == 0
-    assert qasm_registered["details"]["exact_artifact_inventory"]["results"] == 0
+    assert qasm_registered["registration_completed"] is True
+    final = coordinator.store.read()
+    assert final["coordinator"]["current_step_status"] == "complete_resumable"
+    assert "results" not in final["evidence_registry"]["role_heads"]
 
 
 def test_source_plus_run_requires_a_second_exact_execution_permission(tmp_path: Path) -> None:
+    install_cursor_post_write_hook(workspace_root=tmp_path)
     coordinator = CurrentLoopCoordinator(workspace_root=tmp_path)
     activated = coordinator.activate(
         original_request=(
@@ -620,34 +514,34 @@ def test_source_plus_run_requires_a_second_exact_execution_permission(tmp_path: 
         capture_mode="exact_current_customer_message",
     )
     assert activated["compact_next_action"]["artifact_role"] == "source"
-    source_permission = coordinator.record_ide_authority(
-        allowed=True,
-        explicit_user_action=True,
-        operation_category="ide_write",
-        output_role_ceiling=("source",),
-    )
     source = tmp_path / "bell.py"
     source.write_text("print('bounded source')\n", encoding="utf-8")
-    source_registered = coordinator.register_artifacts(
-        candidates=(
-            {
-                "role": "source",
-                "path": str(source),
-                "provenance": "assistant_created",
-                "explicit_external": False,
-            },
-        ),
-        operation_receipt_id=source_permission["details"]["operation_receipt"]["receipt_id"],
+    source_registered = handle_cursor_after_file_edit_event(
+        workspace_root=tmp_path,
+        event={
+            "hook_event_name": "afterFileEdit",
+            "conversation_id": "safe-conversation",
+            "generation_id": "safe-generation",
+            "workspace_roots": [str(tmp_path)],
+            "file_path": str(source),
+            "edits": [{"old_string": "", "new_string": "not-retained"}],
+        },
     )
-    action = source_registered["compact_next_action"]
-    assert action["action"] == "ide_execute"
-    assert action["artifact_role"] == "results"
-    assert action["customer_facing_permission"] == "Allow this local execution"
-    assert action["grants_execution"] is True
-    assert action["grants_evidence_review"] is False
+    assert source_registered["registration_completed"] is True
     state = coordinator.store.read()
-    assert len(state["operation_receipts"]) == 1
-    assert next(iter(state["operation_receipts"].values()))["status"] == "consumed"
+    assert state["coordinator"]["current_step_substage"] == "execution"
+    expectation_id = state["coordinator"]["current_step_bounded_action_expectation_id"]
+    execution_expectation = state["operation_receipts"][expectation_id]
+    assert execution_expectation["authority_binding"]["requested_operation"] == "ide_execute"
+    assert execution_expectation["authority_binding"]["authorized_artifact_role"] == "results"
+    assert execution_expectation["authority_effect"][
+        "native_client_permission_granted_by_qcoder"
+    ] is False
+    assert len(state["operation_receipts"]) == 2
+    assert sorted(row["status"] for row in state["operation_receipts"].values()) == [
+        "consumed",
+        "issued",
+    ]
 
 
 def test_semantic_and_stage_authority_state_stays_bounded_by_decisions() -> None:
@@ -1020,7 +914,7 @@ def test_explicit_generation_bootstrap_never_uses_legacy_broad_role_ceiling(
         output_role_ceiling=("results",),
     )
     assert execution["ok"] is False
-    assert execution["category"] == "current_step_authority_mismatch"
+    assert execution["category"] == "native_client_permission_not_qcoder_state"
     assert coordinator.store.read() == before
 
 

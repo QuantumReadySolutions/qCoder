@@ -154,8 +154,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 28
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v29"
+CLIENT_BINDING_SCHEMA_VERSION = 29
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v30"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -181,17 +181,20 @@ and activates Assist for this request only. After the first actionable result, c
 is the sole procedural construction source. Never reconstruct procedure from chats, workspaces,
 .qcoder state, package/source inspection, or remembered tool choreography. The temporary stage
 ceiling mechanically limits operation, output roles, registration, and authority receipts.
-Activation, qCoder's bounded action, native action-specific permission, and later artifact or
-governing authority are separate. A later exact customer instruction uses interpret-current-request
+Activation, qCoder's bounded action, native-client-owned controls, native-action completion
+evidence, and later artifact or governing authority are separate. A later exact customer
+instruction uses interpret-current-request
 without bootstrap or Request Baseline recreation.
 
-For an exact Cursor-native source write, ask for the one action-specific native permission shown by
-compact_next_action and perform only that native write. The trusted project's matcher-free
+For an exact Cursor-native source write, follow the native client's own controls and perform only
+that native write. qCoder defines what completed evidence it will accept; it does not grant or
+observe Cursor permission and never infers an approval click. The trusted project's matcher-free
 afterFileEdit and unfiltered postToolUse events feed one idempotent receipt-bound broker. qCoder
 uses semantic edit evidence rather than a generic tool name and completes only when the exact path
-and bytes match the pending source action. Whichever valid event arrives first wins; duplicate or
-unrelated events are no-ops. Correctness does not depend on model feedback, a Shell command, or
-another approval. Do not invoke or expose a completion command, narrate registration, or insert
+and bytes match the active bounded-action expectation. Whichever valid event arrives first wins;
+duplicate or unrelated events are no-ops. Explicit native approval telemetry is optional
+client-provided provenance only. Correctness does not depend on model feedback, a Shell command,
+or another approval. Do not invoke or expose a completion command, narrate registration, or insert
 separate authority-recording, receipt-reading, help, package, binding-source, or discovery calls.
 The stop hook is recovery-only: successful registration is silent; an incomplete active source
 step gets at most one bounded follow-up and must not be presented as complete.
@@ -681,6 +684,15 @@ def build_client_binding_descriptor(
                     "model_shell_tool_call": False,
                     "model_feedback_required_for_correctness": False,
                     "second_native_approval_required": False,
+                    "qcoder_bounded_action_expectation_required": True,
+                    "native_client_permission_owner": "native_client",
+                    "native_client_permission_granted_by_qcoder": False,
+                    "native_client_permission_observed_by_qcoder": False,
+                    "native_client_approval_telemetry_required": False,
+                    "user_approval_click_inferred": False,
+                    "registration_authority": (
+                        "qcoder_bounded_action_plus_validated_native_action_completion_evidence"
+                    ),
                     "trigger_is_semantic_native_file_edit_event": True,
                     "mutates_customer_artifact": False,
                     "executes_customer_code": False,
@@ -939,12 +951,15 @@ contract is required, fetch its exact advertised MCP resource URI, verify SHA-25
 without inference if unavailable or mismatched.
 
 IDE WORK AND ARTIFACT HANDOFF
-For the exact source action, obtain the one action-specific native permission and perform only that
-write. The trusted project's matcher-free afterFileEdit and unfiltered postToolUse hooks feed one
+For the exact source action, let the native client apply its own controls and perform only that
+write. qCoder publishes one exact acceptance contract, but does not grant or observe native
+permission and does not infer an approval click. The trusted project's matcher-free afterFileEdit
+and unfiltered postToolUse hooks feed one
 idempotent completion broker. qCoder ignores generic tool names and matches structured mutation
-evidence against the pending source action, exact loop, revision, ceiling, path, and bytes, then
-issues and consumes the single-use receipt. Whichever valid event arrives first wins; the other is
-a no-op. It does not
+evidence against the pending bounded-action expectation, exact loop, revision, ceiling, path, and
+bytes, then consumes the expectation and registers the artifact. Explicit native approval
+telemetry is optional client-provided provenance only. Whichever valid event arrives first wins;
+the other is a no-op. It does not
 mutate source, execute code, broaden roles, invoke the model, or require another approval. Do not
 issue or expose a Shell/CLI completion command and do not narrate registration. Hook output is not
 required for correctness. The stop recovery hook is silent after success and supplies at most one

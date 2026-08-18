@@ -373,6 +373,15 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
         "model_shell_tool_call": False,
         "model_feedback_required_for_correctness": False,
         "second_native_approval_required": False,
+        "qcoder_bounded_action_expectation_required": True,
+        "native_client_permission_owner": "native_client",
+        "native_client_permission_granted_by_qcoder": False,
+        "native_client_permission_observed_by_qcoder": False,
+        "native_client_approval_telemetry_required": False,
+        "user_approval_click_inferred": False,
+        "registration_authority": (
+            "qcoder_bounded_action_plus_validated_native_action_completion_evidence"
+        ),
         "trigger_is_semantic_native_file_edit_event": True,
         "mutates_customer_artifact": False,
         "executes_customer_code": False,

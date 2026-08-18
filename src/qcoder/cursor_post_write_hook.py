@@ -1,9 +1,10 @@
 """Cursor-native integration for structured activation and exact completion.
 
 Two matcher-free project events, ``afterFileEdit`` and ``postToolUse``, feed one
-idempotent receipt-bound completion broker.  Neither event name nor a generic
-tool name carries product authority.  qCoder validates structured mutation
-evidence, the absolute path, current bytes, active loop, ceiling, and receipt.
+idempotent bounded-action completion broker. Neither event name nor a generic
+tool name carries product authority or proves native permission. qCoder validates
+structured completion evidence, the absolute path, current bytes, active loop,
+ceiling, and one-use expectation.
 
 Cursor's ``stop`` hook is recovery-only.  It is silent when there is no pending
 qCoder source action or registration already completed, and supplies one
@@ -29,8 +30,8 @@ from qcoder.current_loop_binding_mcp import BINDING_MCP_SERVER_NAME
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.current_loop_evidence_processing import registration_format_outcome
 
-CURSOR_POST_WRITE_HOOK_SCHEMA_ID = "qcoder.current_loop.cursor_native_edit_broker.v3"
-CURSOR_POST_WRITE_HOOK_SCHEMA_VERSION = 3
+CURSOR_POST_WRITE_HOOK_SCHEMA_ID = "qcoder.current_loop.cursor_native_edit_broker.v4"
+CURSOR_POST_WRITE_HOOK_SCHEMA_VERSION = 4
 CURSOR_POST_WRITE_TRANSPORT = "cursor_project_redundant_native_edit_hooks"
 CURSOR_POST_WRITE_HOOK_MAX_INPUT_BYTES = 1_048_576
 
@@ -257,6 +258,11 @@ def cursor_post_write_hook_status(
         "model_invocation_required": False,
         "shell_tool_invocation_required": False,
         "second_native_approval_required": False,
+        "native_client_permission_owner": "native_client",
+        "native_client_permission_granted_by_qcoder": False,
+        "native_client_permission_observed_by_qcoder": False,
+        "user_approval_click_inferred": False,
+        "qcoder_bounded_action_expectation_required": True,
         "public_context_bridge_tool": False,
     }
     if path.is_symlink() or not path.is_file():
@@ -577,24 +583,45 @@ def _pending_source_action(state: Mapping[str, Any]) -> bool:
     if not isinstance(coordinator, Mapping):
         return False
     semantics = coordinator.get("current_request_semantics")
+    expectation_id = coordinator.get("current_step_bounded_action_expectation_id")
+    expectation = (
+        state.get("operation_receipts", {}).get(expectation_id)
+        if isinstance(expectation_id, str)
+        else None
+    )
+    authority_binding = (
+        expectation.get("authority_binding")
+        if isinstance(expectation, Mapping)
+        else None
+    )
     return bool(
         coordinator.get("phase") == "generation_ready"
         and coordinator.get("state_status") == "ready"
-        and coordinator.get("current_step_status") == "awaiting_native_permission"
-        and coordinator.get("current_step_substage") in {None, "source"}
+        and coordinator.get("current_step_status") == "awaiting_external_client_action"
+        and coordinator.get("current_step_substage") in {None, "source", "qasm"}
+        and isinstance(expectation_id, str)
+        and isinstance(
+            coordinator.get("current_step_bounded_action_expectation_digest"), str
+        )
         and isinstance(semantics, Mapping)
         and semantics.get("requested_operation")
-        in {"source_generation", "source_and_qasm_generation", "source_and_local_execution"}
-        and tuple(semantics.get("current_step_ceiling", {}).get("allowed_artifact_roles", ()))
-        == ("source",)
+        in {
+            "source_generation",
+            "source_and_qasm_generation",
+            "source_and_local_execution",
+            "qasm_export",
+        }
+        and isinstance(authority_binding, Mapping)
+        and authority_binding.get("authorized_artifact_role") in {"source", "circuit_qasm"}
+        and authority_binding.get("authorized_artifact_cardinality") == "exactly_one"
     )
 
 
-def _is_supported_source_file(path: Path) -> bool:
+def _is_supported_file(path: Path, *, role: str) -> bool:
     try:
         outcome = registration_format_outcome(
             path=path,
-            role="source",
+            role=role,
             provenance="assistant_operation_receipt",
         )
     except (CurrentLoopError, OSError, ValueError):
@@ -608,24 +635,42 @@ def _event_binding(
     raw = path.read_bytes()
     coordinator = state["coordinator"]
     semantics = coordinator["current_request_semantics"]
+    expectation = state["operation_receipts"][
+        coordinator["current_step_bounded_action_expectation_id"]
+    ]
+    artifact_role = expectation["authority_binding"]["authorized_artifact_role"]
     return {
-        "schema_id": "qcoder.current_loop.native_client_write_event.v3",
-        "schema_version": 3,
+        "schema_id": "qcoder.current_loop.native_client_write_event.v4",
+        "schema_version": 4,
         "transport": CURSOR_POST_WRITE_TRANSPORT,
         "hook_event_name": event_name,
-        "semantic_event": "agent_file_edit_completed",
+        "semantic_event": "native_file_edit_completed",
         "tool_name_match_required": False,
         "native_write_completed_before_hook": True,
+        "bounded_action_expectation_id": coordinator[
+            "current_step_bounded_action_expectation_id"
+        ],
+        "bounded_action_expectation_digest": coordinator[
+            "current_step_bounded_action_expectation_digest"
+        ],
+        "native_client_permission_owned_by_client": True,
+        "native_client_permission_granted_by_qcoder": False,
+        "native_client_permission_telemetry_required": False,
+        "user_approval_click_inferred": False,
         "conversation_identity_sha256": _digest_text(str(event["conversation_id"])),
         "generation_identity_sha256": _digest_text(str(event["generation_id"])),
         "exact_path_sha256": _digest_text(str(path)),
         "expected_artifact_sha256": sha256(raw).hexdigest(),
         "expected_artifact_bytes": len(raw),
         "bound_loop_identity_sha256": _digest_text(str(state["loop_ref"])),
+        "bound_workspace_identity_sha256": _digest_text(str(state["workspace_root"])),
         "bound_state_revision": state["state_revision"],
+        "current_request_identity_sha256": semantics[
+            "original_message_utf8_sha256"
+        ],
         "current_request_semantics_digest": semantics["semantics_digest"],
         "current_step_ceiling_digest": semantics["current_step_ceiling"]["ceiling_digest"],
-        "artifact_role": "source",
+        "artifact_role": artifact_role,
         "artifact_cardinality": "exactly_one",
         "source_bytes_returned": False,
         "cursor_account_fields_retained": False,
@@ -671,15 +716,17 @@ def handle_cursor_native_edit_event(
         provenance = _event_provenance(parsed)
     else:
         path, provenance = _post_tool_use_path(parsed, workspace)
-    if path is None or not _is_supported_source_file(path):
+    expectation_id = state["coordinator"]["current_step_bounded_action_expectation_id"]
+    role = state["operation_receipts"][expectation_id]["authority_binding"][
+        "authorized_artifact_role"
+    ]
+    if path is None or not _is_supported_file(path, role=role):
         return {"output": {}, "disposition": "unrelated_native_event_ignored", "ok": True}
     binding = _event_binding(parsed, path, state, event_name=event_name)
-    result = coordinator.complete_native_action(
-        allowed=True,
-        explicit_user_action=True,
+    result = coordinator.complete_external_native_action(
         candidates=(
             {
-                "role": "source",
+                "role": role,
                 "path": str(path),
                 "provenance": provenance,
                 "explicit_external": False,
@@ -696,6 +743,9 @@ def handle_cursor_native_edit_event(
             "ok": True,
             "registration_completed": True,
             "second_native_approval_required": False,
+            "native_client_permission_owned_by_client": True,
+            "native_client_permission_granted_by_qcoder": False,
+            "user_approval_click_inferred": False,
             "shell_tool_invocation_required": False,
             "model_feedback_required_for_correctness": False,
             "raw_path_returned": False,

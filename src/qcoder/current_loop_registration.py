@@ -180,6 +180,7 @@ def prepare_registration_transaction(
     authorization_source: str,
     enrollment_authority: str,
     collect_permitted_roles: Sequence[str],
+    native_action_completion_evidence: Mapping[str, Any] | None = None,
     current_time: float | None = None,
 ) -> dict[str, Any]:
     """Validate every exact candidate with no durable success effects."""
@@ -197,6 +198,28 @@ def prepare_registration_transaction(
     )
     if operation_receipt_id is not None and not isinstance(receipt, Mapping):
         raise CurrentLoopError("operation_receipt_missing")
+    safe_completion_evidence: dict[str, Any] | None = None
+    if native_action_completion_evidence is not None:
+        if not isinstance(native_action_completion_evidence, Mapping):
+            raise CurrentLoopError("native_action_completion_evidence_invalid")
+        safe_completion_evidence = deepcopy(dict(native_action_completion_evidence))
+        if (
+            safe_completion_evidence.get("schema_id")
+            != "qcoder.current_loop.native_action_completion_evidence.v1"
+            or safe_completion_evidence.get("native_client_permission_owned_by_client") is not True
+            or safe_completion_evidence.get("native_client_permission_granted_by_qcoder") is not False
+            or safe_completion_evidence.get("user_approval_click_inferred") is not False
+            or safe_completion_evidence.get("raw_path_retained") is not False
+            or safe_completion_evidence.get("raw_source_retained") is not False
+            or safe_completion_evidence.get("bounded_action_expectation_id")
+            != operation_receipt_id
+        ):
+            raise CurrentLoopError("native_action_completion_evidence_invalid")
+        if (
+            not isinstance(receipt, Mapping)
+            or receipt.get("receipt_kind") != "qcoder_bounded_action_expectation"
+        ):
+            raise CurrentLoopError("native_action_completion_evidence_expectation_required")
     registry = state.get("evidence_registry")
     if not isinstance(registry, Mapping):
         raise CurrentLoopError("evidence_registry_missing")
@@ -222,6 +245,15 @@ def prepare_registration_transaction(
         ):
             raise CurrentLoopError("operation_receipt_sensitive_output_requires_selection")
         raw = path.read_bytes()
+        if safe_completion_evidence is not None and (
+            safe_completion_evidence.get("artifact_role") != role
+            or safe_completion_evidence.get("artifact_cardinality") != "exactly_one"
+            or safe_completion_evidence.get("exact_path_sha256")
+            != sha256(str(path).encode("utf-8")).hexdigest()
+            or safe_completion_evidence.get("artifact_sha256") != sha256(raw).hexdigest()
+            or safe_completion_evidence.get("artifact_bytes") != len(raw)
+        ):
+            raise CurrentLoopError("native_action_completion_evidence_artifact_mismatch")
         if len(raw) > MAX_LOCAL_FILE_BYTES:
             raise CurrentLoopError("artifact_candidate_file_too_large")
         content_digest = sha256(raw).hexdigest()
@@ -307,7 +339,21 @@ def prepare_registration_transaction(
             "enrollment_authority": enrollment_authority,
             "operation_receipt_reference": operation_receipt_id,
             "ide_authority_reference": (
-                str(receipt.get("receipt_id")) if isinstance(receipt, Mapping) else None
+                str(receipt.get("receipt_id"))
+                if isinstance(receipt, Mapping)
+                and receipt.get("receipt_kind") == "explicit_client_authority_record"
+                else None
+            ),
+            "bounded_action_expectation_reference": (
+                str(receipt.get("receipt_id"))
+                if isinstance(receipt, Mapping)
+                and receipt.get("receipt_kind") == "qcoder_bounded_action_expectation"
+                else None
+            ),
+            "native_action_completion_evidence_digest": (
+                _canonical_digest(safe_completion_evidence)
+                if safe_completion_evidence is not None
+                else None
             ),
             "registered_state_revision": int(state["state_revision"]) + 1,
             "loop_ref": state["loop_ref"],
@@ -315,6 +361,12 @@ def prepare_registration_transaction(
             "availability": "available",
             "revision_status": "registered",
         }
+        if revision["ide_authority_reference"] is None:
+            revision.pop("ide_authority_reference")
+        if revision["bounded_action_expectation_reference"] is None:
+            revision.pop("bounded_action_expectation_reference")
+        if revision["native_action_completion_evidence_digest"] is None:
+            revision.pop("native_action_completion_evidence_digest")
         prepared.append(
             {
                 "revision": revision,
@@ -354,6 +406,7 @@ def prepare_registration_transaction(
         "next_role_heads": next_heads,
         "pending_snapshot_id": snapshot_id,
         "format_outcomes": format_outcomes,
+        "native_action_completion_evidence": safe_completion_evidence,
         "all_validation_complete": True,
         "durable_success_effects_before_commit": False,
     }
@@ -529,6 +582,9 @@ def commit_registration_transaction(
                 current_for_consumption,
                 registered_artifacts=activity_items,
                 consumed_state_revision=expected + 1,
+                native_action_completion_evidence=transaction.get(
+                    "native_action_completion_evidence"
+                ),
             )
         if not isinstance(activity, Mapping):
             raise CurrentLoopError("registration_activity_receipt_missing")
@@ -554,8 +610,7 @@ def commit_registration_transaction(
                     }
                 )[:32]
             )
-            registry["registration_events"].append(
-                {
+            registration_event = {
                     "event_id": event_id,
                     "artifact_revision_id": revision["artifact_revision_id"],
                     "logical_role": revision["logical_role"],
@@ -565,7 +620,11 @@ def commit_registration_transaction(
                     "operation_receipt_reference": receipt_id,
                     "state_revision": expected + 1,
                 }
-            )
+            if "native_action_completion_evidence_digest" in revision:
+                registration_event["native_action_completion_evidence_digest"] = revision[
+                    "native_action_completion_evidence_digest"
+                ]
+            registry["registration_events"].append(registration_event)
             registration_event_ids[str(revision["logical_role"])] = event_id
         registry["registration_events"] = registry["registration_events"][-64:]
         registry["role_heads"] = deepcopy(dict(transaction["next_role_heads"]))

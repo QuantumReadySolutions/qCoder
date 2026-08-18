@@ -7,12 +7,13 @@ from copy import deepcopy
 from hashlib import sha256
 from typing import Any
 
-VOCABULARY_SCHEMA_ID = "qcoder.current_loop.vocabulary.v2"
-VOCABULARY_SCHEMA_VERSION = 2
+VOCABULARY_SCHEMA_ID = "qcoder.current_loop.vocabulary.v3"
+VOCABULARY_SCHEMA_VERSION = 3
 
 OWNERSHIP = ("qcoder_owned", "assistant_supplied", "customer_authorized")
 AUTHORIZATION_SOURCES = (
     "operation_receipt",
+    "qcoder_bounded_action_and_client_completion_evidence",
     "direct_customer_selection",
     "current_loop_contract_assist",
 )

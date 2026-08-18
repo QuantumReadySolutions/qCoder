@@ -17,8 +17,8 @@ import unicodedata
 from typing import Any, Mapping, Sequence
 
 
-REQUEST_SEMANTICS_SCHEMA_ID = "qcoder.current_loop.request_semantics.v1"
-REQUEST_SEMANTICS_SCHEMA_VERSION = 1
+REQUEST_SEMANTICS_SCHEMA_ID = "qcoder.current_loop.request_semantics.v2"
+REQUEST_SEMANTICS_SCHEMA_VERSION = 2
 REQUEST_RECOVERY_SCHEMA_ID = "qcoder.current_loop.request_semantics_recovery.v1"
 
 ARTIFACT_ROLES = ("source", "circuit_qasm", "results")
@@ -272,8 +272,8 @@ def _authority_layers(*, operation: str, active_loop: bool) -> dict[str, Any]:
         next_object = "none"
         native_action = "none"
     return {
-        "schema_id": "qcoder.current_loop.authority_layers.v1",
-        "schema_version": 1,
+        "schema_id": "qcoder.current_loop.authority_layers.v2",
+        "schema_version": 2,
         "current_loop_activation": {
             "required": not active_loop,
             "object": "exact_message_request_baseline_and_assist_only",
@@ -284,24 +284,38 @@ def _authority_layers(*, operation: str, active_loop: bool) -> dict[str, Any]:
         "qcoder_bounded_action": {
             "object": next_object,
             "derived_from_current_request_semantics": True,
+            "defines_only_acceptable_completion_evidence": True,
             "grants_native_client_permission": False,
         },
         "native_client_permission": {
-            "required": native_action != "none",
+            "owner": "native_client",
+            "applicable": native_action != "none",
+            "requirement": "client_determined",
+            "required_by_qcoder": False,
             "object": native_action,
             "action_specific": True,
+            "granted_by_qcoder": False,
+            "observed_by_qcoder": False,
+            "user_approval_click_inferred": False,
+            "explicit_client_telemetry": "optional_provenance_only",
             "customer_facing_label": (
-                "Allow this source write"
+                "The native client applies its controls to this source write"
                 if operation
                 in {"source_generation", "source_and_qasm_generation", "source_and_local_execution"}
-                else "Allow this QASM export"
+                else "The native client applies its controls to this QASM export"
                 if operation == "qasm_export"
-                else "Allow this local execution"
+                else "The native client applies its controls to this local execution"
                 if operation in {"source_and_local_execution", "local_execution"}
-                else "Allow these selected files to be read"
+                else "The native client applies its controls to these selected-file reads"
                 if operation == "selected_artifact_review"
-                else "Allow this bounded local action"
+                else "The native client applies its controls to this bounded local action"
             ),
+        },
+        "native_action_completion_evidence": {
+            "accepted_only_against_active_qcoder_bounded_action": True,
+            "exact_workspace_loop_request_revision_role_path_bytes_required": True,
+            "client_approval_telemetry_required": False,
+            "registration_consumes_action_once": True,
         },
         "later_artifact_or_governing_authority": {
             "granted": False,
@@ -734,6 +748,30 @@ def validate_request_semantics(value: Mapping[str, Any]) -> None:
         raise ValueError("current_request_semantics_digest_mismatch")
 
 
+def migrate_request_semantics(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Upgrade the pre-D-081 authority projection without changing request meaning."""
+
+    result = deepcopy(dict(value))
+    if (
+        result.get("schema_id") == "qcoder.current_loop.request_semantics.v1"
+        and result.get("schema_version") == 1
+    ):
+        operation = str(result.get("requested_operation"))
+        active_loop = bool(result.get("active_loop_at_classification"))
+        result["schema_id"] = REQUEST_SEMANTICS_SCHEMA_ID
+        result["schema_version"] = REQUEST_SEMANTICS_SCHEMA_VERSION
+        result["authority_layers"] = _authority_layers(
+            operation=operation, active_loop=active_loop
+        )
+        result["next_authority_object"] = result["authority_layers"][
+            "native_client_permission"
+        ]["object"]
+        result.pop("semantics_digest", None)
+        result["semantics_digest"] = _digest(result)
+    validate_request_semantics(result)
+    return result
+
+
 def ceiling_allows(
     semantics: Mapping[str, Any],
     *,
@@ -752,8 +790,8 @@ def ceiling_allows(
 
 def semantics_contract_snapshot() -> dict[str, Any]:
     result = {
-        "schema_id": "qcoder.current_loop.request_semantics_contract.v1",
-        "schema_version": 1,
+        "schema_id": "qcoder.current_loop.request_semantics_contract.v2",
+        "schema_version": 2,
         "semantic_schema_id": REQUEST_SEMANTICS_SCHEMA_ID,
         "natural_language_in_exact_authority_out": True,
         "exact_original_message_preserved": True,
@@ -771,9 +809,12 @@ def semantics_contract_snapshot() -> dict[str, Any]:
         "stage_ceiling_applies_to": [
             "compact_next_action",
             "operation_invocation",
-            "operation_receipt",
+            "bounded_action_expectation",
+            "native_action_completion_evidence",
             "artifact_registration",
         ],
+        "native_client_permission_owner": "native_client",
+        "native_client_permission_observed_or_granted_by_qcoder": False,
         "repository_or_transcript_lookup": False,
         "gate_count_or_raw_artifact_in_semantics": False,
     }
