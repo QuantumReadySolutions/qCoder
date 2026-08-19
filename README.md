@@ -45,9 +45,9 @@ should govern the next iteration. qCoder does not independently generate the Pyt
 compile the circuit, execute the run, recover hidden intent, prove correctness, or automatically
 adopt a blueprint decision.
 
-The everyday path uses Assist with quiet operation: the customer explicitly activates qCoder for
-one build, the Current Loop Contract governs exact authorized output collection and local
-derivation, and qCoder interrupts only for material decisions or separate authority boundaries.
+The everyday path uses Assist: the customer explicitly activates qCoder for one build, the Current
+Loop Contract governs exact authorized output collection and local derivation, and qCoder surfaces
+material decisions or separate authority boundaries.
 Adaptive generation is the default; Blueprint-required governance is available. Evidence
 revisions, snapshots, and current or prior Run Summaries are bounded to that active loop and are
 purged on close. The optional local contract editor uses the same canonical contract as the IDE.
@@ -74,9 +74,9 @@ direct contract or completion routes do not add persistent memory, project histo
 discovery, or automatic IDE authority.
 
 For a customer-selected named qCoder workflow, canonical preparatory states are non-terminal. The
-connected assistant quietly continues only the already-selected workflow until the named customer
-outcome is ready, qCoder reports a genuine blocker, or qCoder reaches a real customer authority or
-decision boundary. For Evidence Review, `assistant_context_ready` is preparatory;
+connected assistant continues only the already-selected workflow until the named customer outcome
+is ready, qCoder reports a genuine blocker, or qCoder reaches a real customer authority or decision
+boundary. For Evidence Review, `assistant_context_ready` is preparatory;
 `result_review_context_card_ready` is the customer outcome. The assistant must not infer customer
 authority, broaden artifact selection, discover files, or chain an unrelated qCoder capability.
 Canonical structured `process_and_discard` unambiguously means that no customer artifact is
