@@ -54,10 +54,26 @@ def test_binding_and_private_tools_encode_semantic_quiet_success(tmp_path: Path)
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     visibility = descriptor["surfaces"]["current_step_transaction"]["customer_visibility"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v33"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v34"
     assert visibility["normal_success"] == "internal_transaction_silent"
     assert visibility["intermediate_customer_message_permitted"] is False
     assert visibility["final_response"] == "concise_task_outcome_only"
+    assert visibility["normal_success_event_policy"] == {
+        "before_begin": "no_customer_message",
+        "before_native_action": "none_or_one_task_level_progress_message",
+        "between_native_action_and_completion": "no_customer_message",
+        "after_validated_completion": "one_concise_task_outcome",
+    }
+    assert set(visibility["prohibited_normal_success_meaning"]) == {
+        "announce_qcoder_activation_or_loop_transition",
+        "explain_current_step_contract_or_bounded_authority",
+        "announce_typed_completion_or_artifact_registration",
+        "explain_receipts_state_revisions_hooks_or_evidence_bookkeeping",
+    }
+    assert visibility["native_permission_explanation"]["maximum_customer_messages"] == 1
+    assert visibility["native_permission_explanation"][
+        "only_when_native_client_actually_requires_permission"
+    ] is True
     assert set(visibility["surface_when"]) >= {
         "blocking_failure",
         "ambiguity",
@@ -69,6 +85,16 @@ def test_binding_and_private_tools_encode_semantic_quiet_success(tmp_path: Path)
         COMPLETE_CURRENT_STEP_TOOL_NAME,
     ]
     assert all(item["x-qcoder-customer-visibility"] == visibility for item in private)
+    assert private[0]["x-qcoder-normal-success-presentation"] == {
+        "customer_message_before_tool_call": "none",
+        "customer_message_after_tool_call": "none_or_task_level_progress_only",
+        "internal_mechanics_explanation": False,
+    }
+    assert private[1]["x-qcoder-normal-success-presentation"] == {
+        "customer_message_before_tool_call": "none",
+        "customer_message_after_tool_call": "one_concise_task_outcome",
+        "internal_mechanics_explanation": False,
+    }
     assert len(EXPECTED_TOOLS) == 12
     instructions = build_client_activation_instructions(
         base_url="https://example.invalid",
@@ -85,11 +111,10 @@ def test_normal_begin_is_task_level_and_contract_stays_bounded(tmp_path: Path) -
     contract = begun["current_step_contract"]
     assert _wire_bytes(contract) <= 2048
     assert contract["customer_visibility"] == {
-        "policy": "quiet_current_step_v1",
-        "normal_success": "task_only",
-        "intermediate_message": False,
-        "internal_procedure": False,
-        "surface_non_success": True,
+        "policy": "quiet_current_step_v2",
+        "events": "optional_task_progress_then_task_outcome",
+        "mechanics": "silent",
+        "native_permission": "only_if_required_once",
     }
     assert begun["customer_summary"] == "Proceed with the requested source task."
     assert begun["compact_next_action"]["normal_path_qcoder_serial_cycles_including_bootstrap"] == 2
@@ -112,11 +137,13 @@ def test_normal_typed_completion_is_compact_task_only_and_final_ready(
             "artifact_path": str(source),
         },
     )
-    assert completed["schema_id"] == "qcoder.current_loop.typed_completion_result.v2"
+    assert completed["schema_id"] == "qcoder.current_loop.typed_completion_result.v3"
     assert completed["current_step_status"] == "complete_resumable"
     assert completed["customer_summary"] == "The requested source artifact is ready."
-    assert completed["customer_visibility"]["normal_success"] == ("internal_transaction_silent")
-    assert completed["customer_visibility"]["intermediate_customer_message_permitted"] is False
+    assert completed["customer_visibility"]["events"] == (
+        "optional_task_progress_then_task_outcome"
+    )
+    assert completed["customer_visibility"]["mechanics"] == "silent"
     assert completed["final_response_permitted"] is True
     assert completed["internal_procedure_customer_visible"] is False
     assert completed["completion"]["exact_artifact_registered"] is True

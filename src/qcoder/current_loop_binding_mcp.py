@@ -17,8 +17,8 @@ from qcoder import __version__
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.current_step_contract import quiet_customer_visibility_contract
 
-BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v3"
-BINDING_MCP_SCHEMA_VERSION = 3
+BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v4"
+BINDING_MCP_SCHEMA_VERSION = 4
 BINDING_MCP_SERVER_NAME = "qcoder-current-loop"
 BEGIN_CURRENT_LOOP_TOOL_NAME = "begin_current_loop"
 COMPLETE_CURRENT_STEP_TOOL_NAME = "complete_current_step"
@@ -33,8 +33,9 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
         {
             "name": BEGIN_CURRENT_LOOP_TOOL_NAME,
             "description": (
-                "Begin qCoder's bounded Current Loop, or interpret the exact next instruction "
-                "against an already complete-resumable loop. "
+                "INTERNAL NORMAL-PATH OPERATION: call as the first response action without a "
+                "customer-facing preface. Begin qCoder's bounded Current Loop, or interpret the "
+                "exact next instruction against an already complete-resumable loop. "
                 "Supply request_text exactly once as the complete unmodified customer message. "
                 "This operation preserves the Request Baseline, classifies authority fail-closed, "
                 "and grants no native write, execution, review, or governing authority. On an "
@@ -68,11 +69,18 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "action_source": "replacement_current_step_contract",
             },
             "x-qcoder-customer-visibility": quiet_customer_visibility_contract(),
+            "x-qcoder-normal-success-presentation": {
+                "customer_message_before_tool_call": "none",
+                "customer_message_after_tool_call": "none_or_task_level_progress_only",
+                "internal_mechanics_explanation": False,
+            },
         },
         {
             "name": COMPLETE_CURRENT_STEP_TOOL_NAME,
             "description": (
-                "Complete the exact active qCoder Current Step after the native client has "
+                "INTERNAL NORMAL-PATH OPERATION: call immediately after the native action without "
+                "a customer-facing transition message. Complete the exact active qCoder Current "
+                "Step after the native client has "
                 "performed its action under its own controls. Supply only the opaque action "
                 "handle from the Current Step Contract and the resulting local artifact path. "
                 "qCoder reads and validates the actual bytes; do not supply permission state, "
@@ -113,6 +121,11 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
             "x-qcoder-native-permission-owner": "native_client",
             "x-qcoder-hooks-required-for-correctness": False,
             "x-qcoder-customer-visibility": quiet_customer_visibility_contract(),
+            "x-qcoder-normal-success-presentation": {
+                "customer_message_before_tool_call": "none",
+                "customer_message_after_tool_call": "one_concise_task_outcome",
+                "internal_mechanics_explanation": False,
+            },
         },
     ]
 
@@ -151,10 +164,14 @@ def handle_binding_jsonrpc_message(
                 "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": BINDING_MCP_SERVER_NAME, "version": __version__},
                 "instructions": (
-                    "NORMAL SUCCESS IS SILENT INTERNAL WORK. Do not send a customer-visible "
-                    "message before begin_current_loop, between the native task and "
+                    "NORMAL SUCCESS EVENT ORDER: the first response event is begin_current_loop, "
+                    "not customer-facing text. Do not send a customer-visible message before "
+                    "begin_current_loop, between the native task and "
                     "complete_current_step, or to explain the transaction. Optional progress is "
                     "task-level only; after successful completion give one concise task outcome. "
+                    "Never describe activation or loop/step transitions, contracts or bounded "
+                    "authority, typed completion or registration, receipts, revisions, hooks, or "
+                    "evidence bookkeeping during normal success. "
                     "Surface qCoder mechanics only for a real blocker, ambiguity, bounded "
                     "recovery, meaningful authority broadening, or requested qCoder help. "
                     "This project-local qCoder binding exposes the two typed operations for one "

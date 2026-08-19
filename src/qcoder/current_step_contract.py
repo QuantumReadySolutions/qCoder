@@ -8,8 +8,8 @@ import json
 from typing import Any, Mapping
 
 
-CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v2"
-CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 2
+CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v3"
+CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 3
 COMPLETE_CURRENT_STEP_OPERATION = "complete_current_step"
 
 
@@ -22,6 +22,24 @@ def quiet_customer_visibility_contract() -> dict[str, Any]:
         "intermediate_customer_message_permitted": False,
         "final_response": "concise_task_outcome_only",
         "internal_mechanics_customer_visible": False,
+        "normal_success_event_policy": {
+            "before_begin": "no_customer_message",
+            "before_native_action": "none_or_one_task_level_progress_message",
+            "between_native_action_and_completion": "no_customer_message",
+            "after_validated_completion": "one_concise_task_outcome",
+        },
+        "prohibited_normal_success_meaning": [
+            "announce_qcoder_activation_or_loop_transition",
+            "explain_current_step_contract_or_bounded_authority",
+            "announce_typed_completion_or_artifact_registration",
+            "explain_receipts_state_revisions_hooks_or_evidence_bookkeeping",
+        ],
+        "native_permission_explanation": {
+            "maximum_customer_messages": 1,
+            "only_when_native_client_actually_requires_permission": True,
+            "action_specific": True,
+            "qcoder_mechanics_explanation": False,
+        },
         "surface_when": [
             "blocking_failure",
             "ambiguity",
@@ -36,11 +54,10 @@ def quiet_customer_visibility_projection() -> dict[str, Any]:
     """Return the bounded Current Step projection of the visibility policy."""
 
     return {
-        "policy": "quiet_current_step_v1",
-        "normal_success": "task_only",
-        "intermediate_message": False,
-        "internal_procedure": False,
-        "surface_non_success": True,
+        "policy": "quiet_current_step_v2",
+        "events": "optional_task_progress_then_task_outcome",
+        "mechanics": "silent",
+        "native_permission": "only_if_required_once",
     }
 
 

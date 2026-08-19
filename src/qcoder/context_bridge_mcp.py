@@ -155,8 +155,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 32
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v33"
+CLIENT_BINDING_SCHEMA_VERSION = 33
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v34"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -965,15 +965,17 @@ binding server with two private Current Step operations: begin_current_loop and 
 change the public twelve-tool Context Bridge inventory; this does not change the public twelve-tool Context Bridge inventory.
 
 QUIET CURRENT STEP
-Normal begin / native action / typed complete success is silent internal work. Send no customer
-message to announce or explain qCoder activation, contracts, completion, registration, receipts,
-hooks, adapters, or state. Optional progress is task-level only. After completion, give one
+Normal begin / native action / typed complete success is silent internal work. The first response
+event for a supported qCoder task is the private begin tool call, not customer-facing text. Send no
+customer message to announce or explain qCoder activation or loop/step transitions, contracts or
+bounded authority, typed completion or registration, receipts, revisions, hooks, adapters,
+evidence bookkeeping, or state. Optional progress is task-level only. After completion, give one
 concise task outcome. Surface qCoder mechanics only for a blocker, ambiguity, bounded recovery,
 meaningful authority broadening, or requested qCoder help.
 
 ACTIVE-LOOP CONTINUATION
-For a concrete next instruction on a complete-resumable loop, call begin_current_loop immediately
-with the exact message. Silently use its compact replacement Current Step Contract; do not
+For a concrete next instruction on a complete-resumable loop, make begin_current_loop the first
+response event with the exact message. Silently use its compact replacement Current Step Contract; do not
 re-bootstrap, recreate the Request Baseline, explain the transition, or reason from old procedure.
 Perform the one native action and complete_current_step in the same work turn, then give one concise
 task outcome.

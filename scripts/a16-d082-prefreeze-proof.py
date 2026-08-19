@@ -27,7 +27,10 @@ from qcoder.current_loop_binding_mcp import (
 )
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.cursor_post_write_hook import handle_cursor_after_file_edit_event
-from qcoder.current_step_contract import quiet_customer_visibility_contract
+from qcoder.current_step_contract import (
+    quiet_customer_visibility_contract,
+    quiet_customer_visibility_projection,
+)
 
 
 REQUEST = (
@@ -158,7 +161,7 @@ def main() -> int:
             completion_response_sizes.append(wire_size(completed))
             if mode == "typed":
                 typed_completion_response_sizes.append(wire_size(completed))
-                if completed.get("customer_visibility") != quiet_customer_visibility_contract():
+                if completed.get("customer_visibility") != quiet_customer_visibility_projection():
                     raise RuntimeError("typed_completion_quiet_contract_missing")
                 if completed.get("internal_procedure_customer_visible") is not False:
                     raise RuntimeError("typed_completion_internal_procedure_visible")

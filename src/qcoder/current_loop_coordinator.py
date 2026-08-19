@@ -110,7 +110,7 @@ from qcoder.current_loop_request_semantics import (
 )
 from qcoder.current_step_contract import (
     derive_current_step_contract,
-    quiet_customer_visibility_contract,
+    quiet_customer_visibility_projection,
 )
 from qcoder.current_loop_bootstrap import (
     BOOTSTRAP_INVOCATION_SCHEMA_ID,
@@ -13908,15 +13908,15 @@ class CurrentLoopCoordinator:
             "results": "The requested local result artifact is ready.",
         }.get(role, "The requested artifact is ready.")
         projection = {
-            "schema_id": "qcoder.current_loop.typed_completion_result.v2",
-            "schema_version": 2,
+            "schema_id": "qcoder.current_loop.typed_completion_result.v3",
+            "schema_version": 3,
             "operation": "complete_current_step",
             "ok": True,
             "category": result.get("category"),
             "state_revision": state["state_revision"],
             "current_step_status": coordinator.get("current_step_status"),
             "customer_summary": task_summary,
-            "customer_visibility": quiet_customer_visibility_contract(),
+            "customer_visibility": quiet_customer_visibility_projection(),
             "final_response_permitted": (
                 coordinator.get("current_step_status") == "complete_resumable"
             ),
