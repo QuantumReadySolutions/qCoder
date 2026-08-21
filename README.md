@@ -65,6 +65,8 @@ provide a fresh authority grant for the new runtime. qCoder fails closed instead
 reinterpreting old authority data. This is a local active-loop compatibility boundary, not a
 migration of project history or server-side persistence.
 
+Known limitation in qCoder 0.6.0a16: After source or circuit evidence is replaced within an active Current Loop, Run Summary may combine the new upstream artifact with older downstream circuit or result evidence and present the mixed-revision set as current. Bare count-like JSON may also be accepted without established circuit lineage. Individual artifacts may still be valid evidence in isolation, but do not use a16 Run Summary to conclude that the latest source, circuit, and result belong to one coherent execution.
+
 ### Connected-client qualification
 
 This package does not activate a named-client support claim. Qualification applies only to an
