@@ -52,7 +52,11 @@ def _call(root: Path, name: str, arguments: dict) -> dict:
 
 
 def _begin(root: Path) -> dict:
-    result = _call(root, BEGIN_CURRENT_LOOP_TOOL_NAME, {"request_text": REQUEST})
+    result = _call(
+        root,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {"request_text": REQUEST, "intended_artifact_paths": {"source": "phi_plus_bell.py"}},
+    )
     assert result["ok"] is True
     return result
 
@@ -106,7 +110,7 @@ def test_begin_returns_small_canonical_current_step_contract(tmp_path: Path) -> 
     assert contract["native_client_authority"]["qcoder_infers_approval_click"] is False
     assert contract["completion"]["operation"] == COMPLETE_CURRENT_STEP_TOOL_NAME
     assert contract == derive_current_step_contract(state)
-    assert len(json.dumps(contract, sort_keys=True, separators=(",", ":")).encode()) <= 2048
+    assert len(json.dumps(contract, sort_keys=True, separators=(",", ":")).encode()) <= 2300
 
 
 def test_private_inventory_is_begin_and_complete_while_public_remains_twelve() -> None:
@@ -244,7 +248,10 @@ def test_continuation_replaces_contract_without_rebootstrap(tmp_path: Path) -> N
     continued = _call(
         tmp_path,
         BEGIN_CURRENT_LOOP_TOOL_NAME,
-        {"request_text": "Now export the circuit as QASM."},
+        {
+            "request_text": "Now export the circuit as QASM.",
+            "intended_artifact_paths": {"circuit_qasm": "circuit.qasm"},
+        },
     )
     assert continued["ok"] is True
     assert continued["details"]["active_loop_continuation"] is True

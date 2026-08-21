@@ -41,7 +41,10 @@ def _activate(root: Path) -> tuple[CurrentLoopCoordinator, dict]:
             "method": "tools/call",
             "params": {
                 "name": BEGIN_CURRENT_LOOP_TOOL_NAME,
-                "arguments": {"request_text": REQUEST},
+                "arguments": {
+                    "request_text": REQUEST,
+                    "intended_artifact_paths": {"source": "bell.py"},
+                },
             },
         },
         workspace_root=root,

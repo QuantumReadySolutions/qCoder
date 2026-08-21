@@ -1,0 +1,171 @@
+from __future__ import annotations
+
+import argparse
+from hashlib import sha256
+import json
+import os
+from pathlib import Path
+import stat
+
+
+PUBLIC_SERVER = "wi0435-qcoder-context-bridge"
+PRIVATE_SERVER = "wi0435-qcoder-current-loop"
+
+
+def canonical_bytes(value: object) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+
+
+def digest(path: Path) -> str:
+    return sha256(path.read_bytes()).hexdigest()
+
+
+def packet_identity(packet: Path) -> dict:
+    value = json.loads((packet / "PACKET-MANIFEST.json").read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise SystemExit("Packet manifest is invalid.")
+    return value
+
+
+def wheel_identity(packet: Path) -> tuple[Path, dict]:
+    manifest = packet_identity(packet)
+    value = manifest.get("wheel")
+    if not isinstance(value, dict) or not isinstance(value.get("filename"), str):
+        raise SystemExit("Packet wheel identity is missing.")
+    return packet / "artifacts" / value["filename"], value
+
+
+def check_global_cursor_configuration() -> None:
+    path = Path.home() / ".cursor" / "mcp.json"
+    if not path.exists():
+        return
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise SystemExit("Cannot safely validate the existing User MCP configuration.") from exc
+    servers = value.get("mcpServers", {}) if isinstance(value, dict) else {}
+    if not isinstance(servers, dict):
+        raise SystemExit("The existing User MCP server collection is not a JSON object.")
+    conflicts = [
+        str(name)
+        for name, descriptor in servers.items()
+        if "qcoder" in str(name).casefold()
+        or "qcoder" in json.dumps(descriptor, sort_keys=True).casefold()
+    ]
+    if conflicts:
+        raise SystemExit(
+            "User-scope qCoder MCP configuration must be disabled before this checkpoint; "
+            f"conflicting server names: {', '.join(sorted(conflicts))}. Preserve it for restoration."
+        )
+
+
+def preflight(packet: Path, workspace: Path, token_file: Path) -> None:
+    wheel, identity = wheel_identity(packet)
+    if workspace.exists():
+        raise SystemExit(f"Fresh workspace required; path already exists: {workspace}")
+    if not token_file.is_file():
+        raise SystemExit("The supplied Context Bridge token-file path is not a regular file.")
+    if (
+        not wheel.is_file()
+        or wheel.stat().st_size != identity.get("bytes")
+        or digest(wheel) != identity.get("sha256")
+    ):
+        raise SystemExit("Exact rehearsal wheel identity check failed.")
+    check_global_cursor_configuration()
+    print("PREPARE_PREFLIGHT_PASS")
+
+
+def configure(packet: Path, workspace: Path, token_file: Path, python: Path) -> None:
+    if not python.is_file():
+        raise SystemExit("Installed-wheel Python is missing.")
+    # Preserve the venv launcher path exactly. Resolving its symlink would bypass
+    # the venv and select the base interpreter where qCoder is not installed.
+    runtime_python = Path(os.path.abspath(python))
+    cursor_dir = workspace / ".cursor"
+    safe_return = workspace / "safe-return"
+    cursor_dir.mkdir(parents=True, exist_ok=False)
+    safe_return.mkdir()
+    mcp = {
+        "mcpServers": {
+            PUBLIC_SERVER: {
+                "command": str(runtime_python),
+                "args": [
+                    "-m",
+                    "qcoder",
+                    "context-bridge",
+                    "mcp",
+                    "serve",
+                    "--token-file",
+                    str(token_file.resolve()),
+                ],
+            },
+            PRIVATE_SERVER: {
+                "command": str(runtime_python),
+                "args": [
+                    "-m",
+                    "qcoder",
+                    "current-loop",
+                    "--workspace",
+                    str(workspace.resolve()),
+                    "serve-binding-mcp",
+                ],
+            },
+        }
+    }
+    mcp_path = cursor_dir / "mcp.json"
+    mcp_path.write_bytes(canonical_bytes(mcp) + b"\n")
+    os.chmod(mcp_path, stat.S_IRUSR | stat.S_IWUSR)
+    print(f"WORKSPACE={workspace}")
+    print(f"RUNTIME_PYTHON={runtime_python}")
+    print(f"CURSOR_MCP_SERVERS={PUBLIC_SERVER},{PRIVATE_SERVER}")
+    print("PUBLIC_TOOL_EXPECTATION=12")
+    print("PRIVATE_OPERATION_EXPECTATION=2")
+    print("CONFIGURE_PASS")
+
+
+def installed_check(packet: Path) -> None:
+    manifest = packet_identity(packet)
+    import qcoder
+    from qcoder.context_bridge_mcp import EXPECTED_TOOLS
+    from qcoder.current_loop_binding_mcp import binding_tool_descriptors
+
+    if qcoder.__version__ != manifest.get("version"):
+        raise SystemExit("Installed qCoder version mismatch.")
+    if len(EXPECTED_TOOLS) != 12:
+        raise SystemExit("Public Context Bridge inventory mismatch.")
+    if [item["name"] for item in binding_tool_descriptors()] != [
+        "begin_current_loop",
+        "complete_current_step",
+    ]:
+        raise SystemExit("Private Current Loop inventory mismatch.")
+    print("INSTALLED_IDENTITY_AND_INVENTORY_PASS")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("mode", choices=["preflight", "configure", "installed-check", "wheel-name"])
+    parser.add_argument("--packet", type=Path, required=True)
+    parser.add_argument("--workspace", type=Path)
+    parser.add_argument("--token-file", type=Path)
+    parser.add_argument("--python", type=Path)
+    args = parser.parse_args()
+    packet = args.packet.absolute()
+    if args.mode == "wheel-name":
+        print(wheel_identity(packet)[1]["filename"])
+        return
+    if args.mode == "installed-check":
+        installed_check(packet)
+        return
+    if args.workspace is None or args.token_file is None:
+        parser.error("--workspace and --token-file are required")
+    workspace = args.workspace.absolute()
+    if args.mode == "preflight":
+        preflight(packet, workspace, args.token_file)
+        return
+    if args.python is None:
+        parser.error("--python is required for configure")
+    configure(packet, workspace, args.token_file, args.python.absolute())
+
+
+if __name__ == "__main__":
+    main()

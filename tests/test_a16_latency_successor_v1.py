@@ -56,7 +56,7 @@ def test_inline_binding_is_compact_tiered_digest_verified_and_keeps_twelve_tools
         token_file=tmp_path / "token.txt",
     )
     assert len(instructions.encode("utf-8")) <= 50_000
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v36"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v37"
     assert len(tool_descriptors()) == len(EXPECTED_TOOLS) == 12
     listed = handle_jsonrpc_message(
         {"jsonrpc": "2.0", "id": 1, "method": "resources/list"},
@@ -100,7 +100,7 @@ def test_inline_binding_is_compact_tiered_digest_verified_and_keeps_twelve_tools
 def test_normal_source_only_results_are_compact_single_source_of_truth(tmp_path: Path) -> None:
     coordinator, activated = _activate(tmp_path)
     assert _wire_bytes(activated) <= 15_000
-    assert activated["schema_id"] == "qcoder.current_loop.coordinator_result.v20"
+    assert activated["schema_id"] == "qcoder.current_loop.coordinator_result.v21"
     assert activated["projection_schema_id"] == ("qcoder.current_loop.normal_success_projection.v2")
     for duplicate in (
         "next_invocation",

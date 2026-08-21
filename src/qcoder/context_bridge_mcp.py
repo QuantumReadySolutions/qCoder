@@ -96,6 +96,7 @@ from qcoder.current_loop_evidence_reconciler import reconciler_contract_snapshot
 from qcoder.current_loop_result_manifest import result_manifest_contract_snapshot
 from qcoder.framework_native_evidence import framework_native_contract_snapshot
 from qcoder.current_step_contract import quiet_customer_visibility_contract
+from qcoder.current_loop_artifact_targets import target_contract_snapshot
 from qcoder.current_loop_derivation import derivation_contract_snapshot
 from qcoder.current_loop_freshness import freshness_contract_snapshot
 from qcoder.current_loop_retention import retention_contract_snapshot
@@ -159,8 +160,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 35
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v36"
+CLIENT_BINDING_SCHEMA_VERSION = 36
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v37"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -195,7 +196,9 @@ Concrete D-080 current request: before planning-language or generic single-capab
 classify the exact current customer message through the binding's canonical request-semantics
 contract. A concrete explicit qCoder source, QASM, execution, or selected-file review request uses
 the project-local binding-owned begin_current_loop MCP operation. Pass the exact complete current
-customer message once as request_text; do not construct Shell, CLI, stdin, flags, JSON envelopes,
+customer message once as request_text and one exact workspace-relative intended_artifact_paths
+entry for every requested artifact role. Choose those names solely from the customer task; do not
+Read, Grep, Glob, list, scan, or search the workspace or neighboring artifacts. Do not construct Shell, CLI, stdin, flags, JSON envelopes,
 IDs, digests, or lineage. One structured activation preserves the exact Request Baseline
 and activates Assist for this request only. The returned current_step_contract is the sole
 current-stage construction source. Never reconstruct procedure from chats, workspaces,
@@ -206,8 +209,9 @@ evidence, and later artifact or governing authority are separate. A later exact 
 instruction uses interpret-current-request
 without bootstrap or Request Baseline recreation.
 
-For an exact native source write, follow the native client's own controls and perform only that
-write. qCoder defines what completed evidence it will accept; it does not grant or observe native
+For an exact native source write, use only the target returned by the Current Step Contract and
+follow the native client's own controls to perform only that write. Never search the workspace to
+choose or confirm the target. qCoder defines what completed evidence it will accept; it does not grant or observe native
 permission and never infers an approval click. After the write, call the private typed
 complete_current_step operation once with only the opaque current_action_handle from the Current
 Step Contract and the exact resulting artifact path. qCoder computes and validates the bytes and
@@ -615,6 +619,7 @@ def build_client_binding_descriptor(
             ),
             "operation_transport_inventory": operation_transport_inventory(),
             "current_request_semantics_contract": semantics_contract_snapshot(),
+            "artifact_target_contract": target_contract_snapshot(),
             "bounded_control_input_contract": bounded_control_contract_snapshot(),
             "adaptive_intent_input_contract": adaptive_intent_contract_snapshot(),
             "adaptive_intent_input_completeness_matrix": adaptive_intent_completeness_matrix(),
@@ -682,6 +687,8 @@ def build_client_binding_descriptor(
                     "structured_activation_operation": "begin_current_loop",
                     "typed_completion_operation": "complete_current_step",
                     "structured_activation_argument": "request_text",
+                    "structured_artifact_target_argument": "intended_artifact_paths",
+                    "workspace_discovery_for_target_selection": False,
                     "exact_request_transported_once": True,
                     "normal_path_shell_or_cli": False,
                     "normal_path_stdin_plumbing": False,
@@ -697,6 +704,7 @@ def build_client_binding_descriptor(
                     "transport": "project_local_binding_mcp",
                     "operations": ["begin_current_loop", "complete_current_step"],
                     "begin_returns": "canonical_current_step_contract",
+                    "begin_binds_exact_workspace_relative_artifact_targets": True,
                     "complete_inputs": ["current_action_handle", "artifact_path"],
                     "strict_result_manifest_transport": "exact_artifact_path",
                     "bare_counts_current_result_permitted": False,
@@ -1001,7 +1009,9 @@ choreography.
 
 ACTIVE-BUILD STRUCTURED ACTIVATION
 Call the project-local qcoder-current-loop begin_current_loop operation once with request_text set
-to the exact complete current customer message. The typed required argument makes missing stdin or
+to the exact complete current customer message. For every requested artifact role, also supply one
+exact workspace-relative intended_artifact_paths value chosen solely from the task without Read,
+Grep, Glob, listing, scanning, or neighboring-artifact search. The typed required argument makes missing stdin or
 command construction inapplicable. The customer never types the command. Never construct a command
 from coordinator_prefix; it and inventories are diagnostics only. Do not run current-loop --help,
 qcoder --help, inspect package/source/binding
@@ -1027,7 +1037,8 @@ without inference if unavailable or mismatched.
 
 IDE WORK AND ARTIFACT HANDOFF
 BEGIN / NATIVE ACTION / TYPED COMPLETE
-For the exact source action, let the native client apply its own controls and perform only that
+Use only the exact target returned in the Current Step Contract; never search the workspace to
+choose or confirm it. For the exact source action, let the native client apply its own controls and perform only that
 write. qCoder publishes one exact Current Step Contract, but does not grant or observe native
 permission and does not infer an approval click. After the native action, call
 complete_current_step with the contract's opaque current_action_handle and the exact resulting

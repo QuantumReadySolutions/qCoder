@@ -59,8 +59,22 @@ def _call(root: Path, name: str, arguments: dict) -> dict:
     return response["result"]["structuredContent"]
 
 
-def _begin(root: Path, request: str) -> dict:
-    result = _call(root, BEGIN_CURRENT_LOOP_TOOL_NAME, {"request_text": request})
+def _begin(root: Path, request: str, *, target: str | None = None) -> dict:
+    role, default_target = (
+        ("circuit_qasm", "bell.qasm")
+        if "QASM" in request
+        else ("results", "result.json")
+        if request.startswith("Run ")
+        else ("source", "bell.py")
+    )
+    result = _call(
+        root,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {
+            "request_text": request,
+            "intended_artifact_paths": {role: target or default_target},
+        },
+    )
     assert result["ok"] is True, result
     return result
 
@@ -141,7 +155,11 @@ def _manifest(
 
 
 def _run_step(root: Path, *, attempt: str = "native-attempt-0001") -> tuple[dict, Path]:
-    begun = _begin(root, "Run it locally with 1,024 shots and save the result evidence.")
+    begun = _begin(
+        root,
+        "Run it locally with 1,024 shots and save the result evidence.",
+        target=f"{attempt}.json",
+    )
     assert begun["current_step_contract"]["permitted_native_action"]["artifact_role"] == "results"
     result_path = root / f"{attempt}.json"
     result_path.write_text(json.dumps(_manifest(attempt=attempt), sort_keys=True), encoding="utf-8")
@@ -244,7 +262,11 @@ def test_malformed_manifests_fail_closed(mutation, category: str) -> None:
 
 def test_bare_counts_are_not_current_result_transport(tmp_path: Path) -> None:
     _source_and_circuit(tmp_path)
-    begun = _begin(tmp_path, "Run it locally with 1,024 shots and save the result evidence.")
+    begun = _begin(
+        tmp_path,
+        "Run it locally with 1,024 shots and save the result evidence.",
+        target="bare-counts.json",
+    )
     path = tmp_path / "bare-counts.json"
     path.write_text(json.dumps({"00": 512, "11": 512}), encoding="utf-8")
     failed = _complete(tmp_path, begun, path)
@@ -290,6 +312,7 @@ def test_shots_only_rerun_reuses_exact_inputs_and_preserves_prior_run(tmp_path: 
     second_step = _begin(
         tmp_path,
         "Run the same circuit locally with 2,000 shots and save the result evidence.",
+        target="native-attempt-2000.json",
     )
     second_path = tmp_path / "native-attempt-2000.json"
     second_path.write_text(
@@ -326,7 +349,11 @@ def test_false_lineage_and_reused_attempts_fail_closed(tmp_path: Path) -> None:
 
     first_step, first_path = _run_step(tmp_path, attempt="reused-attempt")
     assert _complete(tmp_path, first_step, first_path)["ok"] is True
-    second_step = _begin(tmp_path, "Run it locally again and save the result evidence.")
+    second_step = _begin(
+        tmp_path,
+        "Run it locally again and save the result evidence.",
+        target="reused-again.json",
+    )
     second_path = tmp_path / "reused-again.json"
     second_path.write_text(
         json.dumps(_manifest(attempt="reused-attempt"), sort_keys=True), encoding="utf-8"
@@ -358,7 +385,7 @@ def test_preexisting_selected_source_satisfies_without_mutation_or_false_provena
         after.st_mode,
         sha256(path.read_bytes()).hexdigest(),
     )
-    begun = _begin(tmp_path, SOURCE_REQUEST)
+    begun = _begin(tmp_path, SOURCE_REQUEST, target="already_here.py")
     completed = _complete(
         tmp_path,
         begun,

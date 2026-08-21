@@ -108,6 +108,7 @@ from qcoder.current_loop_request_semantics import (
     semantics_contract_snapshot,
     validate_request_semantics,
 )
+from qcoder.current_loop_artifact_targets import normalize_intended_artifact_targets
 from qcoder.current_step_contract import (
     derive_current_step_contract,
     quiet_customer_visibility_projection,
@@ -245,8 +246,8 @@ from qcoder.current_loop_iteration import (
 )
 from qcoder.context_loop import CONTEXT_LOOP_GATE
 
-COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v20"
-COORDINATOR_RESULT_SCHEMA_VERSION = 20
+COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v21"
+COORDINATOR_RESULT_SCHEMA_VERSION = 21
 
 RESULT_SEMANTIC_CLASSES = (
     "pure_observation",
@@ -2699,6 +2700,7 @@ class CurrentLoopCoordinator:
         *,
         exact_message: str,
         selected_paths: Sequence[str] = (),
+        intended_artifact_paths: Mapping[str, str] | None = None,
     ) -> dict[str, Any]:
         """Interpret one active-loop customer message without re-bootstrap or archaeology."""
 
@@ -2888,6 +2890,13 @@ class CurrentLoopCoordinator:
                 ),
                 "compact_next_action_source": "canonical_current_request_semantics_only",
                 "procedural_archaeology_permitted": False,
+                "intended_artifact_targets": normalize_intended_artifact_targets(
+                    intended_artifact_paths,
+                    workspace_root=self.workspace_root,
+                    required_roles=semantics["requested_artifact_roles"],
+                )
+                if intended_artifact_paths is not None
+                else {},
             }
         )
         self._replace_coordinator(coordinator)
@@ -3599,6 +3608,7 @@ class CurrentLoopCoordinator:
         parent_loop_ref: str | None = None,
         assistant_interpretation: Mapping[str, Any] | None = None,
         capture_mode: str = "review_required",
+        intended_artifact_paths: Mapping[str, str] | None = None,
     ) -> dict[str, Any]:
         started = self.clock()
         try:
@@ -3678,6 +3688,15 @@ class CurrentLoopCoordinator:
                     ]
                     coordinator["current_step_status"] = "awaiting_external_client_action"
                     coordinator["current_step_substage"] = "source"
+                    coordinator["intended_artifact_targets"] = (
+                        normalize_intended_artifact_targets(
+                            intended_artifact_paths,
+                            workspace_root=self.workspace_root,
+                            required_roles=request_semantics["requested_artifact_roles"],
+                        )
+                        if intended_artifact_paths is not None
+                        else {}
+                    )
                 coordinator["bootstrap_count"] = 1
                 coordinator["request_baseline_count"] = 1
                 coordinator["compact_next_action_source"] = (
@@ -7472,27 +7491,42 @@ class CurrentLoopCoordinator:
             candidate_path = Path(artifact_path).expanduser()
             if not candidate_path.is_absolute() or ".." in candidate_path.parts:
                 raise CurrentLoopError("artifact_candidate_path_invalid")
-            if candidate_path.is_symlink() or not candidate_path.is_file():
-                raise CurrentLoopError("artifact_candidate_file_required")
-            resolved = candidate_path.resolve(strict=True)
+            normalized = Path(os.path.abspath(candidate_path))
             try:
-                resolved.relative_to(self.workspace_root.resolve(strict=True))
+                normalized.relative_to(Path(os.path.abspath(self.workspace_root)))
             except ValueError as exc:
                 raise CurrentLoopError("completed_artifact_outside_workspace") from exc
-            if ".qcoder" in resolved.parts:
+            if ".qcoder" in normalized.parts:
                 raise CurrentLoopError("qcoder_local_state_artifact_prohibited")
-            raw = resolved.read_bytes()
             receipt = state.get("operation_receipts", {}).get(current_action_handle)
             if isinstance(receipt, Mapping) and receipt.get("status") == "consumed":
                 path_digest = sha256(
                     json.dumps(
-                        {"path": str(resolved)},
+                        {"path": str(normalized)},
                         ensure_ascii=True,
                         separators=(",", ":"),
                         sort_keys=True,
                     ).encode("utf-8")
                 ).hexdigest()
-                content_digest = sha256(raw).hexdigest()
+                matching_activity = next(
+                    (
+                        activity
+                        for activity in state.get("activity_receipts", ())
+                        if isinstance(activity, Mapping)
+                        and activity.get("operation_receipt_id") == current_action_handle
+                        and len(activity.get("registered_artifacts", ())) == 1
+                        and activity["registered_artifacts"][0].get("path_digest") == path_digest
+                    ),
+                    None,
+                )
+                if not isinstance(matching_activity, Mapping):
+                    raise CurrentLoopError("consumed_current_action_mismatch")
+                if normalized.is_symlink() or not normalized.is_file():
+                    raise CurrentLoopError("artifact_candidate_file_required")
+                resolved = normalized.resolve(strict=True)
+                if resolved != normalized:
+                    raise CurrentLoopError("artifact_candidate_alias_prohibited")
+                content_digest = sha256(resolved.read_bytes()).hexdigest()
                 equivalent = any(
                     isinstance(activity, Mapping)
                     and activity.get("operation_receipt_id") == current_action_handle
@@ -7528,9 +7562,26 @@ class CurrentLoopCoordinator:
                 raise CurrentLoopError("current_action_handle_not_active")
             if not isinstance(receipt, Mapping) or receipt.get("status") != "issued":
                 raise CurrentLoopError("bounded_action_expectation_not_active")
-            authority_binding = receipt.get("authority_binding")
+            authority_binding = (
+                receipt.get("authority_binding") if isinstance(receipt, Mapping) else None
+            )
             if not isinstance(authority_binding, Mapping):
                 raise CurrentLoopError("bounded_action_expectation_invalid")
+            target = authority_binding.get("exact_artifact_target")
+            expected_target_digest = (
+                target.get("exact_path_sha256") if isinstance(target, Mapping) else None
+            )
+            if (
+                isinstance(expected_target_digest, str)
+                and expected_target_digest != sha256(str(normalized).encode("utf-8")).hexdigest()
+            ):
+                raise CurrentLoopError("completed_artifact_path_not_bound_target")
+            if normalized.is_symlink() or not normalized.is_file():
+                raise CurrentLoopError("artifact_candidate_file_required")
+            resolved = normalized.resolve(strict=True)
+            if resolved != normalized:
+                raise CurrentLoopError("artifact_candidate_alias_prohibited")
+            raw = resolved.read_bytes()
             role = str(authority_binding.get("authorized_artifact_role"))
             recovery_binding = authority_binding.get("exact_registration_recovery_binding")
             if isinstance(recovery_binding, Mapping):
@@ -12424,7 +12475,7 @@ class CurrentLoopCoordinator:
                     "content_digest": circuit_revision.get("content_digest"),
                 }
         authority_binding = {
-            "schema_id": "qcoder.current_loop.bounded_action_expectation_binding.v1",
+            "schema_id": "qcoder.current_loop.bounded_action_expectation_binding.v2",
             "authority_layer": "qcoder_bounded_action",
             "native_client_permission_owner": "native_client",
             "native_client_permission_granted_by_qcoder": False,
@@ -12457,6 +12508,17 @@ class CurrentLoopCoordinator:
             "stale_after_any_authoritative_revision_change": True,
             "authority_evidence_source": "qcoder_bounded_action_expectation",
         }
+        targets = coordinator.get("intended_artifact_targets")
+        exact_target = targets.get(role) if isinstance(targets, Mapping) else None
+        if not isinstance(exact_target, Mapping):
+            exact_target = {
+                "workspace_relative_path": None,
+                "exact_path_sha256": None,
+                "binding_mode": "legacy_exact_completion_path_handoff",
+                "workspace_discovery_permitted": False,
+                "neighbor_artifact_discovery_permitted": False,
+            }
+        authority_binding["exact_artifact_target"] = deepcopy(dict(exact_target))
         receipt = issue_operation_receipt(
             loop_ref=str(state["loop_ref"]),
             workspace_binding=str(state["workspace_root"]),

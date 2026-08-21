@@ -10,8 +10,8 @@ from typing import Any, Mapping
 from qcoder.current_loop_result_manifest import result_manifest_contract_snapshot
 
 
-CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v4"
-CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 4
+CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v5"
+CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 5
 COMPLETE_CURRENT_STEP_OPERATION = "complete_current_step"
 
 
@@ -138,6 +138,9 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
         if value != role and value not in prohibited_roles
     ]
     prohibited_actions = sorted(set(prohibited_roles + prohibited_actions))
+    target = binding.get("exact_artifact_target")
+    if not isinstance(target, Mapping):
+        raise ValueError("current_step_contract_exact_artifact_target_required")
     contract = {
         "schema_id": CURRENT_STEP_CONTRACT_SCHEMA_ID,
         "schema_version": CURRENT_STEP_CONTRACT_SCHEMA_VERSION,
@@ -157,6 +160,14 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
             "operation": operation,
             "artifact_role": role,
             "cardinality": "exactly_one",
+            "exact_artifact_target": {
+                "workspace_relative_path": target.get("workspace_relative_path"),
+                "selection": (
+                    "bound_before_action_no_discovery"
+                    if isinstance(target.get("exact_path_sha256"), str)
+                    else "legacy_completion_path_handoff"
+                ),
+            },
         },
         "prohibited_current_actions": prohibited_actions,
         "native_client_authority": {
@@ -181,7 +192,7 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
             "clarification": semantics.get("customer_clarification"),
         },
         "privacy": {
-            "raw_artifact_or_path_inline": False,
+            "raw_artifact_or_absolute_path_inline": False,
             "process_and_discard": True,
         },
     }
@@ -215,6 +226,8 @@ def current_step_contract_snapshot() -> dict[str, Any]:
         "bounded_independent_of_artifact_size": True,
         "native_permission_owner": "native_client",
         "hooks_optional_accelerators": True,
+        "exact_artifact_target_required": True,
+        "workspace_discovery_permitted": False,
         "normal_success_customer_visibility": quiet_customer_visibility_contract(),
         "fail_closed": True,
     }

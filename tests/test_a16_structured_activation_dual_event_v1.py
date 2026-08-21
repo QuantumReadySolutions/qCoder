@@ -37,7 +37,10 @@ def _begin(workspace: Path, request: str = REQUEST) -> dict:
             "method": "tools/call",
             "params": {
                 "name": BEGIN_CURRENT_LOOP_TOOL_NAME,
-                "arguments": {"request_text": request},
+                "arguments": {
+                    "request_text": request,
+                    "intended_artifact_paths": {"source": "bell.py"},
+                },
             },
         },
         workspace_root=workspace,

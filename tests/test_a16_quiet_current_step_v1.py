@@ -54,7 +54,7 @@ def test_binding_and_private_tools_encode_semantic_quiet_success(tmp_path: Path)
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     visibility = descriptor["surfaces"]["current_step_transaction"]["customer_visibility"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v36"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v37"
     assert visibility["normal_success"] == "internal_transaction_silent"
     assert visibility["intermediate_customer_message_permitted"] is False
     assert visibility["final_response"] == "concise_task_outcome_only"
@@ -107,9 +107,13 @@ def test_binding_and_private_tools_encode_semantic_quiet_success(tmp_path: Path)
 
 
 def test_normal_begin_is_task_level_and_contract_stays_bounded(tmp_path: Path) -> None:
-    begun = _call(tmp_path, BEGIN_CURRENT_LOOP_TOOL_NAME, {"request_text": REQUEST})
+    begun = _call(
+        tmp_path,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {"request_text": REQUEST, "intended_artifact_paths": {"source": "bell_phi_plus.py"}},
+    )
     contract = begun["current_step_contract"]
-    assert _wire_bytes(contract) <= 2048
+    assert _wire_bytes(contract) <= 2300
     assert contract["customer_visibility"] == {
         "policy": "quiet_current_step_v2",
         "events": "optional_task_progress_then_task_outcome",
@@ -124,7 +128,11 @@ def test_normal_begin_is_task_level_and_contract_stays_bounded(tmp_path: Path) -
 def test_normal_typed_completion_is_compact_task_only_and_final_ready(
     tmp_path: Path,
 ) -> None:
-    begun = _call(tmp_path, BEGIN_CURRENT_LOOP_TOOL_NAME, {"request_text": REQUEST})
+    begun = _call(
+        tmp_path,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {"request_text": REQUEST, "intended_artifact_paths": {"source": "bell_phi_plus.py"}},
+    )
     source = tmp_path / "bell_phi_plus.py"
     source.write_text(SOURCE, encoding="utf-8")
     completed = _call(
@@ -160,7 +168,11 @@ def test_normal_typed_completion_is_compact_task_only_and_final_ready(
 
 
 def test_failure_remains_visible_and_fail_closed(tmp_path: Path) -> None:
-    begun = _call(tmp_path, BEGIN_CURRENT_LOOP_TOOL_NAME, {"request_text": REQUEST})
+    begun = _call(
+        tmp_path,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {"request_text": REQUEST, "intended_artifact_paths": {"source": "bell_phi_plus.py"}},
+    )
     failed = _call(
         tmp_path,
         COMPLETE_CURRENT_STEP_TOOL_NAME,
@@ -181,7 +193,17 @@ def test_multi_stage_completion_returns_next_contract_without_customer_final(
     tmp_path: Path,
 ) -> None:
     request = "Use qCoder to write the source and export QASM, but do not run it."
-    begun = _call(tmp_path, BEGIN_CURRENT_LOOP_TOOL_NAME, {"request_text": request})
+    begun = _call(
+        tmp_path,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {
+            "request_text": request,
+            "intended_artifact_paths": {
+                "source": "circuit.py",
+                "circuit_qasm": "circuit.qasm",
+            },
+        },
+    )
     source = tmp_path / "circuit.py"
     source.write_text(SOURCE, encoding="utf-8")
     completed = _call(

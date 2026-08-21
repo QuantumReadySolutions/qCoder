@@ -52,7 +52,14 @@ def _bytes(value: object) -> int:
 
 
 def _completed_source(root: Path) -> tuple[dict, dict]:
-    begun = _call(root, BEGIN_CURRENT_LOOP_TOOL_NAME, {"request_text": SOURCE_REQUEST})
+    begun = _call(
+        root,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {
+            "request_text": SOURCE_REQUEST,
+            "intended_artifact_paths": {"source": "bell_phi_plus.py"},
+        },
+    )
     source = root / "bell_phi_plus.py"
     source.write_text(SOURCE, encoding="utf-8")
     completed = _call(
@@ -74,11 +81,14 @@ def test_qasm_continuation_returns_only_compact_replacement_contract(tmp_path: P
     continued = _call(
         tmp_path,
         BEGIN_CURRENT_LOOP_TOOL_NAME,
-        {"request_text": "Now export the circuit as QASM."},
+        {
+            "request_text": "Now export the circuit as QASM.",
+            "intended_artifact_paths": {"circuit_qasm": "bell_phi_plus.qasm"},
+        },
     )
     assert continued["ok"] is True
     assert continued["operation"] == "interpret_current_request"
-    assert continued["schema_id"] == "qcoder.current_loop.coordinator_result.v20"
+    assert continued["schema_id"] == "qcoder.current_loop.coordinator_result.v21"
     assert continued["projection_schema_id"] == ("qcoder.current_loop.normal_success_projection.v2")
     assert continued["customer_summary"] == "Proceed with the requested QASM task."
     assert continued["current_step_contract_is_sole_action_source"] is True
@@ -117,7 +127,10 @@ def test_qasm_continuation_completes_without_rebootstrap_or_results(tmp_path: Pa
     continued = _call(
         tmp_path,
         BEGIN_CURRENT_LOOP_TOOL_NAME,
-        {"request_text": "Now export the circuit as QASM."},
+        {
+            "request_text": "Now export the circuit as QASM.",
+            "intended_artifact_paths": {"circuit_qasm": "bell_phi_plus.qasm"},
+        },
     )
     qasm = tmp_path / "bell_phi_plus.qasm"
     qasm.write_text(QASM, encoding="utf-8")
@@ -146,7 +159,7 @@ def test_qasm_continuation_completes_without_rebootstrap_or_results(tmp_path: Pa
 def test_continuation_binding_is_direct_quiet_and_keeps_two_private_tools(
     tmp_path: Path,
 ) -> None:
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v36"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v37"
     assert len(EXPECTED_TOOLS) == 12
     descriptors = binding_tool_descriptors()
     assert [row["name"] for row in descriptors] == [
