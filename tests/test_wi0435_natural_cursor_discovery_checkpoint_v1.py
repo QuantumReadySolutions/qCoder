@@ -6,6 +6,7 @@ from pathlib import Path
 import stat
 import subprocess
 import sys
+from copy import deepcopy
 
 from qcoder.current_loop_binding_mcp import (
     BEGIN_CURRENT_LOOP_TOOL_NAME,
@@ -77,6 +78,13 @@ def test_source_begin_binds_exact_target_and_prohibits_discovery(tmp_path: Path)
     descriptor = binding_tool_descriptors()[0]
     assert "intended_artifact_paths" in descriptor["inputSchema"]["properties"]
     assert descriptor["x-qcoder-artifact-target-contract"]["discovery_or_glob_permitted"] is False
+    completion = begun["current_step_contract"]["completion"]
+    assert completion["artifact_path"] == "phi_plus_bell.py"
+    assert completion["artifact_path_form"] == "workspace_relative_bound_target"
+    complete_descriptor = binding_tool_descriptors()[1]
+    artifact_schema = complete_descriptor["inputSchema"]["properties"]["artifact_path"]
+    assert artifact_schema["x-qcoder-path-form"] == "workspace_relative_bound_target"
+    assert "absolute paths are not accepted" in artifact_schema["description"]
 
 
 def test_completion_refuses_unbound_neighbor_path_before_registration(tmp_path: Path) -> None:
@@ -95,7 +103,7 @@ def test_completion_refuses_unbound_neighbor_path_before_registration(tmp_path: 
     rejected = _call(
         tmp_path,
         COMPLETE_CURRENT_STEP_TOOL_NAME,
-        {"current_action_handle": handle, "artifact_path": str(neighbor)},
+        {"current_action_handle": handle, "artifact_path": neighbor.name},
     )
     assert rejected["ok"] is False
     assert rejected["category"] == "completed_artifact_path_not_bound_target"
@@ -106,11 +114,128 @@ def test_completion_refuses_unbound_neighbor_path_before_registration(tmp_path: 
     completed = _call(
         tmp_path,
         COMPLETE_CURRENT_STEP_TOOL_NAME,
-        {"current_action_handle": handle, "artifact_path": str(source)},
+        {"current_action_handle": handle, "artifact_path": source.name},
     )
     assert completed["ok"] is True
     assert completed["current_step_status"] == "complete_resumable"
     assert completed["artifact"]["role"] == "source"
+
+
+def test_completion_uses_one_relative_form_and_rejects_absolute_retry(
+    tmp_path: Path,
+) -> None:
+    begun = _call(
+        tmp_path,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {
+            "request_text": REQUEST,
+            "intended_artifact_paths": {"source": "phi_plus_bell.py"},
+        },
+    )
+    handle = begun["current_step_contract"]["permitted_native_action"][
+        "current_action_handle"
+    ]
+    source = tmp_path / "phi_plus_bell.py"
+    source.write_text(SOURCE, encoding="utf-8")
+    before = deepcopy(CurrentLoopCoordinator(workspace_root=tmp_path).store.read())
+    absolute = _call(
+        tmp_path,
+        COMPLETE_CURRENT_STEP_TOOL_NAME,
+        {"current_action_handle": handle, "artifact_path": str(source)},
+    )
+    assert absolute == {
+        "schema_id": "qcoder.current_loop.typed_completion_rejection.v2",
+        "ok": False,
+        "category": "completion_artifact_path_must_be_bound_workspace_relative",
+        "expected_path_form": "workspace_relative_bound_target",
+        "copy_from": "current_step_contract.completion.artifact_path",
+        "absolute_path_accepted": False,
+        "workspace_discovery_permitted": False,
+        "state_mutated": False,
+        "raw_path_echoed": False,
+    }
+    assert CurrentLoopCoordinator(workspace_root=tmp_path).store.read() == before
+
+    completed = _call(
+        tmp_path,
+        COMPLETE_CURRENT_STEP_TOOL_NAME,
+        {"current_action_handle": handle, "artifact_path": "phi_plus_bell.py"},
+    )
+    assert completed["ok"] is True
+    assert completed["current_step_status"] == "complete_resumable"
+
+    completed_state = deepcopy(CurrentLoopCoordinator(workspace_root=tmp_path).store.read())
+    duplicate = _call(
+        tmp_path,
+        COMPLETE_CURRENT_STEP_TOOL_NAME,
+        {"current_action_handle": handle, "artifact_path": "phi_plus_bell.py"},
+    )
+    assert duplicate["category"] == "current_step_already_completed"
+    assert duplicate["duplicate_delivery_noop"] is True
+    assert duplicate["canonical_state_mutated"] is False
+    assert CurrentLoopCoordinator(workspace_root=tmp_path).store.read() == completed_state
+
+
+def test_completion_path_escape_traversal_glob_and_symlink_fail_closed(
+    tmp_path: Path,
+) -> None:
+    for invalid in ("../phi_plus_bell.py", "*.py", str(tmp_path.parent / "outside.py")):
+        root = tmp_path / str(abs(hash(invalid)))
+        root.mkdir()
+        begun = _call(
+            root,
+            BEGIN_CURRENT_LOOP_TOOL_NAME,
+            {
+                "request_text": REQUEST,
+                "intended_artifact_paths": {"source": "phi_plus_bell.py"},
+            },
+        )
+        before = deepcopy(CurrentLoopCoordinator(workspace_root=root).store.read())
+        rejected = _call(
+            root,
+            COMPLETE_CURRENT_STEP_TOOL_NAME,
+            {
+                "current_action_handle": begun["current_step_contract"][
+                    "permitted_native_action"
+                ]["current_action_handle"],
+                "artifact_path": invalid,
+            },
+        )
+        assert rejected["category"] == (
+            "completion_artifact_path_must_be_bound_workspace_relative"
+        )
+        assert rejected["state_mutated"] is False
+        assert CurrentLoopCoordinator(workspace_root=root).store.read() == before
+
+    root = tmp_path / "symlink-case"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "phi_plus_bell.py").write_text(SOURCE, encoding="utf-8")
+    (root / "linked").symlink_to(outside, target_is_directory=True)
+    begun = _call(
+        root,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {
+            "request_text": REQUEST,
+            "intended_artifact_paths": {"source": "linked/phi_plus_bell.py"},
+        },
+    )
+    before = deepcopy(CurrentLoopCoordinator(workspace_root=root).store.read())
+    rejected = _call(
+        root,
+        COMPLETE_CURRENT_STEP_TOOL_NAME,
+        {
+            "current_action_handle": begun["current_step_contract"][
+                "permitted_native_action"
+            ]["current_action_handle"],
+            "artifact_path": "linked/phi_plus_bell.py",
+        },
+    )
+    assert rejected["ok"] is False
+    assert rejected["category"] == "artifact_candidate_alias_prohibited"
+    assert rejected["recovery"]["state_mutated"] is False
+    assert CurrentLoopCoordinator(workspace_root=root).store.read() == before
 
 
 def test_checkpoint_selects_supported_python_and_preserves_venv_launcher(

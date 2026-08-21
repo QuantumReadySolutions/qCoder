@@ -160,8 +160,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 36
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v37"
+CLIENT_BINDING_SCHEMA_VERSION = 37
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v38"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -214,7 +214,9 @@ follow the native client's own controls to perform only that write. Never search
 choose or confirm the target. qCoder defines what completed evidence it will accept; it does not grant or observe native
 permission and never infers an approval click. After the write, call the private typed
 complete_current_step operation once with only the opaque current_action_handle from the Current
-Step Contract and the exact resulting artifact path. qCoder computes and validates the bytes and
+Step Contract and artifact_path copied exactly from the contract's workspace-relative completion
+value. Never substitute an absolute path. qCoder resolves that bound value inside the workspace
+and computes and validates the bytes and
 digest. Matcher-free afterFileEdit and unfiltered postToolUse adapters may accelerate the same
 typed transaction, but hooks, Workspace Trust, and hook dispatch are never correctness
 requirements. Duplicate or unrelated deliveries are no-ops. Explicit native approval telemetry
@@ -706,6 +708,8 @@ def build_client_binding_descriptor(
                     "begin_returns": "canonical_current_step_contract",
                     "begin_binds_exact_workspace_relative_artifact_targets": True,
                     "complete_inputs": ["current_action_handle", "artifact_path"],
+                    "completion_artifact_path_form": "workspace_relative_bound_target",
+                    "absolute_completion_path_accepted_from_assistant": False,
                     "strict_result_manifest_transport": "exact_artifact_path",
                     "bare_counts_current_result_permitted": False,
                     "current_run_summary_requires_validated_causal_lineage": True,
@@ -1042,7 +1046,8 @@ choose or confirm it. For the exact source action, let the native client apply i
 write. qCoder publishes one exact Current Step Contract, but does not grant or observe native
 permission and does not infer an approval click. After the native action, call
 complete_current_step with the contract's opaque current_action_handle and the exact resulting
-artifact_path. Do not supply a digest, role, receipt, revision, ceiling, or approval state. qCoder
+workspace-relative artifact_path copied from the contract. Never substitute an absolute path. Do
+not supply a digest, role, receipt, revision, ceiling, or approval state. qCoder
 computes and validates the actual bytes before one atomic registration. The matcher-free afterFileEdit and unfiltered postToolUse hooks
 are optional adapters to this same typed completion transaction;
 they are never required for correctness. Duplicate equivalent delivery is a no-op. Completion

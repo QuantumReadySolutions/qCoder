@@ -139,7 +139,7 @@ def test_non_hook_typed_completion_registers_exact_source(tmp_path: Path) -> Non
     completed = _call(
         tmp_path,
         COMPLETE_CURRENT_STEP_TOOL_NAME,
-        {"current_action_handle": handle, "artifact_path": str(source)},
+        {"current_action_handle": handle, "artifact_path": source.name},
     )
     assert completed["ok"] is True
     assert completed["operation"] == COMPLETE_CURRENT_STEP_TOOL_NAME
@@ -164,7 +164,7 @@ def test_hook_and_non_hook_have_equivalent_authority_state(tmp_path: Path) -> No
         _call(
             roots["typed"],
             COMPLETE_CURRENT_STEP_TOOL_NAME,
-            {"current_action_handle": typed_handle, "artifact_path": str(typed_source)},
+            {"current_action_handle": typed_handle, "artifact_path": typed_source.name},
         )["ok"]
         is True
     )
@@ -223,7 +223,7 @@ def test_hook_then_assistant_duplicate_is_idempotent(tmp_path: Path) -> None:
     duplicate = _call(
         tmp_path,
         COMPLETE_CURRENT_STEP_TOOL_NAME,
-        {"current_action_handle": handle, "artifact_path": str(source)},
+        {"current_action_handle": handle, "artifact_path": source.name},
     )
     assert duplicate["ok"] is True
     assert duplicate["category"] == "current_step_already_completed"
@@ -239,7 +239,7 @@ def test_continuation_replaces_contract_without_rebootstrap(tmp_path: Path) -> N
         _call(
             tmp_path,
             COMPLETE_CURRENT_STEP_TOOL_NAME,
-            {"current_action_handle": handle, "artifact_path": str(source)},
+            {"current_action_handle": handle, "artifact_path": source.name},
         )["ok"]
         is True
     )
@@ -270,7 +270,7 @@ def test_continuation_replaces_contract_without_rebootstrap(tmp_path: Path) -> N
     ("mutation", "expected"),
     [
         ({"current_action_handle": "wrong-handle"}, "current_action_handle_not_active"),
-        ({"artifact_path": "missing.py"}, "artifact_candidate_path_invalid"),
+        ({"artifact_path": "missing.py"}, "completed_artifact_path_not_bound_target"),
     ],
 )
 def test_typed_completion_wrong_action_or_path_fails_without_mutation(
@@ -282,7 +282,7 @@ def test_typed_completion_wrong_action_or_path_fails_without_mutation(
         "current_action_handle": begun["current_step_contract"]["permitted_native_action"][
             "current_action_handle"
         ],
-        "artifact_path": str(source),
+        "artifact_path": source.name,
     }
     arguments.update(mutation)
     before = deepcopy(CurrentLoopCoordinator(workspace_root=tmp_path).store.read())
@@ -314,7 +314,7 @@ def test_prohibited_artifact_formats_fail_under_source_only_ceiling(
             "current_action_handle": begun["current_step_contract"]["permitted_native_action"][
                 "current_action_handle"
             ],
-            "artifact_path": str(artifact),
+            "artifact_path": artifact.name,
         },
     )
     assert result["ok"] is False
@@ -331,7 +331,7 @@ def test_ambiguous_completion_shape_and_unrelated_hook_are_safe(tmp_path: Path) 
             "current_action_handle": begun["current_step_contract"]["permitted_native_action"][
                 "current_action_handle"
             ],
-            "artifact_path": str(tmp_path / "one.py"),
+            "artifact_path": "one.py",
             "artifact_paths": [str(tmp_path / "one.py"), str(tmp_path / "two.py")],
         },
     )

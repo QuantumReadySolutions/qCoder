@@ -10,8 +10,8 @@ from typing import Any, Mapping
 from qcoder.current_loop_result_manifest import result_manifest_contract_snapshot
 
 
-CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v5"
-CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 5
+CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v6"
+CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 6
 COMPLETE_CURRENT_STEP_OPERATION = "complete_current_step"
 
 
@@ -178,6 +178,8 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
         "completion": {
             "operation": COMPLETE_CURRENT_STEP_OPERATION,
             "required_arguments": ["current_action_handle", "artifact_path"],
+            "artifact_path": target.get("workspace_relative_path"),
+            "artifact_path_form": "workspace_relative_bound_target",
             "qcoder_computes_artifact_digest": True,
             "condition": "validated_exact_postcondition",
             "success_state": "complete_resumable",

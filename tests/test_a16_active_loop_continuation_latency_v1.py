@@ -69,7 +69,7 @@ def _completed_source(root: Path) -> tuple[dict, dict]:
             "current_action_handle": begun["current_step_contract"]["permitted_native_action"][
                 "current_action_handle"
             ],
-            "artifact_path": str(source),
+            "artifact_path": source.name,
         },
     )
     return begun, completed
@@ -141,7 +141,7 @@ def test_qasm_continuation_completes_without_rebootstrap_or_results(tmp_path: Pa
             "current_action_handle": continued["current_step_contract"]["permitted_native_action"][
                 "current_action_handle"
             ],
-            "artifact_path": str(qasm),
+            "artifact_path": qasm.name,
         },
     )
     assert completed["ok"] is True
@@ -159,7 +159,7 @@ def test_qasm_continuation_completes_without_rebootstrap_or_results(tmp_path: Pa
 def test_continuation_binding_is_direct_quiet_and_keeps_two_private_tools(
     tmp_path: Path,
 ) -> None:
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v37"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v38"
     assert len(EXPECTED_TOOLS) == 12
     descriptors = binding_tool_descriptors()
     assert [row["name"] for row in descriptors] == [

@@ -18,14 +18,15 @@ from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.current_loop_artifact_targets import (
     ArtifactTargetError,
     MAX_TARGET_PATH_BYTES,
+    normalize_completion_artifact_path,
     normalize_intended_artifact_targets,
     target_contract_snapshot,
 )
 from qcoder.current_loop_request_semantics import classify_current_request
 from qcoder.current_step_contract import quiet_customer_visibility_contract
 
-BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v6"
-BINDING_MCP_SCHEMA_VERSION = 6
+BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v7"
+BINDING_MCP_SCHEMA_VERSION = 7
 BINDING_MCP_SERVER_NAME = "qcoder-current-loop"
 BEGIN_CURRENT_LOOP_TOOL_NAME = "begin_current_loop"
 COMPLETE_CURRENT_STEP_TOOL_NAME = "complete_current_step"
@@ -113,7 +114,9 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "a customer-facing transition message. Complete the exact active qCoder Current "
                 "Step after the native client has "
                 "performed its action under its own controls. Supply only the opaque action "
-                "handle from the Current Step Contract and the resulting local artifact path. "
+                "handle and copy the exact workspace-relative artifact_path value from the "
+                "Current Step Contract. Never send an absolute path, guessed path, neighboring "
+                "path, traversal, or glob. "
                 "qCoder reads and validates the actual bytes; do not supply permission state, "
                 "digests, loop revisions, receipt identities, roles, or stage ceilings."
                 " For a result step, artifact_path transports the exact strict-result-manifest "
@@ -134,8 +137,10 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                         "minLength": 1,
                         "maxLength": MAX_PATH_BYTES,
                         "description": (
-                            "Exact resulting local artifact path returned by the native action."
+                            "Copy the exact workspace-relative artifact_path value from the "
+                            "Current Step Contract; absolute paths are not accepted."
                         ),
+                        "x-qcoder-path-form": "workspace_relative_bound_target",
                     },
                     "artifact_disposition": {
                         "type": "string",
@@ -155,7 +160,7 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
             "x-qcoder-public-context-bridge-tool": False,
             "x-qcoder-normal-happy-path": {
                 "current_action_handle": "<from current_step_contract>",
-                "artifact_path": "<exact path returned by native action>",
+                "artifact_path": "<exact workspace-relative path from current_step_contract>",
             },
             "x-qcoder-native-permission-owner": "native_client",
             "x-qcoder-hooks-required-for-correctness": False,
@@ -273,7 +278,9 @@ def handle_binding_jsonrpc_message(
                         "category": "typed_completion_shape_invalid",
                         "expected_shape": {
                             "current_action_handle": "opaque nonempty string from contract",
-                            "artifact_path": "nonempty exact local artifact path",
+                            "artifact_path": (
+                                "exact workspace-relative path copied from current_step_contract"
+                            ),
                             "artifact_disposition": (
                                 "optional created, modified, pre-existing, or explicit-selection enum"
                             ),
@@ -283,13 +290,36 @@ def handle_binding_jsonrpc_message(
                     }
                 ),
             )
+        binding_workspace = Path(workspace_root).expanduser().absolute()
+        try:
+            normalized_completion_path = normalize_completion_artifact_path(
+                arguments["artifact_path"],
+                workspace_root=binding_workspace,
+            )
+        except ArtifactTargetError as exc:
+            return _result(
+                message_id,
+                _tool_result(
+                    {
+                        "schema_id": "qcoder.current_loop.typed_completion_rejection.v2",
+                        "ok": False,
+                        "category": str(exc),
+                        "expected_path_form": "workspace_relative_bound_target",
+                        "copy_from": "current_step_contract.completion.artifact_path",
+                        "absolute_path_accepted": False,
+                        "workspace_discovery_permitted": False,
+                        "state_mutated": False,
+                        "raw_path_echoed": False,
+                    }
+                ),
+            )
         coordinator = CurrentLoopCoordinator(
-            workspace_root=Path(workspace_root).expanduser().absolute(),
+            workspace_root=binding_workspace,
             runtime_executable=sys.executable,
         )
         payload = coordinator.complete_current_step(
             current_action_handle=str(arguments["current_action_handle"]),
-            artifact_path=str(arguments["artifact_path"]),
+            artifact_path=str(normalized_completion_path),
             artifact_disposition=str(arguments.get("artifact_disposition", "assistant_created")),
         )
         return _result(message_id, _tool_result(payload))

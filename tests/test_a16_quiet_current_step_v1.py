@@ -54,7 +54,7 @@ def test_binding_and_private_tools_encode_semantic_quiet_success(tmp_path: Path)
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     visibility = descriptor["surfaces"]["current_step_transaction"]["customer_visibility"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v37"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v38"
     assert visibility["normal_success"] == "internal_transaction_silent"
     assert visibility["intermediate_customer_message_permitted"] is False
     assert visibility["final_response"] == "concise_task_outcome_only"
@@ -142,7 +142,7 @@ def test_normal_typed_completion_is_compact_task_only_and_final_ready(
             "current_action_handle": begun["current_step_contract"]["permitted_native_action"][
                 "current_action_handle"
             ],
-            "artifact_path": str(source),
+            "artifact_path": source.name,
         },
     )
     assert completed["schema_id"] == "qcoder.current_loop.typed_completion_result.v3"
@@ -180,7 +180,7 @@ def test_failure_remains_visible_and_fail_closed(tmp_path: Path) -> None:
             "current_action_handle": begun["current_step_contract"]["permitted_native_action"][
                 "current_action_handle"
             ],
-            "artifact_path": str(tmp_path / "missing.py"),
+            "artifact_path": "missing.py",
         },
     )
     assert failed["ok"] is False
@@ -213,7 +213,7 @@ def test_multi_stage_completion_returns_next_contract_without_customer_final(
             "current_action_handle": begun["current_step_contract"]["permitted_native_action"][
                 "current_action_handle"
             ],
-            "artifact_path": str(source),
+            "artifact_path": source.name,
         },
     )
     assert completed["current_step_status"] == "awaiting_external_client_action"

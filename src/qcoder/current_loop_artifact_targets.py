@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
-ARTIFACT_TARGET_CONTRACT_SCHEMA_ID = "qcoder.current_loop.artifact_targets.v1"
+ARTIFACT_TARGET_CONTRACT_SCHEMA_ID = "qcoder.current_loop.artifact_targets.v2"
 SUPPORTED_TARGET_ROLES = ("source", "circuit_qasm", "results")
 MAX_TARGET_PATH_BYTES = 4_096
 _DISCOVERY_METACHARACTERS = frozenset("*?[]{}")
@@ -75,12 +75,36 @@ def normalize_intended_artifact_targets(
     return normalized
 
 
+def normalize_completion_artifact_path(
+    value: object,
+    *,
+    workspace_root: Path,
+) -> Path:
+    """Translate the sole client-facing path form to a local absolute path.
+
+    The private binding accepts only the exact workspace-relative representation used
+    by the Current Step Contract. The coordinator continues to receive an absolute
+    local path so hook adapters and the typed binding share its canonical validator.
+    """
+
+    try:
+        target = _normalize_relative_target(value, workspace_root=workspace_root)
+    except ArtifactTargetError as exc:
+        raise ArtifactTargetError(
+            "completion_artifact_path_must_be_bound_workspace_relative"
+        ) from exc
+    return Path(os.path.abspath(Path(workspace_root) / str(target["workspace_relative_path"])))
+
+
 def target_contract_snapshot() -> dict[str, Any]:
     return {
         "schema_id": ARTIFACT_TARGET_CONTRACT_SCHEMA_ID,
         "supported_roles": list(SUPPORTED_TARGET_ROLES),
         "selection_source": "assistant_supplied_with_exact_begin_request",
         "path_form": "workspace_relative_exact_path",
+        "completion_path_form": "same_workspace_relative_exact_path",
+        "absolute_completion_path_accepted_from_assistant": False,
+        "binding_translates_completion_path_to_local_absolute": True,
         "one_target_per_authorized_role": True,
         "discovery_or_glob_permitted": False,
         "neighbor_artifact_discovery_permitted": False,
@@ -93,6 +117,7 @@ __all__ = [
     "ArtifactTargetError",
     "MAX_TARGET_PATH_BYTES",
     "SUPPORTED_TARGET_ROLES",
+    "normalize_completion_artifact_path",
     "normalize_intended_artifact_targets",
     "target_contract_snapshot",
 ]

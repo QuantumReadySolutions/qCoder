@@ -93,7 +93,7 @@ def _complete(
             "current_action_handle": begun["current_step_contract"]["permitted_native_action"][
                 "current_action_handle"
             ],
-            "artifact_path": str(path),
+            "artifact_path": path.relative_to(root).as_posix(),
             "artifact_disposition": disposition,
         },
     )
