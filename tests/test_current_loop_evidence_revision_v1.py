@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from copy import deepcopy
+from hashlib import sha256
 from pathlib import Path
 import time
 from typing import Any
@@ -111,12 +112,12 @@ def _write_iteration(
         encoding="utf-8",
     )
     counts = {"01": 492, "10": 532} if psi else {"00": 500 + iteration, "11": 524 - iteration}
-    result.write_text(
-        json.dumps(
-            {"counts": counts, "shots": 1024, "backend": "AerSimulator"},
-            sort_keys=True,
-        ),
-        encoding="utf-8",
+    _write_strict_result_manifest(
+        source=source,
+        qasm=qasm,
+        result=result,
+        counts=counts,
+        iteration=iteration,
     )
     disposition = "assistant_created" if iteration == 1 else "assistant_modified"
     return [
@@ -139,6 +140,61 @@ def _write_iteration(
             "provenance": disposition,
         },
     ]
+
+
+def _write_strict_result_manifest(
+    *,
+    source: Path,
+    qasm: Path,
+    result: Path,
+    counts: Mapping[str, int],
+    iteration: int,
+) -> None:
+    result.write_text(
+        json.dumps(
+            {
+                "schema_id": "qcoder.current_loop.strict_result_manifest.v1",
+                "schema_version": 1,
+                "manifestation": "exact_result",
+                "counts": counts,
+                "requested_shots": 1024,
+                "observed_shots": 1024,
+                "circuit_lineage": {
+                    "status": "exact",
+                    "content_digest": sha256(qasm.read_bytes()).hexdigest(),
+                    "source_content_digest": sha256(source.read_bytes()).hexdigest(),
+                },
+                "execution_configuration": {
+                    "status": "exact",
+                    "reference": f"aer-iteration-{iteration}",
+                    "digest": sha256(
+                        json.dumps(
+                            {"backend": "AerSimulator", "shots": 1024},
+                            separators=(",", ":"),
+                            sort_keys=True,
+                        ).encode()
+                    ).hexdigest(),
+                    "settings": {"backend": "AerSimulator", "shots": 1024},
+                },
+                "execution_attempt_id": f"bell-attempt-{iteration}",
+                "producer": {
+                    "kind": "native_client_external_execution",
+                    "capture_method": "explicit_result_artifact",
+                    "identity": "test-aer-simulator",
+                },
+                "bit_register_ordering": {
+                    "status": "known",
+                    "convention": "qiskit classical-register display order",
+                },
+                "warnings": [],
+                "explicit_missingness": ["runtime_version"],
+                "limitations": ["Synthetic test execution evidence."],
+                "non_claims": ["qCoder did not execute the circuit."],
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
 
 
 def _authorize(
@@ -171,7 +227,11 @@ def _run_iteration(
         candidates=candidates,
         operation_receipt_id=receipt["receipt_id"],
     )
-    assert result["ok"] is True
+    assert result["ok"] is True, (
+        result.get("category"),
+        result.get("customer_summary"),
+        result.get("details"),
+    )
     return result
 
 
@@ -186,7 +246,7 @@ def test_canonical_vocabulary_binding_and_state_v9_are_identical(tmp_path: Path)
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     vocabulary = vocabulary_snapshot()
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v34"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v35"
     assert binding["canonical_current_loop_vocabulary"] == vocabulary
     assert (
         binding["contract_sidecar"]["accepted_domains"]["canonical_evidence_vocabulary"]
@@ -467,6 +527,13 @@ def test_worst_case_three_changing_roles_stay_inside_registration_headroom(
             f"// iteration {iteration}\n"
             "h q[0];\ncx q[0],q[1];\nmeasure q -> c;\n",
             encoding="utf-8",
+        )
+        _write_strict_result_manifest(
+            source=source,
+            qasm=qasm,
+            result=Path(candidates[2]["path"]),
+            counts={"00": 500 + iteration, "11": 524 - iteration},
+            iteration=iteration,
         )
         result = _run_iteration(
             coordinator,
@@ -823,6 +890,13 @@ def test_exact_selected_qasm3_fallback_promotes_partial_snapshot(tmp_path: Path)
     (tmp_path / "bell.qasm").write_text(
         "OPENQASM 3.0;\nqubit[2] q;\n",
         encoding="utf-8",
+    )
+    _write_strict_result_manifest(
+        source=tmp_path / "bell.py",
+        qasm=tmp_path / "bell.qasm",
+        result=tmp_path / "results.json",
+        counts={"00": 501, "11": 523},
+        iteration=1,
     )
     proposed = coordinator.register_artifacts(candidates=candidates)
     assert proposed["details"]["review_authorized"] is False

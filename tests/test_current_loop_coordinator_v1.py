@@ -48,6 +48,7 @@ from qcoder.current_loop_coordinator import (
     normalize_decision_dispositions,
 )
 import qcoder.current_loop_coordinator as current_loop_coordinator_module
+from tests.test_current_loop_evidence_revision_v1 import _write_strict_result_manifest
 
 
 PROFILE_COUNTS = {
@@ -80,9 +81,7 @@ def test_context_bridge_confirmation_uses_nonidentifying_explicit_user_marker(
         semantic_confirmation="I confirm proposal proposal-example.",
     )
     assert result == {"ok": True}
-    confirmation = captured["message"]["params"]["arguments"][
-        "resolution_confirmation"
-    ]
+    confirmation = captured["message"]["params"]["arguments"]["resolution_confirmation"]
     assert confirmation == {
         "confirmed": True,
         "confirmed_by": "explicit_current_user",
@@ -453,9 +452,7 @@ class PublicBuilderTransport:
         records = [deepcopy(item) for item in supplied["decision_records"]]
         proposal = build_carry_forward_proposal(
             selected_action=supplied["selected_action"],
-            profile_id=decision_inventory_binding(supplied["algorithm_intent_card"])[
-                "profile_id"
-            ],
+            profile_id=decision_inventory_binding(supplied["algorithm_intent_card"])["profile_id"],
             decision_records=records,
             parent_artifacts=supplied["evidence_parent_artifacts"],
             current_build_context=supplied["current_build_context"],
@@ -645,15 +642,15 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "registration_authorizes_review": False,
         "operation_receipt_supported": True,
         "operation_receipt_single_use": True,
-            "operation_receipt_single_use_meaning": (
-                "consumed_after_successful_atomic_canonical_registration"
-            ),
-            "bounded_action_expectation_supported": True,
-            "native_client_permission_owner": "native_client",
-            "native_client_permission_granted_or_observed_by_qcoder": False,
-            "native_action_completion_evidence_required_for_d081": True,
-            "explicit_client_approval_telemetry": "optional_provenance_only",
-            "authorization_source_client_supplied": False,
+        "operation_receipt_single_use_meaning": (
+            "consumed_after_successful_atomic_canonical_registration"
+        ),
+        "bounded_action_expectation_supported": True,
+        "native_client_permission_owner": "native_client",
+        "native_client_permission_granted_or_observed_by_qcoder": False,
+        "native_action_completion_evidence_required_for_d081": True,
+        "explicit_client_approval_telemetry": "optional_provenance_only",
+        "authorization_source_client_supplied": False,
         "registered_and_presentation_currentness_separate": True,
     }
     contract_digest = hashlib.sha256(
@@ -664,7 +661,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("f54b21b942a42b8bf98322cf1e6928f63c4205057a27499e64ff8e17ab9e505a")
+    assert contract_digest == ("6977bfe8c3a9b1c1efb5315cd1c1990edddb1feb2b72c68b4d77d9eecd390a5d")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
@@ -675,11 +672,11 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "artifact_candidate_provenance_conflict",
         "artifact_format_unsupported",
         "authorization_declined",
-            "authorization_partial",
-            "canonical_artifact_modified",
-            "canonical_parent_set_incomplete",
-            "causal_continuation_blocked",
-            "circuit_format_unsupported",
+        "authorization_partial",
+        "canonical_artifact_modified",
+        "canonical_parent_set_incomplete",
+        "causal_continuation_blocked",
+        "circuit_format_unsupported",
         "client_state_conflict",
         "contract_adjustment_value_invalid",
         "contract_broadening_proposal_stale",
@@ -880,9 +877,12 @@ def _write_local_artifacts(workspace: Path) -> list[dict[str, Any]]:
         encoding="utf-8",
     )
     result = workspace / "bell.counts.json"
-    result.write_text(
-        json.dumps({"counts": {"00": 511, "11": 513}, "shots": 1024}),
-        encoding="utf-8",
+    _write_strict_result_manifest(
+        source=source,
+        qasm=qasm,
+        result=result,
+        counts={"00": 511, "11": 513},
+        iteration=1,
     )
     return [
         {
@@ -1519,7 +1519,7 @@ def test_coordinated_partial_and_failed_run_paths(
             item for item in processed["details"]["per_item_outcomes"] if item["role"] == "results"
         )
         assert outcome["status"] == "failed_local"
-        assert outcome["safe_error_category"] == "unknown_local_internal"
+        assert outcome["safe_error_category"] == "result_artifact_invalid"
         assert state["run_summary_index"] == {}
     elif "results" in selected_roles:
         assert processed["details"]["run_summary"]["automatic_preparation"] is True
@@ -1578,7 +1578,7 @@ def test_failed_run_replaces_unapproved_error_text_with_safe_category(
     outcome = next(
         item for item in processed["details"]["per_item_outcomes"] if item["role"] == "results"
     )
-    assert outcome["safe_error_category"] == "unknown_local_internal"
+    assert outcome["safe_error_category"] == "result_artifact_invalid"
     assert "raw exception" not in json.dumps(transport.calls)
 
 
@@ -1696,14 +1696,10 @@ def test_one_proposal_selected_bundle_confirmation_and_next_loop(
         "blueprint_decision"
     )
     assert proposal_arguments["proposed_updates"][0]["evidence_expectation"]
-    assert proposal_arguments["algorithm_intent_card"]["artifact_type"] == (
-        "algorithm_intent_card"
-    )
+    assert proposal_arguments["algorithm_intent_card"]["artifact_type"] == ("algorithm_intent_card")
     assert proposal_arguments["intent_relationship"] == {
         "relationship_type": "represented_by",
-        "parent_artifact_digest": proposal_arguments["algorithm_intent_card"][
-            "artifact_digest"
-        ],
+        "parent_artifact_digest": proposal_arguments["algorithm_intent_card"]["artifact_digest"],
     }
     assert all(
         set(parent) == {"artifact_ref", "artifact_digest", "artifact_type"}

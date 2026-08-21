@@ -237,6 +237,7 @@ def build_run_summary(
     artifact_revision_digests: Mapping[str, str] | None = None,
     manifestation_revision_bindings: Mapping[str, str] | None = None,
     derivation_version: str = "qcoder.current_loop.derivation.v1",
+    evidence_reconciliation: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build one bounded canonical execution-evidence summary."""
 
@@ -263,12 +264,33 @@ def build_run_summary(
     missing = [
         field for field, observation in observations.items() if observation["status"] == "missing"
     ]
+    reconciliation = deepcopy(
+        dict(
+            evidence_reconciliation
+            or {
+                "schema_id": "qcoder.current_loop.explicit_run_summary_inputs.v1",
+                "eligibility": {
+                    "valid_result_evidence": True,
+                    "current_run_evidence": True,
+                    "reproducibility_rich_run_evidence": False,
+                },
+                "relationships": [],
+                "limitations": [],
+            }
+        )
+    )
+    eligibility = reconciliation.get("eligibility", {})
+    current_run = bool(eligibility.get("current_run_evidence"))
     bindings = [_evidence_binding(result_manifestation, role="result_manifestation")]
-    if circuit_manifestation is not None:
+    if circuit_manifestation is not None and current_run:
         if not artifact_digest_matches(dict(circuit_manifestation)):
             raise RunSummaryError("run_summary_circuit_manifestation_digest_invalid")
         bindings.append(_evidence_binding(circuit_manifestation, role="circuit_manifestation"))
-    if source_manifestation is not None:
+    exact_source_relationship = any(
+        isinstance(item, Mapping) and item.get("relationship") == "derived_from"
+        for item in reconciliation.get("relationships", [])
+    )
+    if source_manifestation is not None and current_run and exact_source_relationship:
         if not artifact_digest_matches(dict(source_manifestation)):
             raise RunSummaryError("run_summary_source_manifestation_digest_invalid")
         bindings.append(_evidence_binding(source_manifestation, role="python_manifestation"))
@@ -296,6 +318,14 @@ def build_run_summary(
         "artifact_revision_digests": artifact_digests,
         "manifestation_revision_bindings": manifestation_revisions,
         "derivation_version": derivation_version,
+        "evidence_reconciliation": reconciliation,
+        "evidence_classification": (
+            "reproducibility_rich_run_evidence"
+            if eligibility.get("reproducibility_rich_run_evidence")
+            else "current_run_evidence"
+            if current_run
+            else "valid_result_evidence"
+        ),
         "source_state_revision": state_revision,
         "source_contract_revision": contract_revision,
         "creation_revision": state_revision + 1,
@@ -317,10 +347,12 @@ def build_run_summary(
         "circuit_relationship": {
             "circuit_reference": (
                 _artifact_reference(circuit_manifestation)
-                if circuit_manifestation is not None
+                if circuit_manifestation is not None and current_run
                 else result_manifestation.get("related_circuit_ref")
             ),
-            "structural_metrics_reused_by_reference": circuit_manifestation is not None,
+            "structural_metrics_reused_by_reference": bool(
+                circuit_manifestation is not None and current_run
+            ),
             "circuit_structure_proves_output_state_entanglement": False,
         },
         "freshness": {
@@ -329,7 +361,7 @@ def build_run_summary(
             "source_digest_validation_required": True,
         },
         "integrity_status": "fresh",
-        "currency": "current",
+        "currency": "current" if current_run else "prior",
         "missing_execution_fields": missing,
         "warnings": warnings,
         "limitations": [
@@ -345,6 +377,7 @@ def build_run_summary(
                 if circuit_manifestation is None
                 else []
             ),
+            *list(reconciliation.get("limitations", [])),
         ],
         "raw_result_artifact_embedded": False,
         "complete_raw_counts_embedded": False,
@@ -418,6 +451,15 @@ def run_summary_error(value: object) -> str | None:
         return "run_summary_blueprint_boundary_invalid"
     if value.get("cross_loop_evidence_used") is not False:
         return "run_summary_cross_loop_boundary_invalid"
+    reconciliation = value.get("evidence_reconciliation")
+    if reconciliation is not None:
+        if not isinstance(reconciliation, Mapping) or not isinstance(
+            reconciliation.get("eligibility"), Mapping
+        ):
+            return "run_summary_reconciliation_invalid"
+        expected_current = bool(reconciliation["eligibility"].get("current_run_evidence"))
+        if (value.get("currency") == "current") != expected_current:
+            return "run_summary_currentness_binding_invalid"
     return None
 
 

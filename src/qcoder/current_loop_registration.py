@@ -207,12 +207,12 @@ def prepare_registration_transaction(
             safe_completion_evidence.get("schema_id")
             != "qcoder.current_loop.native_action_completion_evidence.v1"
             or safe_completion_evidence.get("native_client_permission_owned_by_client") is not True
-            or safe_completion_evidence.get("native_client_permission_granted_by_qcoder") is not False
+            or safe_completion_evidence.get("native_client_permission_granted_by_qcoder")
+            is not False
             or safe_completion_evidence.get("user_approval_click_inferred") is not False
             or safe_completion_evidence.get("raw_path_retained") is not False
             or safe_completion_evidence.get("raw_source_retained") is not False
-            or safe_completion_evidence.get("bounded_action_expectation_id")
-            != operation_receipt_id
+            or safe_completion_evidence.get("bounded_action_expectation_id") != operation_receipt_id
         ):
             raise CurrentLoopError("native_action_completion_evidence_invalid")
         if (
@@ -426,6 +426,21 @@ def commit_registration_transaction(
     expected = int(transaction["expected_state_revision"])
     if state["state_revision"] != expected:
         raise CurrentLoopError("client_state_conflict")
+    for prepared in transaction.get("prepared_revisions", []):
+        revision = prepared.get("revision") if isinstance(prepared, Mapping) else None
+        if not isinstance(revision, Mapping):
+            raise CurrentLoopError("registration_transaction_incomplete")
+        path = Path(str(revision.get("exact_path", "")))
+        if path.is_symlink() or not path.is_file():
+            raise CurrentLoopError("artifact_candidate_file_required")
+        raw = path.read_bytes()
+        if (
+            len(raw) != revision.get("size_bytes")
+            or sha256(raw).hexdigest() != revision.get("content_digest")
+            or detect_exact_artifact_format(path, str(revision.get("logical_role")))
+            != revision.get("detected_format")
+        ):
+            raise CurrentLoopError("selected_file_stale")
     receipt_id = transaction.get("operation_receipt_id")
     receipt = (
         state.get("operation_receipts", {}).get(receipt_id) if isinstance(receipt_id, str) else None
@@ -438,8 +453,7 @@ def commit_registration_transaction(
             not isinstance(receipt, Mapping)
             or not isinstance(rebound, Mapping)
             or receipt.get("status") != "issued"
-            or receipt.get("receipt_digest")
-            != causal_rebind.get("original_receipt_digest")
+            or receipt.get("receipt_digest") != causal_rebind.get("original_receipt_digest")
             or rebound.get("receipt_id") != receipt_id
         ):
             raise CurrentLoopError("operation_receipt_replay_rejected")
@@ -571,8 +585,7 @@ def commit_registration_transaction(
                 rebound = causal_rebind.get("rebound_receipt")
                 if (
                     not isinstance(rebound, Mapping)
-                    or current.get("receipt_digest")
-                    != causal_rebind.get("original_receipt_digest")
+                    or current.get("receipt_digest") != causal_rebind.get("original_receipt_digest")
                     or rebound.get("receipt_id") != receipt_id
                 ):
                     raise CurrentLoopError("operation_receipt_replay_rejected")
@@ -611,15 +624,15 @@ def commit_registration_transaction(
                 )[:32]
             )
             registration_event = {
-                    "event_id": event_id,
-                    "artifact_revision_id": revision["artifact_revision_id"],
-                    "logical_role": revision["logical_role"],
-                    "previous_head": item["previous_head"],
-                    "event_disposition": revision["event_disposition"],
-                    "authorization_source": revision["authorization_source"],
-                    "operation_receipt_reference": receipt_id,
-                    "state_revision": expected + 1,
-                }
+                "event_id": event_id,
+                "artifact_revision_id": revision["artifact_revision_id"],
+                "logical_role": revision["logical_role"],
+                "previous_head": item["previous_head"],
+                "event_disposition": revision["event_disposition"],
+                "authorization_source": revision["authorization_source"],
+                "operation_receipt_reference": receipt_id,
+                "state_revision": expected + 1,
+            }
             if "native_action_completion_evidence_digest" in revision:
                 registration_event["native_action_completion_evidence_digest"] = revision[
                     "native_action_completion_evidence_digest"

@@ -24,6 +24,7 @@ from qcoder.current_loop_quiet_workflow import (
 )
 from qcoder.current_loop_iteration import parent_digest_failure_details
 from tests.current_loop_test_support import activate_reviewed_legacy_fixture
+from tests.test_current_loop_evidence_revision_v1 import _write_strict_result_manifest
 
 
 REQUEST = "Use qCoder for this build context with the established quiet-workflow contract."
@@ -87,9 +88,12 @@ def _write_run(workspace: Path, *, counts: Mapping[str, int]) -> list[dict[str, 
         encoding="utf-8",
     )
     results = workspace / "results.json"
-    results.write_text(
-        json.dumps({"counts": dict(counts), "shots": 1024, "backend": "AerSimulator"}),
-        encoding="utf-8",
+    _write_strict_result_manifest(
+        source=source,
+        qasm=qasm,
+        result=results,
+        counts=counts,
+        iteration=1,
     )
     return [
         {
@@ -458,7 +462,7 @@ def test_sidecar_and_binding_share_v2_governance_and_quiet_contract(tmp_path: Pa
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v34"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v35"
     quiet = descriptor["quiet_everyday_workflow_contract"]
     assert quiet["customer_interaction_schema_id"] == CUSTOMER_INTERACTION_SCHEMA_ID
     assert quiet["assist_default"] == "quiet_everyday"

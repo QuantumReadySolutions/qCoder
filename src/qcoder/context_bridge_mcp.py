@@ -156,7 +156,7 @@ EXPECTED_TOOLS = (
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
 CLIENT_BINDING_SCHEMA_VERSION = 33
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v34"
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v35"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES

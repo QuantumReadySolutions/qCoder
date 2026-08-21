@@ -88,8 +88,14 @@ _ROLE_CONTRACTS: tuple[dict[str, Any], ...] = (
     {
         "role": "results",
         "customer_meaning": "Exact JSON result evidence created or selected for this loop.",
-        "accepted_automatic_registration_formats": ["qcoder_result_json"],
-        "local_derivation_formats": ["qcoder_result_json"],
+        "accepted_automatic_registration_formats": [
+            "qcoder_result_json",
+            "qcoder_strict_result_manifest",
+        ],
+        "local_derivation_formats": [
+            "qcoder_result_json",
+            "qcoder_strict_result_manifest",
+        ],
         "producer_requirements": {
             "filename_suffix": [".json"],
             "top_level_json_type": "object",
@@ -224,7 +230,13 @@ def detect_exact_artifact_format(path: Path, role: str) -> str:
             value = json.loads(data.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
             return "unsupported"
-        return "qcoder_result_json" if isinstance(value, Mapping) else "unsupported"
+        if not isinstance(value, Mapping):
+            return "unsupported"
+        if value.get("schema_id") == "qcoder.current_loop.strict_result_manifest.v1":
+            return "qcoder_strict_result_manifest"
+        if isinstance(value.get("counts"), Mapping) or value.get("status") == "failed":
+            return "qcoder_result_json"
+        return "unsupported"
     raise EvidenceProcessingError(
         "unsupported_authorized_artifact_type",
         origin="local_artifact_validation",
