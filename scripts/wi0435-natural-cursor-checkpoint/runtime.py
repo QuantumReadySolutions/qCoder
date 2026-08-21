@@ -53,6 +53,21 @@ def _sample(circuit, *, shots: int) -> tuple[dict[str, int], str]:
     return counts, "qiskit_aer.AerSimulator"
 
 
+def _count_key_ordering(circuit) -> dict[str, object]:
+    registers = list(reversed(circuit.cregs))
+    return {
+        "status": "known",
+        "convention": "qiskit_count_key_display_order",
+        "endianness": "little",
+        "bit_order": [
+            f"{register.name}[{index}]"
+            for register in registers
+            for index in reversed(range(register.size))
+        ],
+        "register_order": [register.name for register in registers],
+    }
+
+
 def _manifest(
     *,
     counts: dict[str, int],
@@ -60,6 +75,7 @@ def _manifest(
     attempt_id: str,
     versions: dict[str, str],
     backend: str,
+    bit_register_ordering: dict[str, object],
     circuit_lineage_status: str,
     qasm_input_sha256: str | None,
 ) -> dict[str, object]:
@@ -109,13 +125,7 @@ def _manifest(
             "method": "backend_result_get_counts_to_exact_manifest",
             "identity": "prepared-workspace-sampler-helper-v1",
         },
-        "bit_register_ordering": {
-            "status": "known",
-            "convention": "qiskit_little_endian",
-            "endianness": "little",
-            "bit_order": ["c[1]", "c[0]"],
-            "register_order": ["c"],
-        },
+        "bit_register_ordering": bit_register_ordering,
         "warnings": [],
         "explicit_missingness": (
             ["circuit_lineage", "source_lineage", "provider_job_identity"]
@@ -173,6 +183,7 @@ def preflight(identity_path: Path, unknown_result_path: Path) -> None:
         attempt_id="prepared-runtime-preflight-unknown-lineage-v4",
         versions=versions,
         backend=backend,
+        bit_register_ordering=_count_key_ordering(circuit),
         circuit_lineage_status="unknown",
         qasm_input_sha256=None,
     )
@@ -198,6 +209,7 @@ def run(qasm_path: Path, result_path: Path, *, shots: int, attempt_id: str) -> N
         attempt_id=attempt_id,
         versions=versions,
         backend=backend,
+        bit_register_ordering=_count_key_ordering(circuit),
         circuit_lineage_status="current_step_contract",
         qasm_input_sha256=sha256(qasm_path.read_bytes()).hexdigest(),
     )

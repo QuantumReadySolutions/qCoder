@@ -351,6 +351,17 @@ def test_prepared_runtime_emits_one_sampled_attempt_without_installation(
         lambda: {"python": "3.12.0", "qiskit": "2.5.2", "qiskit_aer": "0.17.2"},
     )
     monkeypatch.setattr(runtime, "_bell_from_qasm", lambda _path: object())
+    monkeypatch.setattr(
+        runtime,
+        "_count_key_ordering",
+        lambda _circuit: {
+            "status": "known",
+            "convention": "qiskit_count_key_display_order",
+            "endianness": "little",
+            "bit_order": ["meas[1]", "meas[0]"],
+            "register_order": ["meas"],
+        },
+    )
     samples = []
 
     def sample(_circuit, *, shots: int):
@@ -362,6 +373,8 @@ def test_prepared_runtime_emits_one_sampled_attempt_without_installation(
     assert samples == [1_024]
     manifest = json.loads(result.read_text(encoding="utf-8"))
     assert manifest["execution_method"]["kind"] == "sampled_shots"
+    assert manifest["bit_register_ordering"]["bit_order"] == ["meas[1]", "meas[0]"]
+    assert manifest["bit_register_ordering"]["register_order"] == ["meas"]
     assert manifest["execution_observation"] == {
         "status": "client_reported_completed",
         "external_execution_attempt_count": 1,
