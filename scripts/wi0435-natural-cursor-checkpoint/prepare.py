@@ -11,6 +11,12 @@ import importlib.metadata
 
 PUBLIC_SERVER = "wi0435-qcoder-context-bridge"
 PRIVATE_SERVER = "wi0435-qcoder-current-loop"
+PREEXISTING_SOURCE = (
+    "from qiskit import QuantumCircuit\n"
+    "circuit = QuantumCircuit(2)\n"
+    "circuit.h(0)\n"
+    "circuit.cx(0, 1)\n"
+)
 
 
 def canonical_bytes(value: object) -> bytes:
@@ -83,9 +89,11 @@ def configure(packet: Path, workspace: Path, token_file: Path, python: Path) -> 
     # the venv and select the base interpreter where qCoder is not installed.
     runtime_python = Path(os.path.abspath(python))
     cursor_dir = workspace / ".cursor"
+    fixtures = workspace / "fixtures"
     safe_return = workspace / "safe-return"
     client_runtime = workspace / ".qcoder-client-runtime"
     cursor_dir.mkdir(parents=True, exist_ok=False)
+    fixtures.mkdir()
     safe_return.mkdir()
     client_runtime.mkdir()
     runtime_source = packet / "helpers" / "runtime.py"
@@ -135,6 +143,22 @@ def configure(packet: Path, workspace: Path, token_file: Path, python: Path) -> 
         "requested execution attempt. If that runtime is unavailable, report a blocker.\n",
         encoding="utf-8",
     )
+    source = fixtures / "preexisting_bell.py"
+    source.write_text(PREEXISTING_SOURCE, encoding="utf-8")
+    bare = fixtures / "bare-counts.json"
+    bare.write_text(json.dumps({"00": 512, "11": 512}, sort_keys=True) + "\n", encoding="utf-8")
+    fixture_state = source.stat()
+    fixture_identity = {
+        "schema_id": "qcoder.wi0435.preexisting_fixture_identity.v1",
+        "relative_path": "fixtures/preexisting_bell.py",
+        "bytes": fixture_state.st_size,
+        "sha256": digest(source),
+        "mtime_ns": fixture_state.st_mtime_ns,
+        "mode": stat.S_IMODE(fixture_state.st_mode),
+    }
+    identity_path = fixtures / "preexisting-identity.json"
+    identity_path.write_bytes(canonical_bytes(fixture_identity) + b"\n")
+    os.chmod(identity_path, stat.S_IRUSR | stat.S_IWUSR)
     print(f"WORKSPACE={workspace}")
     print(f"RUNTIME_PYTHON={runtime_python}")
     print(f"CURSOR_MCP_SERVERS={PUBLIC_SERVER},{PRIVATE_SERVER}")
@@ -169,6 +193,9 @@ def installed_check(packet: Path, workspace: Path) -> None:
     runtime = json.loads(runtime_identity.read_text(encoding="utf-8"))
     if runtime.get("preflight", {}).get("status") != "pass":
         raise SystemExit("Prepared external execution runtime preflight failed.")
+    unknown_fixture = workspace / "fixtures" / "unknown-result-manifest.json"
+    if not unknown_fixture.is_file():
+        raise SystemExit("Prepared sampled unknown-lineage fixture is missing.")
     print("INSTALLED_IDENTITY_AND_INVENTORY_PASS")
 
 

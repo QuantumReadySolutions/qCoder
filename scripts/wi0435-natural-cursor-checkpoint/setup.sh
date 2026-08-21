@@ -42,7 +42,8 @@ bootstrap_python="$(select_compatible_python)"
   --packet "$packet_root" --workspace "$workspace" --token-file "$token_file" \
   --python "$workspace/.venv/bin/python"
 "$workspace/.venv/bin/python" "$workspace/.qcoder-client-runtime/run-sampled-result.py" \
-  preflight --identity "$workspace/.qcoder-client-runtime/runtime-identity.json"
+  preflight --identity "$workspace/.qcoder-client-runtime/runtime-identity.json" \
+  --unknown-result "$workspace/fixtures/unknown-result-manifest.json"
 "$workspace/.venv/bin/python" "$packet_root/helpers/prepare.py" installed-check \
   --packet "$packet_root" --workspace "$workspace" --token-file "$token_file"
 printf 'Open a fresh Cursor Agent conversation in exactly:\n%s\n' "$workspace"

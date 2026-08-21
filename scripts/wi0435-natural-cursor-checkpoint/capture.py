@@ -56,6 +56,27 @@ def runtime_projection(workspace: Path) -> dict:
     }
 
 
+def fixture_projection(workspace: Path) -> dict:
+    identity_path = workspace / "fixtures" / "preexisting-identity.json"
+    source = workspace / "fixtures" / "preexisting_bell.py"
+    if not identity_path.is_file() or not source.is_file():
+        return {"available": False}
+    before = json.loads(identity_path.read_text(encoding="utf-8"))
+    after = source.stat()
+    current = {
+        "bytes": after.st_size,
+        "sha256": sha256(source.read_bytes()).hexdigest(),
+        "mtime_ns": after.st_mtime_ns,
+        "mode": stat.S_IMODE(after.st_mode),
+    }
+    return {
+        "available": True,
+        "identity_unchanged": all(current.get(key) == before.get(key) for key in current),
+        "before": {key: before.get(key) for key in current},
+        "after": current,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", type=Path, required=True)
@@ -92,6 +113,7 @@ def main() -> None:
             "requested_final_outcome_observed": args.final_outcome_observed == "yes",
         },
         "prepared_external_runtime": runtime_projection(workspace),
+        "preexisting_fixture": fixture_projection(workspace),
         "state": {
             "phase": state.get("phase"),
             "current_step_status": coordinator.get("current_step_status"),

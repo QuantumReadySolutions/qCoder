@@ -311,6 +311,9 @@ def test_checkpoint_selects_supported_python_and_preserves_venv_launcher(
     assert commands == {str(launcher.absolute())}
     assert str(Path(sys.executable).resolve()) not in commands
     assert (workspace / ".qcoder-client-runtime" / "run-sampled-result.py").is_file()
+    assert (workspace / "fixtures" / "preexisting_bell.py").is_file()
+    assert (workspace / "fixtures" / "bare-counts.json").is_file()
+    assert (workspace / "fixtures" / "preexisting-identity.json").is_file()
     rule = workspace / ".cursor" / "rules" / "wi0435-prepared-runtime.mdc"
     assert "Do not install or upgrade dependencies" in rule.read_text(encoding="utf-8")
 
@@ -332,6 +335,7 @@ def test_prepared_runtime_is_pinned_and_missing_or_wrong_runtime_blocks(
     setup = (SCRIPT_ROOT / "setup.sh").read_text(encoding="utf-8")
     assert "'qiskit==2.5.2' 'qiskit-aer==0.17.2'" in setup
     assert "preflight --identity" in setup
+    assert "--unknown-result" in setup
 
 
 def test_prepared_runtime_emits_one_sampled_attempt_without_installation(
