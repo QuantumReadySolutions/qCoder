@@ -28,7 +28,7 @@ if [[ $# -ne 1 ]]; then
 fi
 
 packet_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-workspace="/home/rob/projects/qcoder-wi0435-natural-cursor-workspace-v2"
+workspace="/home/rob/projects/qcoder-wi0435-natural-cursor-workspace-v4"
 token_file="$1"
 bootstrap_python="$(select_compatible_python)"
 "$bootstrap_python" "$packet_root/helpers/prepare.py" preflight \
@@ -36,9 +36,13 @@ bootstrap_python="$(select_compatible_python)"
 "$bootstrap_python" -m venv "$workspace/.venv"
 "$workspace/.venv/bin/python" -m pip install --no-cache-dir \
   "$packet_root/artifacts/$("$bootstrap_python" "$packet_root/helpers/prepare.py" wheel-name --packet "$packet_root")"
+"$workspace/.venv/bin/python" -m pip install --no-cache-dir \
+  'qiskit==2.5.2' 'qiskit-aer==0.17.2'
 "$workspace/.venv/bin/python" "$packet_root/helpers/prepare.py" configure \
   --packet "$packet_root" --workspace "$workspace" --token-file "$token_file" \
   --python "$workspace/.venv/bin/python"
+"$workspace/.venv/bin/python" "$workspace/.qcoder-client-runtime/run-sampled-result.py" \
+  preflight --identity "$workspace/.qcoder-client-runtime/runtime-identity.json"
 "$workspace/.venv/bin/python" "$packet_root/helpers/prepare.py" installed-check \
   --packet "$packet_root" --workspace "$workspace" --token-file "$token_file"
 printf 'Open a fresh Cursor Agent conversation in exactly:\n%s\n' "$workspace"

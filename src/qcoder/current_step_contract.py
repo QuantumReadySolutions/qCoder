@@ -10,8 +10,8 @@ from typing import Any, Mapping
 from qcoder.current_loop_result_manifest import result_manifest_contract_snapshot
 
 
-CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v6"
-CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 6
+CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v7"
+CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 7
 COMPLETE_CURRENT_STEP_OPERATION = "complete_current_step"
 
 
@@ -199,6 +199,17 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
         },
     }
     if role == "results":
+        contract["permitted_native_action"]["external_execution_contract"] = {
+            "execution_owner": "native_client",
+            "runtime": "already_prepared_and_prevalidated",
+            "dependency_installation_permitted": False,
+            "environment_mutation_permitted": False,
+            "external_execution_attempts": "exactly_one",
+            "required_method": "sampled_shots",
+            "analytic_probability_substitution_permitted": False,
+            "missing_runtime_disposition": "surface_blocker_without_execution",
+            "qcoder_executes_customer_code": False,
+        }
         contract["completion"]["artifact_contract"] = {
             "required_format": "strict_result_manifest",
             "contract": result_manifest_contract_snapshot(),
@@ -206,6 +217,10 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
             "current_step_contract_circuit_lineage_status_supported": True,
             "unknown_lineage_supported_as_non_current_evidence": True,
             "bare_counts_current_evidence_permitted": False,
+            "client_reports_producer_method_backend_and_capture_provenance": True,
+            "requested_and_observed_shots_required_to_agree": True,
+            "qcoder_independently_verifies_external_execution": False,
+            "routine_success_customer_outcome": "canonical_current_run_summary",
         }
     contract["contract_digest"] = sha256(_canonical_bytes(contract)).hexdigest()
     return contract
@@ -230,6 +245,9 @@ def current_step_contract_snapshot() -> dict[str, Any]:
         "hooks_optional_accelerators": True,
         "exact_artifact_target_required": True,
         "workspace_discovery_permitted": False,
+        "external_execution_runtime_prepared_before_step": True,
+        "dependency_installation_or_environment_mutation_authorized_by_step": False,
+        "qcoder_external_execution_owner": False,
         "normal_success_customer_visibility": quiet_customer_visibility_contract(),
         "fail_closed": True,
     }

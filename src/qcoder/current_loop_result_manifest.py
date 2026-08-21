@@ -11,8 +11,8 @@ from typing import Any
 from qcoder.engines.review.counts_v0 import normalize_counts_v0
 
 
-STRICT_RESULT_MANIFEST_SCHEMA_ID = "qcoder.current_loop.strict_result_manifest.v2"
-STRICT_RESULT_MANIFEST_SCHEMA_VERSION = 2
+STRICT_RESULT_MANIFEST_SCHEMA_ID = "qcoder.current_loop.strict_result_manifest.v3"
+STRICT_RESULT_MANIFEST_SCHEMA_VERSION = 3
 RESULT_LINEAGE_STATUSES = ("exact", "current_step_contract", "unknown")
 SOURCE_LINEAGE_STATUSES = ("exact", "unknown", "not_supplied")
 MAX_OUTCOMES = 1_024
@@ -274,6 +274,68 @@ def _normalize_provenance(value: object, *, category: str) -> dict[str, Any]:
     }
 
 
+def _normalize_execution_method(value: object) -> dict[str, Any]:
+    if not isinstance(value, Mapping) or set(value).difference(
+        {"kind", "interface", "backend_or_sampler"}
+    ):
+        raise StrictResultManifestError("result_manifest_execution_method_invalid")
+    kind = value.get("kind")
+    if kind not in {
+        "sampled_shots",
+        "analytic_probabilities",
+        "deterministic_construction",
+        "unknown",
+    }:
+        raise StrictResultManifestError("result_manifest_execution_method_invalid")
+    interface = _bounded_text(
+        value.get("interface"), category="result_manifest_execution_method_invalid"
+    )
+    backend = value.get("backend_or_sampler")
+    if backend is not None:
+        backend = _bounded_text(backend, category="result_manifest_execution_method_invalid")
+    if kind == "sampled_shots" and backend is None:
+        raise StrictResultManifestError("result_manifest_sampled_backend_missing")
+    return {
+        "kind": kind,
+        "interface": interface,
+        "backend_or_sampler": backend,
+    }
+
+
+def _normalize_execution_observation(value: object) -> dict[str, Any]:
+    fields = {
+        "status",
+        "external_execution_attempt_count",
+        "dependency_installation_performed",
+        "environment_mutated",
+        "qcoder_independently_verified_execution",
+    }
+    if not isinstance(value, Mapping) or set(value) != fields:
+        raise StrictResultManifestError("result_manifest_execution_observation_invalid")
+    if value.get("status") != "client_reported_completed":
+        raise StrictResultManifestError("result_manifest_execution_observation_invalid")
+    attempts = value.get("external_execution_attempt_count")
+    if attempts != 1 or isinstance(attempts, bool):
+        raise StrictResultManifestError("result_manifest_external_execution_attempt_count_invalid")
+    if value.get("dependency_installation_performed") is not False:
+        raise StrictResultManifestError(
+            "result_manifest_dependency_installation_outside_current_step"
+        )
+    if value.get("environment_mutated") is not False:
+        raise StrictResultManifestError("result_manifest_environment_mutation_outside_current_step")
+    if value.get("qcoder_independently_verified_execution") is not False:
+        raise StrictResultManifestError(
+            "result_manifest_qcoder_execution_verification_claim_invalid"
+        )
+    return {
+        "status": "client_reported_completed",
+        "external_execution_attempt_count": 1,
+        "dependency_installation_performed": False,
+        "environment_mutated": False,
+        "qcoder_independently_verified_execution": False,
+    }
+
+
 def _ordering_items(value: object) -> list[str]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
         raise StrictResultManifestError("result_manifest_bit_ordering_invalid")
@@ -353,6 +415,8 @@ def normalize_strict_result_manifest(
         "circuit_lineage",
         "source_lineage",
         "execution_configuration",
+        "execution_method",
+        "execution_observation",
         "execution_attempt_id",
         "producer_provenance",
         "capture_provenance",
@@ -409,6 +473,37 @@ def normalize_strict_result_manifest(
         artifact_revisions=artifact_revisions,
         circuit_revision=circuit_revision,
     )
+    execution_configuration = _normalize_configuration(value.get("execution_configuration"))
+    execution_method = _normalize_execution_method(value.get("execution_method"))
+    execution_observation = _normalize_execution_observation(value.get("execution_observation"))
+    producer_provenance = _normalize_provenance(
+        value.get("producer_provenance"), category="result_manifest_producer_invalid"
+    )
+    capture_provenance = _normalize_provenance(
+        value.get("capture_provenance"), category="result_manifest_capture_invalid"
+    )
+    exact_circuit_claimed = circuit_lineage.get("status") == "exact"
+    if execution_method["kind"] in {
+        "analytic_probabilities",
+        "deterministic_construction",
+    }:
+        raise StrictResultManifestError(
+            "result_manifest_non_sampled_method_presented_as_sampled_shots"
+        )
+    contradictory_provenance_kinds = {
+        "analytic_derivation",
+        "deterministic_construction",
+        "hard_coded_counts",
+    }
+    if execution_method["kind"] == "sampled_shots" and (
+        producer_provenance["kind"] in contradictory_provenance_kinds
+        or capture_provenance["kind"] in contradictory_provenance_kinds
+    ):
+        raise StrictResultManifestError("result_manifest_execution_provenance_contradiction")
+    if exact_circuit_claimed and execution_method["kind"] != "sampled_shots":
+        raise StrictResultManifestError("result_manifest_sampled_execution_method_required")
+    if exact_circuit_claimed and execution_configuration["status"] != "exact":
+        raise StrictResultManifestError("result_manifest_exact_execution_configuration_required")
     warnings = _bounded_text_list(
         value.get("warnings", []), category="result_manifest_warning_invalid"
     )
@@ -430,17 +525,15 @@ def normalize_strict_result_manifest(
         "observed_shots": observed,
         "circuit_lineage": circuit_lineage,
         "source_lineage": source_lineage,
-        "execution_configuration": _normalize_configuration(value.get("execution_configuration")),
+        "execution_configuration": execution_configuration,
+        "execution_method": execution_method,
+        "execution_observation": execution_observation,
         "execution_attempt_id": _bounded_text(
             value.get("execution_attempt_id"),
             category="result_manifest_execution_attempt_invalid",
         ),
-        "producer_provenance": _normalize_provenance(
-            value.get("producer_provenance"), category="result_manifest_producer_invalid"
-        ),
-        "capture_provenance": _normalize_provenance(
-            value.get("capture_provenance"), category="result_manifest_capture_invalid"
-        ),
+        "producer_provenance": producer_provenance,
+        "capture_provenance": capture_provenance,
         "bit_register_ordering": _normalize_ordering(value.get("bit_register_ordering")),
         "warnings": warnings,
         "explicit_missingness": _bounded_text_list(
@@ -454,6 +547,8 @@ def normalize_strict_result_manifest(
         "raw_terminal_or_chat_evidence_used": False,
         "workspace_or_filename_lineage_inferred": False,
     }
+    if exact_circuit_claimed and normalized["bit_register_ordering"]["status"] != "known":
+        raise StrictResultManifestError("result_manifest_known_bit_ordering_required")
     normalized["outcome_digest"] = _canonical_digest(
         {
             "counts": normalized["counts"],
@@ -475,6 +570,10 @@ def result_manifest_contract_snapshot() -> dict[str, Any]:
         "optional_exact_unknown_or_unsupplied_source_lineage": True,
         "attempt_identity_required": True,
         "producer_and_capture_provenance_distinct": True,
+        "sampled_execution_method_explicit": True,
+        "client_reported_execution_observation_required": True,
+        "dependency_installation_or_environment_mutation_permitted": False,
+        "exact_current_circuit_requires_exact_configuration_and_known_ordering": True,
         "false_or_contradictory_lineage_rejected": True,
         "contradictory_shots_or_ordering_rejected": True,
         "chat_or_terminal_history_permitted": False,
@@ -490,11 +589,36 @@ def result_manifest_contract_snapshot() -> dict[str, Any]:
             "observed_shots": "<positive integer equal to counts sum>",
             "circuit_lineage": {"status": "current_step_contract"},
             "source_lineage": {"status": "not_supplied"},
-            "execution_configuration": {"status": "unknown"},
+            "execution_configuration": {
+                "status": "exact",
+                "reference": "<bounded client configuration reference>",
+                "settings": {
+                    "backend": "<client-reported backend or sampler>",
+                    "shots": "<same positive integer as requested_shots>",
+                },
+            },
+            "execution_method": {
+                "kind": "sampled_shots",
+                "interface": "<client-reported method>",
+                "backend_or_sampler": "<client-reported backend or sampler>",
+            },
+            "execution_observation": {
+                "status": "client_reported_completed",
+                "external_execution_attempt_count": 1,
+                "dependency_installation_performed": False,
+                "environment_mutated": False,
+                "qcoder_independently_verified_execution": False,
+            },
             "execution_attempt_id": "<client execution attempt identity>",
             "producer_provenance": {"kind": "<producer>", "method": "<execution method>"},
             "capture_provenance": {"kind": "<capture source>", "method": "<capture method>"},
-            "bit_register_ordering": {"status": "unknown"},
+            "bit_register_ordering": {
+                "status": "known",
+                "convention": "<bounded ordering convention>",
+                "endianness": "little|big|explicit",
+                "bit_order": ["<exact bit labels>"],
+                "register_order": ["<exact register labels>"],
+            },
             "warnings": [],
             "explicit_missingness": [],
             "limitations": [],

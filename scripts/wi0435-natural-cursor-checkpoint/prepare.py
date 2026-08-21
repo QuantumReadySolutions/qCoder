@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import importlib.metadata
 
 
 PUBLIC_SERVER = "wi0435-qcoder-context-bridge"
@@ -83,8 +84,16 @@ def configure(packet: Path, workspace: Path, token_file: Path, python: Path) -> 
     runtime_python = Path(os.path.abspath(python))
     cursor_dir = workspace / ".cursor"
     safe_return = workspace / "safe-return"
+    client_runtime = workspace / ".qcoder-client-runtime"
     cursor_dir.mkdir(parents=True, exist_ok=False)
     safe_return.mkdir()
+    client_runtime.mkdir()
+    runtime_source = packet / "helpers" / "runtime.py"
+    if not runtime_source.is_file():
+        raise SystemExit("Prepared external execution runtime helper is missing.")
+    runtime_target = client_runtime / "run-sampled-result.py"
+    runtime_target.write_bytes(runtime_source.read_bytes())
+    os.chmod(runtime_target, stat.S_IRUSR | stat.S_IXUSR)
     mcp = {
         "mcpServers": {
             PUBLIC_SERVER: {
@@ -115,6 +124,17 @@ def configure(packet: Path, workspace: Path, token_file: Path, python: Path) -> 
     mcp_path = cursor_dir / "mcp.json"
     mcp_path.write_bytes(canonical_bytes(mcp) + b"\n")
     os.chmod(mcp_path, stat.S_IRUSR | stat.S_IWUSR)
+    rules_dir = cursor_dir / "rules"
+    rules_dir.mkdir()
+    (rules_dir / "wi0435-prepared-runtime.mdc").write_text(
+        "---\nalwaysApply: true\n---\n"
+        "For a qCoder external result step, use only the already prepared workspace "
+        "runtime at .venv/bin/python with .qcoder-client-runtime/run-sampled-result.py. "
+        "Do not install or upgrade dependencies, mutate the environment, substitute analytic "
+        "probabilities or constructed counts for sampled shots, or perform more than the one "
+        "requested execution attempt. If that runtime is unavailable, report a blocker.\n",
+        encoding="utf-8",
+    )
     print(f"WORKSPACE={workspace}")
     print(f"RUNTIME_PYTHON={runtime_python}")
     print(f"CURSOR_MCP_SERVERS={PUBLIC_SERVER},{PRIVATE_SERVER}")
@@ -123,11 +143,16 @@ def configure(packet: Path, workspace: Path, token_file: Path, python: Path) -> 
     print("CONFIGURE_PASS")
 
 
-def installed_check(packet: Path) -> None:
+def installed_check(packet: Path, workspace: Path) -> None:
     manifest = packet_identity(packet)
     import qcoder
     from qcoder.context_bridge_mcp import EXPECTED_TOOLS
     from qcoder.current_loop_binding_mcp import binding_tool_descriptors
+
+    if importlib.metadata.version("qiskit") != "2.5.2":
+        raise SystemExit("Prepared Qiskit version mismatch.")
+    if importlib.metadata.version("qiskit-aer") != "0.17.2":
+        raise SystemExit("Prepared Qiskit Aer version mismatch.")
 
     if qcoder.__version__ != manifest.get("version"):
         raise SystemExit("Installed qCoder version mismatch.")
@@ -138,6 +163,12 @@ def installed_check(packet: Path) -> None:
         "complete_current_step",
     ]:
         raise SystemExit("Private Current Loop inventory mismatch.")
+    runtime_identity = workspace / ".qcoder-client-runtime" / "runtime-identity.json"
+    if not runtime_identity.is_file():
+        raise SystemExit("Prepared external execution runtime preflight identity is missing.")
+    runtime = json.loads(runtime_identity.read_text(encoding="utf-8"))
+    if runtime.get("preflight", {}).get("status") != "pass":
+        raise SystemExit("Prepared external execution runtime preflight failed.")
     print("INSTALLED_IDENTITY_AND_INVENTORY_PASS")
 
 
@@ -154,7 +185,9 @@ def main() -> None:
         print(wheel_identity(packet)[1]["filename"])
         return
     if args.mode == "installed-check":
-        installed_check(packet)
+        if args.workspace is None:
+            parser.error("--workspace is required for installed-check")
+        installed_check(packet, args.workspace.absolute())
         return
     if args.workspace is None or args.token_file is None:
         parser.error("--workspace and --token-file are required")

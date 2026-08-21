@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from copy import deepcopy
+import importlib.util
 import json
 import os
 from pathlib import Path
 import stat
 import subprocess
 import sys
-from copy import deepcopy
+
+import pytest
 
 from qcoder.current_loop_binding_mcp import (
     BEGIN_CURRENT_LOOP_TOOL_NAME,
@@ -28,6 +31,16 @@ SOURCE = (
     "circuit.cx(0, 1)\n"
 )
 SCRIPT_ROOT = Path(__file__).parents[1] / "scripts" / "wi0435-natural-cursor-checkpoint"
+
+
+def _runtime_module():
+    spec = importlib.util.spec_from_file_location(
+        "wi0435_prepared_runtime", SCRIPT_ROOT / "runtime.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _call(root: Path, name: str, arguments: dict) -> dict:
@@ -96,7 +109,9 @@ def test_completion_refuses_unbound_neighbor_path_before_registration(tmp_path: 
             "intended_artifact_paths": {"source": "phi_plus_bell.py"},
         },
     )
-    handle = begun["current_step_contract"]["permitted_native_action"]["current_action_handle"]
+    handle = begun["current_step_contract"]["permitted_native_action"][
+        "current_action_handle"
+    ]
     neighbor = tmp_path / "neighbor.py"
     neighbor.write_text(SOURCE, encoding="utf-8")
     before = CurrentLoopCoordinator(workspace_root=tmp_path).store.read()
@@ -132,9 +147,7 @@ def test_completion_uses_one_relative_form_and_rejects_absolute_retry(
             "intended_artifact_paths": {"source": "phi_plus_bell.py"},
         },
     )
-    handle = begun["current_step_contract"]["permitted_native_action"][
-        "current_action_handle"
-    ]
+    handle = begun["current_step_contract"]["permitted_native_action"]["current_action_handle"]
     source = tmp_path / "phi_plus_bell.py"
     source.write_text(SOURCE, encoding="utf-8")
     before = deepcopy(CurrentLoopCoordinator(workspace_root=tmp_path).store.read())
@@ -266,6 +279,8 @@ def test_checkpoint_selects_supported_python_and_preserves_venv_launcher(
 
     packet = tmp_path / "packet"
     packet.mkdir()
+    (packet / "helpers").mkdir()
+    (packet / "helpers" / "runtime.py").write_bytes((SCRIPT_ROOT / "runtime.py").read_bytes())
     workspace = tmp_path / "workspace"
     launcher_dir = workspace / ".venv" / "bin"
     launcher_dir.mkdir(parents=True)
@@ -295,3 +310,58 @@ def test_checkpoint_selects_supported_python_and_preserves_venv_launcher(
     commands = {value["command"] for value in mcp["mcpServers"].values()}
     assert commands == {str(launcher.absolute())}
     assert str(Path(sys.executable).resolve()) not in commands
+    assert (workspace / ".qcoder-client-runtime" / "run-sampled-result.py").is_file()
+    rule = workspace / ".cursor" / "rules" / "wi0435-prepared-runtime.mdc"
+    assert "Do not install or upgrade dependencies" in rule.read_text(encoding="utf-8")
+
+
+def test_prepared_runtime_is_pinned_and_missing_or_wrong_runtime_blocks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = _runtime_module()
+    observed = []
+
+    def version(name: str) -> str:
+        observed.append(name)
+        return "0.0"
+
+    monkeypatch.setattr(runtime.importlib.metadata, "version", version)
+    with pytest.raises(SystemExit, match="version mismatch"):
+        runtime._versions()
+    assert observed == ["qiskit", "qiskit-aer"]
+    setup = (SCRIPT_ROOT / "setup.sh").read_text(encoding="utf-8")
+    assert "'qiskit==2.5.2' 'qiskit-aer==0.17.2'" in setup
+    assert "preflight --identity" in setup
+
+
+def test_prepared_runtime_emits_one_sampled_attempt_without_installation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runtime = _runtime_module()
+    qasm = tmp_path / "bell.qasm"
+    qasm.write_text("OPENQASM 2.0;", encoding="utf-8")
+    result = tmp_path / "result.json"
+    monkeypatch.setattr(
+        runtime,
+        "_versions",
+        lambda: {"python": "3.12.0", "qiskit": "2.5.2", "qiskit_aer": "0.17.2"},
+    )
+    monkeypatch.setattr(runtime, "_bell_from_qasm", lambda _path: object())
+    samples = []
+
+    def sample(_circuit, *, shots: int):
+        samples.append(shots)
+        return {"00": shots // 2, "11": shots - shots // 2}, "qiskit_aer.AerSimulator"
+
+    monkeypatch.setattr(runtime, "_sample", sample)
+    runtime.run(qasm, result, shots=1_024, attempt_id="native-attempt-one")
+    assert samples == [1_024]
+    manifest = json.loads(result.read_text(encoding="utf-8"))
+    assert manifest["execution_method"]["kind"] == "sampled_shots"
+    assert manifest["execution_observation"] == {
+        "status": "client_reported_completed",
+        "external_execution_attempt_count": 1,
+        "dependency_installation_performed": False,
+        "environment_mutated": False,
+        "qcoder_independently_verified_execution": False,
+    }

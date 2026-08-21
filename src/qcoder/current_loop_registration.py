@@ -464,6 +464,10 @@ def prepare_registration_transaction(
                 "execution_configuration_digest": strict_result_manifest[
                     "execution_configuration"
                 ].get("digest"),
+                "execution_method": deepcopy(strict_result_manifest["execution_method"]),
+                "execution_observation": deepcopy(strict_result_manifest["execution_observation"]),
+                "producer_provenance": deepcopy(strict_result_manifest["producer_provenance"]),
+                "capture_provenance": deepcopy(strict_result_manifest["capture_provenance"]),
                 "request_identity_sha256": (
                     strict_request_identity
                 ),

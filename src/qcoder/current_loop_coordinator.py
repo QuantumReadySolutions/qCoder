@@ -14182,9 +14182,20 @@ class CurrentLoopCoordinator:
             "circuit_qasm": "The requested QASM artifact is ready.",
             "results": "The requested local result artifact is ready.",
         }.get(role, "The requested artifact is ready.")
+        current_run_summary: dict[str, Any] | None = None
+        if role == "results":
+            current_reference = state.get("latest_run_summary_reference")
+            for summary in read_run_summaries(state):
+                if summary.get("artifact_ref") != current_reference:
+                    continue
+                if summary.get("freshness", {}).get("status") != "fresh":
+                    continue
+                current_run_summary = share_safe_run_summary_projection(summary, full=False)
+                task_summary = "The requested current Run Summary is ready."
+                break
         projection = {
-            "schema_id": "qcoder.current_loop.typed_completion_result.v3",
-            "schema_version": 3,
+            "schema_id": "qcoder.current_loop.typed_completion_result.v5",
+            "schema_version": 5,
             "operation": "complete_current_step",
             "ok": True,
             "category": result.get("category"),
@@ -14224,6 +14235,12 @@ class CurrentLoopCoordinator:
             "raw_artifact_included": False,
             "internal_procedure_customer_visible": False,
         }
+        if role == "results":
+            projection["current_run_summary"] = current_run_summary
+            projection["requested_customer_outcome_ready"] = current_run_summary is not None
+            projection["final_response_permitted"] = bool(
+                projection["final_response_permitted"] and current_run_summary is not None
+            )
         if coordinator.get("current_step_status") == "awaiting_external_client_action":
             projection["current_step_contract"] = derive_current_step_contract(state)
             projection["continuation"] = {

@@ -119,7 +119,7 @@ def _manifest(
 ) -> dict:
     return {
         "schema_id": STRICT_RESULT_MANIFEST_SCHEMA_ID,
-        "schema_version": 2,
+        "schema_version": 3,
         "manifestation": "exact_result",
         "counts": {"00": shots // 2, "11": shots - shots // 2},
         "requested_shots": shots,
@@ -130,6 +130,18 @@ def _manifest(
             "status": "exact",
             "reference": "native-client-aer-simulator",
             "settings": {"backend": "aer_simulator", "shots": shots},
+        },
+        "execution_method": {
+            "kind": "sampled_shots",
+            "interface": "qiskit_backend_run",
+            "backend_or_sampler": "qiskit_aer.AerSimulator",
+        },
+        "execution_observation": {
+            "status": "client_reported_completed",
+            "external_execution_attempt_count": 1,
+            "dependency_installation_performed": False,
+            "environment_mutated": False,
+            "qcoder_independently_verified_execution": False,
         },
         "execution_attempt_id": attempt,
         "producer_provenance": {
@@ -172,6 +184,10 @@ def test_strict_source_circuit_result_is_one_current_causal_run(tmp_path: Path) 
     completed = _complete(tmp_path, begun, result_path)
     assert completed["ok"] is True, completed
     assert completed["current_step_status"] == "complete_resumable"
+    assert completed["requested_customer_outcome_ready"] is True
+    assert completed["current_run_summary"]["currency"] == "current"
+    assert completed["current_run_summary"]["freshness"]["status"] == "fresh"
+    assert completed["current_run_summary"]["count_projection"]["observed_shots"] == 1_024
     state = CurrentLoopCoordinator(workspace_root=tmp_path).store.read()
     assert state["latest_run_summary_reference"] is not None
     summary = json.loads(
@@ -179,6 +195,18 @@ def test_strict_source_circuit_result_is_one_current_causal_run(tmp_path: Path) 
             state["run_summary_index"][state["latest_run_summary_reference"]]["local_path"]
         ).read_text(encoding="utf-8")
     )
+    result_revision = state["evidence_registry"]["artifact_revisions"][
+        state["evidence_registry"]["role_heads"]["results"]
+    ]
+    strict_binding = result_revision["strict_result_manifest_binding"]
+    assert strict_binding["execution_method"]["kind"] == "sampled_shots"
+    assert strict_binding["execution_observation"] == {
+        "status": "client_reported_completed",
+        "external_execution_attempt_count": 1,
+        "dependency_installation_performed": False,
+        "environment_mutated": False,
+        "qcoder_independently_verified_execution": False,
+    }
     assert summary["evidence_reconciliation"]["eligibility"] == {
         "valid_result_evidence": True,
         "current_run_evidence": True,
@@ -480,6 +508,99 @@ def test_strict_manifest_rejects_unbounded_configuration_shape() -> None:
     with pytest.raises(StrictResultManifestError) as exc_info:
         normalize_strict_result_manifest(manifest, artifact_revisions={})
     assert exc_info.value.category == "result_manifest_execution_configuration_invalid"
+
+
+@pytest.mark.parametrize(
+    ("mutation", "category"),
+    [
+        (
+            lambda value: value["execution_observation"].update(
+                dependency_installation_performed=True
+            ),
+            "result_manifest_dependency_installation_outside_current_step",
+        ),
+        (
+            lambda value: value["execution_observation"].update(environment_mutated=True),
+            "result_manifest_environment_mutation_outside_current_step",
+        ),
+        (
+            lambda value: value["execution_observation"].update(external_execution_attempt_count=2),
+            "result_manifest_external_execution_attempt_count_invalid",
+        ),
+        (
+            lambda value: value["execution_observation"].update(
+                qcoder_independently_verified_execution=True
+            ),
+            "result_manifest_qcoder_execution_verification_claim_invalid",
+        ),
+        (
+            lambda value: value["execution_method"].update(
+                kind="analytic_probabilities", backend_or_sampler=None
+            ),
+            "result_manifest_non_sampled_method_presented_as_sampled_shots",
+        ),
+        (
+            lambda value: value["execution_method"].update(
+                kind="deterministic_construction", backend_or_sampler=None
+            ),
+            "result_manifest_non_sampled_method_presented_as_sampled_shots",
+        ),
+        (
+            lambda value: value["producer_provenance"].update(kind="hard_coded_counts"),
+            "result_manifest_execution_provenance_contradiction",
+        ),
+    ],
+)
+def test_external_execution_manifest_contradictions_fail_closed(mutation, category: str) -> None:
+    manifest = _manifest(circuit_status="unknown")
+    mutation(manifest)
+    with pytest.raises(StrictResultManifestError) as exc_info:
+        normalize_strict_result_manifest(manifest, artifact_revisions={})
+    assert exc_info.value.category == category
+
+
+def test_current_result_requires_prepared_sampled_execution_evidence(tmp_path: Path) -> None:
+    _source_and_circuit(tmp_path)
+    begun, result_path = _run_step(tmp_path, attempt="native-attempt-insufficient")
+    manifest = _manifest(attempt="native-attempt-insufficient")
+    manifest["execution_configuration"] = {"status": "unknown"}
+    result_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+    before = deepcopy(CurrentLoopCoordinator(workspace_root=tmp_path).store.read())
+    rejected = _complete(tmp_path, begun, result_path)
+    assert rejected["ok"] is False
+    assert rejected["category"] == "result_manifest_exact_execution_configuration_required"
+    after = CurrentLoopCoordinator(workspace_root=tmp_path).store.read()
+    assert after == before
+    assert after["latest_run_summary_reference"] is None
+
+
+def test_result_step_contract_forbids_installation_and_requires_one_sampled_attempt(
+    tmp_path: Path,
+) -> None:
+    _source_and_circuit(tmp_path)
+    begun, _result_path = _run_step(tmp_path, attempt="native-attempt-contract")
+    native = begun["current_step_contract"]["permitted_native_action"]
+    execution = native["external_execution_contract"]
+    assert execution == {
+        "execution_owner": "native_client",
+        "runtime": "already_prepared_and_prevalidated",
+        "dependency_installation_permitted": False,
+        "environment_mutation_permitted": False,
+        "external_execution_attempts": "exactly_one",
+        "required_method": "sampled_shots",
+        "analytic_probability_substitution_permitted": False,
+        "missing_runtime_disposition": "surface_blocker_without_execution",
+        "qcoder_executes_customer_code": False,
+    }
+    artifact_contract = begun["current_step_contract"]["completion"]["artifact_contract"]
+    assert artifact_contract["routine_success_customer_outcome"] == (
+        "canonical_current_run_summary"
+    )
+    assert artifact_contract["qcoder_independently_verifies_external_execution"] is False
+    happy_path = artifact_contract["contract"]["minimal_happy_path"]
+    assert happy_path["execution_method"]["kind"] == "sampled_shots"
+    assert happy_path["execution_configuration"]["status"] == "exact"
+    assert happy_path["bit_register_ordering"]["status"] == "known"
 
 
 def test_pennylane_manifest_rejects_nonfinite_parameters() -> None:

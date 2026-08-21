@@ -25,8 +25,8 @@ from qcoder.current_loop_artifact_targets import (
 from qcoder.current_loop_request_semantics import classify_current_request
 from qcoder.current_step_contract import quiet_customer_visibility_contract
 
-BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v7"
-BINDING_MCP_SCHEMA_VERSION = 7
+BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v8"
+BINDING_MCP_SCHEMA_VERSION = 8
 BINDING_MCP_SERVER_NAME = "qcoder-current-loop"
 BEGIN_CURRENT_LOOP_TOOL_NAME = "begin_current_loop"
 COMPLETE_CURRENT_STEP_TOOL_NAME = "complete_current_step"
@@ -121,7 +121,11 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "digests, loop revisions, receipt identities, roles, or stage ceilings."
                 " For a result step, artifact_path transports the exact strict-result-manifest "
                 "file required by the returned Current Step Contract; bare counts are not "
-                "current result evidence."
+                "current result evidence. Use only an already prepared and prevalidated "
+                "native-client runtime. Dependency installation, environment mutation, analytic "
+                "substitution for sampled shots, and additional execution attempts are outside "
+                "the step; surface a blocker instead. On result success, use the returned "
+                "canonical current_run_summary for the requested final outcome."
             ),
             "inputSchema": {
                 "type": "object",
@@ -233,6 +237,10 @@ def handle_binding_jsonrpc_message(
                     "workspace-relative filenames solely from the customer task; do not Read, "
                     "Glob, Grep, list, scan, or search the workspace to select a target. Use only "
                     "the exact target returned in the Current Step Contract."
+                    " For an external execution step, use only an already prepared and "
+                    "prevalidated native-client runtime. The step does not authorize dependency "
+                    "installation, environment mutation, analytic substitution for sampled "
+                    "shots, or an additional execution attempt; return a blocker instead."
                 ),
             },
         )
