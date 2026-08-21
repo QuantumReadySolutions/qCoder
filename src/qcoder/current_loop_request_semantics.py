@@ -40,7 +40,21 @@ STAGE_OPERATIONS = (
 )
 
 _WORD = r"[\w+.-]+"
-_SOURCE_ACTIONS = frozenset({"write", "create", "make", "generate", "produce", "build", "draft"})
+_SOURCE_ACTIONS = frozenset(
+    {
+        "write",
+        "create",
+        "make",
+        "generate",
+        "produce",
+        "build",
+        "draft",
+        "edit",
+        "modify",
+        "update",
+        "refactor",
+    }
+)
 _SOURCE_NOUNS = frozenset(
     {
         "algorithm",
@@ -419,7 +433,7 @@ def classify_current_request(
             (active_loop or explicit_qcoder)
             and bool(
                 re.search(
-                    r"\b(?:write|create|make|generate|produce|build|draft)\b"
+                    r"\b(?:write|create|make|generate|produce|build|draft|edit|modify|update|refactor)\b"
                     r"[^.!?;]{0,28}\b(?:it|this)\b",
                     normalized,
                 )

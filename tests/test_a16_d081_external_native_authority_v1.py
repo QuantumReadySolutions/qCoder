@@ -148,7 +148,11 @@ def test_each_event_can_register_without_native_permission_receipt(
     assert result["registration_completed"] is True
     state = coordinator.store.read()
     assert state["coordinator"]["current_step_status"] == "complete_resumable"
-    assert set(state["saved_artifacts"]) == {"request_baseline"}
+    assert set(state["saved_artifacts"]) == {
+        "request_baseline",
+        "python_manifestation",
+        "source_evidence",
+    }
     source_head = state["evidence_registry"]["role_heads"]["source"]
     source_revision = state["evidence_registry"]["artifact_revisions"][source_head]
     assert source_revision["logical_role"] == "source"

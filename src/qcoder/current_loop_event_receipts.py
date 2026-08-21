@@ -237,6 +237,70 @@ def rebind_operation_receipt_for_causal_continuation(
     return rebound
 
 
+def rebind_bounded_action_for_exact_recovery(
+    receipt: Mapping[str, Any],
+    *,
+    current_state_revision: int,
+    exact_artifact_binding: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Retain one bounded action after a failed registration commit.
+
+    This qCoder-owned rebind does not extend expiry or broaden the action. It binds
+    the existing opaque handle to the already-observed artifact identity so a later
+    process may register those exact bytes without another external execution.
+    """
+
+    if (
+        receipt.get("receipt_kind") != "qcoder_bounded_action_expectation"
+        or receipt.get("status") != "issued"
+        or not isinstance(current_state_revision, int)
+        or current_state_revision < 1
+    ):
+        raise EventReceiptError("bounded_action_recovery_rebind_invalid")
+    authority_binding = receipt.get("authority_binding")
+    if not isinstance(authority_binding, Mapping):
+        raise EventReceiptError("bounded_action_recovery_rebind_invalid")
+    required = {
+        "artifact_role",
+        "artifact_revision_id",
+        "content_digest",
+        "detected_format",
+        "exact_path_sha256",
+        "size_bytes",
+    }
+    if set(exact_artifact_binding) != required:
+        raise EventReceiptError("bounded_action_recovery_rebind_invalid")
+    if (
+        exact_artifact_binding.get("artifact_role")
+        != authority_binding.get("authorized_artifact_role")
+        or not isinstance(exact_artifact_binding.get("content_digest"), str)
+        or len(str(exact_artifact_binding["content_digest"])) != 64
+        or not isinstance(exact_artifact_binding.get("exact_path_sha256"), str)
+        or len(str(exact_artifact_binding["exact_path_sha256"])) != 64
+    ):
+        raise EventReceiptError("bounded_action_recovery_rebind_invalid")
+    rebound = deepcopy(dict(receipt))
+    original_digest = str(receipt["receipt_digest"])
+    rebound["issued_state_revision"] = current_state_revision
+    rebound_authority = deepcopy(dict(authority_binding))
+    rebound_authority["bound_state_revision"] = current_state_revision
+    rebound_authority["exact_registration_recovery_binding"] = deepcopy(
+        dict(exact_artifact_binding)
+    )
+    rebound["authority_binding"] = rebound_authority
+    rebound["exact_registration_recovery"] = {
+        "original_receipt_digest": original_digest,
+        "expiry_extended": False,
+        "authority_broadened": False,
+        "external_execution_rerun_permitted": False,
+        "exact_bytes_required": True,
+    }
+    rebound["receipt_digest"] = _digest(
+        {key: value for key, value in rebound.items() if key != "receipt_digest"}
+    )
+    return rebound
+
+
 def consume_operation_receipt(
     receipt: Mapping[str, Any],
     *,

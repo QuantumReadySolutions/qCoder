@@ -161,6 +161,7 @@ from qcoder.current_loop_event_receipts import (
     consume_operation_receipt,
     event_receipt_snapshot,
     issue_operation_receipt,
+    rebind_bounded_action_for_exact_recovery,
     rebind_operation_receipt_for_causal_continuation,
     validate_operation_receipt,
     validate_operation_receipt_lifecycle,
@@ -7395,6 +7396,17 @@ class CurrentLoopCoordinator:
                 "artifact_candidate_path_invalid",
                 "artifact_candidate_role_invalid",
                 "external_artifact_selection_required",
+                "strict_result_manifest_required_for_current_result",
+                "result_manifest_schema_invalid",
+                "result_manifest_counts_invalid",
+                "result_manifest_observed_shots_contradiction",
+                "result_manifest_requested_shots_contradiction",
+                "result_manifest_false_circuit_lineage",
+                "result_manifest_false_source_lineage",
+                "result_manifest_false_source_to_circuit_lineage",
+                "result_manifest_circuit_not_current_step_input",
+                "result_manifest_execution_attempt_cross_request",
+                "result_manifest_execution_attempt_reused",
             }
             if category not in safe_categories:
                 category = "native_action_completion_file_unavailable"
@@ -7449,7 +7461,12 @@ class CurrentLoopCoordinator:
                 raise CurrentLoopError("current_action_handle_required")
             if not isinstance(artifact_path, str) or not artifact_path:
                 raise CurrentLoopError("completed_artifact_path_required")
-            if artifact_disposition not in {"assistant_created", "assistant_modified"}:
+            if artifact_disposition not in {
+                "assistant_created",
+                "assistant_modified",
+                "pre_existing_exact_artifact",
+                "explicitly_user_selected_or_supplied",
+            }:
                 raise CurrentLoopError("native_action_disposition_invalid")
             state = self.store.read()
             candidate_path = Path(artifact_path).expanduser()
@@ -7515,6 +7532,18 @@ class CurrentLoopCoordinator:
             if not isinstance(authority_binding, Mapping):
                 raise CurrentLoopError("bounded_action_expectation_invalid")
             role = str(authority_binding.get("authorized_artifact_role"))
+            recovery_binding = authority_binding.get("exact_registration_recovery_binding")
+            if isinstance(recovery_binding, Mapping):
+                observed_recovery_binding = {
+                    "artifact_role": role,
+                    "artifact_revision_id": recovery_binding.get("artifact_revision_id"),
+                    "content_digest": sha256(raw).hexdigest(),
+                    "detected_format": detect_exact_artifact_format(resolved, role),
+                    "exact_path_sha256": sha256(str(resolved).encode("utf-8")).hexdigest(),
+                    "size_bytes": len(raw),
+                }
+                if observed_recovery_binding != dict(recovery_binding):
+                    raise CurrentLoopError("registration_recovery_artifact_mismatch")
             event_identity = client_event_identity_sha256
             if event_identity is not None and (
                 not isinstance(event_identity, str) or len(event_identity) != 64
@@ -7528,6 +7557,10 @@ class CurrentLoopCoordinator:
                 "semantic_event": "native_file_edit_completed",
                 "tool_name_match_required": False,
                 "native_write_completed_before_handoff": True,
+                "artifact_satisfaction_disposition": artifact_disposition,
+                "assistant_created_provenance_claimed": artifact_disposition
+                == "assistant_created",
+                "pre_existing_artifact_mutated_by_qcoder": False,
                 "bounded_action_expectation_id": current_action_handle,
                 "bounded_action_expectation_digest": receipt.get("receipt_digest"),
                 "native_client_permission_owned_by_client": True,
@@ -7566,13 +7599,72 @@ class CurrentLoopCoordinator:
                     {
                         "role": role,
                         "path": str(resolved),
-                        "provenance": artifact_disposition,
+                        "provenance": (
+                            "user_selected"
+                            if artifact_disposition
+                            in {
+                                "pre_existing_exact_artifact",
+                                "explicitly_user_selected_or_supplied",
+                            }
+                            else artifact_disposition
+                        ),
                         "explicit_external": False,
                         "content_digest": binding["expected_artifact_sha256"],
                     },
                 ),
                 native_client_event_binding=binding,
             )
+            if result.get("ok") is True:
+                registered_state = self.store.read()
+                if (
+                    self._coordinator_state(registered_state).get("current_step_status")
+                    == "complete_resumable"
+                    and isinstance(registered_state.get("registered_pending_derivation"), Mapping)
+                ):
+                    try:
+                        derivation = derive_pending_snapshot(
+                            state=registered_state,
+                            artifact_directory=self.artifact_directory,
+                        )
+                        promotion = promote_derivation_snapshot(
+                            store=self.store,
+                            derivation=derivation,
+                            artifact_directory=self.artifact_directory,
+                        )
+                        result.setdefault("details", {}).update(
+                            {
+                                "causal_evidence_reconciliation_completed": True,
+                                "evidence_snapshot_id": promotion.get("snapshot_id"),
+                                "run_summary_reference": promotion.get("run_summary_reference"),
+                            }
+                        )
+                    except (CurrentLoopError, OSError, ValueError) as exc:
+                        failed_state = self.store.read()
+                        return {
+                            "schema_id": "qcoder.current_loop.typed_completion_result.v4",
+                            "schema_version": 4,
+                            "operation": "complete_current_step",
+                            "ok": False,
+                            "category": str(
+                                getattr(exc, "category", "causal_evidence_reconciliation_failed")
+                            ),
+                            "state_revision": failed_state["state_revision"],
+                            "current_step_status": self._coordinator_state(failed_state).get(
+                                "current_step_status"
+                            ),
+                            "artifact_registration_committed": True,
+                            "external_execution_rerun_required": False,
+                            "recovery": {
+                                "policy": "resume_exact_pending_derivation_without_rerun",
+                                "state_mutated_by_failed_derivation": False,
+                                "authority_broadened": False,
+                            },
+                            "native_client_permission_owned_by_client": True,
+                            "native_client_permission_granted_by_qcoder": False,
+                            "user_approval_click_inferred": False,
+                            "raw_path_included": False,
+                            "raw_artifact_included": False,
+                        }
             result["operation"] = "complete_current_step"
             result.setdefault("details", {}).update(
                 {
@@ -7791,6 +7883,7 @@ class CurrentLoopCoordinator:
                         dimension="collect",
                     )
                     permitted_roles.append(role)
+                transaction: Mapping[str, Any] | None = None
                 try:
                     transaction = prepare_registration_transaction(
                         state=state,
@@ -7860,6 +7953,84 @@ class CurrentLoopCoordinator:
                     error_category = str(getattr(exc, "category", "unknown_local_internal"))
                     if bounded_expectation:
                         current = self.store.read()
+                        recovery_retained = False
+                        if (
+                            isinstance(transaction, Mapping)
+                            and current.get("state_revision") == state.get("state_revision")
+                        ):
+                            prepared = transaction.get("prepared_revisions")
+                            if isinstance(prepared, list) and len(prepared) == 1:
+                                prepared_revision = prepared[0].get("revision")
+                                if isinstance(prepared_revision, Mapping):
+                                    exact_binding = {
+                                        "artifact_role": prepared_revision.get("logical_role"),
+                                        "artifact_revision_id": prepared_revision.get(
+                                            "artifact_revision_id"
+                                        ),
+                                        "content_digest": prepared_revision.get("content_digest"),
+                                        "detected_format": prepared_revision.get(
+                                            "detected_format"
+                                        ),
+                                        "exact_path_sha256": sha256(
+                                            str(prepared_revision.get("exact_path")).encode("utf-8")
+                                        ).hexdigest(),
+                                        "size_bytes": prepared_revision.get("size_bytes"),
+                                    }
+
+                                    def retain_exact_recovery(
+                                        value: dict[str, Any],
+                                    ) -> Mapping[str, Any]:
+                                        current_receipt = value.get(
+                                            "operation_receipts", {}
+                                        ).get(operation_receipt_id)
+                                        current_coordinator = value.get("coordinator")
+                                        if (
+                                            not isinstance(current_receipt, Mapping)
+                                            or not isinstance(current_coordinator, dict)
+                                            or current_receipt.get("status") != "issued"
+                                            or current_receipt.get("receipt_digest")
+                                            != receipt.get("receipt_digest")
+                                            or current_coordinator.get(
+                                                "current_step_bounded_action_expectation_id"
+                                            )
+                                            != operation_receipt_id
+                                        ):
+                                            raise CurrentLoopError(
+                                                "bounded_action_recovery_state_changed"
+                                            )
+                                        rebound = rebind_bounded_action_for_exact_recovery(
+                                            current_receipt,
+                                            current_state_revision=int(value["state_revision"]) + 1,
+                                            exact_artifact_binding=exact_binding,
+                                        )
+                                        value["operation_receipts"][operation_receipt_id] = rebound
+                                        current_coordinator[
+                                            "current_step_bounded_action_expectation_digest"
+                                        ] = rebound["receipt_digest"]
+                                        current_coordinator[
+                                            "registration_recovery_pending"
+                                        ] = {
+                                            "exact_artifact_binding_digest": sha256(
+                                                json.dumps(
+                                                    exact_binding,
+                                                    ensure_ascii=True,
+                                                    separators=(",", ":"),
+                                                    sort_keys=True,
+                                                ).encode("utf-8")
+                                            ).hexdigest(),
+                                            "external_execution_rerun_required": False,
+                                            "same_exact_artifact_required": True,
+                                        }
+                                        return value
+
+                                    try:
+                                        current = self.store.update(
+                                            retain_exact_recovery,
+                                            expected_revision=int(state["state_revision"]),
+                                        )
+                                        recovery_retained = True
+                                    except (CurrentLoopConflict, CurrentLoopError):
+                                        current = self.store.read()
                         return {
                             "schema_id": COORDINATOR_RESULT_SCHEMA_ID,
                             "schema_version": COORDINATOR_RESULT_SCHEMA_VERSION,
@@ -7879,11 +8050,13 @@ class CurrentLoopCoordinator:
                                     "retain_expectation_and_require_exact_client_event"
                                 ),
                                 "bounded_action_expectation_retained": True,
-                                "state_mutated": False,
+                                "state_mutated": recovery_retained,
                                 "authority_broadened": False,
                                 "native_client_permission_granted_by_qcoder": False,
                                 "user_approval_click_inferred": False,
                                 "fail_closed": True,
+                                "exact_artifact_bound_for_retry": recovery_retained,
+                                "external_execution_rerun_required": False,
                             },
                             "raw_artifact_included": False,
                             "local_path_included": False,
@@ -8011,6 +8184,7 @@ class CurrentLoopCoordinator:
                             "assist_iteration_ready": False,
                         }
                     )
+                    coordinator.pop("registration_recovery_pending", None)
                     self._replace_coordinator(coordinator)
                     resulting_state = (
                         self.store.read()
@@ -11652,6 +11826,8 @@ class CurrentLoopCoordinator:
                     "assistant_created": "created",
                     "assistant_modified": "modified",
                     "user_selected": "selected",
+                    "pre_existing_exact_artifact": "selected",
+                    "explicitly_user_selected_or_supplied": "selected",
                 }.get(str(legacy_disposition))
             if event_disposition not in {"created", "modified", "selected", "restored"}:
                 raise CurrentLoopError("artifact_candidate_provenance_invalid")
@@ -12213,6 +12389,40 @@ class CurrentLoopCoordinator:
         # insertion revision.
         observable_revision = final_revision + 1
         ceiling = semantics["current_step_ceiling"]
+        registry = state.get("evidence_registry", {})
+        role_heads = registry.get("role_heads", {}) if isinstance(registry, Mapping) else {}
+        revisions = (
+            registry.get("artifact_revisions", {}) if isinstance(registry, Mapping) else {}
+        )
+        eligible_inputs: dict[str, dict[str, Any]] = {}
+        if role in {"circuit_qasm", "results"}:
+            source_id = role_heads.get("source") if isinstance(role_heads, Mapping) else None
+            source_revision = (
+                revisions.get(source_id)
+                if isinstance(revisions, Mapping) and isinstance(source_id, str)
+                else None
+            )
+            if isinstance(source_revision, Mapping):
+                eligible_inputs["source"] = {
+                    "status": "exact",
+                    "artifact_revision_id": source_id,
+                    "content_digest": source_revision.get("content_digest"),
+                }
+        if role == "results":
+            circuit_id = (
+                role_heads.get("circuit_qasm") if isinstance(role_heads, Mapping) else None
+            )
+            circuit_revision = (
+                revisions.get(circuit_id)
+                if isinstance(revisions, Mapping) and isinstance(circuit_id, str)
+                else None
+            )
+            if isinstance(circuit_revision, Mapping):
+                eligible_inputs["circuit"] = {
+                    "status": "exact",
+                    "artifact_revision_id": circuit_id,
+                    "content_digest": circuit_revision.get("content_digest"),
+                }
         authority_binding = {
             "schema_id": "qcoder.current_loop.bounded_action_expectation_binding.v1",
             "authority_layer": "qcoder_bounded_action",
@@ -12233,6 +12443,9 @@ class CurrentLoopCoordinator:
             "authorized_artifact_role": role,
             "authorized_artifact_cardinality": "exactly_one",
             "prohibited_artifact_roles": list(ceiling["prohibited_artifact_roles"]),
+            "eligible_input_artifacts": eligible_inputs,
+            "eligible_inputs_derived_from_canonical_role_heads": True,
+            "lineage_inferred_from_path_filename_or_adjacency": False,
             "bound_loop_identity_sha256": sha256(
                 str(state["loop_ref"]).encode("utf-8")
             ).hexdigest(),

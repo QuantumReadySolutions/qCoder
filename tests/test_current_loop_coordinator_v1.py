@@ -664,7 +664,7 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    assert contract_digest == ("f54b21b942a42b8bf98322cf1e6928f63c4205057a27499e64ff8e17ab9e505a")
+    assert contract_digest == ("3e3e6c57c367321bdcf93c8e76145d78ff7b5dfac1e7093c400eef644a99a397")
     assert snapshot["phases"] == list(PHASES)
     assert snapshot["state_statuses"] == list(STATE_STATUSES)
     assert snapshot["checkpoint_kinds"] == list(CHECKPOINT_KINDS)
@@ -1519,11 +1519,12 @@ def test_coordinated_partial_and_failed_run_paths(
             item for item in processed["details"]["per_item_outcomes"] if item["role"] == "results"
         )
         assert outcome["status"] == "failed_local"
-        assert outcome["safe_error_category"] == "unknown_local_internal"
+        assert outcome["safe_error_category"] == "result_artifact_invalid"
         assert state["run_summary_index"] == {}
     elif "results" in selected_roles:
         assert processed["details"]["run_summary"]["automatic_preparation"] is True
-        assert state["latest_run_summary_reference"] in state["run_summary_index"]
+        assert state["latest_run_summary_reference"] is None
+        assert len(state["run_summary_index"]) == 1
     review = coordinator.review_build()
     assert review["ok"] is True
     if "results" in selected_roles and not failed_run:
@@ -1532,12 +1533,8 @@ def test_coordinated_partial_and_failed_run_paths(
             for tool, arguments in reversed(transport.calls)
             if tool == "create_context_session_card"
         )
-        assert (
-            current_call["selected_share_safe_summaries"]["run_summary"][
-                "raw_result_artifact_included"
-            ]
-            is False
-        )
+        assert "selected_share_safe_summaries" not in current_call
+        assert review["details"]["run_summary_missing_limitation"] is True
         assert review["details"]["run_summary_reference"] == state["latest_run_summary_reference"]
     current = json.loads(
         Path(
@@ -1578,7 +1575,7 @@ def test_failed_run_replaces_unapproved_error_text_with_safe_category(
     outcome = next(
         item for item in processed["details"]["per_item_outcomes"] if item["role"] == "results"
     )
-    assert outcome["safe_error_category"] == "unknown_local_internal"
+    assert outcome["safe_error_category"] == "result_artifact_invalid"
     assert "raw exception" not in json.dumps(transport.calls)
 
 

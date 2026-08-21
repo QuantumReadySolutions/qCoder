@@ -206,10 +206,11 @@ def test_qasm3_isolated_local_processing_keeps_result_and_run_summary(
     assert result["details"]["run_summary"]["automatic_preparation"] is True
     state = coordinator.store.read()
     assert "result_manifestation" in state["saved_artifacts"]
-    assert state["latest_run_summary_reference"] is not None
+    assert state["latest_run_summary_reference"] is None
     assert "circuit_manifestation" not in state["saved_artifacts"]
     assert state["hosted_enrichment"]["status"] == "available"
-    summary_descriptor = state["run_summary_index"][state["latest_run_summary_reference"]]
+    assert len(state["run_summary_index"]) == 1
+    summary_descriptor = next(iter(state["run_summary_index"].values()))
     summary = json.loads(Path(summary_descriptor["local_path"]).read_text(encoding="utf-8"))
     assert any(
         "Circuit structural evidence is unavailable" in limitation
@@ -247,7 +248,9 @@ def test_qasm3_per_item_isolation_is_order_independent(
         "circuit_qasm": "unsupported_format",
         "results": "completed",
     }
-    assert coordinator.store.read()["latest_run_summary_reference"] is not None
+    state = coordinator.store.read()
+    assert state["latest_run_summary_reference"] is None
+    assert len(state["run_summary_index"]) == 1
 
 
 def test_qasm2_full_local_processing_and_no_hosted_call(tmp_path: Path) -> None:
@@ -334,7 +337,8 @@ def test_second_hosted_call_failure_preserves_first_enrichment_and_local_summary
     state = coordinator.store.read()
     assert "result_review_context_card" in state["saved_artifacts"]
     assert "result_manifestation" in state["saved_artifacts"]
-    assert state["latest_run_summary_reference"] is not None
+    assert state["latest_run_summary_reference"] is None
+    assert len(state["run_summary_index"]) == 1
     assert state["hosted_enrichment"]["status"] == "rejected"
 
 

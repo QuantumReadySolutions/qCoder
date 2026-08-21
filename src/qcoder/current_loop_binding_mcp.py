@@ -17,8 +17,8 @@ from qcoder import __version__
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.current_step_contract import quiet_customer_visibility_contract
 
-BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v4"
-BINDING_MCP_SCHEMA_VERSION = 4
+BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v5"
+BINDING_MCP_SCHEMA_VERSION = 5
 BINDING_MCP_SERVER_NAME = "qcoder-current-loop"
 BEGIN_CURRENT_LOOP_TOOL_NAME = "begin_current_loop"
 COMPLETE_CURRENT_STEP_TOOL_NAME = "complete_current_step"
@@ -85,6 +85,9 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "handle from the Current Step Contract and the resulting local artifact path. "
                 "qCoder reads and validates the actual bytes; do not supply permission state, "
                 "digests, loop revisions, receipt identities, roles, or stage ceilings."
+                " For a result step, artifact_path transports the exact strict-result-manifest "
+                "file required by the returned Current Step Contract; bare counts are not "
+                "current result evidence."
             ),
             "inputSchema": {
                 "type": "object",
@@ -105,7 +108,12 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                     },
                     "artifact_disposition": {
                         "type": "string",
-                        "enum": ["assistant_created", "assistant_modified"],
+                        "enum": [
+                            "assistant_created",
+                            "assistant_modified",
+                            "pre_existing_exact_artifact",
+                            "explicitly_user_selected_or_supplied",
+                        ],
                         "default": "assistant_created",
                     },
                 },
@@ -120,6 +128,7 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
             },
             "x-qcoder-native-permission-owner": "native_client",
             "x-qcoder-hooks-required-for-correctness": False,
+            "x-qcoder-strict-result-manifest-transport": "exact_artifact_path",
             "x-qcoder-customer-visibility": quiet_customer_visibility_contract(),
             "x-qcoder-normal-success-presentation": {
                 "customer_message_before_tool_call": "none",
@@ -213,7 +222,12 @@ def handle_binding_jsonrpc_message(
             or not arguments["artifact_path"]
             or len(arguments["artifact_path"].encode("utf-8")) > MAX_PATH_BYTES
             or arguments.get("artifact_disposition", "assistant_created")
-            not in {"assistant_created", "assistant_modified"}
+            not in {
+                "assistant_created",
+                "assistant_modified",
+                "pre_existing_exact_artifact",
+                "explicitly_user_selected_or_supplied",
+            }
         ):
             return _result(
                 message_id,
@@ -225,7 +239,9 @@ def handle_binding_jsonrpc_message(
                         "expected_shape": {
                             "current_action_handle": "opaque nonempty string from contract",
                             "artifact_path": "nonempty exact local artifact path",
-                            "artifact_disposition": "optional created-or-modified enum",
+                            "artifact_disposition": (
+                                "optional created, modified, pre-existing, or explicit-selection enum"
+                            ),
                         },
                         "state_mutated": False,
                         "raw_path_echoed": False,

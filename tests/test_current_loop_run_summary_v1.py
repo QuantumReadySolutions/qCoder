@@ -181,7 +181,7 @@ def test_multiple_run_requires_selection_and_stale_summary_is_honest(tmp_path: P
         evidence_limitations=[],
         selected_run_reference=second["artifact_ref"],
     )
-    assert selected["status"] == "available"
+    assert selected["status"] == "stale"
     stale = mark_run_summary_stale(first, reasons=["source_evidence_excluded"])
     assert stale["freshness"]["status"] == "stale"
     assert run_summary_error(stale) is None

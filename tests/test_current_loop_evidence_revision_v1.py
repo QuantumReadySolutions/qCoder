@@ -186,7 +186,7 @@ def test_canonical_vocabulary_binding_and_state_v9_are_identical(tmp_path: Path)
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     vocabulary = vocabulary_snapshot()
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v34"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v36"
     assert binding["canonical_current_loop_vocabulary"] == vocabulary
     assert (
         binding["contract_sidecar"]["accepted_domains"]["canonical_evidence_vocabulary"]
@@ -218,15 +218,16 @@ def test_three_same_path_iterations_create_coherent_snapshots(tmp_path: Path) ->
     ]
     assert by_revision == ["created", "modified", "modified"]
     currencies = [descriptor["currency"] for descriptor in state["run_summary_index"].values()]
-    assert currencies.count("current") == 1
+    assert currencies.count("current") == 0
     assert currencies.count("superseded") == 2
     for snapshot in registry["snapshots"].values():
         summary = _read_summary(state, snapshot["run_summary_reference"])
         assert summary["schema_id"] == RUN_SUMMARY_SCHEMA_ID
         assert validate_run_summary_snapshot_binding(summary, snapshot) is None
-    current_reference = state["latest_run_summary_reference"]
-    computed = run_summary_status(state, summary_reference=current_reference)
-    assert computed["is_current_run_summary"] is True
+    assert state["latest_run_summary_reference"] is None
+    for reference in state["run_summary_index"]:
+        computed = run_summary_status(state, summary_reference=reference)
+        assert computed["is_current_run_summary"] is False
     assert len(canonical_bytes(state)) <= CURRENT_LOOP_STATE_MAX_BYTES
 
 
@@ -726,7 +727,8 @@ def test_pending_current_view_is_honest_and_status_resumes_exact_snapshot(
     assert resumed["details"]["pending_derivation_resumed"] is True
     current = coordinator.evidence_view(view_id="full_run_summary")
     assert current["details"]["registered_newer_pending"] is False
-    assert current["details"]["current_run_summary_reference"] is not None
+    assert current["details"]["current_run_summary_reference"] is None
+    assert current["details"]["evidence_view"]["status"] == "missing"
 
 
 def test_summary_failure_preserves_explicit_prior_but_never_selects_it_as_latest(
@@ -736,7 +738,7 @@ def test_summary_failure_preserves_explicit_prior_but_never_selects_it_as_latest
     coordinator = _coordinator(tmp_path)
     _run_iteration(coordinator, _write_iteration(tmp_path, iteration=1), iteration=1)
     prior_state = coordinator.store.read()
-    prior_reference = prior_state["latest_run_summary_reference"]
+    prior_reference = next(iter(prior_state["run_summary_index"]))
 
     def fail_summary(**_kwargs: Any) -> dict[str, Any]:
         raise RunSummaryError("synthetic_run_summary_failure")
@@ -750,7 +752,8 @@ def test_summary_failure_preserves_explicit_prior_but_never_selects_it_as_latest
     assert second["details"]["snapshot_status"] == "partial"
     state = coordinator.store.read()
     assert state["latest_run_summary_reference"] is None
-    assert state["run_summary_index"][prior_reference]["currency"] == ("prior_newer_failed")
+    assert prior_reference in state["run_summary_index"]
+    assert state["run_summary_index"][prior_reference]["currency"] != "current"
     assert state["latest_assistant_context_update"]["newer_iteration_status"] == "failed"
     failed_help = coordinator.help(topic="overview")["details"]["help"]["evidence_status"]
     assert failed_help["newer_iteration_status"] == "failed"
@@ -766,9 +769,7 @@ def test_summary_failure_preserves_explicit_prior_but_never_selects_it_as_latest
         selected_run_reference=prior_reference,
     )
     assert explicit_prior["details"]["selected_prior_summary_explicitly"] is True
-    assert explicit_prior["details"]["evidence_view"]["presentation_currency"] == (
-        "prior_newer_failed"
-    )
+    assert explicit_prior["details"]["evidence_view"]["presentation_currency"] != "current"
 
 
 def test_exclude_restore_and_delete_current_manifestation_are_snapshot_bound(

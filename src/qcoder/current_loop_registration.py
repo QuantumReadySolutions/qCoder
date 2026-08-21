@@ -28,6 +28,11 @@ from qcoder.current_loop_evidence_processing import (
     registration_format_outcome,
 )
 from qcoder.current_loop_quiet_workflow import assistant_context_update
+from qcoder.current_loop_result_manifest import (
+    STRICT_RESULT_MANIFEST_SCHEMA_ID,
+    StrictResultManifestError,
+    normalize_strict_result_manifest,
+)
 from qcoder.current_loop_vocabulary import (
     AUTHORIZATION_SOURCES,
     EVENT_DISPOSITIONS,
@@ -51,7 +56,30 @@ _LEGACY_EVENT_DISPOSITIONS = {
     "assistant_modified": "modified",
     "user_selected": "selected",
     "user_supplied": "selected",
+    "pre_existing_exact_artifact": "selected",
+    "explicitly_user_selected_or_supplied": "selected",
 }
+
+
+def _receipt_causal_input(
+    receipt: Mapping[str, Any] | None, role: str
+) -> dict[str, Any] | None:
+    binding = receipt.get("authority_binding") if isinstance(receipt, Mapping) else None
+    inputs = binding.get("eligible_input_artifacts") if isinstance(binding, Mapping) else None
+    value = inputs.get(role) if isinstance(inputs, Mapping) else None
+    if (
+        not isinstance(value, Mapping)
+        or value.get("status") != "exact"
+        or not isinstance(value.get("artifact_revision_id"), str)
+        or not _digest(value.get("content_digest"))
+    ):
+        return None
+    return {
+        "status": "exact",
+        "artifact_revision_id": value["artifact_revision_id"],
+        "content_digest": value["content_digest"],
+        "relationship_source": "bounded_action_expectation",
+    }
 
 
 def _canonical_digest(value: Any) -> str:
@@ -207,12 +235,12 @@ def prepare_registration_transaction(
             safe_completion_evidence.get("schema_id")
             != "qcoder.current_loop.native_action_completion_evidence.v1"
             or safe_completion_evidence.get("native_client_permission_owned_by_client") is not True
-            or safe_completion_evidence.get("native_client_permission_granted_by_qcoder") is not False
+            or safe_completion_evidence.get("native_client_permission_granted_by_qcoder")
+            is not False
             or safe_completion_evidence.get("user_approval_click_inferred") is not False
             or safe_completion_evidence.get("raw_path_retained") is not False
             or safe_completion_evidence.get("raw_source_retained") is not False
-            or safe_completion_evidence.get("bounded_action_expectation_id")
-            != operation_receipt_id
+            or safe_completion_evidence.get("bounded_action_expectation_id") != operation_receipt_id
         ):
             raise CurrentLoopError("native_action_completion_evidence_invalid")
         if (
@@ -261,6 +289,46 @@ def prepare_registration_transaction(
         if isinstance(expected_content_digest, str) and expected_content_digest != content_digest:
             raise CurrentLoopError("selected_file_stale")
         detected_format = detect_exact_artifact_format(path, str(role))
+        strict_result_manifest: dict[str, Any] | None = None
+        strict_request_identity: str | None = None
+        if role == "results" and detected_format == "qcoder_strict_result_manifest":
+            try:
+                decoded = json.loads(raw.decode("utf-8"))
+                if not isinstance(decoded, Mapping):
+                    raise StrictResultManifestError("result_manifest_schema_invalid")
+                strict_result_manifest = normalize_strict_result_manifest(
+                    decoded,
+                    artifact_revisions=revisions,
+                    expected_circuit_lineage=_receipt_causal_input(receipt, "circuit"),
+                )
+            except (UnicodeDecodeError, json.JSONDecodeError, StrictResultManifestError) as exc:
+                raise CurrentLoopError(
+                    str(getattr(exc, "category", "result_manifest_schema_invalid"))
+                ) from exc
+            attempt_id = strict_result_manifest["execution_attempt_id"]
+            strict_request_identity = (
+                receipt.get("authority_binding", {}).get("current_request_identity_sha256")
+                if isinstance(receipt, Mapping)
+                else None
+            )
+            for existing in revisions.values():
+                prior = (
+                    existing.get("strict_result_manifest_binding")
+                    if isinstance(existing, Mapping)
+                    else None
+                )
+                if not isinstance(prior, Mapping) or prior.get("execution_attempt_id") != attempt_id:
+                    continue
+                if prior.get("request_identity_sha256") != strict_request_identity:
+                    raise CurrentLoopError("result_manifest_execution_attempt_cross_request")
+                raise CurrentLoopError("result_manifest_execution_attempt_reused")
+        if (
+            role == "results"
+            and isinstance(receipt, Mapping)
+            and receipt.get("receipt_kind") == "qcoder_bounded_action_expectation"
+            and detected_format != "qcoder_strict_result_manifest"
+        ):
+            raise CurrentLoopError("strict_result_manifest_required_for_current_result")
         format_outcome = registration_format_outcome(
             path=path,
             role=str(role),
@@ -294,6 +362,18 @@ def prepare_registration_transaction(
                 current_time=validation_time,
             )
         path_digest = sha256(str(path).encode()).hexdigest()
+        causal_source = _receipt_causal_input(receipt, "source") if role == "circuit_qasm" else None
+        relationship_identity = (
+            {"source": causal_source or {"status": "unknown"}}
+            if role == "circuit_qasm"
+            else {
+                "strict_result_manifest_digest": strict_result_manifest.get("manifest_digest"),
+                "execution_attempt_id": strict_result_manifest.get("execution_attempt_id"),
+                "request_identity_sha256": strict_request_identity,
+            }
+            if role == "results" and isinstance(strict_result_manifest, Mapping)
+            else None
+        )
         revision_id = (
             "artifact-revision-"
             + _canonical_digest(
@@ -302,6 +382,7 @@ def prepare_registration_transaction(
                     "role": role,
                     "path_digest": path_digest,
                     "content_digest": content_digest,
+                    "causal_relationship_identity": relationship_identity,
                 }
             )[:32]
         )
@@ -316,7 +397,7 @@ def prepare_registration_transaction(
         revision_already_exists = revision_id in revisions
         event_disposition = (
             supplied_event_disposition
-            if idempotent
+            if idempotent or supplied_event_disposition == "selected"
             else "modified"
             if isinstance(current, Mapping) and current.get("exact_path") == str(path)
             else "selected"
@@ -361,6 +442,34 @@ def prepare_registration_transaction(
             "availability": "available",
             "revision_status": "registered",
         }
+        if role == "circuit_qasm":
+            revision["causal_lineage"] = {
+                "source": causal_source
+                or {
+                    "status": "unknown",
+                    "artifact_revision_id": None,
+                    "content_digest": None,
+                    "relationship_source": "not_supplied",
+                },
+                "lineage_inferred_from_path_or_adjacency": False,
+            }
+        if role == "results" and isinstance(strict_result_manifest, Mapping):
+            revision["strict_result_manifest_binding"] = {
+                "schema_id": strict_result_manifest["schema_id"],
+                "manifest_digest": strict_result_manifest["manifest_digest"],
+                "outcome_digest": strict_result_manifest["outcome_digest"],
+                "execution_attempt_id": strict_result_manifest["execution_attempt_id"],
+                "circuit_lineage": deepcopy(strict_result_manifest["circuit_lineage"]),
+                "source_lineage": deepcopy(strict_result_manifest["source_lineage"]),
+                "execution_configuration_digest": strict_result_manifest[
+                    "execution_configuration"
+                ].get("digest"),
+                "request_identity_sha256": (
+                    strict_request_identity
+                ),
+                "bounded_action_expectation_reference": operation_receipt_id,
+                "raw_result_embedded": False,
+            }
         if revision["ide_authority_reference"] is None:
             revision.pop("ide_authority_reference")
         if revision["bounded_action_expectation_reference"] is None:
@@ -426,6 +535,21 @@ def commit_registration_transaction(
     expected = int(transaction["expected_state_revision"])
     if state["state_revision"] != expected:
         raise CurrentLoopError("client_state_conflict")
+    for prepared in transaction.get("prepared_revisions", []):
+        revision = prepared.get("revision") if isinstance(prepared, Mapping) else None
+        if not isinstance(revision, Mapping):
+            raise CurrentLoopError("registration_transaction_incomplete")
+        path = Path(str(revision.get("exact_path", "")))
+        if path.is_symlink() or not path.is_file():
+            raise CurrentLoopError("artifact_candidate_file_required")
+        raw = path.read_bytes()
+        if (
+            len(raw) != revision.get("size_bytes")
+            or sha256(raw).hexdigest() != revision.get("content_digest")
+            or detect_exact_artifact_format(path, str(revision.get("logical_role")))
+            != revision.get("detected_format")
+        ):
+            raise CurrentLoopError("selected_file_stale")
     receipt_id = transaction.get("operation_receipt_id")
     receipt = (
         state.get("operation_receipts", {}).get(receipt_id) if isinstance(receipt_id, str) else None
@@ -438,8 +562,7 @@ def commit_registration_transaction(
             not isinstance(receipt, Mapping)
             or not isinstance(rebound, Mapping)
             or receipt.get("status") != "issued"
-            or receipt.get("receipt_digest")
-            != causal_rebind.get("original_receipt_digest")
+            or receipt.get("receipt_digest") != causal_rebind.get("original_receipt_digest")
             or rebound.get("receipt_id") != receipt_id
         ):
             raise CurrentLoopError("operation_receipt_replay_rejected")
@@ -571,8 +694,7 @@ def commit_registration_transaction(
                 rebound = causal_rebind.get("rebound_receipt")
                 if (
                     not isinstance(rebound, Mapping)
-                    or current.get("receipt_digest")
-                    != causal_rebind.get("original_receipt_digest")
+                    or current.get("receipt_digest") != causal_rebind.get("original_receipt_digest")
                     or rebound.get("receipt_id") != receipt_id
                 ):
                     raise CurrentLoopError("operation_receipt_replay_rejected")
@@ -611,15 +733,15 @@ def commit_registration_transaction(
                 )[:32]
             )
             registration_event = {
-                    "event_id": event_id,
-                    "artifact_revision_id": revision["artifact_revision_id"],
-                    "logical_role": revision["logical_role"],
-                    "previous_head": item["previous_head"],
-                    "event_disposition": revision["event_disposition"],
-                    "authorization_source": revision["authorization_source"],
-                    "operation_receipt_reference": receipt_id,
-                    "state_revision": expected + 1,
-                }
+                "event_id": event_id,
+                "artifact_revision_id": revision["artifact_revision_id"],
+                "logical_role": revision["logical_role"],
+                "previous_head": item["previous_head"],
+                "event_disposition": revision["event_disposition"],
+                "authorization_source": revision["authorization_source"],
+                "operation_receipt_reference": receipt_id,
+                "state_revision": expected + 1,
+            }
             if "native_action_completion_evidence_digest" in revision:
                 registration_event["native_action_completion_evidence_digest"] = revision[
                     "native_action_completion_evidence_digest"
@@ -755,6 +877,41 @@ def artifact_revision_error(value: object) -> str | None:
         return "current_loop_artifact_revision_availability_invalid"
     if not isinstance(value.get("registered_state_revision"), int):
         return "current_loop_artifact_revision_state_binding_invalid"
+    causal_lineage = value.get("causal_lineage")
+    if causal_lineage is not None:
+        if value.get("logical_role") != "circuit_qasm" or not isinstance(
+            causal_lineage, Mapping
+        ):
+            return "current_loop_artifact_revision_causal_lineage_invalid"
+        source = causal_lineage.get("source")
+        if not isinstance(source, Mapping) or source.get("status") not in {"exact", "unknown"}:
+            return "current_loop_artifact_revision_causal_lineage_invalid"
+        if source.get("status") == "exact" and (
+            not isinstance(source.get("artifact_revision_id"), str)
+            or not _digest(source.get("content_digest"))
+        ):
+            return "current_loop_artifact_revision_causal_lineage_invalid"
+        if causal_lineage.get("lineage_inferred_from_path_or_adjacency") is not False:
+            return "current_loop_artifact_revision_causal_lineage_invalid"
+    strict_binding = value.get("strict_result_manifest_binding")
+    if strict_binding is not None:
+        if (
+            value.get("logical_role") != "results"
+            or value.get("detected_format") != "qcoder_strict_result_manifest"
+            or not isinstance(strict_binding, Mapping)
+            or strict_binding.get("schema_id") != STRICT_RESULT_MANIFEST_SCHEMA_ID
+            or not _digest(strict_binding.get("manifest_digest"))
+            or not _digest(strict_binding.get("outcome_digest"))
+            or not isinstance(strict_binding.get("execution_attempt_id"), str)
+            or not strict_binding.get("execution_attempt_id")
+            or strict_binding.get("raw_result_embedded") is not False
+        ):
+            return "current_loop_artifact_revision_result_manifest_binding_invalid"
+    if (
+        value.get("detected_format") == "qcoder_strict_result_manifest"
+        and not isinstance(strict_binding, Mapping)
+    ):
+        return "current_loop_artifact_revision_result_manifest_binding_missing"
     return None
 
 

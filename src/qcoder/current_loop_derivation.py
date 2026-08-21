@@ -29,12 +29,17 @@ from qcoder.current_loop_evidence_processing import (
     hosted_enrichment_status,
     processing_outcome,
 )
+from qcoder.current_loop_evidence_reconciler import reconcile_current_evidence
 from qcoder.current_loop_quiet_workflow import assistant_context_update
 from qcoder.current_loop_retention import apply_bounded_retention
 from qcoder.current_loop_run_summary import (
     RunSummaryError,
     build_run_summary,
     validate_run_summary_snapshot_binding,
+)
+from qcoder.current_loop_result_manifest import (
+    STRICT_RESULT_MANIFEST_SCHEMA_ID,
+    normalize_strict_result_manifest,
 )
 
 DERIVATION_SCHEMA_ID = "qcoder.current_loop.derivation.v1"
@@ -57,6 +62,14 @@ def _artifact_digest(value: Mapping[str, Any]) -> str:
     if not isinstance(digest, str) or len(digest) != 64:
         raise CurrentLoopError("derived_artifact_digest_invalid")
     return digest
+
+
+def _reconciliation_reference(value: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "schema_id": value["schema_id"],
+        "reconciliation_digest": value["reconciliation_digest"],
+        "eligibility": deepcopy(dict(value["eligibility"])),
+    }
 
 
 def _deterministic_artifact(
@@ -254,6 +267,7 @@ def derive_pending_snapshot(
     outcomes: dict[str, dict[str, Any]] = {}
     values: dict[str, dict[str, Any]] = {}
     result_payload: dict[str, Any] | None = None
+    normalized_result_manifest: dict[str, Any] | None = None
     for role, revision_id in sorted(role_set.items()):
         revision = registry["artifact_revisions"][revision_id]
         detected = str(revision["detected_format"])
@@ -321,7 +335,11 @@ def derive_pending_snapshot(
                 values["circuit_manifestation"] = circuit
                 manifestation_roles = ["circuit_manifestation"]
             elif role == "results":
-                if detected != "qcoder_result_json":
+                if detected not in {
+                    "qcoder_result_json",
+                    "qcoder_strict_result_manifest",
+                    "qcoder_legacy_bare_counts",
+                }:
                     raise EvidenceProcessingError(
                         "artifact_format_unsupported", origin="local_result_derivation"
                     )
@@ -330,21 +348,59 @@ def derive_pending_snapshot(
                     raise EvidenceProcessingError(
                         "result_artifact_invalid", origin="local_result_derivation"
                     )
-                result_payload = (
-                    deepcopy(dict(loaded))
-                    if "counts" in loaded
-                    else {"counts": deepcopy(dict(loaded))}
-                )
-                counts_value = loaded.get("counts", loaded)
+                if loaded.get("schema_id") == STRICT_RESULT_MANIFEST_SCHEMA_ID:
+                    normalized_result_manifest = normalize_strict_result_manifest(
+                        loaded,
+                        artifact_revisions=registry["artifact_revisions"],
+                        expected_circuit_lineage=revision.get(
+                            "strict_result_manifest_binding", {}
+                        ).get("circuit_lineage"),
+                    )
+                    result_payload = {
+                        "counts": deepcopy(normalized_result_manifest["counts"]),
+                        "shots": normalized_result_manifest["observed_shots"],
+                        **deepcopy(
+                            normalized_result_manifest["execution_configuration"]["settings"]
+                        ),
+                    }
+                    counts_value = normalized_result_manifest["counts"]
+                else:
+                    counts_value = (
+                        loaded if detected == "qcoder_legacy_bare_counts" else loaded.get("counts")
+                    )
+                    result_payload = (
+                        {"counts": deepcopy(dict(loaded))}
+                        if detected == "qcoder_legacy_bare_counts"
+                        else deepcopy(dict(loaded))
+                    )
+                    normalized_result_manifest = {
+                        "schema_id": "qcoder.current_loop.legacy_result_evidence.v1",
+                        "counts": deepcopy(dict(counts_value or {})),
+                        "circuit_lineage": {
+                            "status": "unknown",
+                            "artifact_revision_id": None,
+                            "content_digest": None,
+                        },
+                        "source_lineage": {
+                            "status": "unknown",
+                            "artifact_revision_id": None,
+                            "content_digest": None,
+                        },
+                        "execution_configuration": {"status": "unknown"},
+                        "bit_register_ordering": {"status": "unknown"},
+                    }
                 if not isinstance(counts_value, Mapping):
                     raise EvidenceProcessingError(
                         "result_artifact_invalid", origin="local_result_derivation"
                     )
                 counts = {str(key): int(value) for key, value in counts_value.items()}
                 circuit = values.get("circuit_manifestation")
+                exact_lineage = normalized_result_manifest.get("circuit_lineage", {})
+                exact_circuit_id = exact_lineage.get("artifact_revision_id")
+                current_circuit_id = role_set.get("circuit_qasm")
                 related_ref = (
                     str(circuit["artifact_ref"])
-                    if circuit is not None
+                    if circuit is not None and exact_circuit_id == current_circuit_id
                     else "session-artifact-"
                     + _digest({"unavailable_circuit_for": revision_id})[:32]
                 )
@@ -352,7 +408,9 @@ def derive_pending_snapshot(
                     counts=counts,
                     related_circuit_ref=related_ref,
                     user_provided_shots=(
-                        int(loaded["shots"]) if isinstance(loaded.get("shots"), int) else None
+                        int(result_payload["shots"])
+                        if isinstance(result_payload.get("shots"), int)
+                        else None
                     ),
                 )
                 result = with_artifact_digest(
@@ -368,7 +426,7 @@ def derive_pending_snapshot(
                         ),
                     }
                 )
-                if circuit is None:
+                if circuit is None or exact_circuit_id != current_circuit_id:
                     result = with_artifact_digest(
                         {
                             **{
@@ -424,6 +482,11 @@ def derive_pending_snapshot(
             )
     summary: dict[str, Any] | None = None
     summary_failure: dict[str, Any] | None = None
+    reconciliation = reconcile_current_evidence(
+        role_revision_set=role_set,
+        artifact_revisions=registry["artifact_revisions"],
+        normalized_result_manifest=normalized_result_manifest,
+    )
     if (
         result_payload is not None
         and "result_manifestation" in values
@@ -456,6 +519,7 @@ def derive_pending_snapshot(
                 artifact_revision_digests=snapshot["artifact_revision_digest_bindings"],
                 manifestation_revision_bindings=manifestation_ids,
                 derivation_version=DERIVATION_SCHEMA_ID,
+                evidence_reconciliation=reconciliation,
             )
             candidate_snapshot = {
                 **deepcopy(dict(snapshot)),
@@ -501,6 +565,7 @@ def derive_pending_snapshot(
         "processing_outcomes": outcomes,
         "run_summary": summary,
         "run_summary_failure": summary_failure,
+        "evidence_reconciliation": reconciliation,
         "snapshot_status": snapshot_status,
         "all_side_writes_immutable": True,
         "state_mutated": False,
@@ -534,13 +599,16 @@ def promote_derivation_snapshot(
             "artifact_reference": summary["artifact_ref"],
             "result_evidence_reference": summary["result_evidence_reference"],
             "creation_revision": summary["creation_revision"],
-            "status": summary["integrity_status"],
-            "currency": "current",
+            "status": summary["freshness"]["status"],
+            "currency": summary["currency"],
             "evidence_snapshot_id": snapshot_id,
         }
     manifestations = deepcopy(dict(derivation["manifestation_revision_set"]))
     outcomes = deepcopy(dict(derivation["processing_outcomes"]))
     summary_reference = str(summary["artifact_ref"]) if isinstance(summary, Mapping) else None
+    run_is_current = bool(
+        derivation["evidence_reconciliation"]["eligibility"]["current_run_evidence"]
+    )
     previous_snapshot_id = state["evidence_registry"].get("current_presentation_snapshot_id")
     previous_snapshot = state["evidence_registry"].get("snapshots", {}).get(previous_snapshot_id)
     previous_summary_reference = state.get("latest_run_summary_reference") or (
@@ -576,6 +644,7 @@ def promote_derivation_snapshot(
             }
         ),
         "currentness": "current" if derivation["snapshot_status"] != "failed" else "prior",
+        "run_summary_currentness": "current" if run_is_current else "historical_not_current",
         "newer_iteration_status": (
             "failed"
             if derivation["snapshot_status"] == "failed"
@@ -583,6 +652,7 @@ def promote_derivation_snapshot(
             else None
         ),
         "raw_evidence_included": False,
+        "evidence_reconciliation": _reconciliation_reference(derivation["evidence_reconciliation"]),
     }
     context_update = None
     if isinstance(summary, Mapping) and contract_permits(
@@ -615,11 +685,17 @@ def promote_derivation_snapshot(
                 if isinstance(circuit, Mapping)
                 else None
             ),
-            freshness=("fresh" if derivation["snapshot_status"] == "complete" else "incomplete"),
+            freshness=(
+                "fresh"
+                if derivation["snapshot_status"] == "complete" and run_is_current
+                else "stale"
+                if derivation["snapshot_status"] == "complete"
+                else "incomplete"
+            ),
             contract_revision=int(state["current_loop_contract"]["contract_revision"]),
             evidence_snapshot_id=snapshot_id,
             artifact_revision_references=derivation["role_revision_set"],
-            currency="current",
+            currency="current" if run_is_current else "prior",
             newer_iteration_status=None,
             prior_context_available=previous_summary_reference is not None,
         )
@@ -669,6 +745,9 @@ def promote_derivation_snapshot(
         promoted["processing_outcomes"] = outcomes
         promoted["run_summary_reference"] = summary_reference
         promoted["run_summary_failure"] = deepcopy(derivation.get("run_summary_failure"))
+        promoted["evidence_reconciliation"] = _reconciliation_reference(
+            derivation["evidence_reconciliation"]
+        )
         promoted["current_build_context"] = deepcopy(current_build_context)
         promoted["assistant_context_update_reference"] = (
             context_update.get("context_digest") if isinstance(context_update, Mapping) else None
@@ -708,7 +787,9 @@ def promote_derivation_snapshot(
                 )
         if isinstance(summary_descriptor, Mapping) and isinstance(summary, Mapping):
             value["run_summary_index"][summary_reference] = deepcopy(summary_descriptor)
-            value["latest_run_summary_reference"] = summary_reference
+            value["latest_run_summary_reference"] = (
+                summary_reference if summary.get("currency") == "current" else None
+            )
         elif derivation["snapshot_status"] == "failed":
             value["latest_run_summary_reference"] = None
         value["current_build_context_refresh"] = deepcopy(current_build_context)

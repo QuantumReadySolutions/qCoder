@@ -7,9 +7,11 @@ from hashlib import sha256
 import json
 from typing import Any, Mapping
 
+from qcoder.current_loop_result_manifest import result_manifest_contract_snapshot
 
-CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v3"
-CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 3
+
+CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v4"
+CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 4
 COMPLETE_CURRENT_STEP_OPERATION = "complete_current_step"
 
 
@@ -145,7 +147,8 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
             "request_identity_sha256": semantics.get("original_message_utf8_sha256"),
             "state_revision": state.get("state_revision"),
             "stage": coordinator.get("current_step_substage") or role,
-            "fresh_until_epoch": receipt.get("expires_at"),
+            "fresh_until_host_monotonic_seconds": receipt.get("expires_at"),
+            "freshness_clock": "host_monotonic_same_boot",
         },
         "current_customer_goal": semantics.get("exact_original_message"),
         "authoritative_evidence_references": _evidence_references(state, active_role=role),
@@ -159,9 +162,7 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
         "native_client_authority": {
             "owner": "native_client",
             "qcoder_grants_permission": False,
-            "qcoder_observes_permission": False,
             "qcoder_infers_approval_click": False,
-            "approval_telemetry": "optional",
         },
         "completion": {
             "operation": COMPLETE_CURRENT_STEP_OPERATION,
@@ -184,6 +185,15 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
             "process_and_discard": True,
         },
     }
+    if role == "results":
+        contract["completion"]["artifact_contract"] = {
+            "required_format": "strict_result_manifest",
+            "contract": result_manifest_contract_snapshot(),
+            "transport": "exact_artifact_path",
+            "current_step_contract_circuit_lineage_status_supported": True,
+            "unknown_lineage_supported_as_non_current_evidence": True,
+            "bare_counts_current_evidence_permitted": False,
+        }
     contract["contract_digest"] = sha256(_canonical_bytes(contract)).hexdigest()
     return contract
 

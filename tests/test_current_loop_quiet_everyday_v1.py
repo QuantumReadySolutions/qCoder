@@ -252,7 +252,8 @@ def test_native_card_authority_auto_enrolls_and_processes_exact_outputs(
     assert context["complete_raw_source_included"] is False
     assert result["customer_interaction"]["requires_customer_response"] is False
     state = coordinator.store.read()
-    assert state["latest_run_summary_reference"] is not None
+    assert state["latest_run_summary_reference"] is None
+    assert len(state["run_summary_index"]) == 1
     assert state["quiet_iteration_status"] == "assist_iteration_ready"
 
 
@@ -302,8 +303,9 @@ def test_grouped_view_and_help_are_qcoder_managed(tmp_path: Path) -> None:
     grouped = coordinator.evidence_view(view_id="current_build_facts")
     assert grouped["ok"] is True
     view = grouped["details"]["evidence_view"]
-    assert view["answer"]["run"]["backend_or_simulator"] == "AerSimulator"
-    assert view["answer"]["run"]["shots"] == 1024
+    assert view["answer"]["run"]["backend_or_simulator"] is None
+    assert view["answer"]["run"]["status"] == "none_available"
+    assert view["answer"]["run"]["shots"] is None
     assert view["answer"]["circuit"]["gate_count"] == 2
     assert view["workspace_scanned"] is False
     help_result = coordinator.help(topic="overview")
@@ -458,7 +460,7 @@ def test_sidecar_and_binding_share_v2_governance_and_quiet_contract(tmp_path: Pa
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v34"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v36"
     quiet = descriptor["quiet_everyday_workflow_contract"]
     assert quiet["customer_interaction_schema_id"] == CUSTOMER_INTERACTION_SCHEMA_ID
     assert quiet["assist_default"] == "quiet_everyday"

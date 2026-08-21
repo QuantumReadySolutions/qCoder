@@ -1311,34 +1311,51 @@ class CurrentLoopStore:
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         _apply_private_permissions(self.state_path.parent, directory=True)
         deadline = time.monotonic() + self.lock_timeout_seconds
-        descriptor: int | None = None
-        while descriptor is None:
+        descriptor = os.open(self.lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+        acquired = False
+        while not acquired:
             try:
-                descriptor = os.open(
-                    self.lock_path,
-                    os.O_CREAT | os.O_EXCL | os.O_WRONLY,
-                    0o600,
-                )
-            except FileExistsError:
+                if os.name == "nt":
+                    import msvcrt
+
+                    os.lseek(descriptor, 0, os.SEEK_SET)
+                    if os.fstat(descriptor).st_size == 0:
+                        os.write(descriptor, b"\0")
+                        os.fsync(descriptor)
+                    os.lseek(descriptor, 0, os.SEEK_SET)
+                    msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                acquired = True
+            except (BlockingIOError, OSError):
                 if time.monotonic() >= deadline:
+                    os.close(descriptor)
                     raise CurrentLoopConflict("current_loop_lock_timeout")
                 time.sleep(0.025)
         try:
-            os.write(descriptor, b'{"schema_version":1,"single_writer":true}\n')
+            os.ftruncate(descriptor, 0)
+            os.write(
+                descriptor,
+                b'{"schema_version":2,"os_advisory_lock":true,"stale_file_safe":true}\n',
+            )
             os.fsync(descriptor)
-            os.close(descriptor)
-            descriptor = None
             _apply_private_permissions(self.lock_path, directory=False)
             held_locks.add(lock_identity)
             yield
         finally:
             held_locks.discard(lock_identity)
-            if descriptor is not None:
-                os.close(descriptor)
-            try:
-                self.lock_path.unlink()
-            except FileNotFoundError:
-                pass
+            if os.name == "nt":
+                import msvcrt
+
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+            os.close(descriptor)
 
     def read(self) -> dict[str, Any]:
         if self.state_path.is_symlink() or _symlink_component(self.state_path.parent):

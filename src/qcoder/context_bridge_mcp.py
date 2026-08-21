@@ -91,6 +91,10 @@ from qcoder.current_loop_evidence_processing import (
     recovery_action_contract_snapshot,
 )
 from qcoder.current_loop_registration import registration_contract_snapshot
+from qcoder.current_loop_artifact_satisfaction import satisfaction_contract_snapshot
+from qcoder.current_loop_evidence_reconciler import reconciler_contract_snapshot
+from qcoder.current_loop_result_manifest import result_manifest_contract_snapshot
+from qcoder.framework_native_evidence import framework_native_contract_snapshot
 from qcoder.current_step_contract import quiet_customer_visibility_contract
 from qcoder.current_loop_derivation import derivation_contract_snapshot
 from qcoder.current_loop_freshness import freshness_contract_snapshot
@@ -155,8 +159,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 33
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v34"
+CLIENT_BINDING_SCHEMA_VERSION = 35
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v36"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -626,6 +630,10 @@ def build_client_binding_descriptor(
             "recovery_action_contract": recovery_action_contract_snapshot(),
             "canonical_current_loop_vocabulary": vocabulary_snapshot(),
             "atomic_registration_contract": registration_contract_snapshot(),
+            "strict_result_manifest_contract": result_manifest_contract_snapshot(),
+            "causal_evidence_reconciler_contract": reconciler_contract_snapshot(),
+            "preexisting_artifact_satisfaction_contract": satisfaction_contract_snapshot(),
+            "bounded_framework_native_evidence_contract": framework_native_contract_snapshot(),
             "immutable_derivation_contract": derivation_contract_snapshot(),
             "freshness_and_currency_contract": freshness_contract_snapshot(),
             "bounded_retention_contract": retention_contract_snapshot(),
@@ -690,6 +698,9 @@ def build_client_binding_descriptor(
                     "operations": ["begin_current_loop", "complete_current_step"],
                     "begin_returns": "canonical_current_step_contract",
                     "complete_inputs": ["current_action_handle", "artifact_path"],
+                    "strict_result_manifest_transport": "exact_artifact_path",
+                    "bare_counts_current_result_permitted": False,
+                    "current_run_summary_requires_validated_causal_lineage": True,
                     "assistant_supplies_qcoder_owned_digests_or_revisions": False,
                     "correctness_depends_on_hooks": False,
                     "native_client_permission_owner": "native_client",

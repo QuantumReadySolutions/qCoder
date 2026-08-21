@@ -8,6 +8,8 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
+from qcoder.current_loop_result_manifest import STRICT_RESULT_MANIFEST_SCHEMA_ID
+
 ARTIFACT_FORMAT_CONTRACT_SCHEMA_ID = "qcoder.current_loop.artifact_format_contract.v1"
 ARTIFACT_FORMAT_CONTRACT_SCHEMA_VERSION = 1
 PROCESSING_OUTCOME_SCHEMA_ID = "qcoder.current_loop.processing_outcome.v2"
@@ -88,8 +90,15 @@ _ROLE_CONTRACTS: tuple[dict[str, Any], ...] = (
     {
         "role": "results",
         "customer_meaning": "Exact JSON result evidence created or selected for this loop.",
-        "accepted_automatic_registration_formats": ["qcoder_result_json"],
-        "local_derivation_formats": ["qcoder_result_json"],
+        "accepted_automatic_registration_formats": [
+            "qcoder_result_json",
+            "qcoder_strict_result_manifest",
+        ],
+        "local_derivation_formats": [
+            "qcoder_result_json",
+            "qcoder_strict_result_manifest",
+            "qcoder_legacy_bare_counts",
+        ],
         "producer_requirements": {
             "filename_suffix": [".json"],
             "top_level_json_type": "object",
@@ -224,7 +233,21 @@ def detect_exact_artifact_format(path: Path, role: str) -> str:
             value = json.loads(data.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
             return "unsupported"
-        return "qcoder_result_json" if isinstance(value, Mapping) else "unsupported"
+        if not isinstance(value, Mapping):
+            return "unsupported"
+        if value.get("schema_id") == STRICT_RESULT_MANIFEST_SCHEMA_ID:
+            return "qcoder_strict_result_manifest"
+        if isinstance(value.get("counts"), Mapping) or value.get("status") == "failed":
+            return "qcoder_result_json"
+        if value and all(
+            isinstance(label, str)
+            and isinstance(count, int)
+            and not isinstance(count, bool)
+            and count >= 0
+            for label, count in value.items()
+        ):
+            return "qcoder_legacy_bare_counts"
+        return "unsupported"
     raise EvidenceProcessingError(
         "unsupported_authorized_artifact_type",
         origin="local_artifact_validation",
