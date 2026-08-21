@@ -160,8 +160,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 38
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v39"
+CLIENT_BINDING_SCHEMA_VERSION = 39
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v40"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -185,6 +185,12 @@ operation immediately with that exact message. It interprets against canonical a
 returns a compact replacement Current Step Contract; it is not a re-bootstrap. Do not narrate,
 reconstruct, or explain the transition. Use the replacement contract directly, perform its one
 native action, complete_current_step in the same work turn, then give one concise task outcome.
+
+PENDING COMPLETION RECOVERY
+When a Current Step is awaiting completion after its native action, complete_current_step is the
+sole next qCoder operation. Call it directly with an empty object, including on a later turn or
+same-host MCP restart. Do not call begin_current_loop, inspect state/help, refresh or restage the
+artifact, or rerun external execution. Surface only an honest blocker if exact completion fails.
 
 WORKSTYLE ROUTING
 Available but inactive: when there is no explicit qCoder request, no accepted qCoder activation
@@ -213,9 +219,9 @@ For an exact native source write, use only the target returned by the Current St
 follow the native client's own controls to perform only that write. Never search the workspace to
 choose or confirm the target. qCoder defines what completed evidence it will accept; it does not grant or observe native
 permission and never infers an approval click. After the write, call the private typed
-complete_current_step operation once with only the opaque current_action_handle from the Current
-Step Contract and artifact_path copied exactly from the contract's workspace-relative completion
-value. Never substitute an absolute path. qCoder resolves that bound value inside the workspace
+complete_current_step operation once with an empty object. qCoder resolves the durable opaque
+action handle and exact workspace-relative target from its pending checkpoint; do not reproduce
+or substitute either identity. qCoder resolves the bound value inside the workspace
 and computes and validates the bytes and
 digest. Matcher-free afterFileEdit and unfiltered postToolUse adapters may accelerate the same
 typed transaction, but hooks, Workspace Trust, and hook dispatch are never correctness
@@ -707,8 +713,8 @@ def build_client_binding_descriptor(
                     "operations": ["begin_current_loop", "complete_current_step"],
                     "begin_returns": "canonical_current_step_contract",
                     "begin_binds_exact_workspace_relative_artifact_targets": True,
-                    "complete_inputs": ["current_action_handle", "artifact_path"],
-                    "completion_artifact_path_form": "workspace_relative_bound_target",
+                    "complete_inputs": [],
+                    "completion_identity_source": "durable_pending_completion_checkpoint",
                     "absolute_completion_path_accepted_from_assistant": False,
                     "strict_result_manifest_transport": "exact_artifact_path",
                     "bare_counts_current_result_permitted": False,
@@ -719,6 +725,9 @@ def build_client_binding_descriptor(
                     "native_client_permission_granted_by_qcoder": False,
                     "user_approval_click_inferred": False,
                     "at_most_once": True,
+                    "later_turn_direct_completion": True,
+                    "same_host_mcp_restart_recovery": True,
+                    "pending_completion_begin_required": False,
                     "public_context_bridge_tool": False,
                     "customer_visibility": quiet_customer_visibility_contract(),
                 },
@@ -1003,6 +1012,12 @@ re-bootstrap, recreate the Request Baseline, explain the transition, or reason f
 Perform the one native action and complete_current_step in the same work turn, then give one concise
 task outcome.
 
+PENDING COMPLETION RECOVERY
+If a native action has been saved but qCoder completion is pending, call complete_current_step
+directly with an empty object. Do not begin again, reconstruct procedure, inspect state/help,
+refresh/restage the artifact, or rerun external execution. The durable pending checkpoint is the
+sole action source and survives a later turn and same-host MCP restart.
+
 WORKSTYLE ROUTING
 Before generic tool routing, apply the inline machine-readable route. Do nothing when qCoder was
 not explicitly requested. Route concrete source/QASM/execution requests through the D-080
@@ -1045,9 +1060,9 @@ Use only the exact target returned in the Current Step Contract; never search th
 choose or confirm it. For the exact source action, let the native client apply its own controls and perform only that
 write. qCoder publishes one exact Current Step Contract, but does not grant or observe native
 permission and does not infer an approval click. After the native action, call
-complete_current_step with the contract's opaque current_action_handle and the exact resulting
-workspace-relative artifact_path copied from the contract. Never substitute an absolute path. Do
-not supply a digest, role, receipt, revision, ceiling, or approval state. qCoder
+complete_current_step with an empty object. qCoder resolves the contract's durable opaque action
+and exact bound workspace-relative target. Do not supply a path, digest, role, receipt, revision,
+ceiling, or approval state. qCoder
 computes and validates the actual bytes before one atomic registration. The matcher-free afterFileEdit and unfiltered postToolUse hooks
 are optional adapters to this same typed completion transaction;
 they are never required for correctness. Duplicate equivalent delivery is a no-op. Completion

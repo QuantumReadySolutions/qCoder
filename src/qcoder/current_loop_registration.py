@@ -61,9 +61,7 @@ _LEGACY_EVENT_DISPOSITIONS = {
 }
 
 
-def _receipt_causal_input(
-    receipt: Mapping[str, Any] | None, role: str
-) -> dict[str, Any] | None:
+def _receipt_causal_input(receipt: Mapping[str, Any] | None, role: str) -> dict[str, Any] | None:
     binding = receipt.get("authority_binding") if isinstance(receipt, Mapping) else None
     inputs = binding.get("eligible_input_artifacts") if isinstance(binding, Mapping) else None
     value = inputs.get(role) if isinstance(inputs, Mapping) else None
@@ -306,6 +304,17 @@ def prepare_registration_transaction(
                     str(getattr(exc, "category", "result_manifest_schema_invalid"))
                 ) from exc
             attempt_id = strict_result_manifest["execution_attempt_id"]
+            authority_binding = (
+                receipt.get("authority_binding") if isinstance(receipt, Mapping) else None
+            )
+            if isinstance(authority_binding, Mapping):
+                expected_attempt = authority_binding.get("execution_attempt_identity")
+                if isinstance(expected_attempt, str) and attempt_id != expected_attempt:
+                    raise CurrentLoopError("result_manifest_execution_attempt_mismatch")
+                expected_shots = authority_binding.get("requested_shots")
+                manifest_requested = strict_result_manifest.get("requested_shots")
+                if isinstance(expected_shots, int) and manifest_requested != expected_shots:
+                    raise CurrentLoopError("result_manifest_requested_shots_contract_mismatch")
             strict_request_identity = (
                 receipt.get("authority_binding", {}).get("current_request_identity_sha256")
                 if isinstance(receipt, Mapping)
@@ -317,7 +326,10 @@ def prepare_registration_transaction(
                     if isinstance(existing, Mapping)
                     else None
                 )
-                if not isinstance(prior, Mapping) or prior.get("execution_attempt_id") != attempt_id:
+                if (
+                    not isinstance(prior, Mapping)
+                    or prior.get("execution_attempt_id") != attempt_id
+                ):
                     continue
                 if prior.get("request_identity_sha256") != strict_request_identity:
                     raise CurrentLoopError("result_manifest_execution_attempt_cross_request")
@@ -468,9 +480,7 @@ def prepare_registration_transaction(
                 "execution_observation": deepcopy(strict_result_manifest["execution_observation"]),
                 "producer_provenance": deepcopy(strict_result_manifest["producer_provenance"]),
                 "capture_provenance": deepcopy(strict_result_manifest["capture_provenance"]),
-                "request_identity_sha256": (
-                    strict_request_identity
-                ),
+                "request_identity_sha256": (strict_request_identity),
                 "bounded_action_expectation_reference": operation_receipt_id,
                 "raw_result_embedded": False,
             }
@@ -883,9 +893,7 @@ def artifact_revision_error(value: object) -> str | None:
         return "current_loop_artifact_revision_state_binding_invalid"
     causal_lineage = value.get("causal_lineage")
     if causal_lineage is not None:
-        if value.get("logical_role") != "circuit_qasm" or not isinstance(
-            causal_lineage, Mapping
-        ):
+        if value.get("logical_role") != "circuit_qasm" or not isinstance(causal_lineage, Mapping):
             return "current_loop_artifact_revision_causal_lineage_invalid"
         source = causal_lineage.get("source")
         if not isinstance(source, Mapping) or source.get("status") not in {"exact", "unknown"}:
@@ -911,9 +919,8 @@ def artifact_revision_error(value: object) -> str | None:
             or strict_binding.get("raw_result_embedded") is not False
         ):
             return "current_loop_artifact_revision_result_manifest_binding_invalid"
-    if (
-        value.get("detected_format") == "qcoder_strict_result_manifest"
-        and not isinstance(strict_binding, Mapping)
+    if value.get("detected_format") == "qcoder_strict_result_manifest" and not isinstance(
+        strict_binding, Mapping
     ):
         return "current_loop_artifact_revision_result_manifest_binding_missing"
     return None

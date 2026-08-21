@@ -17,8 +17,8 @@ import unicodedata
 from typing import Any, Mapping, Sequence
 
 
-REQUEST_SEMANTICS_SCHEMA_ID = "qcoder.current_loop.request_semantics.v2"
-REQUEST_SEMANTICS_SCHEMA_VERSION = 2
+REQUEST_SEMANTICS_SCHEMA_ID = "qcoder.current_loop.request_semantics.v3"
+REQUEST_SEMANTICS_SCHEMA_VERSION = 3
 REQUEST_RECOVERY_SCHEMA_ID = "qcoder.current_loop.request_semantics_recovery.v1"
 
 ARTIFACT_ROLES = ("source", "circuit_qasm", "results")
@@ -153,6 +153,19 @@ def _deferred(normalized: str, terms: Sequence[str]) -> bool:
 
 def _explicit_qcoder_request(normalized: str) -> bool:
     return bool(re.search(r"\bqcoder\b", normalized))
+
+
+def _requested_shots(normalized: str) -> int | None:
+    values = {
+        int(match.group(1).replace(",", "").replace("_", ""))
+        for match in re.finditer(r"\b([0-9][0-9,_]*)\s+shots?\b", normalized)
+    }
+    if len(values) > 1:
+        raise ValueError("current_request_shot_count_ambiguous")
+    value = next(iter(values), None)
+    if value is not None and not 1 <= value <= 1_000_000_000:
+        raise ValueError("current_request_shot_count_invalid")
+    return value
 
 
 def _question_or_information(
@@ -463,6 +476,7 @@ def classify_current_request(
         execution_mentioned and not execution_prohibited and not non_action_execution_reference
     )
     results_requested = results_mentioned and not results_prohibited
+    requested_shots = _requested_shots(normalized)
 
     # "Stop after source/code" and "only source/code" are semantic ceiling
     # features independent of the particular customer sentence.
@@ -710,6 +724,11 @@ def classify_current_request(
             if "results" in allowed_roles
             else "prohibited_for_current_step"
         ),
+        "requested_shots": (
+            requested_shots
+            if operation in {"source_and_local_execution", "local_execution"}
+            else None
+        ),
         "evidence_review_disposition": evidence_review,
         "current_step_ceiling": ceiling,
         "ambiguity_state": ambiguity,
@@ -752,6 +771,14 @@ def validate_request_semantics(value: Mapping[str, Any]) -> None:
     roles = value.get("requested_artifact_roles")
     if not isinstance(roles, list) or any(role not in ARTIFACT_ROLES for role in roles):
         raise ValueError("current_request_semantics_role_invalid")
+    requested_shots = value.get("requested_shots")
+    if requested_shots is not None and (
+        not isinstance(requested_shots, int)
+        or isinstance(requested_shots, bool)
+        or not 1 <= requested_shots <= 1_000_000_000
+        or value.get("requested_operation") not in {"source_and_local_execution", "local_execution"}
+    ):
+        raise ValueError("current_request_semantics_shot_count_invalid")
     ceiling = value.get("current_step_ceiling")
     if not isinstance(ceiling, Mapping) or ceiling.get("allowed_artifact_roles") != roles:
         raise ValueError("current_request_semantics_ceiling_mismatch")
@@ -766,20 +793,23 @@ def migrate_request_semantics(value: Mapping[str, Any]) -> dict[str, Any]:
     """Upgrade the pre-D-081 authority projection without changing request meaning."""
 
     result = deepcopy(dict(value))
-    if (
-        result.get("schema_id") == "qcoder.current_loop.request_semantics.v1"
-        and result.get("schema_version") == 1
-    ):
+    if result.get("schema_id") in {
+        "qcoder.current_loop.request_semantics.v1",
+        "qcoder.current_loop.request_semantics.v2",
+    } and result.get("schema_version") in {1, 2}:
         operation = str(result.get("requested_operation"))
         active_loop = bool(result.get("active_loop_at_classification"))
         result["schema_id"] = REQUEST_SEMANTICS_SCHEMA_ID
         result["schema_version"] = REQUEST_SEMANTICS_SCHEMA_VERSION
-        result["authority_layers"] = _authority_layers(
-            operation=operation, active_loop=active_loop
+        result["authority_layers"] = _authority_layers(operation=operation, active_loop=active_loop)
+        result["next_authority_object"] = result["authority_layers"]["native_client_permission"][
+            "object"
+        ]
+        result["requested_shots"] = (
+            _requested_shots(_normalized(str(result.get("exact_original_message", ""))))
+            if operation in {"source_and_local_execution", "local_execution"}
+            else None
         )
-        result["next_authority_object"] = result["authority_layers"][
-            "native_client_permission"
-        ]["object"]
         result.pop("semantics_digest", None)
         result["semantics_digest"] = _digest(result)
     validate_request_semantics(result)
@@ -804,12 +834,13 @@ def ceiling_allows(
 
 def semantics_contract_snapshot() -> dict[str, Any]:
     result = {
-        "schema_id": "qcoder.current_loop.request_semantics_contract.v2",
-        "schema_version": 2,
+        "schema_id": "qcoder.current_loop.request_semantics_contract.v3",
+        "schema_version": 3,
         "semantic_schema_id": REQUEST_SEMANTICS_SCHEMA_ID,
         "natural_language_in_exact_authority_out": True,
         "exact_original_message_preserved": True,
         "temporary_current_step_ceiling": True,
+        "exact_requested_shots_bound_when_supplied": True,
         "durable_blueprint_constraint": False,
         "authority_layers": [
             "current_loop_activation",

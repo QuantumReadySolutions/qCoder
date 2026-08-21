@@ -110,7 +110,7 @@ def test_begin_returns_small_canonical_current_step_contract(tmp_path: Path) -> 
     assert contract["native_client_authority"]["qcoder_infers_approval_click"] is False
     assert contract["completion"]["operation"] == COMPLETE_CURRENT_STEP_TOOL_NAME
     assert contract == derive_current_step_contract(state)
-    assert len(json.dumps(contract, sort_keys=True, separators=(",", ":")).encode()) <= 2300
+    assert len(json.dumps(contract, sort_keys=True, separators=(",", ":")).encode()) <= 2600
 
 
 def test_private_inventory_is_begin_and_complete_while_public_remains_twelve() -> None:
@@ -122,10 +122,8 @@ def test_private_inventory_is_begin_and_complete_while_public_remains_twelve() -
     ]
     assert all(item["x-qcoder-public-context-bridge-tool"] is False for item in descriptors)
     completion = descriptors[1]
-    assert completion["inputSchema"]["required"] == [
-        "current_action_handle",
-        "artifact_path",
-    ]
+    assert completion["inputSchema"]["required"] == []
+    assert completion["x-qcoder-normal-happy-path"] == {}
     assert "artifact_digest" not in completion["inputSchema"]["properties"]
     assert "approval" not in completion["inputSchema"]["properties"]
     assert "state_revision" not in completion["inputSchema"]["properties"]

@@ -10,8 +10,8 @@ from typing import Any, Mapping
 from qcoder.current_loop_result_manifest import result_manifest_contract_snapshot
 
 
-CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v7"
-CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 7
+CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v8"
+CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 8
 COMPLETE_CURRENT_STEP_OPERATION = "complete_current_step"
 
 
@@ -141,6 +141,8 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
     target = binding.get("exact_artifact_target")
     if not isinstance(target, Mapping):
         raise ValueError("current_step_contract_exact_artifact_target_required")
+    pending = coordinator.get("pending_completion_checkpoint")
+    durable_pending = isinstance(pending, Mapping)
     contract = {
         "schema_id": CURRENT_STEP_CONTRACT_SCHEMA_ID,
         "schema_version": CURRENT_STEP_CONTRACT_SCHEMA_VERSION,
@@ -177,14 +179,19 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
         },
         "completion": {
             "operation": COMPLETE_CURRENT_STEP_OPERATION,
-            "required_arguments": ["current_action_handle", "artifact_path"],
+            "required_arguments": (
+                [] if durable_pending else ["current_action_handle", "artifact_path"]
+            ),
+            "canonical_arguments": {} if durable_pending else None,
+            "qcoder_resolves_bound_action_and_target": durable_pending,
             "artifact_path": target.get("workspace_relative_path"),
             "artifact_path_form": "workspace_relative_bound_target",
             "qcoder_computes_artifact_digest": True,
             "condition": "validated_exact_postcondition",
             "success_state": "complete_resumable",
-            "customer_artifact_mutated_by_completion": False,
-            "customer_code_executed_by_completion": False,
+            "pending_checkpoint": pending.get("checkpoint_digest") if durable_pending else None,
+            "survives_later_turn_and_same_host_restart": durable_pending,
+            "external_execution_rerun_permitted": False if durable_pending else None,
         },
         "customer_visibility": quiet_customer_visibility_projection(),
         "recovery": {
@@ -199,7 +206,7 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
         },
     }
     if role == "results":
-        contract["permitted_native_action"]["external_execution_contract"] = {
+        external_execution_contract = {
             "execution_owner": "native_client",
             "runtime": "already_prepared_and_prevalidated",
             "dependency_installation_permitted": False,
@@ -210,6 +217,16 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
             "missing_runtime_disposition": "surface_blocker_without_execution",
             "qcoder_executes_customer_code": False,
         }
+        if durable_pending:
+            external_execution_contract.update(
+                {
+                    "execution_attempt_identity": pending.get("execution_attempt_identity"),
+                    "requested_shots": pending.get("requested_shots"),
+                }
+            )
+        contract["permitted_native_action"]["external_execution_contract"] = (
+            external_execution_contract
+        )
         contract["completion"]["artifact_contract"] = {
             "required_format": "strict_result_manifest",
             "contract": result_manifest_contract_snapshot(),

@@ -23,10 +23,17 @@ from qcoder.current_loop_artifact_targets import (
     target_contract_snapshot,
 )
 from qcoder.current_loop_request_semantics import classify_current_request
-from qcoder.current_step_contract import quiet_customer_visibility_contract
+from qcoder.current_loop_pending_completion import (
+    PendingCompletionError,
+    validate_pending_completion_checkpoint,
+)
+from qcoder.current_step_contract import (
+    derive_current_step_contract,
+    quiet_customer_visibility_contract,
+)
 
-BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v8"
-BINDING_MCP_SCHEMA_VERSION = 8
+BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v9"
+BINDING_MCP_SCHEMA_VERSION = 9
 BINDING_MCP_SERVER_NAME = "qcoder-current-loop"
 BEGIN_CURRENT_LOOP_TOOL_NAME = "begin_current_loop"
 COMPLETE_CURRENT_STEP_TOOL_NAME = "complete_current_step"
@@ -110,13 +117,16 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
         {
             "name": COMPLETE_CURRENT_STEP_TOOL_NAME,
             "description": (
-                "INTERNAL NORMAL-PATH OPERATION: call immediately after the native action without "
+                "SOLE PENDING-COMPLETION OPERATION: when qCoder has one pending completion, call "
+                "this operation directly with an empty object after the native action, including "
+                "on a later turn or same-host MCP restart. Do not call begin_current_loop, inspect "
+                "state/help, refresh the result, or rerun execution. Call without a customer-facing "
+                "transition message. "
                 "a customer-facing transition message. Complete the exact active qCoder Current "
                 "Step after the native client has "
-                "performed its action under its own controls. Supply only the opaque action "
-                "handle and copy the exact workspace-relative artifact_path value from the "
-                "Current Step Contract. Never send an absolute path, guessed path, neighboring "
-                "path, traversal, or glob. "
+                "performed its action under its own controls. qCoder resolves its durable opaque "
+                "action handle and exact bound workspace-relative target. Optional explicit "
+                "handle/path compatibility fields must match that same checkpoint exactly. "
                 "qCoder reads and validates the actual bytes; do not supply permission state, "
                 "digests, loop revisions, receipt identities, roles, or stage ceilings."
                 " For a result step, artifact_path transports the exact strict-result-manifest "
@@ -157,14 +167,17 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                         "default": "assistant_created",
                     },
                 },
-                "required": ["current_action_handle", "artifact_path"],
+                "required": [],
                 "additionalProperties": False,
             },
             "x-qcoder-binding-owned-internal-operation": True,
             "x-qcoder-public-context-bridge-tool": False,
-            "x-qcoder-normal-happy-path": {
-                "current_action_handle": "<from current_step_contract>",
-                "artifact_path": "<exact workspace-relative path from current_step_contract>",
+            "x-qcoder-normal-happy-path": {},
+            "x-qcoder-pending-completion": {
+                "sole_next_qcoder_operation": True,
+                "direct_later_turn_completion": True,
+                "begin_current_loop_required": False,
+                "external_execution_rerun_permitted": False,
             },
             "x-qcoder-native-permission-owner": "native_client",
             "x-qcoder-hooks-required-for-correctness": False,
@@ -237,6 +250,10 @@ def handle_binding_jsonrpc_message(
                     "workspace-relative filenames solely from the customer task; do not Read, "
                     "Glob, Grep, list, scan, or search the workspace to select a target. Use only "
                     "the exact target returned in the Current Step Contract."
+                    " If a pending completion exists, complete_current_step is the sole next "
+                    "qCoder operation: call it directly with an empty object even on a later turn "
+                    "or same-host MCP restart. Do not call begin_current_loop, inspect state/help, "
+                    "refresh/restage the artifact, or rerun external execution."
                     " For an external execution step, use only an already prepared and "
                     "prevalidated native-client runtime. The step does not authorize dependency "
                     "installation, environment mutation, analytic substitution for sampled "
@@ -259,16 +276,27 @@ def handle_binding_jsonrpc_message(
     arguments = params.get("arguments")
     if operation_name == COMPLETE_CURRENT_STEP_TOOL_NAME:
         allowed = {"current_action_handle", "artifact_path", "artifact_disposition"}
+        explicit_identity = isinstance(arguments, Mapping) and (
+            "current_action_handle" in arguments or "artifact_path" in arguments
+        )
         if (
             not isinstance(arguments, Mapping)
             or set(arguments).difference(allowed)
-            or not {"current_action_handle", "artifact_path"}.issubset(arguments)
-            or not isinstance(arguments.get("current_action_handle"), str)
-            or not arguments["current_action_handle"]
-            or len(arguments["current_action_handle"].encode("utf-8")) > 256
-            or not isinstance(arguments.get("artifact_path"), str)
-            or not arguments["artifact_path"]
-            or len(arguments["artifact_path"].encode("utf-8")) > MAX_PATH_BYTES
+            or (
+                explicit_identity
+                and not {"current_action_handle", "artifact_path"}.issubset(arguments)
+            )
+            or (
+                explicit_identity
+                and (
+                    not isinstance(arguments.get("current_action_handle"), str)
+                    or not arguments["current_action_handle"]
+                    or len(arguments["current_action_handle"].encode("utf-8")) > 256
+                    or not isinstance(arguments.get("artifact_path"), str)
+                    or not arguments["artifact_path"]
+                    or len(arguments["artifact_path"].encode("utf-8")) > MAX_PATH_BYTES
+                )
+            )
             or arguments.get("artifact_disposition", "assistant_created")
             not in {
                 "assistant_created",
@@ -285,10 +313,8 @@ def handle_binding_jsonrpc_message(
                         "ok": False,
                         "category": "typed_completion_shape_invalid",
                         "expected_shape": {
-                            "current_action_handle": "opaque nonempty string from contract",
-                            "artifact_path": (
-                                "exact workspace-relative path copied from current_step_contract"
-                            ),
+                            "canonical": {},
+                            "compatibility": "both exact handle and bound relative path",
                             "artifact_disposition": (
                                 "optional created, modified, pre-existing, or explicit-selection enum"
                             ),
@@ -300,9 +326,12 @@ def handle_binding_jsonrpc_message(
             )
         binding_workspace = Path(workspace_root).expanduser().absolute()
         try:
-            normalized_completion_path = normalize_completion_artifact_path(
-                arguments["artifact_path"],
-                workspace_root=binding_workspace,
+            normalized_completion_path = (
+                normalize_completion_artifact_path(
+                    arguments["artifact_path"], workspace_root=binding_workspace
+                )
+                if explicit_identity
+                else None
             )
         except ArtifactTargetError as exc:
             return _result(
@@ -326,8 +355,10 @@ def handle_binding_jsonrpc_message(
             runtime_executable=sys.executable,
         )
         payload = coordinator.complete_current_step(
-            current_action_handle=str(arguments["current_action_handle"]),
-            artifact_path=str(normalized_completion_path),
+            current_action_handle=(
+                str(arguments["current_action_handle"]) if explicit_identity else None
+            ),
+            artifact_path=(str(normalized_completion_path) if normalized_completion_path else None),
             artifact_disposition=str(arguments.get("artifact_disposition", "assistant_created")),
         )
         return _result(message_id, _tool_result(payload))
@@ -383,6 +414,54 @@ def handle_binding_jsonrpc_message(
     if state_path.is_file() and not state_path.is_symlink():
         current = coordinator.store.read()
         current_status = current.get("coordinator", {}).get("current_step_status")
+        if current_status == "awaiting_external_client_action":
+            try:
+                checkpoint, _receipt = validate_pending_completion_checkpoint(
+                    state=current,
+                    coordinator=coordinator._coordinator_state(current),
+                    current_time=coordinator.clock(),
+                )
+                contract = derive_current_step_contract(current)
+            except (PendingCompletionError, ValueError) as exc:
+                return _result(
+                    message_id,
+                    _tool_result(
+                        {
+                            "schema_id": "qcoder.current_loop.pending_completion_blocker.v1",
+                            "ok": False,
+                            "category": str(getattr(exc, "category", exc)),
+                            "state_mutated": False,
+                            "external_execution_rerun_permitted": False,
+                            "recovery": "honest_blocker_no_refresh_or_restage",
+                        }
+                    ),
+                )
+            return _result(
+                message_id,
+                _tool_result(
+                    {
+                        "schema_id": "qcoder.current_loop.pending_completion_resume.v1",
+                        "schema_version": 1,
+                        "ok": True,
+                        "operation": "begin_current_loop",
+                        "category": "pending_completion_already_active",
+                        "state_revision": current["state_revision"],
+                        "state_mutated": False,
+                        "bootstrap_count": current["coordinator"].get("bootstrap_count"),
+                        "request_baseline_count": current["coordinator"].get(
+                            "request_baseline_count"
+                        ),
+                        "current_step_contract": contract,
+                        "pending_completion": {
+                            "checkpoint_digest": checkpoint.get("checkpoint_digest"),
+                            "sole_next_qcoder_operation": "complete_current_step",
+                            "canonical_arguments": {},
+                            "external_execution_rerun_permitted": False,
+                            "state_or_help_archaeology_required": False,
+                        },
+                    }
+                ),
+            )
         continuation = current_status == "complete_resumable"
     semantics = classify_current_request(request_text, active_loop=continuation)
     actionable_artifact_request = semantics.get(

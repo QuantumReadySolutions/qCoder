@@ -109,9 +109,7 @@ def test_completion_refuses_unbound_neighbor_path_before_registration(tmp_path: 
             "intended_artifact_paths": {"source": "phi_plus_bell.py"},
         },
     )
-    handle = begun["current_step_contract"]["permitted_native_action"][
-        "current_action_handle"
-    ]
+    handle = begun["current_step_contract"]["permitted_native_action"]["current_action_handle"]
     neighbor = tmp_path / "neighbor.py"
     neighbor.write_text(SOURCE, encoding="utf-8")
     before = CurrentLoopCoordinator(workspace_root=tmp_path).store.read()
@@ -208,15 +206,13 @@ def test_completion_path_escape_traversal_glob_and_symlink_fail_closed(
             root,
             COMPLETE_CURRENT_STEP_TOOL_NAME,
             {
-                "current_action_handle": begun["current_step_contract"][
-                    "permitted_native_action"
-                ]["current_action_handle"],
+                "current_action_handle": begun["current_step_contract"]["permitted_native_action"][
+                    "current_action_handle"
+                ],
                 "artifact_path": invalid,
             },
         )
-        assert rejected["category"] == (
-            "completion_artifact_path_must_be_bound_workspace_relative"
-        )
+        assert rejected["category"] == ("completion_artifact_path_must_be_bound_workspace_relative")
         assert rejected["state_mutated"] is False
         assert CurrentLoopCoordinator(workspace_root=root).store.read() == before
 
@@ -239,9 +235,9 @@ def test_completion_path_escape_traversal_glob_and_symlink_fail_closed(
         root,
         COMPLETE_CURRENT_STEP_TOOL_NAME,
         {
-            "current_action_handle": begun["current_step_contract"][
-                "permitted_native_action"
-            ]["current_action_handle"],
+            "current_action_handle": begun["current_step_contract"]["permitted_native_action"][
+                "current_action_handle"
+            ],
             "artifact_path": "linked/phi_plus_bell.py",
         },
     )
@@ -282,6 +278,7 @@ def test_checkpoint_selects_supported_python_and_preserves_venv_launcher(
     (packet / "helpers").mkdir()
     (packet / "helpers" / "runtime.py").write_bytes((SCRIPT_ROOT / "runtime.py").read_bytes())
     workspace = tmp_path / "workspace"
+    operator_run_dir = tmp_path / "operator-run"
     launcher_dir = workspace / ".venv" / "bin"
     launcher_dir.mkdir(parents=True)
     launcher = launcher_dir / "python"
@@ -299,6 +296,8 @@ def test_checkpoint_selects_supported_python_and_preserves_venv_launcher(
             str(workspace),
             "--token-file",
             str(token),
+            "--operator-run-dir",
+            str(operator_run_dir),
             "--python",
             str(launcher),
         ],
@@ -314,8 +313,31 @@ def test_checkpoint_selects_supported_python_and_preserves_venv_launcher(
     assert (workspace / "fixtures" / "preexisting_bell.py").is_file()
     assert (workspace / "fixtures" / "bare-counts.json").is_file()
     assert (workspace / "fixtures" / "preexisting-identity.json").is_file()
+    assert operator_run_dir.is_dir()
+    assert not (workspace / "safe-return").exists()
     rule = workspace / ".cursor" / "rules" / "wi0435-prepared-runtime.mdc"
     assert "Do not install or upgrade dependencies" in rule.read_text(encoding="utf-8")
+
+
+def test_checkpoint_v5_keeps_instrumentation_outside_workspace_and_accepts_aborts() -> None:
+    setup = (SCRIPT_ROOT / "setup.sh").read_text(encoding="utf-8")
+    capture = (SCRIPT_ROOT / "capture.py").read_text(encoding="utf-8")
+    capture_sh = (SCRIPT_ROOT / "capture.sh").read_text(encoding="utf-8")
+    seal = (SCRIPT_ROOT / "seal.py").read_text(encoding="utf-8")
+    assert "qcoder-wi0435-natural-cursor-workspace-v5" in setup
+    assert "natural-cursor-run-v5" in setup
+    assert 'destination = operator_run_dir / f"{args.label}.json"' in capture
+    assert 'workspace / "safe-return"' not in capture
+    assert {"unknown", "not_observed", "aborted", "timeout"} <= set(
+        __import__("runpy").run_path(str(SCRIPT_ROOT / "capture.py"))["OBSERVATION_VALUES"]
+    )
+    assert "--stage-status" in capture_sh
+    assert "--qcoder-begin-calls" in capture_sh
+    assert "--qcoder-completion-calls" in capture_sh
+    assert "--cli-help-invocations" in capture_sh
+    assert "--harness-file-reads" in capture_sh
+    assert "operator_run_dir.glob" in seal
+    assert 'workspace / "safe-return"' not in seal
 
 
 def test_prepared_runtime_is_pinned_and_missing_or_wrong_runtime_blocks(

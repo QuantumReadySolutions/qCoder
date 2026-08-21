@@ -110,8 +110,16 @@ from qcoder.current_loop_request_semantics import (
 )
 from qcoder.current_loop_artifact_targets import normalize_intended_artifact_targets
 from qcoder.current_step_contract import (
+    CURRENT_STEP_CONTRACT_SCHEMA_ID,
+    CURRENT_STEP_CONTRACT_SCHEMA_VERSION,
     derive_current_step_contract,
     quiet_customer_visibility_projection,
+)
+from qcoder.current_loop_pending_completion import (
+    PendingCompletionError,
+    build_pending_completion_checkpoint,
+    completed_checkpoint,
+    validate_pending_completion_checkpoint,
 )
 from qcoder.current_loop_bootstrap import (
     BOOTSTRAP_INVOCATION_SCHEMA_ID,
@@ -335,11 +343,12 @@ def result_semantic_classification(
     return "authoritative_mutation"
 
 
-COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v15"
-PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v14"
+COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v16"
+PREVIOUS_COORDINATOR_STATE_SCHEMA_ID = "qcoder.current_loop.coordinator_state.v15"
 OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
     {
         "qcoder.current_loop.coordinator_state.v9",
+        "qcoder.current_loop.coordinator_state.v14",
         "qcoder.current_loop.coordinator_state.v13",
         "qcoder.current_loop.coordinator_state.v12",
         "qcoder.current_loop.coordinator_state.v10",
@@ -353,7 +362,7 @@ OLDER_COORDINATOR_STATE_SCHEMA_IDS = frozenset(
         "qcoder.current_loop.coordinator_state.v3",
     }
 )
-COORDINATOR_STATE_SCHEMA_VERSION = 15
+COORDINATOR_STATE_SCHEMA_VERSION = 16
 RECOVERY_SCHEMA_ID = "qcoder.current_loop.recovery.v5"
 RECOVERY_SCHEMA_VERSION = 5
 CONSEQUENCE_PROJECTION_SCHEMA_ID = "qcoder.current_loop.consequence_projection.v1"
@@ -7426,6 +7435,12 @@ class CurrentLoopCoordinator:
                 "result_manifest_circuit_not_current_step_input",
                 "result_manifest_execution_attempt_cross_request",
                 "result_manifest_execution_attempt_reused",
+                "result_manifest_execution_attempt_mismatch",
+                "result_manifest_requested_shots_contract_mismatch",
+                "pending_completion_checkpoint_missing",
+                "pending_completion_checkpoint_ambiguous",
+                "pending_completion_checkpoint_stale",
+                "pending_completion_checkpoint_binding_mismatch",
             }
             if category not in safe_categories:
                 category = "native_action_completion_file_unavailable"
@@ -7464,8 +7479,8 @@ class CurrentLoopCoordinator:
     def complete_current_step(
         self,
         *,
-        current_action_handle: str,
-        artifact_path: str,
+        current_action_handle: str | None = None,
+        artifact_path: str | None = None,
         transport: str = "binding_owned_typed_completion",
         transport_event: str = "typedComplete",
         artifact_disposition: str = "assistant_created",
@@ -7476,10 +7491,6 @@ class CurrentLoopCoordinator:
 
         started = self.clock()
         try:
-            if not isinstance(current_action_handle, str) or not current_action_handle:
-                raise CurrentLoopError("current_action_handle_required")
-            if not isinstance(artifact_path, str) or not artifact_path:
-                raise CurrentLoopError("completed_artifact_path_required")
             if artifact_disposition not in {
                 "assistant_created",
                 "assistant_modified",
@@ -7488,6 +7499,51 @@ class CurrentLoopCoordinator:
             }:
                 raise CurrentLoopError("native_action_disposition_invalid")
             state = self.store.read()
+            coordinator = self._coordinator_state(state)
+            supplied_identity = current_action_handle is not None or artifact_path is not None
+            if supplied_identity and (
+                not isinstance(current_action_handle, str)
+                or not current_action_handle
+                or not isinstance(artifact_path, str)
+                or not artifact_path
+            ):
+                raise CurrentLoopError("typed_completion_identity_pair_required")
+            if coordinator.get(
+                "current_step_status"
+            ) == "awaiting_external_client_action" and isinstance(
+                coordinator.get("pending_completion_checkpoint"), Mapping
+            ):
+                try:
+                    checkpoint, _checkpoint_receipt = validate_pending_completion_checkpoint(
+                        state=state,
+                        coordinator=coordinator,
+                        current_time=self.clock(),
+                    )
+                except PendingCompletionError as exc:
+                    raise CurrentLoopError(exc.category) from exc
+                checkpoint_action = checkpoint["bounded_action"]["handle"]
+                checkpoint_target = checkpoint["artifact"]["workspace_relative_target"]
+                expected_path = Path(os.path.abspath(Path(self.workspace_root) / checkpoint_target))
+                if supplied_identity and current_action_handle != checkpoint_action:
+                    raise CurrentLoopError("current_action_handle_not_active")
+                if supplied_identity and Path(os.path.abspath(str(artifact_path))) != expected_path:
+                    raise CurrentLoopError("completed_artifact_path_not_bound_target")
+                current_action_handle = str(checkpoint_action)
+                artifact_path = str(expected_path)
+            elif coordinator.get("current_step_status") == "awaiting_external_client_action":
+                if not supplied_identity:
+                    raise CurrentLoopError("pending_completion_checkpoint_missing")
+            elif not supplied_identity:
+                history = coordinator.get("pending_completion_history", [])
+                latest = history[-1] if isinstance(history, list) and history else None
+                if not isinstance(latest, Mapping) or latest.get("status") != "completed":
+                    raise CurrentLoopError("pending_completion_checkpoint_missing")
+                current_action_handle = str(latest["bounded_action"]["handle"])
+                artifact_path = str(
+                    Path(self.workspace_root) / latest["artifact"]["workspace_relative_target"]
+                )
+            assert isinstance(current_action_handle, str)
+            assert isinstance(artifact_path, str)
             candidate_path = Path(artifact_path).expanduser()
             if not candidate_path.is_absolute() or ".." in candidate_path.parts:
                 raise CurrentLoopError("artifact_candidate_path_invalid")
@@ -7609,8 +7665,7 @@ class CurrentLoopCoordinator:
                 "tool_name_match_required": False,
                 "native_write_completed_before_handoff": True,
                 "artifact_satisfaction_disposition": artifact_disposition,
-                "assistant_created_provenance_claimed": artifact_disposition
-                == "assistant_created",
+                "assistant_created_provenance_claimed": artifact_disposition == "assistant_created",
                 "pre_existing_artifact_mutated_by_qcoder": False,
                 "bounded_action_expectation_id": current_action_handle,
                 "bounded_action_expectation_digest": receipt.get("receipt_digest"),
@@ -7667,10 +7722,10 @@ class CurrentLoopCoordinator:
             )
             if result.get("ok") is True:
                 registered_state = self.store.read()
-                if (
-                    self._coordinator_state(registered_state).get("current_step_status")
-                    == "complete_resumable"
-                    and isinstance(registered_state.get("registered_pending_derivation"), Mapping)
+                if self._coordinator_state(registered_state).get(
+                    "current_step_status"
+                ) == "complete_resumable" and isinstance(
+                    registered_state.get("registered_pending_derivation"), Mapping
                 ):
                     try:
                         derivation = derive_pending_snapshot(
@@ -8005,10 +8060,9 @@ class CurrentLoopCoordinator:
                     if bounded_expectation:
                         current = self.store.read()
                         recovery_retained = False
-                        if (
-                            isinstance(transaction, Mapping)
-                            and current.get("state_revision") == state.get("state_revision")
-                        ):
+                        if isinstance(transaction, Mapping) and current.get(
+                            "state_revision"
+                        ) == state.get("state_revision"):
                             prepared = transaction.get("prepared_revisions")
                             if isinstance(prepared, list) and len(prepared) == 1:
                                 prepared_revision = prepared[0].get("revision")
@@ -8019,9 +8073,7 @@ class CurrentLoopCoordinator:
                                             "artifact_revision_id"
                                         ),
                                         "content_digest": prepared_revision.get("content_digest"),
-                                        "detected_format": prepared_revision.get(
-                                            "detected_format"
-                                        ),
+                                        "detected_format": prepared_revision.get("detected_format"),
                                         "exact_path_sha256": sha256(
                                             str(prepared_revision.get("exact_path")).encode("utf-8")
                                         ).hexdigest(),
@@ -8031,9 +8083,9 @@ class CurrentLoopCoordinator:
                                     def retain_exact_recovery(
                                         value: dict[str, Any],
                                     ) -> Mapping[str, Any]:
-                                        current_receipt = value.get(
-                                            "operation_receipts", {}
-                                        ).get(operation_receipt_id)
+                                        current_receipt = value.get("operation_receipts", {}).get(
+                                            operation_receipt_id
+                                        )
                                         current_coordinator = value.get("coordinator")
                                         if (
                                             not isinstance(current_receipt, Mapping)
@@ -8058,9 +8110,20 @@ class CurrentLoopCoordinator:
                                         current_coordinator[
                                             "current_step_bounded_action_expectation_digest"
                                         ] = rebound["receipt_digest"]
-                                        current_coordinator[
-                                            "registration_recovery_pending"
-                                        ] = {
+                                        current_coordinator["pending_completion_checkpoint"] = (
+                                            build_pending_completion_checkpoint(
+                                                state=value,
+                                                coordinator=current_coordinator,
+                                                receipt=rebound,
+                                                current_step_contract_schema_id=(
+                                                    CURRENT_STEP_CONTRACT_SCHEMA_ID
+                                                ),
+                                                current_step_contract_schema_version=(
+                                                    CURRENT_STEP_CONTRACT_SCHEMA_VERSION
+                                                ),
+                                            )
+                                        )
+                                        current_coordinator["registration_recovery_pending"] = {
                                             "exact_artifact_binding_digest": sha256(
                                                 json.dumps(
                                                     exact_binding,
@@ -8190,6 +8253,26 @@ class CurrentLoopCoordinator:
                 state = self.store.read()
                 coordinator = self._coordinator_state(state)
                 if isinstance(request_semantics, Mapping):
+                    pending_checkpoint = coordinator.get("pending_completion_checkpoint")
+                    if isinstance(pending_checkpoint, Mapping):
+                        consumed_receipt = state.get("operation_receipts", {}).get(
+                            operation_receipt_id
+                        )
+                        coordinator["pending_completion_history"] = (
+                            list(coordinator.get("pending_completion_history", []))
+                            + [
+                                completed_checkpoint(
+                                    pending_checkpoint,
+                                    completed_state_revision=int(state["state_revision"]) + 1,
+                                    consumed_receipt_digest=(
+                                        consumed_receipt.get("receipt_digest")
+                                        if isinstance(consumed_receipt, Mapping)
+                                        else None
+                                    ),
+                                )
+                            ]
+                        )[-16:]
+                        coordinator["pending_completion_checkpoint"] = None
                     requested_operation = str(request_semantics["requested_operation"])
                     completed_substage = coordinator.get("current_step_substage")
                     next_substage = (
@@ -12190,6 +12273,8 @@ class CurrentLoopCoordinator:
             "current_step_operation_receipt_id": None,
             "current_step_bounded_action_expectation_id": None,
             "current_step_bounded_action_expectation_digest": None,
+            "pending_completion_checkpoint": None,
+            "pending_completion_history": [],
             "bootstrap_count": 0,
             "request_baseline_count": 0,
         }
@@ -12207,7 +12292,7 @@ class CurrentLoopCoordinator:
         if result.get("schema_id") in {
             PREVIOUS_COORDINATOR_STATE_SCHEMA_ID,
             *OLDER_COORDINATOR_STATE_SCHEMA_IDS,
-        } and result.get("schema_version") in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}:
+        } and result.get("schema_version") in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}:
             result["schema_id"] = COORDINATOR_STATE_SCHEMA_ID
             result["schema_version"] = COORDINATOR_STATE_SCHEMA_VERSION
             result.setdefault("effective_generation_posture", state.get("generation_posture"))
@@ -12230,6 +12315,8 @@ class CurrentLoopCoordinator:
             result.setdefault("current_step_operation_receipt_id", None)
             result.setdefault("current_step_bounded_action_expectation_id", None)
             result.setdefault("current_step_bounded_action_expectation_digest", None)
+            result.setdefault("pending_completion_checkpoint", None)
+            result.setdefault("pending_completion_history", [])
             result.setdefault("bootstrap_count", 0)
             result.setdefault("request_baseline_count", 0)
             if isinstance(result.get("current_request_semantics"), Mapping):
@@ -12262,6 +12349,8 @@ class CurrentLoopCoordinator:
         result.setdefault("current_step_operation_receipt_id", None)
         result.setdefault("current_step_bounded_action_expectation_id", None)
         result.setdefault("current_step_bounded_action_expectation_digest", None)
+        result.setdefault("pending_completion_checkpoint", None)
+        result.setdefault("pending_completion_history", [])
         result.setdefault("bootstrap_count", 0)
         result.setdefault("request_baseline_count", 0)
         if (
@@ -12345,6 +12434,12 @@ class CurrentLoopCoordinator:
         if not isinstance(result.get("bootstrap_count"), int) or not isinstance(
             result.get("request_baseline_count"), int
         ):
+            raise CurrentLoopError("current_loop_state_corrupt")
+        if result.get("pending_completion_checkpoint") is not None and not isinstance(
+            result.get("pending_completion_checkpoint"), Mapping
+        ):
+            raise CurrentLoopError("current_loop_state_corrupt")
+        if not isinstance(result.get("pending_completion_history"), list):
             raise CurrentLoopError("current_loop_state_corrupt")
         if result.get("pending_checkpoint_input") is not None and not isinstance(
             result.get("pending_checkpoint_input"), Mapping
@@ -12442,9 +12537,7 @@ class CurrentLoopCoordinator:
         ceiling = semantics["current_step_ceiling"]
         registry = state.get("evidence_registry", {})
         role_heads = registry.get("role_heads", {}) if isinstance(registry, Mapping) else {}
-        revisions = (
-            registry.get("artifact_revisions", {}) if isinstance(registry, Mapping) else {}
-        )
+        revisions = registry.get("artifact_revisions", {}) if isinstance(registry, Mapping) else {}
         eligible_inputs: dict[str, dict[str, Any]] = {}
         if role in {"circuit_qasm", "results"}:
             source_id = role_heads.get("source") if isinstance(role_heads, Mapping) else None
@@ -12460,9 +12553,7 @@ class CurrentLoopCoordinator:
                     "content_digest": source_revision.get("content_digest"),
                 }
         if role == "results":
-            circuit_id = (
-                role_heads.get("circuit_qasm") if isinstance(role_heads, Mapping) else None
-            )
+            circuit_id = role_heads.get("circuit_qasm") if isinstance(role_heads, Mapping) else None
             circuit_revision = (
                 revisions.get(circuit_id)
                 if isinstance(revisions, Mapping) and isinstance(circuit_id, str)
@@ -12519,6 +12610,24 @@ class CurrentLoopCoordinator:
                 "neighbor_artifact_discovery_permitted": False,
             }
         authority_binding["exact_artifact_target"] = deepcopy(dict(exact_target))
+        if role == "results":
+            authority_binding["requested_shots"] = semantics.get("requested_shots")
+            authority_binding["execution_attempt_identity"] = (
+                "execution-attempt-"
+                + sha256(
+                    canonical_bytes(
+                        {
+                            "request_identity_sha256": semantics.get(
+                                "original_message_utf8_sha256"
+                            ),
+                            "state_revision": observable_revision,
+                            "workspace_relative_target": exact_target.get(
+                                "workspace_relative_path"
+                            ),
+                        }
+                    )
+                ).hexdigest()[:32]
+            )
         receipt = issue_operation_receipt(
             loop_ref=str(state["loop_ref"]),
             workspace_binding=str(state["workspace_root"]),
@@ -12529,6 +12638,7 @@ class CurrentLoopCoordinator:
             authority_binding=authority_binding,
             receipt_kind="qcoder_bounded_action_expectation",
             issued_at=self.clock(),
+            lifetime_seconds=14_400.0 if role == "results" else 900.0,
         )
         expectation_id = str(receipt["receipt_id"])
         expectation_digest = str(receipt["receipt_digest"])
@@ -12545,6 +12655,14 @@ class CurrentLoopCoordinator:
                 ),
             }
         )
+        if isinstance(exact_target.get("workspace_relative_path"), str):
+            coordinator["pending_completion_checkpoint"] = build_pending_completion_checkpoint(
+                state=state,
+                coordinator=coordinator,
+                receipt=receipt,
+                current_step_contract_schema_id=CURRENT_STEP_CONTRACT_SCHEMA_ID,
+                current_step_contract_schema_version=CURRENT_STEP_CONTRACT_SCHEMA_VERSION,
+            )
         coordinator["authority_separation"]["ide_write_or_run"] = (
             "owned_by_native_client_not_observed_or_granted_by_qcoder"
         )

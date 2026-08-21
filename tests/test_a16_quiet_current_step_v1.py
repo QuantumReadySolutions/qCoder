@@ -54,7 +54,7 @@ def test_binding_and_private_tools_encode_semantic_quiet_success(tmp_path: Path)
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     visibility = descriptor["surfaces"]["current_step_transaction"]["customer_visibility"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v39"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v40"
     assert visibility["normal_success"] == "internal_transaction_silent"
     assert visibility["intermediate_customer_message_permitted"] is False
     assert visibility["final_response"] == "concise_task_outcome_only"
@@ -113,7 +113,7 @@ def test_normal_begin_is_task_level_and_contract_stays_bounded(tmp_path: Path) -
         {"request_text": REQUEST, "intended_artifact_paths": {"source": "bell_phi_plus.py"}},
     )
     contract = begun["current_step_contract"]
-    assert _wire_bytes(contract) <= 2300
+    assert _wire_bytes(contract) <= 2500
     assert contract["customer_visibility"] == {
         "policy": "quiet_current_step_v2",
         "events": "optional_task_progress_then_task_outcome",

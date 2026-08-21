@@ -66,10 +66,18 @@ def check_global_cursor_configuration() -> None:
         )
 
 
-def preflight(packet: Path, workspace: Path, token_file: Path) -> None:
+def preflight(packet: Path, workspace: Path, operator_run_dir: Path, token_file: Path) -> None:
     wheel, identity = wheel_identity(packet)
     if workspace.exists():
         raise SystemExit(f"Fresh workspace required; path already exists: {workspace}")
+    if operator_run_dir.exists():
+        raise SystemExit(f"Fresh operator run directory required: {operator_run_dir}")
+    if (
+        workspace == operator_run_dir
+        or workspace in operator_run_dir.parents
+        or operator_run_dir in workspace.parents
+    ):
+        raise SystemExit("Operator instrumentation directory must be outside the Cursor workspace.")
     if not token_file.is_file():
         raise SystemExit("The supplied Context Bridge token-file path is not a regular file.")
     if (
@@ -82,7 +90,9 @@ def preflight(packet: Path, workspace: Path, token_file: Path) -> None:
     print("PREPARE_PREFLIGHT_PASS")
 
 
-def configure(packet: Path, workspace: Path, token_file: Path, python: Path) -> None:
+def configure(
+    packet: Path, workspace: Path, operator_run_dir: Path, token_file: Path, python: Path
+) -> None:
     if not python.is_file():
         raise SystemExit("Installed-wheel Python is missing.")
     # Preserve the venv launcher path exactly. Resolving its symlink would bypass
@@ -90,12 +100,11 @@ def configure(packet: Path, workspace: Path, token_file: Path, python: Path) -> 
     runtime_python = Path(os.path.abspath(python))
     cursor_dir = workspace / ".cursor"
     fixtures = workspace / "fixtures"
-    safe_return = workspace / "safe-return"
     client_runtime = workspace / ".qcoder-client-runtime"
     cursor_dir.mkdir(parents=True, exist_ok=False)
     fixtures.mkdir()
-    safe_return.mkdir()
     client_runtime.mkdir()
+    operator_run_dir.mkdir(parents=True, mode=0o700)
     runtime_source = packet / "helpers" / "runtime.py"
     if not runtime_source.is_file():
         raise SystemExit("Prepared external execution runtime helper is missing.")
@@ -159,7 +168,16 @@ def configure(packet: Path, workspace: Path, token_file: Path, python: Path) -> 
     identity_path = fixtures / "preexisting-identity.json"
     identity_path.write_bytes(canonical_bytes(fixture_identity) + b"\n")
     os.chmod(identity_path, stat.S_IRUSR | stat.S_IWUSR)
+    prohibited_instrumentation = [
+        workspace / "safe-return",
+        workspace / "operator-captures",
+        workspace / "timing-records",
+        workspace / "capture.json",
+    ]
+    if any(path.exists() for path in prohibited_instrumentation):
+        raise SystemExit("Acceptance instrumentation leaked into the Cursor workspace.")
     print(f"WORKSPACE={workspace}")
+    print(f"OPERATOR_RUN_DIR={operator_run_dir}")
     print(f"RUNTIME_PYTHON={runtime_python}")
     print(f"CURSOR_MCP_SERVERS={PUBLIC_SERVER},{PRIVATE_SERVER}")
     print("PUBLIC_TOOL_EXPECTATION=12")
@@ -206,6 +224,7 @@ def main() -> None:
     parser.add_argument("--workspace", type=Path)
     parser.add_argument("--token-file", type=Path)
     parser.add_argument("--python", type=Path)
+    parser.add_argument("--operator-run-dir", type=Path)
     args = parser.parse_args()
     packet = args.packet.absolute()
     if args.mode == "wheel-name":
@@ -216,15 +235,16 @@ def main() -> None:
             parser.error("--workspace is required for installed-check")
         installed_check(packet, args.workspace.absolute())
         return
-    if args.workspace is None or args.token_file is None:
-        parser.error("--workspace and --token-file are required")
+    if args.workspace is None or args.token_file is None or args.operator_run_dir is None:
+        parser.error("--workspace, --operator-run-dir, and --token-file are required")
     workspace = args.workspace.absolute()
+    operator_run_dir = args.operator_run_dir.absolute()
     if args.mode == "preflight":
-        preflight(packet, workspace, args.token_file)
+        preflight(packet, workspace, operator_run_dir, args.token_file)
         return
     if args.python is None:
         parser.error("--python is required for configure")
-    configure(packet, workspace, args.token_file, args.python.absolute())
+    configure(packet, workspace, operator_run_dir, args.token_file, args.python.absolute())
 
 
 if __name__ == "__main__":

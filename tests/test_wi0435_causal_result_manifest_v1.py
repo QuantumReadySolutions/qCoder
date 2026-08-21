@@ -173,8 +173,13 @@ def _run_step(root: Path, *, attempt: str = "native-attempt-0001") -> tuple[dict
         target=f"{attempt}.json",
     )
     assert begun["current_step_contract"]["permitted_native_action"]["artifact_role"] == "results"
+    bound_attempt = begun["current_step_contract"]["permitted_native_action"][
+        "external_execution_contract"
+    ]["execution_attempt_identity"]
     result_path = root / f"{attempt}.json"
-    result_path.write_text(json.dumps(_manifest(attempt=attempt), sort_keys=True), encoding="utf-8")
+    result_path.write_text(
+        json.dumps(_manifest(attempt=bound_attempt), sort_keys=True), encoding="utf-8"
+    )
     return begun, result_path
 
 
@@ -315,7 +320,12 @@ def test_unknown_lineage_is_valid_but_not_current_for_claimed_circuit(tmp_path: 
 def test_unknown_lineage_registers_as_historical_without_current_run(tmp_path: Path) -> None:
     _source_and_circuit(tmp_path)
     begun, result_path = _run_step(tmp_path, attempt="native-attempt-unknown")
-    value = _manifest(attempt="native-attempt-unknown", circuit_status="unknown")
+    value = _manifest(
+        attempt=begun["current_step_contract"]["permitted_native_action"][
+            "external_execution_contract"
+        ]["execution_attempt_identity"],
+        circuit_status="unknown",
+    )
     result_path.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
     completed = _complete(tmp_path, begun, result_path)
     assert completed["ok"] is True
@@ -344,7 +354,15 @@ def test_shots_only_rerun_reuses_exact_inputs_and_preserves_prior_run(tmp_path: 
     )
     second_path = tmp_path / "native-attempt-2000.json"
     second_path.write_text(
-        json.dumps(_manifest(attempt="native-attempt-2000", shots=2_000), sort_keys=True),
+        json.dumps(
+            _manifest(
+                attempt=second_step["current_step_contract"]["permitted_native_action"][
+                    "external_execution_contract"
+                ]["execution_attempt_identity"],
+                shots=2_000,
+            ),
+            sort_keys=True,
+        ),
         encoding="utf-8",
     )
     assert _complete(tmp_path, second_step, second_path)["ok"] is True
@@ -384,11 +402,19 @@ def test_false_lineage_and_reused_attempts_fail_closed(tmp_path: Path) -> None:
     )
     second_path = tmp_path / "reused-again.json"
     second_path.write_text(
-        json.dumps(_manifest(attempt="reused-attempt"), sort_keys=True), encoding="utf-8"
+        json.dumps(
+            _manifest(
+                attempt=first_step["current_step_contract"]["permitted_native_action"][
+                    "external_execution_contract"
+                ]["execution_attempt_identity"]
+            ),
+            sort_keys=True,
+        ),
+        encoding="utf-8",
     )
     rejected = _complete(tmp_path, second_step, second_path)
     assert rejected["ok"] is False
-    assert rejected["category"] == "result_manifest_execution_attempt_cross_request"
+    assert rejected["category"] == "result_manifest_execution_attempt_mismatch"
 
 
 def test_preexisting_selected_source_satisfies_without_mutation_or_false_provenance(
@@ -467,7 +493,11 @@ def test_failed_registration_retries_same_result_without_rerun_and_rejects_chang
     calls = 0
     failed = _complete(other, changed_step, changed_path)
     assert failed["ok"] is False
-    changed = _manifest(attempt="native-attempt-changed")
+    changed = _manifest(
+        attempt=changed_step["current_step_contract"]["permitted_native_action"][
+            "external_execution_contract"
+        ]["execution_attempt_identity"]
+    )
     changed["counts"] = {"00": 500, "11": 524}
     changed_path.write_text(json.dumps(changed, sort_keys=True), encoding="utf-8")
     rejected = _complete(other, changed_step, changed_path)
@@ -562,7 +592,11 @@ def test_external_execution_manifest_contradictions_fail_closed(mutation, catego
 def test_current_result_requires_prepared_sampled_execution_evidence(tmp_path: Path) -> None:
     _source_and_circuit(tmp_path)
     begun, result_path = _run_step(tmp_path, attempt="native-attempt-insufficient")
-    manifest = _manifest(attempt="native-attempt-insufficient")
+    manifest = _manifest(
+        attempt=begun["current_step_contract"]["permitted_native_action"][
+            "external_execution_contract"
+        ]["execution_attempt_identity"]
+    )
     manifest["execution_configuration"] = {"status": "unknown"}
     result_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
     before = deepcopy(CurrentLoopCoordinator(workspace_root=tmp_path).store.read())
@@ -591,6 +625,8 @@ def test_result_step_contract_forbids_installation_and_requires_one_sampled_atte
         "analytic_probability_substitution_permitted": False,
         "missing_runtime_disposition": "surface_blocker_without_execution",
         "qcoder_executes_customer_code": False,
+        "execution_attempt_identity": execution["execution_attempt_identity"],
+        "requested_shots": 1_024,
     }
     artifact_contract = begun["current_step_contract"]["completion"]["artifact_contract"]
     assert artifact_contract["routine_success_customer_outcome"] == (
