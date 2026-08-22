@@ -18,6 +18,33 @@ def canonical_bytes(value: object) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
 
 
+def _append_execution_event(path: Path | None, value: dict[str, object]) -> None:
+    if path is None:
+        return
+    destination = path.absolute()
+    if not destination.parent.is_dir() or destination.parent.is_symlink():
+        raise SystemExit("Prepared execution evidence directory is unavailable or unsafe.")
+    payload = (
+        canonical_bytes(
+            {
+                "schema_id": "qcoder.wi0435.prepared_execution_event.v1",
+                **value,
+                "raw_circuit_retained": False,
+                "raw_result_retained": False,
+            }
+        )
+        + b"\n"
+    )
+    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(destination, flags, stat.S_IRUSR | stat.S_IWUSR)
+    try:
+        os.write(descriptor, payload)
+    finally:
+        os.close(descriptor)
+
+
 def _versions() -> dict[str, str]:
     versions = {
         "python": platform.python_version(),
@@ -191,7 +218,14 @@ def preflight(identity_path: Path, unknown_result_path: Path) -> None:
     os.chmod(unknown_result_path, stat.S_IRUSR | stat.S_IWUSR)
 
 
-def run(qasm_path: Path, result_path: Path, *, shots: int, attempt_id: str) -> None:
+def run(
+    qasm_path: Path,
+    result_path: Path,
+    *,
+    shots: int,
+    attempt_id: str,
+    event_log: Path | None = None,
+) -> None:
     if shots < 1 or not attempt_id or len(attempt_id.encode("utf-8")) > 1_024:
         raise SystemExit("Bounded execution arguments are invalid.")
     qasm_path = qasm_path.absolute()
@@ -201,6 +235,15 @@ def run(qasm_path: Path, result_path: Path, *, shots: int, attempt_id: str) -> N
     if result_path.exists() or result_path.is_symlink():
         raise SystemExit("The exact result target already exists; no execution occurred.")
     versions = _versions()
+    _append_execution_event(
+        event_log,
+        {
+            "event": "execution_started",
+            "attempt_identity_sha256": sha256(attempt_id.encode()).hexdigest(),
+            "requested_shots": shots,
+            "qasm_input_sha256": sha256(qasm_path.read_bytes()).hexdigest(),
+        },
+    )
     circuit = _bell_from_qasm(qasm_path)
     counts, backend = _sample(circuit, shots=shots)
     manifest = _manifest(
@@ -215,6 +258,19 @@ def run(qasm_path: Path, result_path: Path, *, shots: int, attempt_id: str) -> N
     )
     result_path.write_bytes(canonical_bytes(manifest) + b"\n")
     os.chmod(result_path, stat.S_IRUSR | stat.S_IWUSR)
+    _append_execution_event(
+        event_log,
+        {
+            "event": "sampled_execution_completed",
+            "attempt_identity_sha256": sha256(attempt_id.encode()).hexdigest(),
+            "requested_shots": shots,
+            "observed_shots": sum(counts.values()),
+            "backend_or_sampler": backend,
+            "result_manifest_sha256": sha256(result_path.read_bytes()).hexdigest(),
+            "dependency_installation_performed": False,
+            "environment_mutated": False,
+        },
+    )
 
 
 def main() -> None:
@@ -228,11 +284,18 @@ def main() -> None:
     execute.add_argument("--result", type=Path, required=True)
     execute.add_argument("--shots", type=int, required=True)
     execute.add_argument("--attempt-id", required=True)
+    execute.add_argument("--event-log", type=Path)
     args = parser.parse_args()
     if args.operation == "preflight":
         preflight(args.identity.absolute(), args.unknown_result.absolute())
         return
-    run(args.qasm, args.result, shots=args.shots, attempt_id=args.attempt_id)
+    run(
+        args.qasm,
+        args.result,
+        shots=args.shots,
+        attempt_id=args.attempt_id,
+        event_log=args.event_log.absolute() if args.event_log is not None else None,
+    )
 
 
 if __name__ == "__main__":

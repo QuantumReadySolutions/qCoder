@@ -17,8 +17,8 @@ import unicodedata
 from typing import Any, Mapping, Sequence
 
 
-REQUEST_SEMANTICS_SCHEMA_ID = "qcoder.current_loop.request_semantics.v3"
-REQUEST_SEMANTICS_SCHEMA_VERSION = 3
+REQUEST_SEMANTICS_SCHEMA_ID = "qcoder.current_loop.request_semantics.v4"
+REQUEST_SEMANTICS_SCHEMA_VERSION = 4
 REQUEST_RECOVERY_SCHEMA_ID = "qcoder.current_loop.request_semantics_recovery.v1"
 
 ARTIFACT_ROLES = ("source", "circuit_qasm", "results")
@@ -48,11 +48,13 @@ _SOURCE_ACTIONS = frozenset(
         "generate",
         "produce",
         "build",
+        "change",
         "draft",
         "edit",
         "modify",
         "update",
         "refactor",
+        "replace",
     }
 )
 _SOURCE_NOUNS = frozenset(
@@ -446,7 +448,7 @@ def classify_current_request(
             (active_loop or explicit_qcoder)
             and bool(
                 re.search(
-                    r"\b(?:write|create|make|generate|produce|build|draft|edit|modify|update|refactor)\b"
+                    r"\b(?:write|create|make|generate|produce|build|change|draft|edit|modify|replace|update|refactor)\b"
                     r"[^.!?;]{0,28}\b(?:it|this)\b",
                     normalized,
                 )
@@ -475,7 +477,19 @@ def classify_current_request(
     execution_requested = (
         execution_mentioned and not execution_prohibited and not non_action_execution_reference
     )
-    results_requested = results_mentioned and not results_prohibited
+    currentness_projection_requested = bool(
+        active_loop
+        and (source_action or qasm_requested)
+        and re.search(
+            r"\b(?:current|currentness|history|historical|preserve(?:d|s|ing)?)\b",
+            normalized,
+        )
+    )
+    results_requested = bool(
+        results_mentioned
+        and not results_prohibited
+        and not (currentness_projection_requested and not execution_requested)
+    )
     requested_shots = _requested_shots(normalized)
 
     # "Stop after source/code" and "only source/code" are semantic ceiling
@@ -556,7 +570,7 @@ def classify_current_request(
         execution = "prohibited_for_current_step"
         evidence_review = "existing_canonical_evidence_only"
         stop_after = "bounded_difference_ready"
-    elif affirmative_review_intent and not review_deferred:
+    elif affirmative_review_intent and not review_deferred and not currentness_projection_requested:
         operation = "selected_artifact_review"
         route = "named_d079_workflow"
         allowed_roles = []
@@ -729,6 +743,7 @@ def classify_current_request(
             if operation in {"source_and_local_execution", "local_execution"}
             else None
         ),
+        "currentness_projection_requested": currentness_projection_requested,
         "evidence_review_disposition": evidence_review,
         "current_step_ceiling": ceiling,
         "ambiguity_state": ambiguity,
@@ -779,6 +794,8 @@ def validate_request_semantics(value: Mapping[str, Any]) -> None:
         or value.get("requested_operation") not in {"source_and_local_execution", "local_execution"}
     ):
         raise ValueError("current_request_semantics_shot_count_invalid")
+    if not isinstance(value.get("currentness_projection_requested"), bool):
+        raise ValueError("current_request_semantics_currentness_projection_invalid")
     ceiling = value.get("current_step_ceiling")
     if not isinstance(ceiling, Mapping) or ceiling.get("allowed_artifact_roles") != roles:
         raise ValueError("current_request_semantics_ceiling_mismatch")
@@ -796,7 +813,8 @@ def migrate_request_semantics(value: Mapping[str, Any]) -> dict[str, Any]:
     if result.get("schema_id") in {
         "qcoder.current_loop.request_semantics.v1",
         "qcoder.current_loop.request_semantics.v2",
-    } and result.get("schema_version") in {1, 2}:
+        "qcoder.current_loop.request_semantics.v3",
+    } and result.get("schema_version") in {1, 2, 3}:
         operation = str(result.get("requested_operation"))
         active_loop = bool(result.get("active_loop_at_classification"))
         result["schema_id"] = REQUEST_SEMANTICS_SCHEMA_ID
@@ -809,6 +827,15 @@ def migrate_request_semantics(value: Mapping[str, Any]) -> dict[str, Any]:
             _requested_shots(_normalized(str(result.get("exact_original_message", ""))))
             if operation in {"source_and_local_execution", "local_execution"}
             else None
+        )
+        normalized = _normalized(str(result.get("exact_original_message", "")))
+        result["currentness_projection_requested"] = bool(
+            active_loop
+            and operation in {"source_generation", "qasm_export"}
+            and re.search(
+                r"\b(?:current|currentness|history|historical|preserve(?:d|s|ing)?)\b",
+                normalized,
+            )
         )
         result.pop("semantics_digest", None)
         result["semantics_digest"] = _digest(result)
@@ -834,13 +861,14 @@ def ceiling_allows(
 
 def semantics_contract_snapshot() -> dict[str, Any]:
     result = {
-        "schema_id": "qcoder.current_loop.request_semantics_contract.v3",
-        "schema_version": 3,
+        "schema_id": "qcoder.current_loop.request_semantics_contract.v4",
+        "schema_version": 4,
         "semantic_schema_id": REQUEST_SEMANTICS_SCHEMA_ID,
         "natural_language_in_exact_authority_out": True,
         "exact_original_message_preserved": True,
         "temporary_current_step_ceiling": True,
         "exact_requested_shots_bound_when_supplied": True,
+        "action_currentness_projection_is_not_selected_file_review": True,
         "durable_blueprint_constraint": False,
         "authority_layers": [
             "current_loop_activation",

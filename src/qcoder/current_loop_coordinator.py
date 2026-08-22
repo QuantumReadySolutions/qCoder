@@ -2710,6 +2710,7 @@ class CurrentLoopCoordinator:
         exact_message: str,
         selected_paths: Sequence[str] = (),
         intended_artifact_paths: Mapping[str, str] | None = None,
+        intended_artifact_target_binding_modes: Mapping[str, str] | None = None,
     ) -> dict[str, Any]:
         """Interpret one active-loop customer message without re-bootstrap or archaeology."""
 
@@ -2878,6 +2879,22 @@ class CurrentLoopCoordinator:
                 "active_loop_at_classification": True,
             }
         )
+        normalized_targets = (
+            normalize_intended_artifact_targets(
+                intended_artifact_paths,
+                workspace_root=self.workspace_root,
+                required_roles=semantics["requested_artifact_roles"],
+            )
+            if intended_artifact_paths is not None
+            else {}
+        )
+        if intended_artifact_target_binding_modes is not None:
+            if set(intended_artifact_target_binding_modes) - set(normalized_targets):
+                raise CurrentLoopError("intended_artifact_target_binding_mode_invalid")
+            for role, mode in intended_artifact_target_binding_modes.items():
+                if mode != "registered_current_role_head_exact_target":
+                    raise CurrentLoopError("intended_artifact_target_binding_mode_invalid")
+                normalized_targets[role]["binding_mode"] = mode
         coordinator.update(
             {
                 "phase": "generation_ready",
@@ -2899,13 +2916,7 @@ class CurrentLoopCoordinator:
                 ),
                 "compact_next_action_source": "canonical_current_request_semantics_only",
                 "procedural_archaeology_permitted": False,
-                "intended_artifact_targets": normalize_intended_artifact_targets(
-                    intended_artifact_paths,
-                    workspace_root=self.workspace_root,
-                    required_roles=semantics["requested_artifact_roles"],
-                )
-                if intended_artifact_paths is not None
-                else {},
+                "intended_artifact_targets": normalized_targets,
             }
         )
         self._replace_coordinator(coordinator)
@@ -12354,6 +12365,14 @@ class CurrentLoopCoordinator:
         result.setdefault("bootstrap_count", 0)
         result.setdefault("request_baseline_count", 0)
         if (
+            isinstance(result.get("current_request_semantics"), Mapping)
+            and result["current_request_semantics"].get("schema_id")
+            != semantics_contract_snapshot()["semantic_schema_id"]
+        ):
+            result["current_request_semantics"] = migrate_request_semantics(
+                result["current_request_semantics"]
+            )
+        if (
             result.get("schema_id") != COORDINATOR_STATE_SCHEMA_ID
             or result.get("schema_version") != COORDINATOR_STATE_SCHEMA_VERSION
             or result.get("phase") not in PHASES
@@ -14353,6 +14372,58 @@ class CurrentLoopCoordinator:
             "raw_artifact_included": False,
             "internal_procedure_customer_visible": False,
         }
+        semantics = coordinator.get("current_request_semantics")
+        if (
+            role in {"source", "circuit_qasm"}
+            and isinstance(semantics, Mapping)
+            and semantics.get("currentness_projection_requested") is True
+        ):
+            registry = state.get("evidence_registry", {})
+            heads = registry.get("role_heads", {}) if isinstance(registry, Mapping) else {}
+            revisions = (
+                registry.get("artifact_revisions", {}) if isinstance(registry, Mapping) else {}
+            )
+            historical_by_role: dict[str, int] = {}
+            if isinstance(revisions, Mapping):
+                for value in revisions.values():
+                    if not isinstance(value, Mapping):
+                        continue
+                    logical_role = value.get("logical_role")
+                    if logical_role in {"source", "circuit_qasm", "results"}:
+                        historical_by_role[str(logical_role)] = (
+                            historical_by_role.get(str(logical_role), 0) + 1
+                        )
+            projection["causal_currentness"] = {
+                "schema_id": "qcoder.current_loop.replacement_currentness_projection.v1",
+                "replaced_role": role,
+                "current_role_heads": {
+                    value: heads.get(value)
+                    for value in ("source", "circuit_qasm", "results")
+                    if isinstance(heads, Mapping) and isinstance(heads.get(value), str)
+                },
+                "active_goal_eligibility": {
+                    "source": isinstance(heads, Mapping) and isinstance(heads.get("source"), str),
+                    "circuit_qasm": role == "circuit_qasm"
+                    and isinstance(heads, Mapping)
+                    and isinstance(heads.get("circuit_qasm"), str),
+                    "results": False,
+                    "current_run_summary": False,
+                },
+                "dependent_prior_evidence_current": False,
+                "historical_artifact_revision_counts": historical_by_role,
+                "historical_run_summaries_preserved": len(state.get("run_summary_index", {})),
+                "latest_current_run_summary_reference": state.get("latest_run_summary_reference"),
+                "history_deleted_or_rewritten": False,
+                "currentness_inferred_from_path_or_adjacency": False,
+            }
+            projection["requested_customer_outcome_ready"] = True
+            projection["customer_summary"] = (
+                "The requested source replacement is ready. Prior circuit and result evidence "
+                "remain historical and are not current for the replacement source."
+                if role == "source"
+                else "The requested QASM replacement is ready. Prior result evidence remains "
+                "historical and is not current for the replacement circuit."
+            )
         if role == "results":
             projection["current_run_summary"] = current_run_summary
             projection["requested_customer_outcome_ready"] = current_run_summary is not None

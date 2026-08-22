@@ -111,16 +111,21 @@ def configure(
     runtime_target = client_runtime / "run-sampled-result.py"
     runtime_target.write_bytes(runtime_source.read_bytes())
     os.chmod(runtime_target, stat.S_IRUSR | stat.S_IXUSR)
+    instrumented_mcp = packet / "helpers" / "instrumented_mcp.py"
+    if not instrumented_mcp.is_file():
+        raise SystemExit("Bounded MCP instrumentation helper is missing.")
+    mcp_event_log = operator_run_dir / "mcp-events.jsonl"
     mcp = {
         "mcpServers": {
             PUBLIC_SERVER: {
                 "command": str(runtime_python),
                 "args": [
-                    "-m",
-                    "qcoder",
-                    "context-bridge",
-                    "mcp",
-                    "serve",
+                    str(instrumented_mcp),
+                    "public",
+                    "--workspace",
+                    str(workspace.resolve()),
+                    "--event-log",
+                    str(mcp_event_log),
                     "--token-file",
                     str(token_file.resolve()),
                 ],
@@ -128,12 +133,12 @@ def configure(
             PRIVATE_SERVER: {
                 "command": str(runtime_python),
                 "args": [
-                    "-m",
-                    "qcoder",
-                    "current-loop",
+                    str(instrumented_mcp),
+                    "private",
                     "--workspace",
                     str(workspace.resolve()),
-                    "serve-binding-mcp",
+                    "--event-log",
+                    str(mcp_event_log),
                 ],
             },
         }
@@ -147,6 +152,8 @@ def configure(
         "---\nalwaysApply: true\n---\n"
         "For a qCoder external result step, use only the already prepared workspace "
         "runtime at .venv/bin/python with .qcoder-client-runtime/run-sampled-result.py. "
+        f"Pass --event-log {operator_run_dir / 'execution-events.jsonl'} so the bounded "
+        "operator record can count the prepared execution without retaining result content. "
         "Do not install or upgrade dependencies, mutate the environment, substitute analytic "
         "probabilities or constructed counts for sampled shots, or perform more than the one "
         "requested execution attempt. If that runtime is unavailable, report a blocker.\n",

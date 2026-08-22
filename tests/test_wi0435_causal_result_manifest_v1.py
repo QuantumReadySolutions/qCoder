@@ -264,6 +264,214 @@ def test_source_and_circuit_replacement_invalidate_downstream_but_keep_history(
     assert old_summary in circuit_state["run_summary_index"]
 
 
+def test_active_loop_replacement_reuses_registered_targets_and_reports_currentness(
+    tmp_path: Path,
+) -> None:
+    _source_and_circuit(tmp_path)
+    begun, result_path = _run_step(tmp_path)
+    assert _complete(tmp_path, begun, result_path)["ok"] is True
+    before = CurrentLoopCoordinator(workspace_root=tmp_path).store.read()
+    old_heads = deepcopy(before["evidence_registry"]["role_heads"])
+    old_summaries = set(before["run_summary_index"])
+    baseline_descriptor = deepcopy(before["saved_artifacts"]["request_baseline"])
+
+    source_request = (
+        "Change the Python source to prepare a Ψ+ Bell state. Stop after the source; "
+        "then tell me whether the earlier circuit and result remain current and preserve "
+        "their history."
+    )
+    source_step = _call(
+        tmp_path,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {"request_text": source_request},
+    )
+    assert source_step["ok"] is True, source_step
+    active_source_semantics = CurrentLoopCoordinator(workspace_root=tmp_path).store.read()[
+        "coordinator"
+    ]["current_request_semantics"]
+    assert active_source_semantics["requested_operation"] == "source_generation"
+    assert active_source_semantics["currentness_projection_requested"] is True
+    assert source_step["details"]["active_loop_target_continuity"]["source"] == {
+        "binding_mode": "registered_current_role_head_exact_target",
+        "artifact_revision_id": old_heads["source"],
+        "workspace_discovery_performed": False,
+    }
+    target = source_step["current_step_contract"]["permitted_native_action"][
+        "exact_artifact_target"
+    ]
+    assert target["workspace_relative_path"] == "bell.py"
+    assert target["selection"] == "registered_current_role_head_no_discovery"
+    assert target["replacement_target_model_selection_required"] is False
+    (tmp_path / "bell.py").write_text(SOURCE + "circuit.x(0)\n", encoding="utf-8")
+    source_completed = _call(
+        tmp_path,
+        COMPLETE_CURRENT_STEP_TOOL_NAME,
+        {"artifact_disposition": "assistant_modified"},
+    )
+    assert source_completed["ok"] is True, source_completed
+    assert source_completed["causal_currentness"]["active_goal_eligibility"] == {
+        "source": True,
+        "circuit_qasm": False,
+        "results": False,
+        "current_run_summary": False,
+    }
+    assert source_completed["causal_currentness"]["history_deleted_or_rewritten"] is False
+
+    after_source = CurrentLoopCoordinator(workspace_root=tmp_path).store.read()
+    assert after_source["coordinator"]["bootstrap_count"] == 1
+    assert after_source["coordinator"]["request_baseline_count"] == 1
+    assert after_source["saved_artifacts"]["request_baseline"] == baseline_descriptor
+    assert (
+        after_source["evidence_registry"]["role_heads"]["circuit_qasm"] == old_heads["circuit_qasm"]
+    )
+    assert after_source["evidence_registry"]["role_heads"]["results"] == old_heads["results"]
+    assert old_summaries.issubset(after_source["run_summary_index"])
+    assert after_source["latest_run_summary_reference"] is None
+
+    qasm_request = (
+        "Export the updated circuit as QASM. Do not run it; then tell me whether the "
+        "earlier result is current for this new circuit."
+    )
+    qasm_step = _call(
+        tmp_path,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {"request_text": qasm_request},
+    )
+    assert qasm_step["ok"] is True, qasm_step
+    active_qasm_semantics = CurrentLoopCoordinator(workspace_root=tmp_path).store.read()[
+        "coordinator"
+    ]["current_request_semantics"]
+    assert active_qasm_semantics["requested_operation"] == "qasm_export"
+    assert (
+        qasm_step["current_step_contract"]["permitted_native_action"]["exact_artifact_target"][
+            "workspace_relative_path"
+        ]
+        == "bell.qasm"
+    )
+    (tmp_path / "bell.qasm").write_text(
+        QASM.replace("h q[0];", "x q[0];\nh q[0];"), encoding="utf-8"
+    )
+    qasm_completed = _call(
+        tmp_path,
+        COMPLETE_CURRENT_STEP_TOOL_NAME,
+        {"artifact_disposition": "assistant_modified"},
+    )
+    assert qasm_completed["ok"] is True, qasm_completed
+    assert qasm_completed["causal_currentness"]["active_goal_eligibility"]["results"] is False
+    assert qasm_completed["causal_currentness"]["historical_run_summaries_preserved"] >= 1
+    after_qasm = CurrentLoopCoordinator(workspace_root=tmp_path).store.read()
+    assert after_qasm["evidence_registry"]["role_heads"]["results"] == old_heads["results"]
+    assert after_qasm["latest_run_summary_reference"] is None
+
+
+@pytest.mark.parametrize(
+    ("target", "category"),
+    [
+        ("neighbor.py", "active_loop_replacement_target_requires_exact_customer_selection"),
+        ("../escape.py", "intended_artifact_path_must_be_workspace_relative"),
+        ("*.py", "intended_artifact_path_discovery_expression_prohibited"),
+    ],
+)
+def test_active_loop_replacement_target_mismatch_fails_before_mutation(
+    tmp_path: Path, target: str, category: str
+) -> None:
+    source_step = _begin(tmp_path, SOURCE_REQUEST)
+    source = tmp_path / "bell.py"
+    source.write_text(SOURCE, encoding="utf-8")
+    assert _complete(tmp_path, source_step, source)["ok"] is True
+    before = (tmp_path / ".qcoder" / "current-loop" / "state.json").read_bytes()
+    result = _call(
+        tmp_path,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {
+            "request_text": "Change the Python source to prepare a Ψ+ Bell state.",
+            "intended_artifact_paths": {"source": target},
+        },
+    )
+    assert result["ok"] is False
+    assert result["category"] == category
+    assert result["state_mutated"] is False
+    assert (tmp_path / ".qcoder" / "current-loop" / "state.json").read_bytes() == before
+
+
+def test_active_loop_replacement_explicitly_named_new_target_is_bounded(
+    tmp_path: Path,
+) -> None:
+    source_step = _begin(tmp_path, SOURCE_REQUEST)
+    source = tmp_path / "bell.py"
+    source.write_text(SOURCE, encoding="utf-8")
+    assert _complete(tmp_path, source_step, source)["ok"] is True
+    result = _call(
+        tmp_path,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {
+            "request_text": "Replace the Python source at replacement.py and stop after source.",
+            "intended_artifact_paths": {"source": "replacement.py"},
+        },
+    )
+    assert result["ok"] is True, result
+    assert (
+        result["current_step_contract"]["permitted_native_action"]["exact_artifact_target"][
+            "workspace_relative_path"
+        ]
+        == "replacement.py"
+    )
+    active_semantics = CurrentLoopCoordinator(workspace_root=tmp_path).store.read()["coordinator"][
+        "current_request_semantics"
+    ]
+    assert active_semantics["execution_disposition"] == ("prohibited_for_current_step")
+
+
+def test_active_loop_matching_current_target_does_not_become_file_review(
+    tmp_path: Path,
+) -> None:
+    source_step = _begin(tmp_path, SOURCE_REQUEST)
+    source = tmp_path / "bell.py"
+    source.write_text(SOURCE, encoding="utf-8")
+    assert _complete(tmp_path, source_step, source)["ok"] is True
+    result = _call(
+        tmp_path,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {
+            "request_text": (
+                "Change the Python source to prepare a Ψ+ Bell state. Stop after the source; "
+                "then tell me whether the earlier circuit and result remain current and "
+                "preserve their history."
+            ),
+            "intended_artifact_paths": {"source": "bell.py"},
+        },
+    )
+    assert result["ok"] is True, result
+    assert result.get("customer_summary") != "Which exact files should qCoder review?"
+    state = CurrentLoopCoordinator(workspace_root=tmp_path).store.read()
+    assert state["coordinator"]["current_request_semantics"]["requested_operation"] == (
+        "source_generation"
+    )
+
+
+def test_active_loop_replacement_refuses_aliased_or_changed_current_head(
+    tmp_path: Path,
+) -> None:
+    source_step = _begin(tmp_path, SOURCE_REQUEST)
+    source = tmp_path / "bell.py"
+    source.write_text(SOURCE, encoding="utf-8")
+    assert _complete(tmp_path, source_step, source)["ok"] is True
+    before = (tmp_path / ".qcoder" / "current-loop" / "state.json").read_bytes()
+    outside = tmp_path / "outside.py"
+    outside.write_text(SOURCE, encoding="utf-8")
+    source.unlink()
+    source.symlink_to(outside)
+    result = _call(
+        tmp_path,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {"request_text": "Change the Python source to prepare a Ψ+ Bell state."},
+    )
+    assert result["ok"] is False
+    assert result["category"] == "current_role_target_file_unavailable"
+    assert result["state_mutated"] is False
+    assert (tmp_path / ".qcoder" / "current-loop" / "state.json").read_bytes() == before
+
+
 @pytest.mark.parametrize(
     ("mutation", "category"),
     [

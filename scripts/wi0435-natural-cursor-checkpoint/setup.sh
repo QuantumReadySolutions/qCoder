@@ -28,8 +28,8 @@ if [[ $# -ne 1 ]]; then
 fi
 
 packet_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-workspace="/home/rob/projects/qcoder-wi0435-natural-cursor-workspace-v5"
-operator_run_dir="/home/rob/projects/_ops/qcoder/wi0435-evidence-reconciler-result-manifest-successor-v1/natural-cursor-run-v5"
+workspace="/home/rob/projects/qcoder-wi0435-natural-cursor-workspace-v6"
+operator_run_dir="/home/rob/projects/_ops/qcoder/wi0435-evidence-reconciler-result-manifest-successor-v1/natural-cursor-run-v6"
 token_file="$1"
 bootstrap_python="$(select_compatible_python)"
 "$bootstrap_python" "$packet_root/helpers/prepare.py" preflight \
@@ -48,5 +48,7 @@ bootstrap_python="$(select_compatible_python)"
   --unknown-result "$workspace/fixtures/unknown-result-manifest.json"
 "$workspace/.venv/bin/python" "$packet_root/helpers/prepare.py" installed-check \
   --packet "$packet_root" --workspace "$workspace" --token-file "$token_file"
+"$workspace/.venv/bin/python" "$packet_root/helpers/prepare_precondition.py" \
+  --workspace "$workspace" --operator-run-dir "$operator_run_dir"
 printf 'Open a fresh Cursor Agent conversation in exactly:\n%s\n' "$workspace"
 printf 'If the cursor command is installed, run: cursor %q\n' "$workspace"

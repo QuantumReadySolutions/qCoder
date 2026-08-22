@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 import sys
 from typing import Any, Mapping
 
@@ -18,6 +19,7 @@ from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.current_loop_artifact_targets import (
     ArtifactTargetError,
     MAX_TARGET_PATH_BYTES,
+    current_registered_role_target,
     normalize_completion_artifact_path,
     normalize_intended_artifact_targets,
     target_contract_snapshot,
@@ -32,13 +34,25 @@ from qcoder.current_step_contract import (
     quiet_customer_visibility_contract,
 )
 
-BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v9"
-BINDING_MCP_SCHEMA_VERSION = 9
+BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v10"
+BINDING_MCP_SCHEMA_VERSION = 10
 BINDING_MCP_SERVER_NAME = "qcoder-current-loop"
 BEGIN_CURRENT_LOOP_TOOL_NAME = "begin_current_loop"
 COMPLETE_CURRENT_STEP_TOOL_NAME = "complete_current_step"
 MAX_REQUEST_BYTES = 65_536
 MAX_PATH_BYTES = 16_384
+
+
+def _request_explicitly_selects_target(request_text: str, target: str) -> bool:
+    normalized_request = request_text.replace("\\", "/").casefold()
+    normalized_target = target.replace("\\", "/").casefold()
+    return bool(
+        normalized_target
+        and re.search(
+            rf"(?<![\w./-]){re.escape(normalized_target)}(?![\w./-])",
+            normalized_request,
+        )
+    )
 
 
 def binding_tool_descriptors() -> list[dict[str, Any]]:
@@ -53,9 +67,12 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "exact next instruction against an already complete-resumable loop. "
                 "Supply request_text exactly once as the complete unmodified customer message. "
                 "For an artifact-producing request, also supply one exact workspace-relative "
-                "intended_artifact_paths entry for every requested role. Choose those bounded "
-                "names from the customer task without reading, listing, globbing, or searching "
-                "the workspace. qCoder binds them before any native action. "
+                "intended_artifact_paths entry for every requested role on a fresh loop. For an "
+                "active-loop replacement, omit the path: qCoder binds the current registered "
+                "role-head target automatically. A different target is accepted only when the "
+                "exact customer message names that workspace-relative path. Never read, list, "
+                "glob, or search the workspace to choose a target. qCoder binds it before any "
+                "native action. "
                 "This operation preserves the Request Baseline, classifies authority fail-closed, "
                 "and grants no native write, execution, review, or governing authority. On an "
                 "active loop, call it directly without narrating or reconstructing continuation "
@@ -83,8 +100,8 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                         },
                         "additionalProperties": False,
                         "description": (
-                            "Exact workspace-relative target for every artifact role requested "
-                            "in request_text; select names without workspace discovery."
+                            "Fresh-loop exact workspace-relative targets. Omit for an active-loop "
+                            "replacement so qCoder reuses the registered current role-head target."
                         ),
                     },
                 },
@@ -106,6 +123,9 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "pre_contract_procedure_reasoning": False,
                 "customer_visible_transition_narration": False,
                 "action_source": "replacement_current_step_contract",
+                "replacement_target_source": "registered_current_role_head",
+                "replacement_target_model_selection_required": False,
+                "different_target_requires_exact_customer_path_selection": True,
             },
             "x-qcoder-customer-visibility": quiet_customer_visibility_contract(),
             "x-qcoder-normal-success-presentation": {
@@ -245,11 +265,13 @@ def handle_binding_jsonrpc_message(
                     "Do not construct Shell commands, stdin pipelines, receipts, digests, loop "
                     "revisions, roles, or stage ceilings. The returned current_step_contract is "
                     "the only current-stage action source. Hooks may accelerate completion but "
-                    "are never required for correctness. For artifact-producing requests, "
-                    "supply intended_artifact_paths in the first begin call. Choose exact "
-                    "workspace-relative filenames solely from the customer task; do not Read, "
-                    "Glob, Grep, list, scan, or search the workspace to select a target. Use only "
-                    "the exact target returned in the Current Step Contract."
+                    "are never required for correctness. For a fresh artifact-producing request, "
+                    "supply intended_artifact_paths in the first begin call. For an active-loop "
+                    "replacement, omit the path and let qCoder bind the registered current "
+                    "role-head target; never rediscover or reselect it. A different target is "
+                    "valid only when the exact customer message explicitly names it. Do not "
+                    "Read, Glob, Grep, list, scan, or search the workspace to select a target. "
+                    "Use only the exact target returned in the Current Step Contract."
                     " If a pending completion exists, complete_current_step is the sole next "
                     "qCoder operation: call it directly with an empty object even on a later turn "
                     "or same-host MCP restart. Do not call begin_current_loop, inspect state/help, "
@@ -411,8 +433,10 @@ def handle_binding_jsonrpc_message(
     )
     state_path = coordinator.workspace_root / ".qcoder" / "current-loop" / "state.json"
     continuation = False
+    active_state: Mapping[str, Any] | None = None
     if state_path.is_file() and not state_path.is_symlink():
         current = coordinator.store.read()
+        active_state = current
         current_status = current.get("coordinator", {}).get("current_step_status")
         if current_status == "awaiting_external_client_action":
             try:
@@ -476,9 +500,71 @@ def handle_binding_jsonrpc_message(
     required_roles = (
         semantics.get("requested_artifact_roles", ()) if actionable_artifact_request else ()
     )
+    intended_paths_value = arguments.get("intended_artifact_paths")
+    if intended_paths_value is not None and not isinstance(intended_paths_value, Mapping):
+        return _result(
+            message_id,
+            _tool_result(
+                {
+                    "schema_id": "qcoder.current_loop.structured_activation_rejection.v2",
+                    "ok": False,
+                    "category": "exact_intended_artifact_targets_required",
+                    "workspace_discovery_permitted": False,
+                    "state_mutated": False,
+                }
+            ),
+        )
+    intended_paths = dict(intended_paths_value) if isinstance(intended_paths_value, Mapping) else {}
+    target_continuity: dict[str, dict[str, Any]] = {}
+    if continuation and isinstance(active_state, Mapping) and isinstance(required_roles, list):
+        try:
+            for role in required_roles:
+                if role not in {"source", "circuit_qasm"}:
+                    continue
+                current_target = current_registered_role_target(
+                    active_state,
+                    role=str(role),
+                    workspace_root=coordinator.workspace_root,
+                )
+                if current_target is None:
+                    continue
+                current_relative = str(current_target["workspace_relative_path"])
+                supplied = intended_paths.get(str(role))
+                if supplied is None:
+                    intended_paths[str(role)] = current_relative
+                    target_continuity[str(role)] = current_target
+                    continue
+                normalized_supplied = normalize_intended_artifact_targets(
+                    {str(role): supplied},
+                    workspace_root=coordinator.workspace_root,
+                    required_roles=(str(role),),
+                )[str(role)]
+                supplied_relative = str(normalized_supplied["workspace_relative_path"])
+                if supplied_relative == current_relative:
+                    target_continuity[str(role)] = current_target
+                    continue
+                if not _request_explicitly_selects_target(request_text, supplied_relative):
+                    raise ArtifactTargetError(
+                        "active_loop_replacement_target_requires_exact_customer_selection"
+                    )
+        except ArtifactTargetError as exc:
+            return _result(
+                message_id,
+                _tool_result(
+                    {
+                        "schema_id": "qcoder.current_loop.replacement_target_rejection.v1",
+                        "ok": False,
+                        "category": str(exc),
+                        "current_registered_target_retained": True,
+                        "workspace_discovery_permitted": False,
+                        "selected_file_review_inferred": False,
+                        "state_mutated": False,
+                    }
+                ),
+            )
     try:
         normalize_intended_artifact_targets(
-            arguments.get("intended_artifact_paths"),
+            intended_paths or None,
             workspace_root=coordinator.workspace_root,
             required_roles=required_roles if isinstance(required_roles, list) else (),
         )
@@ -503,13 +589,14 @@ def handle_binding_jsonrpc_message(
                 }
             ),
         )
-    intended_paths = arguments.get("intended_artifact_paths")
     payload = (
         coordinator.interpret_current_request(
             exact_message=request_text,
-            intended_artifact_paths=(
-                dict(intended_paths) if isinstance(intended_paths, Mapping) else None
-            ),
+            intended_artifact_paths=(intended_paths or None),
+            intended_artifact_target_binding_modes={
+                role: "registered_current_role_head_exact_target" for role in target_continuity
+            }
+            or None,
         )
         if continuation
         else coordinator.activate(
@@ -517,9 +604,7 @@ def handle_binding_jsonrpc_message(
             explicit_authority=True,
             capture_mode="exact_current_customer_message",
             request_transport="binding_owned_structured_mcp_argument",
-            intended_artifact_paths=(
-                dict(intended_paths) if isinstance(intended_paths, Mapping) else None
-            ),
+            intended_artifact_paths=(intended_paths or None),
         )
     )
     payload.setdefault("details", {}).update(
@@ -532,6 +617,14 @@ def handle_binding_jsonrpc_message(
             "active_loop_continuation": continuation,
             "request_baseline_recreated": False if continuation else None,
             "rebootstrap_performed": False if continuation else None,
+            "active_loop_target_continuity": {
+                role: {
+                    "binding_mode": value.get("binding_mode"),
+                    "artifact_revision_id": value.get("artifact_revision_id"),
+                    "workspace_discovery_performed": False,
+                }
+                for role, value in sorted(target_continuity.items())
+            },
         }
     )
     return _result(message_id, _tool_result(payload))

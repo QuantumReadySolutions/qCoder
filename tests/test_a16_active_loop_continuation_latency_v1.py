@@ -117,7 +117,7 @@ def test_qasm_continuation_returns_only_compact_replacement_contract(tmp_path: P
     assert contract["customer_visibility"]["mechanics"] == "silent"
     assert _bytes(contract) <= 2_500
     assert _bytes(continued) <= 5_200
-    assert _bytes(begun) <= 13_000
+    assert _bytes(begun) <= 13_100
 
 
 def test_qasm_continuation_completes_without_rebootstrap_or_results(tmp_path: Path) -> None:
@@ -159,7 +159,7 @@ def test_qasm_continuation_completes_without_rebootstrap_or_results(tmp_path: Pa
 def test_continuation_binding_is_direct_quiet_and_keeps_two_private_tools(
     tmp_path: Path,
 ) -> None:
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v40"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v41"
     assert len(EXPECTED_TOOLS) == 12
     descriptors = binding_tool_descriptors()
     assert [row["name"] for row in descriptors] == [

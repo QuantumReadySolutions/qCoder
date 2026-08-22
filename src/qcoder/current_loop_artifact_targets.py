@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
-ARTIFACT_TARGET_CONTRACT_SCHEMA_ID = "qcoder.current_loop.artifact_targets.v2"
+ARTIFACT_TARGET_CONTRACT_SCHEMA_ID = "qcoder.current_loop.artifact_targets.v3"
 SUPPORTED_TARGET_ROLES = ("source", "circuit_qasm", "results")
 MAX_TARGET_PATH_BYTES = 4_096
 _DISCOVERY_METACHARACTERS = frozenset("*?[]{}")
@@ -96,11 +96,69 @@ def normalize_completion_artifact_path(
     return Path(os.path.abspath(Path(workspace_root) / str(target["workspace_relative_path"])))
 
 
+def current_registered_role_target(
+    state: Mapping[str, Any],
+    *,
+    role: str,
+    workspace_root: Path,
+) -> dict[str, Any] | None:
+    """Return one exact role-head target without discovering neighboring files."""
+
+    if role not in SUPPORTED_TARGET_ROLES:
+        raise ArtifactTargetError("intended_artifact_role_unsupported")
+    registry = state.get("evidence_registry")
+    if not isinstance(registry, Mapping):
+        raise ArtifactTargetError("current_role_target_registry_invalid")
+    heads = registry.get("role_heads")
+    revisions = registry.get("artifact_revisions")
+    if not isinstance(heads, Mapping) or not isinstance(revisions, Mapping):
+        raise ArtifactTargetError("current_role_target_registry_invalid")
+    revision_id = heads.get(role)
+    if revision_id is None:
+        return None
+    revision = revisions.get(revision_id) if isinstance(revision_id, str) else None
+    if (
+        not isinstance(revision, Mapping)
+        or revision.get("logical_role") != role
+        or revision.get("artifact_revision_id") != revision_id
+        or revision.get("workspace_binding") != str(workspace_root)
+        or not isinstance(revision.get("exact_path"), str)
+    ):
+        raise ArtifactTargetError("current_role_target_revision_invalid")
+    workspace = Path(os.path.abspath(workspace_root))
+    candidate = Path(os.path.abspath(str(revision["exact_path"])))
+    try:
+        relative = candidate.relative_to(workspace)
+    except ValueError as exc:
+        raise ArtifactTargetError("current_role_target_outside_workspace") from exc
+    if (
+        candidate.is_symlink()
+        or not candidate.is_file()
+        or candidate.resolve(strict=True) != candidate
+    ):
+        raise ArtifactTargetError("current_role_target_file_unavailable")
+    if sha256(candidate.read_bytes()).hexdigest() != revision.get("content_digest"):
+        raise ArtifactTargetError("current_role_target_bytes_changed")
+    target = _normalize_relative_target(relative.as_posix(), workspace_root=workspace)
+    if target["exact_path_sha256"] != revision.get("path_digest"):
+        raise ArtifactTargetError("current_role_target_path_identity_mismatch")
+    target.update(
+        {
+            "binding_mode": "registered_current_role_head_exact_target",
+            "artifact_revision_id": revision_id,
+            "content_digest": revision.get("content_digest"),
+        }
+    )
+    return target
+
+
 def target_contract_snapshot() -> dict[str, Any]:
     return {
         "schema_id": ARTIFACT_TARGET_CONTRACT_SCHEMA_ID,
         "supported_roles": list(SUPPORTED_TARGET_ROLES),
-        "selection_source": "assistant_supplied_with_exact_begin_request",
+        "selection_source": ("fresh_assistant_bound_target_or_active_loop_registered_role_head"),
+        "active_loop_replacement_reuses_registered_role_head": True,
+        "different_replacement_target_requires_exact_customer_path_selection": True,
         "path_form": "workspace_relative_exact_path",
         "completion_path_form": "same_workspace_relative_exact_path",
         "absolute_completion_path_accepted_from_assistant": False,
@@ -117,6 +175,7 @@ __all__ = [
     "ArtifactTargetError",
     "MAX_TARGET_PATH_BYTES",
     "SUPPORTED_TARGET_ROLES",
+    "current_registered_role_target",
     "normalize_completion_artifact_path",
     "normalize_intended_artifact_targets",
     "target_contract_snapshot",

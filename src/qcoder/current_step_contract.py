@@ -10,8 +10,8 @@ from typing import Any, Mapping
 from qcoder.current_loop_result_manifest import result_manifest_contract_snapshot
 
 
-CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v8"
-CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 8
+CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v9"
+CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 9
 COMPLETE_CURRENT_STEP_OPERATION = "complete_current_step"
 
 
@@ -165,9 +165,16 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
             "exact_artifact_target": {
                 "workspace_relative_path": target.get("workspace_relative_path"),
                 "selection": (
-                    "bound_before_action_no_discovery"
+                    "registered_current_role_head_no_discovery"
+                    if target.get("binding_mode") == "registered_current_role_head_exact_target"
+                    else "bound_before_action_no_discovery"
                     if isinstance(target.get("exact_path_sha256"), str)
                     else "legacy_completion_path_handoff"
+                ),
+                **(
+                    {"replacement_target_model_selection_required": False}
+                    if target.get("binding_mode") == "registered_current_role_head_exact_target"
+                    else {}
                 ),
             },
         },

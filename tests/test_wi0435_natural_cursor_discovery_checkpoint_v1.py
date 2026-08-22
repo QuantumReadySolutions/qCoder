@@ -43,6 +43,16 @@ def _runtime_module():
     return module
 
 
+def _capture_module():
+    spec = importlib.util.spec_from_file_location(
+        "wi0435_bounded_capture", SCRIPT_ROOT / "capture.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _call(root: Path, name: str, arguments: dict) -> dict:
     response = handle_binding_jsonrpc_message(
         {
@@ -277,6 +287,9 @@ def test_checkpoint_selects_supported_python_and_preserves_venv_launcher(
     packet.mkdir()
     (packet / "helpers").mkdir()
     (packet / "helpers" / "runtime.py").write_bytes((SCRIPT_ROOT / "runtime.py").read_bytes())
+    (packet / "helpers" / "instrumented_mcp.py").write_bytes(
+        (SCRIPT_ROOT / "instrumented_mcp.py").read_bytes()
+    )
     workspace = tmp_path / "workspace"
     operator_run_dir = tmp_path / "operator-run"
     launcher_dir = workspace / ".venv" / "bin"
@@ -319,25 +332,105 @@ def test_checkpoint_selects_supported_python_and_preserves_venv_launcher(
     assert "Do not install or upgrade dependencies" in rule.read_text(encoding="utf-8")
 
 
-def test_checkpoint_v5_keeps_instrumentation_outside_workspace_and_accepts_aborts() -> None:
+def test_checkpoint_v6_automates_bounded_capture_outside_workspace() -> None:
     setup = (SCRIPT_ROOT / "setup.sh").read_text(encoding="utf-8")
     capture = (SCRIPT_ROOT / "capture.py").read_text(encoding="utf-8")
     capture_sh = (SCRIPT_ROOT / "capture.sh").read_text(encoding="utf-8")
     seal = (SCRIPT_ROOT / "seal.py").read_text(encoding="utf-8")
-    assert "qcoder-wi0435-natural-cursor-workspace-v5" in setup
-    assert "natural-cursor-run-v5" in setup
+    assert "qcoder-wi0435-natural-cursor-workspace-v6" in setup
+    assert "natural-cursor-run-v6" in setup
     assert 'destination = operator_run_dir / f"{args.label}.json"' in capture
     assert 'workspace / "safe-return"' not in capture
-    assert {"unknown", "not_observed", "aborted", "timeout"} <= set(
-        __import__("runpy").run_path(str(SCRIPT_ROOT / "capture.py"))["OBSERVATION_VALUES"]
-    )
+    assert '"not_observed"' in capture
+    assert "input(" not in capture
+    assert "read -r -p" not in capture_sh
     assert "--stage-status" in capture_sh
-    assert "--qcoder-begin-calls" in capture_sh
-    assert "--qcoder-completion-calls" in capture_sh
-    assert "--cli-help-invocations" in capture_sh
-    assert "--harness-file-reads" in capture_sh
+    assert "--qcoder-begin-calls" not in capture_sh
+    assert "mcp-events.jsonl" in capture
+    assert "execution-events.jsonl" in capture
+    assert "qcoder_completion_rejections" in capture
+    assert "prepared_sampler_executions" in capture
+    assert ".capture-watermark.json" in capture
+    assert "prepare_precondition.py" in setup
     assert "operator_run_dir.glob" in seal
     assert 'workspace / "safe-return"' not in seal
+
+
+def test_bounded_capture_derives_calls_execution_and_registrations_without_operator_counts(
+    tmp_path: Path,
+) -> None:
+    capture = _capture_module()
+    run_dir = tmp_path / "operator"
+    run_dir.mkdir()
+    events = [
+        {
+            "surface": "private_current_loop",
+            "tool": "begin_current_loop",
+            "result": {"ok": True},
+        },
+        {
+            "surface": "private_current_loop",
+            "tool": "complete_current_step",
+            "result": {"ok": False},
+        },
+        {
+            "surface": "private_current_loop",
+            "tool": "complete_current_step",
+            "result": {"ok": True},
+        },
+        {
+            "surface": "public_context_bridge",
+            "tool": "bounded_public_fixture",
+            "result": {"ok": True},
+        },
+    ]
+    (run_dir / "mcp-events.jsonl").write_text(
+        "".join(json.dumps(value) + "\n" for value in events), encoding="utf-8"
+    )
+    executions = [
+        {
+            "event": "execution_started",
+            "attempt_identity_sha256": "a" * 64,
+        },
+        {
+            "event": "sampled_execution_completed",
+            "attempt_identity_sha256": "a" * 64,
+            "dependency_installation_performed": False,
+            "environment_mutated": False,
+        },
+    ]
+    (run_dir / "execution-events.jsonl").write_text(
+        "".join(json.dumps(value) + "\n" for value in executions), encoding="utf-8"
+    )
+    state = {
+        "evidence_registry": {
+            "registration_events": [
+                {"event_id": "event-1", "logical_role": "source"},
+                {"event_id": "event-2", "logical_role": "circuit_qasm"},
+            ]
+        }
+    }
+    projection, watermark = capture.instrumentation_projection(run_dir, state)
+    assert projection == {
+        "mcp_tool_calls": 4,
+        "public_context_bridge_calls": 1,
+        "private_current_loop_calls": 3,
+        "qcoder_begin_calls": 1,
+        "qcoder_completion_calls": 2,
+        "qcoder_completion_rejections": 1,
+        "canonical_registrations": 2,
+        "registered_roles": ["circuit_qasm", "source"],
+        "prepared_execution_process_attempts": 1,
+        "prepared_sampler_executions": 1,
+        "prepared_execution_reruns": 0,
+        "dependency_installations": 0,
+        "environment_mutations": 0,
+        "other_native_process_attempts": "not_observed",
+        "qcoder_cli_or_help_invocations": "not_observed",
+        "workspace_target_selection_discovery": "not_observed",
+        "harness_file_reads": "not_observed",
+    }
+    assert watermark["registration_event_ids"] == ["event-1", "event-2"]
 
 
 def test_prepared_runtime_is_pinned_and_missing_or_wrong_runtime_blocks(

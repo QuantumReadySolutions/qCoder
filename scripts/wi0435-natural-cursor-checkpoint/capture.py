@@ -31,13 +31,10 @@ def artifact_projection(state: dict) -> dict:
 
 
 def summary_projection(state: dict) -> dict:
-    result = {}
-    for reference, descriptor in sorted(state.get("run_summary_index", {}).items()):
-        result[reference] = {
-            "currency": descriptor.get("currency"),
-            "status": descriptor.get("status"),
-        }
-    return result
+    return {
+        reference: {"currency": value.get("currency"), "status": value.get("status")}
+        for reference, value in sorted(state.get("run_summary_index", {}).items())
+    }
 
 
 def runtime_projection(workspace: Path) -> dict:
@@ -52,7 +49,6 @@ def runtime_projection(workspace: Path) -> dict:
         "versions": value.get("versions"),
         "backend_or_sampler": value.get("backend_or_sampler"),
         "preflight_status": value.get("preflight", {}).get("status"),
-        "natural_campaign_execution_count_at_setup": value.get("natural_campaign_execution_count"),
     }
 
 
@@ -75,27 +71,6 @@ def fixture_projection(workspace: Path) -> dict:
         "before": {key: before.get(key) for key in current},
         "after": current,
     }
-
-
-OBSERVATION_VALUES = {"unknown", "not_observed", "aborted", "timeout"}
-
-
-def observation_count(value: str) -> int | str:
-    if value in OBSERVATION_VALUES:
-        return value
-    parsed = int(value)
-    if parsed < 0:
-        raise argparse.ArgumentTypeError("observation count must be nonnegative")
-    return parsed
-
-
-def wall_time(value: str) -> float | str:
-    if value in {"unknown", "aborted", "timeout"}:
-        return value
-    parsed = float(value)
-    if parsed < 0:
-        raise argparse.ArgumentTypeError("wall time must be nonnegative")
-    return parsed
 
 
 def pending_projection(state: dict, workspace: Path) -> dict:
@@ -122,6 +97,109 @@ def pending_projection(state: dict, workspace: Path) -> dict:
     }
 
 
+def wall_time(value: str) -> float | str:
+    if value in {"unknown", "aborted", "timeout"}:
+        return value
+    parsed = float(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("wall time must be nonnegative")
+    return parsed
+
+
+def _read_json_lines(path: Path, *, offset: int) -> tuple[list[dict], int]:
+    if not path.exists():
+        return [], 0
+    if not path.is_file() or path.is_symlink():
+        raise SystemExit("Bounded instrumentation log is unsafe.")
+    raw = path.read_bytes()
+    if offset < 0 or offset > len(raw):
+        raise SystemExit("Bounded instrumentation watermark is invalid.")
+    values: list[dict] = []
+    for line in raw[offset:].splitlines():
+        value = json.loads(line.decode("utf-8"))
+        if not isinstance(value, dict):
+            raise SystemExit("Bounded instrumentation event is invalid.")
+        values.append(value)
+    return values, len(raw)
+
+
+def instrumentation_projection(operator_run_dir: Path, state: dict) -> tuple[dict, dict]:
+    watermark_path = operator_run_dir / ".capture-watermark.json"
+    watermark = (
+        json.loads(watermark_path.read_text(encoding="utf-8"))
+        if watermark_path.is_file() and not watermark_path.is_symlink()
+        else {}
+    )
+    offsets = watermark.get("offsets", {}) if isinstance(watermark, dict) else {}
+    mcp_events, mcp_offset = _read_json_lines(
+        operator_run_dir / "mcp-events.jsonl", offset=int(offsets.get("mcp", 0))
+    )
+    execution_events, execution_offset = _read_json_lines(
+        operator_run_dir / "execution-events.jsonl", offset=int(offsets.get("execution", 0))
+    )
+    prior_ids = set(watermark.get("registration_event_ids", []))
+    registry = state.get("evidence_registry", {})
+    registrations = registry.get("registration_events", []) if isinstance(registry, dict) else []
+    new_registrations = [
+        item
+        for item in registrations
+        if isinstance(item, dict) and item.get("event_id") not in prior_ids
+    ]
+    private = [item for item in mcp_events if item.get("surface") == "private_current_loop"]
+    public = [item for item in mcp_events if item.get("surface") == "public_context_bridge"]
+    completions = [item for item in private if item.get("tool") == "complete_current_step"]
+    starts = [item for item in execution_events if item.get("event") == "execution_started"]
+    sampled = [
+        item for item in execution_events if item.get("event") == "sampled_execution_completed"
+    ]
+    projection = {
+        "mcp_tool_calls": len(mcp_events),
+        "public_context_bridge_calls": len(public),
+        "private_current_loop_calls": len(private),
+        "qcoder_begin_calls": sum(item.get("tool") == "begin_current_loop" for item in private),
+        "qcoder_completion_calls": len(completions),
+        "qcoder_completion_rejections": sum(
+            item.get("result", {}).get("ok") is not True for item in completions
+        ),
+        "canonical_registrations": len(new_registrations),
+        "registered_roles": sorted(
+            str(item.get("logical_role"))
+            for item in new_registrations
+            if isinstance(item.get("logical_role"), str)
+        ),
+        "prepared_execution_process_attempts": len(starts),
+        "prepared_sampler_executions": len(sampled),
+        "prepared_execution_reruns": max(
+            0,
+            len(starts) - len({item.get("attempt_identity_sha256") for item in starts}),
+        ),
+        "dependency_installations": (
+            0
+            if sampled
+            and all(item.get("dependency_installation_performed") is False for item in sampled)
+            else "not_observed"
+        ),
+        "environment_mutations": (
+            0
+            if sampled and all(item.get("environment_mutated") is False for item in sampled)
+            else "not_observed"
+        ),
+        "other_native_process_attempts": "not_observed",
+        "qcoder_cli_or_help_invocations": "not_observed",
+        "workspace_target_selection_discovery": "not_observed",
+        "harness_file_reads": "not_observed",
+    }
+    next_watermark = {
+        "offsets": {"mcp": mcp_offset, "execution": execution_offset},
+        "registration_event_ids": [
+            item.get("event_id")
+            for item in registrations
+            if isinstance(item, dict) and isinstance(item.get("event_id"), str)
+        ],
+    }
+    return projection, next_watermark
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", type=Path, required=True)
@@ -129,20 +207,9 @@ def main() -> None:
     parser.add_argument("--operator-run-dir", type=Path, required=True)
     parser.add_argument("--wall-seconds", type=wall_time, required=True)
     parser.add_argument("--stage-status", choices=["complete", "aborted", "timeout"], required=True)
-    parser.add_argument("--procedure-narration", choices=["yes", "no"], required=True)
-    parser.add_argument("--native-process-attempts", type=observation_count, required=True)
-    parser.add_argument("--sampler-executions", type=observation_count, required=True)
-    parser.add_argument("--dependency-installations", type=observation_count, required=True)
-    parser.add_argument("--environment-mutations", type=observation_count, required=True)
-    parser.add_argument("--execution-reruns", type=observation_count, required=True)
-    parser.add_argument("--qcoder-begin-calls", type=observation_count, required=True)
-    parser.add_argument("--qcoder-completion-calls", type=observation_count, required=True)
-    parser.add_argument("--completion-retries", type=observation_count, required=True)
-    parser.add_argument("--cli-help-invocations", type=observation_count, required=True)
-    parser.add_argument("--workspace-discovery-actions", type=observation_count, required=True)
-    parser.add_argument("--harness-file-reads", type=observation_count, required=True)
-    parser.add_argument("--requested-outcome", required=True)
-    parser.add_argument("--final-outcome-observed", choices=["yes", "no"], required=True)
+    parser.add_argument(
+        "--procedure-narration", choices=["yes", "no", "not_observed"], default="not_observed"
+    )
     args = parser.parse_args()
     workspace = args.workspace.resolve()
     operator_run_dir = args.operator_run_dir.resolve()
@@ -156,27 +223,21 @@ def main() -> None:
         raise SystemExit("Operator run directory is missing or unsafe.")
     state = CurrentLoopCoordinator(workspace_root=workspace).store.read()
     coordinator = state.get("coordinator", {})
+    instrumentation, next_watermark = instrumentation_projection(operator_run_dir, state)
     output = {
-        "schema_id": "qcoder.wi0435.natural_cursor_checkpoint.v5",
+        "schema_id": "qcoder.wi0435.natural_cursor_checkpoint.v6",
         "checkpoint": args.label,
         "stage_status": args.stage_status,
         "customer_visible_wall_seconds": args.wall_seconds,
         "operator_observations": {
-            "procedure_narration": args.procedure_narration == "yes",
-            "native_process_attempts": args.native_process_attempts,
-            "actual_sampler_executions": args.sampler_executions,
-            "dependency_installation_actions": args.dependency_installations,
-            "environment_mutations": args.environment_mutations,
-            "execution_reruns": args.execution_reruns,
-            "qcoder_begin_calls": args.qcoder_begin_calls,
-            "qcoder_completion_calls": args.qcoder_completion_calls,
-            "qcoder_completion_retries": args.completion_retries,
-            "qcoder_cli_or_help_invocations": args.cli_help_invocations,
-            "target_selection_discovery_actions": args.workspace_discovery_actions,
-            "harness_file_reads": args.harness_file_reads,
-            "requested_final_outcome": args.requested_outcome,
-            "requested_final_outcome_observed": args.final_outcome_observed == "yes",
+            "procedure_narration": (
+                args.procedure_narration == "yes"
+                if args.procedure_narration in {"yes", "no"}
+                else "not_observed"
+            ),
+            "all_internal_counts_operator_entered": False,
         },
+        "bounded_instrumentation": instrumentation,
         "prepared_external_runtime": runtime_projection(workspace),
         "preexisting_fixture": fixture_projection(workspace),
         "pending_completion": pending_projection(state, workspace),
@@ -196,6 +257,9 @@ def main() -> None:
     destination = operator_run_dir / f"{args.label}.json"
     destination.write_bytes(canonical_bytes(output) + b"\n")
     os.chmod(destination, stat.S_IRUSR | stat.S_IWUSR)
+    watermark_path = operator_run_dir / ".capture-watermark.json"
+    watermark_path.write_bytes(canonical_bytes(next_watermark) + b"\n")
+    os.chmod(watermark_path, stat.S_IRUSR | stat.S_IWUSR)
     print(destination)
 
 
