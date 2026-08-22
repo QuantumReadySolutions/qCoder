@@ -108,6 +108,10 @@ from qcoder.current_loop_request_semantics import (
     semantics_contract_snapshot,
     validate_request_semantics,
 )
+from qcoder.current_loop_result_controls import (
+    ResultControlError,
+    evaluate_selected_result_controls,
+)
 from qcoder.current_loop_artifact_targets import normalize_intended_artifact_targets
 from qcoder.current_step_contract import (
     CURRENT_STEP_CONTRACT_SCHEMA_ID,
@@ -2750,6 +2754,32 @@ class CurrentLoopCoordinator:
                 "raw_artifact_included": False,
                 "local_path_included": False,
             }
+        if semantics["requested_operation"] == "selected_result_evidence_controls":
+            try:
+                result = self.evaluate_selected_result_evidence_controls(
+                    selected_paths=selected_paths
+                )
+            except ResultControlError as exc:
+                return {
+                    "schema_id": "qcoder.current_loop.selected_result_control_rejection.v1",
+                    "schema_version": 1,
+                    "ok": False,
+                    "operation": "interpret_current_request",
+                    "category": exc.category,
+                    "state_revision": state["state_revision"],
+                    "loop_ref": state["loop_ref"],
+                    "current_request_semantics": semantics,
+                    "state_mutated": False,
+                    "authority_broadened": False,
+                    "workspace_discovery_permitted": False,
+                    "cli_or_help_fallback_permitted": False,
+                    "request_baseline_recreated": False,
+                    "rebootstrap_performed": False,
+                }
+            result["current_request_semantics"] = semantics
+            result["request_baseline_recreated"] = False
+            result["rebootstrap_performed"] = False
+            return result
         if semantics["requested_operation"] == "selected_artifact_review":
             result = self.review_customer_selected_files(selected_paths=selected_paths)
             return {
@@ -2966,6 +2996,36 @@ class CurrentLoopCoordinator:
             protected_call=self.transport.call,
             python_profile=python_profile,
         )
+
+    def evaluate_selected_result_evidence_controls(
+        self,
+        *,
+        selected_paths: Sequence[str],
+    ) -> dict[str, Any]:
+        """Return a read-only disposition for exactly selected result controls."""
+
+        state = self._require_phase(
+            "evaluate_selected_result_evidence_controls",
+            {
+                "generation_ready",
+                "awaiting_local_artifacts",
+                "evidence_processing",
+                "current_build_review",
+                "continuation_choice",
+            },
+        )
+        before_revision = state["state_revision"]
+        before_result = state.get("evidence_registry", {}).get("role_heads", {}).get("results")
+        result = evaluate_selected_result_controls(
+            state=state,
+            workspace_root=self.workspace_root,
+            selected_paths=selected_paths,
+        )
+        after = self.store.read()
+        after_result = after.get("evidence_registry", {}).get("role_heads", {}).get("results")
+        if after["state_revision"] != before_revision or after_result != before_result:
+            raise ResultControlError("selected_result_control_state_changed")
+        return result
 
     def _pending_activation_result(
         self,
@@ -7280,12 +7340,19 @@ class CurrentLoopCoordinator:
             ):
                 raise CurrentLoopError("bounded_action_expectation_not_active")
             binding = dict(native_client_event_binding)
+            preexisting_satisfaction = (
+                binding.get("artifact_satisfaction_disposition") == "pre_existing_exact_artifact"
+            )
             required_binding = {
                 "schema_id": "qcoder.current_loop.native_action_completion_handoff.v1",
                 "schema_version": 1,
-                "semantic_event": "native_file_edit_completed",
+                "semantic_event": (
+                    "exact_preexisting_artifact_selected"
+                    if preexisting_satisfaction
+                    else "native_file_edit_completed"
+                ),
                 "tool_name_match_required": False,
-                "native_write_completed_before_handoff": True,
+                "native_write_completed_before_handoff": not preexisting_satisfaction,
                 "source_bytes_returned": False,
                 "native_client_permission_owned_by_client": True,
                 "native_client_permission_granted_by_qcoder": False,
@@ -7672,9 +7739,15 @@ class CurrentLoopCoordinator:
                 "schema_version": 1,
                 "transport": transport,
                 "transport_event": transport_event,
-                "semantic_event": "native_file_edit_completed",
+                "semantic_event": (
+                    "exact_preexisting_artifact_selected"
+                    if artifact_disposition == "pre_existing_exact_artifact"
+                    else "native_file_edit_completed"
+                ),
                 "tool_name_match_required": False,
-                "native_write_completed_before_handoff": True,
+                "native_write_completed_before_handoff": (
+                    artifact_disposition != "pre_existing_exact_artifact"
+                ),
                 "artifact_satisfaction_disposition": artifact_disposition,
                 "assistant_created_provenance_claimed": artifact_disposition == "assistant_created",
                 "pre_existing_artifact_mutated_by_qcoder": False,

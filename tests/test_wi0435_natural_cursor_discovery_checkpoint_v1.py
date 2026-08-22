@@ -98,6 +98,11 @@ def test_source_begin_binds_exact_target_and_prohibits_discovery(tmp_path: Path)
         "workspace_relative_path": "phi_plus_bell.py",
         "selection": "bound_before_action_no_discovery",
     }
+    assert "native_write_required" not in begun["current_step_contract"]["permitted_native_action"]
+    assert (
+        "preexisting_exact_artifact_satisfaction"
+        not in begun["current_step_contract"]["permitted_native_action"]
+    )
     descriptor = binding_tool_descriptors()[0]
     assert "intended_artifact_paths" in descriptor["inputSchema"]["properties"]
     assert descriptor["x-qcoder-artifact-target-contract"]["discovery_or_glob_permitted"] is False
@@ -108,6 +113,25 @@ def test_source_begin_binds_exact_target_and_prohibits_discovery(tmp_path: Path)
     artifact_schema = complete_descriptor["inputSchema"]["properties"]["artifact_path"]
     assert artifact_schema["x-qcoder-path-form"] == "workspace_relative_bound_target"
     assert "absolute paths are not accepted" in artifact_schema["description"]
+
+
+def test_binding_schema_exposes_bounded_exact_selected_control_transport() -> None:
+    descriptor = next(
+        item for item in binding_tool_descriptors() if item["name"] == BEGIN_CURRENT_LOOP_TOOL_NAME
+    )
+    selected = descriptor["inputSchema"]["properties"]["selected_artifact_paths"]
+    assert selected["type"] == "array"
+    assert selected["minItems"] == 1
+    assert selected["maxItems"] == 2
+    assert selected["uniqueItems"] is True
+    happy = descriptor["x-qcoder-selected-result-control-happy-path"]
+    assert len(happy["selected_artifact_paths"]) == 2
+    assert happy["terminal_read_only_projection"] is True
+    assert happy["native_action_required"] is False
+    text = descriptor["description"].casefold()
+    assert "selected_artifact_paths" in text
+    assert "never read or search" in text
+    assert "no native action" in text
 
 
 def test_completion_refuses_unbound_neighbor_path_before_registration(tmp_path: Path) -> None:
@@ -332,13 +356,13 @@ def test_checkpoint_selects_supported_python_and_preserves_venv_launcher(
     assert "Do not install or upgrade dependencies" in rule.read_text(encoding="utf-8")
 
 
-def test_checkpoint_v6_automates_bounded_capture_outside_workspace() -> None:
+def test_checkpoint_v7_automates_bounded_capture_outside_workspace() -> None:
     setup = (SCRIPT_ROOT / "setup.sh").read_text(encoding="utf-8")
     capture = (SCRIPT_ROOT / "capture.py").read_text(encoding="utf-8")
     capture_sh = (SCRIPT_ROOT / "capture.sh").read_text(encoding="utf-8")
     seal = (SCRIPT_ROOT / "seal.py").read_text(encoding="utf-8")
-    assert "qcoder-wi0435-natural-cursor-workspace-v6" in setup
-    assert "natural-cursor-run-v6" in setup
+    assert "qcoder-wi0435-natural-cursor-workspace-v7" in setup
+    assert "natural-cursor-run-v7" in setup
     assert 'destination = operator_run_dir / f"{args.label}.json"' in capture
     assert 'workspace / "safe-return"' not in capture
     assert '"not_observed"' in capture
@@ -366,7 +390,16 @@ def test_bounded_capture_derives_calls_execution_and_registrations_without_opera
         {
             "surface": "private_current_loop",
             "tool": "begin_current_loop",
-            "result": {"ok": True},
+            "result": {
+                "ok": True,
+                "operation": "evaluate_selected_result_evidence_controls",
+                "selected_artifact_count": 2,
+                "selected_control_dispositions": [
+                    "rejected_as_current_result_evidence",
+                    "preserved_unknown_lineage_historical_noncurrent",
+                ],
+                "current_result_unchanged": True,
+            },
         },
         {
             "surface": "private_current_loop",
@@ -418,6 +451,13 @@ def test_bounded_capture_derives_calls_execution_and_registrations_without_opera
         "qcoder_begin_calls": 1,
         "qcoder_completion_calls": 2,
         "qcoder_completion_rejections": 1,
+        "selected_result_control_evaluations": 1,
+        "selected_result_control_paths": 2,
+        "selected_result_control_dispositions": [
+            "rejected_as_current_result_evidence",
+            "preserved_unknown_lineage_historical_noncurrent",
+        ],
+        "selected_result_control_current_result_unchanged": True,
         "canonical_registrations": 2,
         "registered_roles": ["circuit_qasm", "source"],
         "prepared_execution_process_attempts": 1,

@@ -10,8 +10,8 @@ from typing import Any, Mapping
 from qcoder.current_loop_result_manifest import result_manifest_contract_snapshot
 
 
-CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v9"
-CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 9
+CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v10"
+CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 10
 COMPLETE_CURRENT_STEP_OPERATION = "complete_current_step"
 
 
@@ -143,6 +143,9 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("current_step_contract_exact_artifact_target_required")
     pending = coordinator.get("pending_completion_checkpoint")
     durable_pending = isinstance(pending, Mapping)
+    preexisting_satisfaction = bool(
+        semantics.get("preexisting_exact_source_satisfaction_requested")
+    )
     contract = {
         "schema_id": CURRENT_STEP_CONTRACT_SCHEMA_ID,
         "schema_version": CURRENT_STEP_CONTRACT_SCHEMA_VERSION,
@@ -177,6 +180,14 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
                     else {}
                 ),
             },
+            **(
+                {
+                    "native_write_required": False,
+                    "preexisting_exact_artifact_satisfaction": True,
+                }
+                if preexisting_satisfaction
+                else {}
+            ),
         },
         "prohibited_current_actions": prohibited_actions,
         "native_client_authority": {
@@ -190,6 +201,11 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
                 [] if durable_pending else ["current_action_handle", "artifact_path"]
             ),
             "canonical_arguments": {} if durable_pending else None,
+            **(
+                {"artifact_disposition_derived_by_qcoder": "pre_existing_exact_artifact"}
+                if preexisting_satisfaction
+                else {}
+            ),
             "qcoder_resolves_bound_action_and_target": durable_pending,
             "artifact_path": target.get("workspace_relative_path"),
             "artifact_path_form": "workspace_relative_bound_target",
@@ -268,6 +284,7 @@ def current_step_contract_snapshot() -> dict[str, Any]:
         "native_permission_owner": "native_client",
         "hooks_optional_accelerators": True,
         "exact_artifact_target_required": True,
+        "preexisting_exact_source_satisfaction_without_write": True,
         "workspace_discovery_permitted": False,
         "external_execution_runtime_prepared_before_step": True,
         "dependency_installation_or_environment_mutation_authorized_by_step": False,

@@ -17,8 +17,8 @@ import unicodedata
 from typing import Any, Mapping, Sequence
 
 
-REQUEST_SEMANTICS_SCHEMA_ID = "qcoder.current_loop.request_semantics.v4"
-REQUEST_SEMANTICS_SCHEMA_VERSION = 4
+REQUEST_SEMANTICS_SCHEMA_ID = "qcoder.current_loop.request_semantics.v5"
+REQUEST_SEMANTICS_SCHEMA_VERSION = 5
 REQUEST_RECOVERY_SCHEMA_ID = "qcoder.current_loop.request_semantics_recovery.v1"
 
 ARTIFACT_ROLES = ("source", "circuit_qasm", "results")
@@ -29,6 +29,7 @@ STAGE_OPERATIONS = (
     "qasm_export",
     "local_execution",
     "selected_artifact_review",
+    "selected_result_evidence_controls",
     "current_loop_evidence_diff",
     "close_current_loop",
     "abandon_current_loop",
@@ -85,7 +86,9 @@ _EXECUTION_WORDS = frozenset(
 )
 _RESULT_WORDS = frozenset({"count", "counts", "result", "results", "shots", "shot"})
 _QASM_WORDS = frozenset({"qasm", "openqasm"})
-_REVIEW_WORDS = frozenset({"review", "inspect", "analyze", "analyse", "check"})
+_REVIEW_WORDS = frozenset(
+    {"review", "inspect", "analyze", "analyse", "check", "evaluate", "validate", "assess"}
+)
 _DEFERRED_MARKERS = ("later", "afterward", "afterwards", "next step", "another step")
 
 
@@ -255,6 +258,8 @@ def _stage_ceiling(
         allowed_operations = ["ide_execute_local"]
     elif operation == "selected_artifact_review":
         allowed_operations = ["local_selected_artifact_review"]
+    elif operation == "selected_result_evidence_controls":
+        allowed_operations = ["local_selected_result_control_evaluation"]
     elif operation == "current_loop_evidence_diff":
         allowed_operations = ["current_loop_evidence_diff"]
     else:
@@ -294,6 +299,9 @@ def _authority_layers(*, operation: str, active_loop: bool) -> dict[str, Any]:
     elif operation == "selected_artifact_review":
         next_object = "exact_selected_artifact_review"
         native_action = "exact_native_file_selection_and_read"
+    elif operation == "selected_result_evidence_controls":
+        next_object = "exact_selected_result_control_evaluation"
+        native_action = "none"
     elif operation == "current_loop_evidence_diff":
         next_object = "current_loop_evidence_diff"
         native_action = "none"
@@ -337,6 +345,8 @@ def _authority_layers(*, operation: str, active_loop: bool) -> dict[str, Any]:
                 if operation in {"source_and_local_execution", "local_execution"}
                 else "The native client applies its controls to these selected-file reads"
                 if operation == "selected_artifact_review"
+                else "qCoder locally evaluates only the exact selected result controls"
+                if operation == "selected_result_evidence_controls"
                 else "The native client applies its controls to this bounded local action"
             ),
         },
@@ -458,6 +468,15 @@ def classify_current_request(
     source_action = source_action_candidate and _has_affirmative_action(
         normalized, tuple(_SOURCE_ACTIONS)
     )
+    preexisting_exact_source_satisfaction = bool(
+        active_loop
+        and explicit_qcoder
+        and _has_any(words, _SOURCE_NOUNS)
+        and re.search(r"\b(?:already\s+exists?|pre[- ]?existing)\b", normalized)
+        and re.search(r"\b(?:exact\s+selected\s+file|source\s+role)\b", normalized)
+        and re.search(r"\b(?:accept|satisf(?:y|ies)|without\s+rewrit)", normalized)
+    )
+    source_action = source_action or preexisting_exact_source_satisfaction
     negated_supported_task = bool(
         explicit_qcoder
         and (
@@ -491,6 +510,14 @@ def classify_current_request(
         and not (currentness_projection_requested and not execution_requested)
     )
     requested_shots = _requested_shots(normalized)
+    selected_result_control_intent = bool(
+        active_loop
+        and explicit_qcoder
+        and affirmative_review_intent
+        and results_mentioned
+        and re.search(r"\b(?:result\s+evidence\s+controls?|lineage\s+controls?)\b", normalized)
+        and re.search(r"\bexact\s+selected\s+files?\b", normalized)
+    )
 
     # "Stop after source/code" and "only source/code" are semantic ceiling
     # features independent of the particular customer sentence.
@@ -570,6 +597,20 @@ def classify_current_request(
         execution = "prohibited_for_current_step"
         evidence_review = "existing_canonical_evidence_only"
         stop_after = "bounded_difference_ready"
+    elif selected_result_control_intent:
+        operation = "selected_result_evidence_controls"
+        route = "active_loop_continuation"
+        allowed_roles = []
+        execution = "prohibited_for_current_step"
+        evidence_review = "exact_selected_result_controls_only"
+        stop_after = "bounded_result_control_disposition_ready"
+        if len(selected_paths) != 2:
+            ambiguity = "missing_or_surplus_exact_result_control_selection"
+            clarification = None
+            recovery = _semantic_recovery(
+                category="exact_two_selected_result_control_paths_required",
+                clarification=None,
+            )
     elif affirmative_review_intent and not review_deferred and not currentness_projection_requested:
         operation = "selected_artifact_review"
         route = "named_d079_workflow"
@@ -744,12 +785,21 @@ def classify_current_request(
             else None
         ),
         "currentness_projection_requested": currentness_projection_requested,
+        **(
+            {"preexisting_exact_source_satisfaction_requested": True}
+            if preexisting_exact_source_satisfaction
+            else {}
+        ),
         "evidence_review_disposition": evidence_review,
         "current_step_ceiling": ceiling,
         "ambiguity_state": ambiguity,
         "clarification_required": clarification is not None,
         "customer_clarification": clarification,
-        "loop_mutation_permitted": clarification is None and route not in {"available_inactive"},
+        "loop_mutation_permitted": (
+            clarification is None
+            and route not in {"available_inactive"}
+            and operation != "selected_result_evidence_controls"
+        ),
         "bootstrap_required": route == "active_build",
         "rebootstrap_permitted": False if active_loop else route == "active_build",
         "request_baseline_recreation_permitted": False if active_loop else route == "active_build",
@@ -796,6 +846,8 @@ def validate_request_semantics(value: Mapping[str, Any]) -> None:
         raise ValueError("current_request_semantics_shot_count_invalid")
     if not isinstance(value.get("currentness_projection_requested"), bool):
         raise ValueError("current_request_semantics_currentness_projection_invalid")
+    if value.get("preexisting_exact_source_satisfaction_requested") not in {None, True}:
+        raise ValueError("current_request_semantics_preexisting_satisfaction_invalid")
     ceiling = value.get("current_step_ceiling")
     if not isinstance(ceiling, Mapping) or ceiling.get("allowed_artifact_roles") != roles:
         raise ValueError("current_request_semantics_ceiling_mismatch")
@@ -814,7 +866,8 @@ def migrate_request_semantics(value: Mapping[str, Any]) -> dict[str, Any]:
         "qcoder.current_loop.request_semantics.v1",
         "qcoder.current_loop.request_semantics.v2",
         "qcoder.current_loop.request_semantics.v3",
-    } and result.get("schema_version") in {1, 2, 3}:
+        "qcoder.current_loop.request_semantics.v4",
+    } and result.get("schema_version") in {1, 2, 3, 4}:
         operation = str(result.get("requested_operation"))
         active_loop = bool(result.get("active_loop_at_classification"))
         result["schema_id"] = REQUEST_SEMANTICS_SCHEMA_ID
@@ -861,14 +914,16 @@ def ceiling_allows(
 
 def semantics_contract_snapshot() -> dict[str, Any]:
     result = {
-        "schema_id": "qcoder.current_loop.request_semantics_contract.v4",
-        "schema_version": 4,
+        "schema_id": "qcoder.current_loop.request_semantics_contract.v5",
+        "schema_version": 5,
         "semantic_schema_id": REQUEST_SEMANTICS_SCHEMA_ID,
         "natural_language_in_exact_authority_out": True,
         "exact_original_message_preserved": True,
         "temporary_current_step_ceiling": True,
         "exact_requested_shots_bound_when_supplied": True,
         "action_currentness_projection_is_not_selected_file_review": True,
+        "selected_result_controls_are_read_only_exact_selection": True,
+        "preexisting_exact_source_can_satisfy_without_native_write": True,
         "durable_blueprint_constraint": False,
         "authority_layers": [
             "current_loop_activation",

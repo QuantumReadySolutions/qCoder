@@ -160,8 +160,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 40
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v41"
+CLIENT_BINDING_SCHEMA_VERSION = 41
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v42"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -214,6 +214,15 @@ Activation, qCoder's bounded action, native-client-owned controls, native-action
 evidence, and later artifact or governing authority are separate. A later exact customer
 instruction uses interpret-current-request
 without bootstrap or Request Baseline recreation.
+
+For an exact selected result-evidence control request, call begin_current_loop with the complete
+request_text and copy only the customer-named workspace-relative files into selected_artifact_paths.
+That private operation performs the bounded local validation and returns the terminal control
+disposition directly. Do not use qCoder CLI/help, Read, Grep, Glob, state inspection, package
+inspection, neighboring files, or sibling workspaces. Do not execute, infer lineage, or register a
+control as current evidence. For an explicitly selected pre-existing exact source, use the same
+selected_artifact_paths field with its one customer-named path; qCoder binds the source step and
+derives the no-write completion disposition without claiming assistant creation.
 
 For an exact native source write, use only the target returned by the Current Step Contract and
 follow the native client's own controls to perform only that write. Never search the workspace to
@@ -696,6 +705,9 @@ def build_client_binding_descriptor(
                     "typed_completion_operation": "complete_current_step",
                     "structured_activation_argument": "request_text",
                     "structured_artifact_target_argument": "intended_artifact_paths",
+                    "structured_exact_selection_argument": "selected_artifact_paths",
+                    "selected_result_control_path_limit": 2,
+                    "selected_result_control_terminal_read_only_projection": True,
                     "workspace_discovery_for_target_selection": False,
                     "exact_request_transported_once": True,
                     "normal_path_shell_or_cli": False,

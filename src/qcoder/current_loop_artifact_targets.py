@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
-ARTIFACT_TARGET_CONTRACT_SCHEMA_ID = "qcoder.current_loop.artifact_targets.v3"
+ARTIFACT_TARGET_CONTRACT_SCHEMA_ID = "qcoder.current_loop.artifact_targets.v4"
 SUPPORTED_TARGET_ROLES = ("source", "circuit_qasm", "results")
 MAX_TARGET_PATH_BYTES = 4_096
 _DISCOVERY_METACHARACTERS = frozenset("*?[]{}")
@@ -96,6 +96,51 @@ def normalize_completion_artifact_path(
     return Path(os.path.abspath(Path(workspace_root) / str(target["workspace_relative_path"])))
 
 
+def normalize_selected_artifact_paths(
+    value: object,
+    *,
+    workspace_root: Path,
+    minimum_count: int = 1,
+    maximum_count: int = 2,
+) -> list[dict[str, Any]]:
+    """Validate a bounded exact selection without discovering any other path."""
+
+    if (
+        not isinstance(value, Sequence)
+        or isinstance(value, (str, bytes, bytearray))
+        or not minimum_count <= len(value) <= maximum_count
+    ):
+        raise ArtifactTargetError("exact_selected_artifact_path_count_invalid")
+    workspace = Path(os.path.abspath(workspace_root))
+    normalized: list[dict[str, Any]] = []
+    identities: set[str] = set()
+    for position, raw_path in enumerate(value, start=1):
+        target = _normalize_relative_target(raw_path, workspace_root=workspace)
+        relative = str(target["workspace_relative_path"])
+        absolute = Path(os.path.abspath(workspace / relative))
+        if (
+            absolute.is_symlink()
+            or not absolute.is_file()
+            or absolute.resolve(strict=True) != absolute
+        ):
+            raise ArtifactTargetError("selected_artifact_exact_file_required")
+        identity = str(target["exact_path_sha256"])
+        if identity in identities:
+            raise ArtifactTargetError("selected_artifact_duplicate_path")
+        identities.add(identity)
+        normalized.append(
+            {
+                "position": position,
+                "workspace_relative_path": relative,
+                "absolute_path": absolute,
+                "exact_path_sha256": identity,
+                "workspace_discovery_permitted": False,
+                "neighbor_artifact_discovery_permitted": False,
+            }
+        )
+    return normalized
+
+
 def current_registered_role_target(
     state: Mapping[str, Any],
     *,
@@ -167,6 +212,9 @@ def target_contract_snapshot() -> dict[str, Any]:
         "discovery_or_glob_permitted": False,
         "neighbor_artifact_discovery_permitted": False,
         "completion_exact_path_match_required": True,
+        "bounded_exact_selected_artifact_paths_supported": True,
+        "selected_artifact_path_limit": 2,
+        "selected_artifact_must_already_exist": True,
     }
 
 
@@ -178,5 +226,6 @@ __all__ = [
     "current_registered_role_target",
     "normalize_completion_artifact_path",
     "normalize_intended_artifact_targets",
+    "normalize_selected_artifact_paths",
     "target_contract_snapshot",
 ]

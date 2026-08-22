@@ -35,6 +35,7 @@ def _safe_result(response: object) -> dict[str, Any]:
     if not isinstance(structured, Mapping):
         return {"response": "protocol_only"}
     artifact = structured.get("artifact")
+    controls = structured.get("controls")
     return {
         "ok": structured.get("ok") is True,
         "category": structured.get("category"),
@@ -42,6 +43,21 @@ def _safe_result(response: object) -> dict[str, Any]:
         "state_revision": structured.get("state_revision"),
         "current_step_status": structured.get("current_step_status"),
         "artifact_role": artifact.get("role") if isinstance(artifact, Mapping) else None,
+        "selected_artifact_count": structured.get("selected_artifact_count"),
+        "selected_control_dispositions": [
+            str(item.get("disposition"))
+            for item in controls
+            if isinstance(item, Mapping) and isinstance(item.get("disposition"), str)
+        ]
+        if isinstance(controls, list)
+        else [],
+        "current_result_unchanged": (
+            structured.get("current_result", {}).get("unchanged")
+            if isinstance(structured.get("current_result"), Mapping)
+            else None
+        ),
+        "execution_performed": structured.get("execution_performed"),
+        "workspace_discovery_performed": structured.get("workspace_discovery_performed"),
         "raw_arguments_retained": False,
         "raw_result_retained": False,
     }
@@ -57,7 +73,7 @@ def _instrument(handler, *, surface: str, event_log: Path, workspace: Path):
             _append_event(
                 event_log,
                 {
-                    "schema_id": "qcoder.wi0435.bounded_mcp_event.v1",
+                    "schema_id": "qcoder.wi0435.bounded_mcp_event.v2",
                     "surface": surface,
                     "tool": str(name) if isinstance(name, str) else "unknown",
                     "argument_field_names": sorted(arguments)

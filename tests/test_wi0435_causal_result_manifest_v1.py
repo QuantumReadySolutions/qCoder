@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 import qcoder.current_loop_coordinator as coordinator_module
+import qcoder.current_loop_result_controls as result_controls_module
 from qcoder.context_bridge_mcp import EXPECTED_TOOLS
 from qcoder.current_loop_artifact_satisfaction import evaluate_exact_artifact_satisfaction
 from qcoder.current_loop_binding_mcp import (
@@ -546,6 +547,295 @@ def test_unknown_lineage_registers_as_historical_without_current_run(tmp_path: P
     assert descriptor["status"] == "stale"
 
 
+LINEAGE_CONTROL_REQUEST = (
+    "Use qCoder to evaluate the exact selected files fixtures/bare-counts.json and "
+    "fixtures/unknown-result-manifest.json as result evidence controls. Do not execute "
+    "anything, infer lineage, or claim either belongs to the registered circuit."
+)
+
+
+def _selected_control_fixtures(root: Path, *, attempt: str = "selected-control-unknown") -> None:
+    fixtures = root / "fixtures"
+    fixtures.mkdir(exist_ok=True)
+    (fixtures / "bare-counts.json").write_text(
+        json.dumps({"00": 8, "11": 8}, sort_keys=True), encoding="utf-8"
+    )
+    (fixtures / "unknown-result-manifest.json").write_text(
+        json.dumps(_manifest(attempt=attempt, circuit_status="unknown", shots=32), sort_keys=True),
+        encoding="utf-8",
+    )
+
+
+def test_exact_two_selected_result_controls_are_bounded_read_only_terminal_projection(
+    tmp_path: Path,
+) -> None:
+    _source_and_circuit(tmp_path)
+    begun, result_path = _run_step(tmp_path)
+    assert _complete(tmp_path, begun, result_path)["ok"] is True
+    _selected_control_fixtures(tmp_path)
+    before = deepcopy(CurrentLoopCoordinator(workspace_root=tmp_path).store.read())
+    response = _call(
+        tmp_path,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {
+            "request_text": LINEAGE_CONTROL_REQUEST,
+            "selected_artifact_paths": [
+                "fixtures/bare-counts.json",
+                "fixtures/unknown-result-manifest.json",
+            ],
+        },
+    )
+    assert response["ok"] is True, response
+    assert response["operation"] == "evaluate_selected_result_evidence_controls"
+    assert response["selected_artifact_count"] == 2
+    assert response["execution_performed"] is False
+    assert response["state_mutated"] is False
+    assert response["workspace_discovery_performed"] is False
+    assert response["cli_or_help_required"] is False
+    assert response["package_or_state_inspection_required"] is False
+    assert [item["disposition"] for item in response["controls"]] == [
+        "strict_manifest_and_causal_lineage_required",
+        "explicit_selected_historical_non_current_only",
+    ]
+    assert response["controls"][0]["valid_result_evidence"] is False
+    assert response["controls"][1]["circuit_lineage_status"] == "unknown"
+    assert all(item["current_result_evidence"] is False for item in response["controls"])
+    assert all(item["registered"] is False for item in response["controls"])
+    assert (
+        response["current_result"]["artifact_revision_id"]
+        == before["evidence_registry"]["role_heads"]["results"]
+    )
+    assert response["current_result"]["unchanged"] is True
+    assert response["current_request_semantics"]["requested_operation"] == (
+        "selected_result_evidence_controls"
+    )
+    assert response["current_request_semantics"]["execution_disposition"] == (
+        "prohibited_for_current_step"
+    )
+    assert CurrentLoopCoordinator(workspace_root=tmp_path).store.read() == before
+
+    replay = _call(
+        tmp_path,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {
+            "request_text": LINEAGE_CONTROL_REQUEST,
+            "selected_artifact_paths": [
+                "fixtures/bare-counts.json",
+                "fixtures/unknown-result-manifest.json",
+            ],
+        },
+    )
+    assert replay["projection_digest"] == response["projection_digest"]
+    assert replay["state_mutated"] is False
+    assert CurrentLoopCoordinator(workspace_root=tmp_path).store.read() == before
+
+
+@pytest.mark.parametrize(
+    ("paths", "category"),
+    [
+        (["fixtures/bare-counts.json"], "exact_selected_artifact_path_count_invalid"),
+        (
+            ["fixtures/bare-counts.json", "fixtures/bare-counts.json"],
+            "selected_artifact_duplicate_path",
+        ),
+        (
+            ["../bare-counts.json", "fixtures/unknown-result-manifest.json"],
+            "intended_artifact_path_must_be_workspace_relative",
+        ),
+        (
+            ["fixtures/*.json", "fixtures/unknown-result-manifest.json"],
+            "intended_artifact_path_discovery_expression_prohibited",
+        ),
+        (
+            ["/tmp/bare-counts.json", "fixtures/unknown-result-manifest.json"],
+            "intended_artifact_path_must_be_workspace_relative",
+        ),
+        (
+            ["fixtures/bare-counts.json", "fixtures/missing.json"],
+            "selected_artifact_exact_file_required",
+        ),
+        (
+            [
+                "fixtures/bare-counts.json",
+                "fixtures/unknown-result-manifest.json",
+                "fixtures/surplus.json",
+            ],
+            "exact_selected_artifact_path_count_invalid",
+        ),
+    ],
+)
+def test_selected_result_control_path_failures_preserve_state(
+    tmp_path: Path, paths: list[str], category: str
+) -> None:
+    _source_and_circuit(tmp_path)
+    _selected_control_fixtures(tmp_path)
+    (tmp_path / "fixtures" / "surplus.json").write_text("{}", encoding="utf-8")
+    before = deepcopy(CurrentLoopCoordinator(workspace_root=tmp_path).store.read())
+    response = _call(
+        tmp_path,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {"request_text": LINEAGE_CONTROL_REQUEST, "selected_artifact_paths": paths},
+    )
+    assert response["ok"] is False
+    assert response["category"] == category
+    assert response["state_mutated"] is False
+    assert response["workspace_discovery_permitted"] is False
+    assert CurrentLoopCoordinator(workspace_root=tmp_path).store.read() == before
+
+
+def test_selected_result_control_changed_bytes_fail_before_state_mutation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _source_and_circuit(tmp_path)
+    _selected_control_fixtures(tmp_path)
+    before = deepcopy(CurrentLoopCoordinator(workspace_root=tmp_path).store.read())
+    original_read = result_controls_module._read_exact
+    calls = 0
+
+    def changed_between_validation_reads(path: Path) -> bytes:
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            (tmp_path / "fixtures" / "bare-counts.json").write_text(
+                json.dumps({"00": 7, "11": 9}, sort_keys=True), encoding="utf-8"
+            )
+        return original_read(path)
+
+    monkeypatch.setattr(result_controls_module, "_read_exact", changed_between_validation_reads)
+    response = _call(
+        tmp_path,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {
+            "request_text": LINEAGE_CONTROL_REQUEST,
+            "selected_artifact_paths": [
+                "fixtures/bare-counts.json",
+                "fixtures/unknown-result-manifest.json",
+            ],
+        },
+    )
+    assert response["ok"] is False
+    assert response["category"] == "selected_result_control_bytes_changed"
+    assert response["state_mutated"] is False
+    assert CurrentLoopCoordinator(workspace_root=tmp_path).store.read() == before
+
+
+def test_selected_result_controls_reject_neighbor_symlink_false_lineage_and_prior_attempt(
+    tmp_path: Path,
+) -> None:
+    _source_and_circuit(tmp_path)
+    registered_step, registered_path = _run_step(tmp_path, attempt="already-registered")
+    assert _complete(tmp_path, registered_step, registered_path)["ok"] is True
+    registered_state = CurrentLoopCoordinator(workspace_root=tmp_path).store.read()
+    registered_attempt = registered_state["evidence_registry"]["artifact_revisions"][
+        registered_state["evidence_registry"]["role_heads"]["results"]
+    ]["strict_result_manifest_binding"]["execution_attempt_id"]
+    _selected_control_fixtures(tmp_path, attempt=registered_attempt)
+    fixtures = tmp_path / "fixtures"
+    (fixtures / "neighbor.json").write_text(
+        (fixtures / "unknown-result-manifest.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    outside = tmp_path / "outside.json"
+    outside.write_text(
+        (fixtures / "unknown-result-manifest.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (fixtures / "linked.json").symlink_to(outside)
+    before = deepcopy(CurrentLoopCoordinator(workspace_root=tmp_path).store.read())
+    cases = [
+        (
+            ["fixtures/bare-counts.json", "fixtures/neighbor.json"],
+            "selected_result_control_path_not_named_by_customer",
+        ),
+        (
+            ["fixtures/bare-counts.json", "fixtures/linked.json"],
+            "selected_artifact_exact_file_required",
+        ),
+        (
+            ["fixtures/bare-counts.json", "fixtures/unknown-result-manifest.json"],
+            "selected_result_control_attempt_already_registered",
+        ),
+    ]
+    for paths, category in cases:
+        response = _call(
+            tmp_path,
+            BEGIN_CURRENT_LOOP_TOOL_NAME,
+            {"request_text": LINEAGE_CONTROL_REQUEST, "selected_artifact_paths": paths},
+        )
+        assert response["ok"] is False
+        assert response["category"] == category
+        assert response["state_mutated"] is False
+        assert CurrentLoopCoordinator(workspace_root=tmp_path).store.read() == before
+
+    false_manifest = _manifest(attempt="selected-control-false", circuit_status="unknown")
+    false_manifest["circuit_lineage"] = {
+        "status": "exact",
+        "artifact_revision_id": before["evidence_registry"]["role_heads"]["circuit_qasm"],
+        "content_digest": "f" * 64,
+    }
+    (fixtures / "unknown-result-manifest.json").write_text(
+        json.dumps(false_manifest, sort_keys=True), encoding="utf-8"
+    )
+    false = _call(
+        tmp_path,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {
+            "request_text": LINEAGE_CONTROL_REQUEST,
+            "selected_artifact_paths": [
+                "fixtures/bare-counts.json",
+                "fixtures/unknown-result-manifest.json",
+            ],
+        },
+    )
+    assert false["ok"] is False
+    assert false["category"] == "result_manifest_false_circuit_lineage"
+    assert CurrentLoopCoordinator(workspace_root=tmp_path).store.read() == before
+
+
+def test_natural_preexisting_source_selection_binds_and_completes_without_write(
+    tmp_path: Path,
+) -> None:
+    initial = _begin(tmp_path, SOURCE_REQUEST)
+    (tmp_path / "bell.py").write_text(SOURCE, encoding="utf-8")
+    assert _complete(tmp_path, initial, tmp_path / "bell.py")["ok"] is True
+    fixtures = tmp_path / "fixtures"
+    fixtures.mkdir()
+    selected = fixtures / "preexisting_bell.py"
+    selected.write_text(SOURCE, encoding="utf-8")
+    before = (selected.read_bytes(), selected.stat().st_mtime_ns, selected.stat().st_mode)
+    request = (
+        "Use qCoder for a source-only Bell step. The exact selected file "
+        "fixtures/preexisting_bell.py already exists; if it satisfies the source role, "
+        "accept it without rewriting it or claiming the assistant created it."
+    )
+    begun = _call(
+        tmp_path,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {
+            "request_text": request,
+            "selected_artifact_paths": ["fixtures/preexisting_bell.py"],
+        },
+    )
+    assert begun["ok"] is True, begun
+    action = begun["current_step_contract"]["permitted_native_action"]
+    assert action["native_write_required"] is False
+    assert action["preexisting_exact_artifact_satisfaction"] is True
+    assert action["exact_artifact_target"]["workspace_relative_path"] == (
+        "fixtures/preexisting_bell.py"
+    )
+    completed = _call(tmp_path, COMPLETE_CURRENT_STEP_TOOL_NAME, {})
+    assert completed["ok"] is True, completed
+    after = (selected.read_bytes(), selected.stat().st_mtime_ns, selected.stat().st_mode)
+    assert after == before
+    state = CurrentLoopCoordinator(workspace_root=tmp_path).store.read()
+    revision = state["evidence_registry"]["artifact_revisions"][
+        state["evidence_registry"]["role_heads"]["source"]
+    ]
+    assert revision["event_disposition"] == "selected"
+    assert state["coordinator"]["bootstrap_count"] == 1
+    assert state["coordinator"]["request_baseline_count"] == 1
+
+
 def test_shots_only_rerun_reuses_exact_inputs_and_preserves_prior_run(tmp_path: Path) -> None:
     _source_and_circuit(tmp_path)
     first_step, first_path = _run_step(tmp_path, attempt="native-attempt-1024")
@@ -887,6 +1177,20 @@ def test_connected_client_adapter_converges_on_canonical_wi0435_semantics(
     _source_and_circuit(root)
     begun, result_path = _run_step(root, attempt="adapter-attempt-0001")
     assert _complete(root, begun, result_path)["ok"] is True
+    _selected_control_fixtures(root, attempt=f"{adapter}-unknown-control")
+    controls = _call(
+        root,
+        BEGIN_CURRENT_LOOP_TOOL_NAME,
+        {
+            "request_text": LINEAGE_CONTROL_REQUEST,
+            "selected_artifact_paths": [
+                "fixtures/bare-counts.json",
+                "fixtures/unknown-result-manifest.json",
+            ],
+        },
+    )
+    assert controls["ok"] is True
+    assert controls["state_mutated"] is False
     state = CurrentLoopCoordinator(workspace_root=root).store.read()
     summary_reference = state["latest_run_summary_reference"]
     summary = json.loads(
@@ -908,6 +1212,14 @@ def test_connected_client_adapter_converges_on_canonical_wi0435_semantics(
         "current_step_status": state["coordinator"]["current_step_status"],
         "bootstrap_count": state["coordinator"]["bootstrap_count"],
         "request_baseline_count": state["coordinator"]["request_baseline_count"],
+        "selected_result_control_dispositions": [
+            item["disposition"] for item in controls["controls"]
+        ],
+        "selected_result_control_current_result_unchanged": controls["current_result"]["unchanged"],
+        "selected_result_control_execution_performed": controls["execution_performed"],
+        "selected_result_control_workspace_discovery_performed": controls[
+            "workspace_discovery_performed"
+        ],
         "native_execution_owned_by_qcoder": False,
         "client_classification_or_qualification_claimed": False,
     }

@@ -310,7 +310,7 @@ def test_prefreeze_request_semantics_migrate_without_changing_stage_meaning() ->
     legacy["authority_layers"] = {"legacy_projection": True}
     legacy["semantics_digest"] = "legacy-recomputed-by-migration"
     migrated = migrate_request_semantics(legacy)
-    assert migrated["schema_id"] == "qcoder.current_loop.request_semantics.v4"
+    assert migrated["schema_id"] == "qcoder.current_loop.request_semantics.v5"
     assert migrated["requested_operation"] == current["requested_operation"]
     assert migrated["requested_artifact_roles"] == current["requested_artifact_roles"]
     assert migrated["current_step_ceiling"] == current["current_step_ceiling"]

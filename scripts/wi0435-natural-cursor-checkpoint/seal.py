@@ -20,7 +20,7 @@ def main() -> None:
         path for path in operator_run_dir.glob("*.json") if path.name != "manifest.json"
     )
     manifest = {
-        "schema_id": "qcoder.wi0435.natural_cursor_safe_return_manifest.v6",
+        "schema_id": "qcoder.wi0435.natural_cursor_safe_return_manifest.v7",
         "records": [
             {
                 "filename": path.name,
@@ -40,7 +40,7 @@ def main() -> None:
     }
     manifest_path = operator_run_dir / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
-    archive = operator_run_dir.parent / "qcoder-wi0435-natural-cursor-safe-return-v6.zip"
+    archive = operator_run_dir.parent / "qcoder-wi0435-natural-cursor-safe-return-v7.zip"
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
         for path in sorted(operator_run_dir.glob("*.json")):
             bundle.write(path, arcname=path.name)

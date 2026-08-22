@@ -28,8 +28,8 @@ if [[ $# -ne 1 ]]; then
 fi
 
 packet_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-workspace="/home/rob/projects/qcoder-wi0435-natural-cursor-workspace-v6"
-operator_run_dir="/home/rob/projects/_ops/qcoder/wi0435-evidence-reconciler-result-manifest-successor-v1/natural-cursor-run-v6"
+workspace="/home/rob/projects/qcoder-wi0435-natural-cursor-workspace-v7"
+operator_run_dir="/home/rob/projects/_ops/qcoder/wi0435-evidence-reconciler-result-manifest-successor-v1/natural-cursor-run-v7"
 token_file="$1"
 bootstrap_python="$(select_compatible_python)"
 "$bootstrap_python" "$packet_root/helpers/prepare.py" preflight \

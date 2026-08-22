@@ -148,6 +148,11 @@ def instrumentation_projection(operator_run_dir: Path, state: dict) -> tuple[dic
     private = [item for item in mcp_events if item.get("surface") == "private_current_loop"]
     public = [item for item in mcp_events if item.get("surface") == "public_context_bridge"]
     completions = [item for item in private if item.get("tool") == "complete_current_step"]
+    control_evaluations = [
+        item
+        for item in private
+        if item.get("result", {}).get("operation") == "evaluate_selected_result_evidence_controls"
+    ]
     starts = [item for item in execution_events if item.get("event") == "execution_started"]
     sampled = [
         item for item in execution_events if item.get("event") == "sampled_execution_completed"
@@ -160,6 +165,24 @@ def instrumentation_projection(operator_run_dir: Path, state: dict) -> tuple[dic
         "qcoder_completion_calls": len(completions),
         "qcoder_completion_rejections": sum(
             item.get("result", {}).get("ok") is not True for item in completions
+        ),
+        "selected_result_control_evaluations": len(control_evaluations),
+        "selected_result_control_paths": sum(
+            int(item.get("result", {}).get("selected_artifact_count") or 0)
+            for item in control_evaluations
+        ),
+        "selected_result_control_dispositions": [
+            value
+            for item in control_evaluations
+            for value in item.get("result", {}).get("selected_control_dispositions", [])
+        ],
+        "selected_result_control_current_result_unchanged": (
+            all(
+                item.get("result", {}).get("current_result_unchanged") is True
+                for item in control_evaluations
+            )
+            if control_evaluations
+            else "not_observed"
         ),
         "canonical_registrations": len(new_registrations),
         "registered_roles": sorted(
@@ -225,7 +248,7 @@ def main() -> None:
     coordinator = state.get("coordinator", {})
     instrumentation, next_watermark = instrumentation_projection(operator_run_dir, state)
     output = {
-        "schema_id": "qcoder.wi0435.natural_cursor_checkpoint.v6",
+        "schema_id": "qcoder.wi0435.natural_cursor_checkpoint.v7",
         "checkpoint": args.label,
         "stage_status": args.stage_status,
         "customer_visible_wall_seconds": args.wall_seconds,
