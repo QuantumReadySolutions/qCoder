@@ -30,15 +30,13 @@ def test_readme_is_publication_truthful_and_keeps_client_claims_held() -> None:
         in readme
     )
     assert "0.6.0a17" in readme
-    assert "qcoder 0.6.0a17 is a pre-release" in lowered
-    assert "corrects the a16 mixed-revision limitation" in lowered
+    assert "0.6.0a18+wi0436.structured.intent.recovery.v1" in lowered
+    assert "unfrozen, unpublished development identity" in lowered
+    assert "release candidate was rejected and must not be published" in lowered
+    assert "preserved a17 implementation corrected the a16 mixed-revision limitation" in lowered
     assert "bare counts fail closed" in lowered
     assert "without repository discovery" in lowered
     assert "does not authorize another execution" in lowered
-    assert "unpublished successor candidate" not in lowered
-    assert "package-index availability requires a separate publication decision" not in lowered
-    assert "current public package remains" not in lowered
-    assert "publication remains pending" not in lowered
     assert "stable or generally available release" in lowered
     assert "Review local evidence (OSS development branch)" not in readme
     assert "WI-0421 development branch" not in readme
@@ -99,6 +97,7 @@ def test_a17_release_note_is_durable_and_keeps_claims_separate() -> None:
     assert "exactly twelve public context bridge tools" in lowered
     assert "package publication does not activate a named-client support claim" in lowered
     assert "latency or quiet-operation guarantee" in lowered
-    assert "unpublished" not in lowered
-    assert "never published" not in lowered
+    assert "immutable historical failure evidence" in lowered
+    assert "release-candidate disposition was rejected" in lowered
+    assert "must not be published" in lowered
     assert "private-only" not in lowered

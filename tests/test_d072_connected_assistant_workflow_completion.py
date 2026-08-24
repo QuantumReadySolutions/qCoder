@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from qcoder.algorithm_blueprint import with_artifact_digest
+from qcoder.algorithm_intent_recovery import build_clarification_recovery_contract
 from qcoder.connected_assistant_conformance import (
     CUSTOMER_AUTHORITY_OR_DECISION_BOUNDARY,
     CUSTOMER_TERMINAL_OUTCOME,
@@ -212,19 +214,33 @@ def test_same_generic_mechanism_completes_algorithm_blueprint_workflow() -> None
 
 
 def test_algorithm_intent_confirmation_is_a_real_customer_decision_boundary() -> None:
+    card = with_artifact_digest(
+        {
+            "artifact_type": "algorithm_intent_card",
+            "schema_version": 1,
+            "original_user_intent": "Prepare one bounded Bell example.",
+            "profile": {"id": "generic_qiskit"},
+            "interpretation": {},
+            "unresolved_questions": ["normalized_goal"],
+            "field_provenance": {"original_user_intent": "user"},
+            "confirmation_state": "needs_clarification",
+        }
+    )
     evaluated = evaluate_named_workflow_result(
         workflow_name="Algorithm Blueprint / Generation Context",
         tool_name="create_algorithm_intent_card",
         structured_result=_result(
             tool_name="create_algorithm_intent_card",
             context_status="algorithm_intent_card_ready",
-            algorithm_intent_card={"confirmation_state": "needs_clarification"},
+            algorithm_intent_card=card,
+            clarification_recovery_contract=build_clarification_recovery_contract(card),
         ),
     )
 
     assert evaluated["classification"] == CUSTOMER_AUTHORITY_OR_DECISION_BOUNDARY
     assert evaluated["customer_interaction_required"] is True
-    assert evaluated["next_tool_name"] is None
+    assert evaluated["next_tool_name"] == "create_algorithm_intent_card"
+    assert evaluated["clarification_recovery_contract_available"] is True
 
 
 def test_genuine_blocker_stops_without_bypass() -> None:
@@ -396,7 +412,7 @@ def test_distributed_binding_and_tool_descriptions_expose_shared_d072_semantics(
     workflow = descriptor["named_workflow_completion"]
     descriptions = {item["name"]: item["description"] for item in tool_descriptors()}
 
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v42"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v43"
     assert len(EXPECTED_TOOLS) == 12
     assert workflow["preparatory_success_is_completion"] is False
     assert workflow["automatic_continuation_scope"] == "already_selected_named_workflow_only"

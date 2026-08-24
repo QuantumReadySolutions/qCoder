@@ -55,17 +55,22 @@ Narrowing applies immediately; broadening requires explicit confirmation.
 
 ### Upgrading an active Current Loop
 
-Version 0.6.0a17 preserves the connected-assistant, adaptive-intent input, coordinator-result, and
-vocabulary contracts while adding causal currentness, strict result-manifest lineage, and exact
-selected-path transport to the Context Bridge binding. qCoder 0.6.0a17 is a pre-release. Finish or
-restart an active qCoder loop
+This source tree has the unfrozen, unpublished development identity
+`0.6.0a18+wi0436.structured.intent.recovery.v1`. It adds exact card-and-revision-bound Algorithm
+Intent clarification recovery to binding v43. It is not a release candidate and does not activate
+a named-client support claim. Plain 0.6.0a17 remains immutable historical failure evidence; its
+release candidate was rejected and must not be published.
+
+The successor preserves the connected-assistant, adaptive-intent input, coordinator-result, and
+vocabulary contracts while retaining a17's causal currentness, strict result-manifest lineage, and
+exact selected-path transport. Finish or restart an active qCoder loop
 before upgrading. An outstanding
 pre-v4 operation receipt cannot be reused. When an old receipt is outstanding, the IDE must
 provide a fresh authority grant for the new runtime. qCoder fails closed instead of silently
 reinterpreting old authority data. This is a local active-loop compatibility boundary, not a
 migration of project history or server-side persistence.
 
-qCoder 0.6.0a17 corrects the a16 mixed-revision limitation. Replacing current source or circuit
+The preserved a17 implementation corrected the a16 mixed-revision limitation. Replacing current source or circuit
 evidence invalidates dependent downstream currentness while preserving immutable history. Current
 result evidence requires a structured manifest with sufficient causal lineage; bare counts fail
 closed, and unknown-lineage manifests remain historical and non-current. Exact customer-selected
@@ -89,6 +94,9 @@ authority, broaden artifact selection, discover files, or chain an unrelated qCo
 Canonical structured `process_and_discard` unambiguously means that no customer artifact is
 retained for that operation; qualification evidence remains fail-closed when this semantic state
 is absent, ambiguous, contradictory, free-form only, or belongs to another operation.
+For Algorithm Intent clarification, the returned contract is bound to the exact card digest and
+revision. The assistant may submit only customer-reviewed unresolved fields and must include the
+explicit review assertion; stale, cross-card, and cross-revision continuations fail closed.
 
 ## Context Bridge inventory
 
@@ -214,9 +222,10 @@ See the synthetic [`Algorithm Blueprint walkthrough`](examples/09_algorithm_blue
 
 ## Quick start
 
-qCoder 0.6.0a17 is a pre-release. It is not a stable or generally available release. Package
-publication and named-client support claims are governed separately from these immutable package
-bytes. The commands below describe behavior provided by this pre-release.
+qCoder `0.6.0a18+wi0436.structured.intent.recovery.v1` is an unfrozen development pre-release. It
+is not a stable or generally available release. Package publication and named-client support
+claims are governed separately. The commands below describe behavior present in this development
+source; plain a17 remains a rejected immutable candidate and is not a publication target.
 
 Analyze a circuit:
 

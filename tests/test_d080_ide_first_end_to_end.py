@@ -166,7 +166,7 @@ def test_binding_route_and_inventory_are_deterministic_and_keep_twelve_tools() -
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v42"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v43"
     assert (
         descriptor["current_request_semantics_contract"]["temporary_current_step_ceiling"] is True
     )

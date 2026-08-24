@@ -28,6 +28,13 @@ from qcoder.algorithm_blueprint import (
     algorithm_blueprint_contract_snapshot,
     compact_selected_python_source_evidence_for_hosted,
 )
+from qcoder.algorithm_intent_recovery import (
+    ClarificationRecoveryError,
+    RECOVERY_INPUT_FIELD,
+    build_clarification_recovery_contract,
+    clarification_recovery_contract_snapshot,
+    prepare_clarification_recovery,
+)
 from qcoder.blueprint_decisions import (
     ACTION_IDS,
     CONSTRUCTION_POLICY_PATTERNS,
@@ -160,8 +167,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 41
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v42"
+CLIENT_BINDING_SCHEMA_VERSION = 42
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v43"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -640,6 +647,9 @@ def build_client_binding_descriptor(
             "bounded_control_input_contract": bounded_control_contract_snapshot(),
             "adaptive_intent_input_contract": adaptive_intent_contract_snapshot(),
             "adaptive_intent_input_completeness_matrix": adaptive_intent_completeness_matrix(),
+            "algorithm_intent_clarification_recovery_contract": (
+                clarification_recovery_contract_snapshot()
+            ),
             "client_neutral_conformance_contract": client_neutral_conformance_contract(
                 EXPECTED_TOOLS
             ),
@@ -1664,6 +1674,24 @@ def safe_error(
     return payload
 
 
+def _safe_clarification_recovery_error(
+    error: ClarificationRecoveryError,
+) -> dict[str, Any]:
+    payload = safe_error(
+        error.category,
+        field=error.field,
+        expected_shape=error.expected,
+    )
+    payload["clarification_recovery_diagnostic"] = {
+        "affected_field": error.field or "clarification_recovery",
+        "trigger_class": error.trigger_class or "unsupported_correction_shape",
+        "expected_type_or_domain": error.expected or {"contract_bound_shape": True},
+        "safe_next_action": error.safe_next_action,
+        "raw_rejected_value_returned": False,
+    }
+    return payload
+
+
 def validate_token_file(token_file: str | Path) -> tuple[bool, str, str]:
     path = Path(token_file)
     if not path.is_file():
@@ -2314,6 +2342,67 @@ def post_context_bridge(
             if key in arguments and arguments[key] != value:
                 return safe_error("conflicting_tool_argument")
             arguments[key] = value
+    recovery_metadata: dict[str, Any] | None = None
+    if RECOVERY_INPUT_FIELD in arguments:
+        if canonical_tool_name != "create_algorithm_intent_card":
+            return safe_error("clarification_recovery_tool_mismatch")
+        if set(arguments) != {RECOVERY_INPUT_FIELD}:
+            return _safe_clarification_recovery_error(
+                ClarificationRecoveryError(
+                    "clarification_recovery_overlay_forbidden",
+                    trigger_class="unsupported_correction_shape",
+                    safe_next_action="invoke_only_the_advertised_recovery_envelope",
+                )
+            )
+        envelope = arguments[RECOVERY_INPUT_FIELD]
+        if isinstance(envelope, Mapping):
+            correction = envelope.get("correction")
+            field_values = (
+                correction.get("field_values") if isinstance(correction, Mapping) else None
+            )
+            if isinstance(field_values, Mapping):
+                forbidden_fields = sorted(
+                    str(field)
+                    for field in field_values
+                    if str(field).strip().lower() in FORBIDDEN_PAYLOAD_FIELDS
+                )
+                if forbidden_fields:
+                    return _safe_clarification_recovery_error(
+                        ClarificationRecoveryError(
+                            "clarification_recovery_value_rejected",
+                            field=forbidden_fields[0],
+                            trigger_class="forbidden_field_name_class",
+                            expected={"allowed_fields": "contract.unresolved_fields"},
+                            safe_next_action=(
+                                "submit_only_a_field_identifier_listed_by_the_contract"
+                            ),
+                        )
+                    )
+        try:
+            arguments, recovery_metadata = prepare_clarification_recovery(envelope)
+        except ClarificationRecoveryError as exc:
+            return _safe_clarification_recovery_error(exc)
+        corrected = recovery_metadata["corrected_fields"]
+        interpretation = arguments["proposed_interpretation"]
+        for field in corrected:
+            correction_validation = validate_optional_payload(interpretation[field])
+            if correction_validation != "ok":
+                trigger_class = (
+                    "forbidden_text_marker_class"
+                    if correction_validation == "forbidden_input_value"
+                    else "type_or_domain_mismatch"
+                )
+                return _safe_clarification_recovery_error(
+                    ClarificationRecoveryError(
+                        "clarification_recovery_value_rejected",
+                        field=field,
+                        trigger_class=trigger_class,
+                        expected={"type": "non_empty_string"},
+                        safe_next_action=(
+                            "replace_only_this_field_with_a_safe_customer_reviewed_value"
+                        ),
+                    )
+                )
     context_loop_enabled = arguments.get("context_loop") == CONTEXT_LOOP_GATE
     baseline_error = _compose_request_baseline_handoff(canonical_tool_name, arguments)
     if baseline_error is not None:
@@ -2396,7 +2485,15 @@ def post_context_bridge(
                 },
             )
     decision_loop_enabled = arguments.get("decision_loop") == DECISION_LOOP_GATE
-    for payload in arguments.values():
+    validation_arguments = (
+        {
+            field: arguments["proposed_interpretation"][field]
+            for field in recovery_metadata["corrected_fields"]
+        }
+        if recovery_metadata is not None
+        else arguments
+    )
+    for payload in validation_arguments.values():
         payload_validation = validate_optional_payload(
             payload,
             max_chars=(
@@ -2487,6 +2584,25 @@ def post_context_bridge(
         portable_error = _attach_proposal_portable_current_build_context(payload, arguments)
         if portable_error is not None:
             return safe_error(portable_error)
+    if 200 <= status < 300 and canonical_tool_name == "create_algorithm_intent_card":
+        card = payload.get("algorithm_intent_card")
+        if isinstance(card, Mapping) and card.get("confirmation_state") == "needs_clarification":
+            try:
+                payload["clarification_recovery_contract"] = build_clarification_recovery_contract(
+                    card
+                )
+            except ClarificationRecoveryError:
+                return safe_error(
+                    "clarification_recovery_contract_unavailable",
+                    status_category="transport_consistency_failed",
+                )
+        if recovery_metadata is not None:
+            payload["clarification_recovery_applied"] = {
+                **recovery_metadata,
+                "explicit_confirmation_assertion": True,
+                "raw_rejected_value_retained": False,
+                "retention": "process_and_discard",
+            }
     return payload
 
 
@@ -2927,6 +3043,73 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
             "items": {"type": "string"},
             "description": "Named unresolved fields the user explicitly accepts retaining in a confirmed card.",
         },
+        RECOVERY_INPUT_FIELD: {
+            "type": "object",
+            "properties": {
+                "contract": {
+                    "type": "object",
+                    "required": [
+                        "schema_id",
+                        "schema_version",
+                        "contract_id",
+                        "contract_digest",
+                        "card_binding",
+                        "unresolved_fields",
+                        "safe_correction_shape",
+                        "supported_next_invocation",
+                    ],
+                    "additionalProperties": True,
+                },
+                "prior_algorithm_intent_card": {
+                    "type": "object",
+                    "required": [
+                        "artifact_type",
+                        "schema_version",
+                        "artifact_digest",
+                        "original_user_intent",
+                        "profile",
+                        "interpretation",
+                        "unresolved_questions",
+                        "field_provenance",
+                        "confirmation_state",
+                    ],
+                    "additionalProperties": True,
+                },
+                "correction": {
+                    "type": "object",
+                    "properties": {
+                        "card_binding": {"type": "object"},
+                        "field_values": {
+                            "type": "object",
+                            "additionalProperties": {"type": "string"},
+                        },
+                        "confirmation_assertion": {
+                            "type": "object",
+                            "properties": {"user_reviewed": {"const": True}},
+                            "required": ["user_reviewed"],
+                            "additionalProperties": False,
+                        },
+                    },
+                    "required": [
+                        "card_binding",
+                        "field_values",
+                        "confirmation_assertion",
+                    ],
+                    "additionalProperties": False,
+                },
+            },
+            "required": [
+                "contract",
+                "prior_algorithm_intent_card",
+                "correction",
+            ],
+            "additionalProperties": False,
+            "description": (
+                "Exact stateless continuation returned with a needs-clarification Intent Card. "
+                "Resupply the card and contract unchanged, bind only customer-reviewed values "
+                "for listed unresolved fields, and include the explicit review assertion."
+            ),
+        },
         "decision_loop": {
             "type": "string",
             "enum": [DECISION_LOOP_GATE, DECISION_LOOP_DISABLED],
@@ -3290,6 +3473,13 @@ def _tool_schema(tool_name: str) -> dict[str, Any]:
                 "properties": {LOCAL_SELECTED_NEXT_LOOP_SEED_FIELD: {"const": True}},
             },
         ]
+    if tool_name == "create_algorithm_intent_card":
+        normal_required = list(TOOL_REQUIRED_FIELDS[tool_name])
+        schema["required"] = []
+        schema["anyOf"] = [
+            {"required": normal_required},
+            {"required": [RECOVERY_INPUT_FIELD]},
+        ]
     return schema
 
 
@@ -3388,7 +3578,11 @@ def tool_descriptors() -> list[dict[str, Any]]:
             "surface profile questions and provenance, and require explicit user-reviewed confirmation. For "
             "the named Algorithm Blueprint / Generation Context workflow, algorithm_intent_card_ready with a "
             "confirmed card is preparatory: quietly continue with create_implementation_blueprint. A proposed "
-            "or needs-clarification card is a customer decision boundary and must not be auto-confirmed."
+            "or needs-clarification card is a customer decision boundary and must not be auto-confirmed. Every "
+            "needs-clarification result includes an exact card-and-revision-bound machine-readable recovery "
+            "contract. Apply only customer-reviewed values for its listed unresolved fields through the "
+            "advertised clarification_recovery envelope; never guess, replay across revisions, or echo a "
+            "rejected raw value."
         ),
         "create_implementation_blueprint": (
             "Create a Qiskit-first Implementation Blueprint and distinct Output Evidence Contract from an "

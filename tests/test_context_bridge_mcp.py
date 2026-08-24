@@ -1871,7 +1871,7 @@ def test_tool_descriptors_advertise_only_tool_specific_fields() -> None:
             expected = expected | set(context_bridge_mcp._CONTEXT_LOOP_EVIDENCE_FIELDS)
         assert set(schema["properties"]) == expected
         expected_required = {
-            "create_algorithm_intent_card": ["original_user_intent", "profile_id"],
+            "create_algorithm_intent_card": [],
             "create_implementation_blueprint": ["algorithm_intent_card", "intent_relationship"],
             "create_generation_context_pack": [],
             "create_source_blueprint_alignment_review": [
@@ -1885,6 +1885,11 @@ def test_tool_descriptors_advertise_only_tool_specific_fields() -> None:
         }.get(tool_name, ["artifact_text"])
         assert schema["required"] == expected_required
         assert schema["additionalProperties"] is False
+
+    assert schemas["create_algorithm_intent_card"]["anyOf"] == [
+        {"required": ["original_user_intent", "profile_id"]},
+        {"required": ["clarification_recovery"]},
+    ]
 
     # Codex projects conditional top-level allOf schemas as zero-argument tools.
     # The adapter enforces the Current Build Context parent requirements at runtime.

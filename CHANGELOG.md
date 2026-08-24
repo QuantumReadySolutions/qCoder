@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0a18+wi0436.structured.intent.recovery.v1 (unfrozen development rehearsal)
+
+- Add an exact card-and-revision-bound clarification continuation to the existing Algorithm Intent
+  Card operation without adding a public tool or protected capability.
+- Restrict corrections to fields identified as unresolved, require an explicit customer-review
+  assertion, and refuse stale, cross-card, and cross-revision continuations.
+- Return field-local correction diagnostics without echoing rejected values or disclosing protected
+  filter details; all clarification material remains process-and-discard.
+- Retain the rejected plain-a17 candidate as immutable historical evidence. This development
+  identity is unfrozen, unpublished, and does not activate a client qualification claim.
+
 ## 0.6.0a17
 
 - Keep source, circuit, and result currentness causally coherent when active-loop evidence is
