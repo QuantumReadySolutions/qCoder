@@ -55,17 +55,22 @@ Narrowing applies immediately; broadening requires explicit confirmation.
 
 ### Upgrading an active Current Loop
 
-Version 0.6.0a16 preserves the connected-assistant, adaptive-intent input, coordinator-result, and
-vocabulary contracts while adding decision-aware planning, local-first selected-file review, and
-IDE-first current-step authority semantics to the Context Bridge binding. qCoder 0.6.0a16 is a
-pre-release. Finish or restart an active qCoder loop
+Version 0.6.0a17 preserves the connected-assistant, adaptive-intent input, coordinator-result, and
+vocabulary contracts while adding causal currentness, strict result-manifest lineage, and exact
+selected-path transport to the Context Bridge binding. qCoder 0.6.0a17 is a pre-release. Finish or
+restart an active qCoder loop
 before upgrading. An outstanding
 pre-v4 operation receipt cannot be reused. When an old receipt is outstanding, the IDE must
 provide a fresh authority grant for the new runtime. qCoder fails closed instead of silently
 reinterpreting old authority data. This is a local active-loop compatibility boundary, not a
 migration of project history or server-side persistence.
 
-Known limitation in qCoder 0.6.0a16: After source or circuit evidence is replaced within an active Current Loop, Run Summary may combine the new upstream artifact with older downstream circuit or result evidence and present the mixed-revision set as current. Bare count-like JSON may also be accepted without established circuit lineage. Individual artifacts may still be valid evidence in isolation, but do not use a16 Run Summary to conclude that the latest source, circuit, and result belong to one coherent execution.
+qCoder 0.6.0a17 corrects the a16 mixed-revision limitation. Replacing current source or circuit
+evidence invalidates dependent downstream currentness while preserving immutable history. Current
+result evidence requires a structured manifest with sufficient causal lineage; bare counts fail
+closed, and unknown-lineage manifests remain historical and non-current. Exact customer-selected
+paths are transported structurally without repository discovery, and recovery of an already-run
+pending completion does not authorize another execution.
 
 ### Connected-client qualification
 
@@ -157,7 +162,7 @@ attributes and alternate data streams are not qualified. See
 [`docs/local-evidence-review.md`](docs/local-evidence-review.md) for the complete commands and
 section meanings.
 
-This section describes behavior present in qCoder 0.6.0a16. Package publication and public client-
+This section describes behavior present in qCoder 0.6.0a17. Package publication and public client-
 claim status remain separate facts governed outside the package documentation.
 
 ### Explorer Evidence Review
@@ -209,7 +214,7 @@ See the synthetic [`Algorithm Blueprint walkthrough`](examples/09_algorithm_blue
 
 ## Quick start
 
-qCoder 0.6.0a16 is a pre-release. It is not a stable or generally available release. Package
+qCoder 0.6.0a17 is a pre-release. It is not a stable or generally available release. Package
 publication and named-client support claims are governed separately from these immutable package
 bytes. The commands below describe behavior provided by this pre-release.
 

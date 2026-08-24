@@ -13,7 +13,7 @@ from qcoder import __version__
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts/verify-release-version.py"
-EXPECTED_VERSION = "0.6.0a17+wi0435.evidence.reconciler.v1"
+EXPECTED_VERSION = "0.6.0a17"
 EXPECTED_PREDECESSOR_VERSION = "0.6.0a16"
 EXPECTED_IDENTITY_KIND = "prerelease_successor"
 EXPECTED_INTERVENING: list[str] = []
@@ -27,7 +27,7 @@ def _load_verifier():
     return module
 
 
-def test_source_version_identity_is_private_a17_prerelease_successor() -> None:
+def test_source_version_identity_is_plain_a17_prerelease_successor() -> None:
     verifier = _load_verifier()
     assert verifier.source_versions(REPO_ROOT) == {
         "pyproject": EXPECTED_VERSION,

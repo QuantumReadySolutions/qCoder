@@ -1,6 +1,6 @@
 {
   "schema": "qcoder.release_version_source.v2",
-  "source_version": "0.6.0a17+wi0435.evidence.reconciler.v1",
+  "source_version": "0.6.0a17",
   "release_identity_kind": "prerelease_successor",
   "predecessor_public_version": "0.6.0a16",
   "publication_state_authority": "external_release_control",

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.0a17
+
+- Keep source, circuit, and result currentness causally coherent when active-loop evidence is
+  replaced, while retaining superseded revisions as immutable history.
+- Require strict result manifests with sufficient circuit lineage for current-result registration;
+  reject legacy bare counts and treat unknown lineage as historical, non-current evidence.
+- Carry exact customer-selected artifact paths through the structured connected-assistant binding,
+  preserving fail-closed path scope and avoiding repository discovery or reconstructed targets.
+- Recover an already-run pending completion without rerunning, preserve current results across
+  rejected controls, and retain exact source/QASM target continuity through replacement.
+- Preserve exactly twelve public Context Bridge tools, the two private coordination operations,
+  external execution authority, and separate publication and named-client qualification controls.
+
 ## 0.6.0a16
 
 - Preserve the a15 source-only stage ceiling, exact native source-write authority, one-source
