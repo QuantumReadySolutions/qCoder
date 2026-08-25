@@ -174,8 +174,8 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
             "name": COMPLETE_CURRENT_STEP_TOOL_NAME,
             "description": (
                 "BOUNDED COMPLETION AND RECOVERY OPERATION: call this operation after the native "
-                "action only when current_step_contract.completion says "
-                "assistant_completion_call_required=true, or when qCoder reports pending recovery. "
+                "action only when current_step_contract.completion.mode is "
+                "binding_owned_typed_completion, or when qCoder reports pending recovery. "
                 "When the contract selects synchronous_native_edit_event terminal closure, do not "
                 "make a duplicate completion call. For an applicable pending completion, call "
                 "this operation directly with an empty object, including "
