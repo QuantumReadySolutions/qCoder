@@ -30,8 +30,8 @@ def test_readme_is_publication_truthful_and_keeps_client_claims_held() -> None:
         in readme
     )
     assert "0.6.0a17" in readme
-    assert "0.6.0a18+wi0436.atomic.continuation.v1" in lowered
-    assert "unfrozen, unpublished development identity" in lowered
+    assert "qcoder 0.6.0a18 is a behavior-changing pre-release successor" in lowered
+    assert "one atomic qcoder-supplied copy-through capsule" in lowered
     assert "release candidate was rejected and must not be published" in lowered
     assert "preserved a17 implementation corrected the a16 mixed-revision limitation" in lowered
     assert "bare counts fail closed" in lowered
@@ -101,3 +101,17 @@ def test_a17_release_note_is_durable_and_keeps_claims_separate() -> None:
     assert "release-candidate disposition was rejected" in lowered
     assert "must not be published" in lowered
     assert "private-only" not in lowered
+
+
+def test_a18_release_note_is_publication_truthful_and_keeps_claims_separate() -> None:
+    note = _normalized(ROOT / "docs/releases/0.6.0a18.md")
+    lowered = note.lower()
+    assert "qcoder 0.6.0a18 is a behavior-changing pre-release successor" in lowered
+    assert "atomic continuation capsule" in lowered
+    assert "causal currentness" in lowered
+    assert "exactly twelve public context bridge tools" in lowered
+    assert "package publication does not activate a named-client support claim" in lowered
+    assert "latency or quiet-operation guarantee" in lowered
+    assert "general framework qualification" in lowered
+    assert "private-only" not in lowered
+    assert "unfrozen" not in lowered

@@ -55,11 +55,11 @@ Narrowing applies immediately; broadening requires explicit confirmation.
 
 ### Upgrading an active Current Loop
 
-This source tree has the unfrozen, unpublished development identity
-`0.6.0a18+wi0436.atomic.continuation.v1`. It gives Algorithm Intent clarification recovery one
-atomic qCoder-supplied copy-through capsule under binding v44. It is not a release candidate and does not activate
-a named-client support claim. Plain 0.6.0a17 remains immutable historical failure evidence; its
-release candidate was rejected and must not be published.
+Version 0.6.0a18 gives Algorithm Intent clarification recovery one atomic qCoder-supplied
+copy-through capsule under binding v44. qCoder 0.6.0a18 is a behavior-changing pre-release
+successor to public 0.6.0a16. Package publication does not activate a named-client support claim.
+Plain 0.6.0a17 remains immutable historical failure evidence; its release candidate was rejected
+and must not be published.
 
 The successor preserves the connected-assistant, adaptive-intent input, coordinator-result, and
 vocabulary contracts while retaining a17's causal currentness, strict result-manifest lineage, and
@@ -94,9 +94,11 @@ authority, broaden artifact selection, discover files, or chain an unrelated qCo
 Canonical structured `process_and_discard` unambiguously means that no customer artifact is
 retained for that operation; qualification evidence remains fail-closed when this semantic state
 is absent, ambiguous, contradictory, free-form only, or belongs to another operation.
-For Algorithm Intent clarification, the returned contract is bound to the exact card digest and
-revision. The assistant may submit only customer-reviewed unresolved fields and must include the
-explicit review assertion; stale, cross-card, and cross-revision continuations fail closed.
+For Algorithm Intent clarification, qCoder returns one atomic continuation capsule bound to the
+exact card, revision, and regenerated internal contract. The assistant copies the capsule unchanged
+and may submit only all advertised customer-reviewed unresolved fields plus the explicit review
+assertion. Malformed, tampered, stale, cross-card, cross-revision, incomplete, forbidden, and
+unauthorized continuations fail closed without raw-value echo or retention.
 
 ## Context Bridge inventory
 
@@ -170,7 +172,7 @@ attributes and alternate data streams are not qualified. See
 [`docs/local-evidence-review.md`](docs/local-evidence-review.md) for the complete commands and
 section meanings.
 
-This section describes behavior present in qCoder 0.6.0a17. Package publication and public client-
+This section describes behavior present in qCoder 0.6.0a18. Package publication and public client-
 claim status remain separate facts governed outside the package documentation.
 
 ### Explorer Evidence Review
@@ -222,10 +224,10 @@ See the synthetic [`Algorithm Blueprint walkthrough`](examples/09_algorithm_blue
 
 ## Quick start
 
-qCoder `0.6.0a18+wi0436.atomic.continuation.v1` is an unfrozen development pre-release. It
-is not a stable or generally available release. Package publication and named-client support
-claims are governed separately. The commands below describe behavior present in this development
-source; plain a17 remains a rejected immutable candidate and is not a publication target.
+qCoder 0.6.0a18 is a pre-release. It is not a stable or generally available release. Package
+publication and named-client support claims are governed separately. The commands below describe
+behavior present in this pre-release; plain a17 remains a rejected immutable candidate and is not
+a publication target.
 
 Analyze a circuit:
 

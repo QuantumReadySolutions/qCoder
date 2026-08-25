@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.0a18+wi0436.atomic.continuation.v1 (unfrozen development rehearsal)
+## 0.6.0a18
 
 - Replace client reconstruction of separate card, revision, contract, digest, and binding fields
   with one qCoder-supplied atomic copy-through capsule on the existing Intent Card operation.
@@ -8,8 +8,8 @@
   assertion; reject malformed, tampered, stale, cross-card, cross-revision, and forbidden inputs.
 - Preserve process-and-discard, safe field-local diagnostics, strict customer authority, twelve
   public tools, two private operations, and all accepted WI-0435 semantics.
-- Retain the v43 development rehearsal and rejected plain-a17 candidate as immutable evidence. This
-  identity remains unfrozen, unpublished, and qualification-neutral.
+- Retain the v43 development rehearsal and rejected plain-a17 candidate as immutable historical
+  evidence. Package publication and named-client qualification remain separate lifecycle facts.
 
 ## 0.6.0a18+wi0436.structured.intent.recovery.v1 (unfrozen development rehearsal)
 
