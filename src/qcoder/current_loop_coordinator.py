@@ -12657,8 +12657,44 @@ class CurrentLoopCoordinator:
                     "artifact_revision_id": circuit_id,
                     "content_digest": circuit_revision.get("content_digest"),
                 }
+        from qcoder.cursor_post_write_hook import cursor_post_write_hook_status
+
+        cursor_hook = cursor_post_write_hook_status(
+            workspace_root=self.workspace_root,
+            executable=self.runtime_executable,
+        )
+        synchronous_terminal_closure = bool(
+            role == "source"
+            and cursor_hook.get("configured") is True
+            and cursor_hook.get("exact_runtime_bound") is True
+        )
+        terminal_closure = {
+            "schema_id": "qcoder.current_loop.terminal_closure_route.v1",
+            "schema_version": 1,
+            "mode": (
+                "synchronous_native_edit_event"
+                if synchronous_terminal_closure
+                else "binding_owned_typed_completion"
+            ),
+            "trigger": (
+                "first_valid_exact_native_edit_event"
+                if synchronous_terminal_closure
+                else "explicit_typed_completion_after_native_action"
+            ),
+            "completion_operation": "complete_current_step",
+            "assistant_completion_call_required": not synchronous_terminal_closure,
+            "assistant_procedure_reentry_required_after_native_action": (
+                not synchronous_terminal_closure
+            ),
+            "native_client_permission_owner": "native_client",
+            "qcoder_mutates_customer_artifact": False,
+            "qcoder_executes_customer_code": False,
+            "hook_present_at_issuance": synchronous_terminal_closure,
+            "hook_absent_typed_completion_available": True,
+            "duplicate_delivery_disposition": "idempotent_noop",
+        }
         authority_binding = {
-            "schema_id": "qcoder.current_loop.bounded_action_expectation_binding.v2",
+            "schema_id": "qcoder.current_loop.bounded_action_expectation_binding.v3",
             "authority_layer": "qcoder_bounded_action",
             "native_client_permission_owner": "native_client",
             "native_client_permission_granted_by_qcoder": False,
@@ -12690,6 +12726,7 @@ class CurrentLoopCoordinator:
             "single_use": True,
             "stale_after_any_authoritative_revision_change": True,
             "authority_evidence_source": "qcoder_bounded_action_expectation",
+            "terminal_closure": terminal_closure,
         }
         targets = coordinator.get("intended_artifact_targets")
         exact_target = targets.get(role) if isinstance(targets, Mapping) else None
@@ -12740,6 +12777,7 @@ class CurrentLoopCoordinator:
                 "current_step_operation_receipt_id": None,
                 "current_step_bounded_action_expectation_id": expectation_id,
                 "current_step_bounded_action_expectation_digest": expectation_digest,
+                "terminal_closure_route": deepcopy(terminal_closure),
                 "customer_summary": (
                     "qCoder prepared one exact bounded action contract. The native client "
                     "owns any local permission and action; qCoder will accept only matching "
@@ -12983,28 +13021,21 @@ class CurrentLoopCoordinator:
                     customer_label = "Complete this local execution using the native client"
                 else:
                     raise CurrentLoopError("current_request_stage_unsupported")
-                from qcoder.cursor_post_write_hook import (
-                    cursor_post_write_hook_status,
-                )
-
-                cursor_hook = cursor_post_write_hook_status(
-                    workspace_root=self.workspace_root,
-                    executable=self.runtime_executable,
-                )
-                cursor_hook_ready = (
-                    output_role == "source"
-                    and cursor_hook.get("configured") is True
-                    and cursor_hook.get("exact_runtime_bound") is True
-                )
                 expectation_id = coordinator.get("current_step_bounded_action_expectation_id")
                 expectation_digest = coordinator.get(
                     "current_step_bounded_action_expectation_digest"
                 )
                 if not isinstance(expectation_id, str) or not isinstance(expectation_digest, str):
                     raise CurrentLoopError("bounded_action_expectation_missing")
+                terminal_closure = coordinator.get("terminal_closure_route")
+                if not isinstance(terminal_closure, Mapping):
+                    raise CurrentLoopError("terminal_closure_route_missing")
+                cursor_hook_ready = (
+                    terminal_closure.get("mode") == "synchronous_native_edit_event"
+                )
                 compact_action = {
-                    "schema_id": "qcoder.current_loop.compact_next_action.v3",
-                    "schema_version": 3,
+                    "schema_id": "qcoder.current_loop.compact_next_action.v4",
+                    "schema_version": 4,
                     "action": operation_category,
                     "artifact_role": output_role,
                     "customer_facing_action": customer_label,
@@ -13027,7 +13058,7 @@ class CurrentLoopCoordinator:
                         "native_client_applies_its_own_controls",
                         "perform_exact_external_native_action",
                         (
-                            "first_valid_native_edit_event_completes_exact_registration"
+                            "native_edit_success_event_completes_exact_registration"
                             if cursor_hook_ready
                             else "perform_typed_completion_handoff"
                         ),
@@ -13035,7 +13066,7 @@ class CurrentLoopCoordinator:
                     "post_action_operation": "complete_current_step",
                     "post_action_transport": "private_current_loop_binding",
                     "post_action_trigger": (
-                        "first_valid_hook_event_accelerates_typed_completion"
+                        "first_valid_exact_native_edit_event_is_terminal_closure"
                         if cursor_hook_ready
                         else "typed_completion_after_successful_native_action"
                     ),
@@ -13043,7 +13074,11 @@ class CurrentLoopCoordinator:
                     "post_action_executes_customer_code": False,
                     "post_action_broadens_output_roles": False,
                     "post_action_is_required_active_request_completion": True,
-                    "registration_result_delivery": "compact_typed_completion_result",
+                    "registration_result_delivery": (
+                        "synchronous_silent_terminal_closure"
+                        if cursor_hook_ready
+                        else "compact_typed_completion_result"
+                    ),
                     "tool_name_matcher_required": False if cursor_hook_ready else None,
                     "workspace_trust_required_for_correctness": False,
                     "hooks_required_for_correctness": False,
@@ -13058,9 +13093,11 @@ class CurrentLoopCoordinator:
                     "second_native_approval_required": False,
                     "bounded_action_expectation_preissued_by_qcoder": True,
                     "separate_qcoder_native_permission_receipt_required": False,
-                    "typed_completion_handoff_required": True,
                     "typed_completion_operation": "complete_current_step",
-                    "normal_path_qcoder_serial_cycles_including_bootstrap": 2,
+                    "post_source_generation_model_procedure_reentry_required": (
+                        not cursor_hook_ready
+                    ),
+                    "qcoder_calls": 1 if cursor_hook_ready else 2,
                     "normal_path_expected_model_turns": 3,
                     "procedural_source_of_truth": True,
                     "transcript_or_repository_reconstruction_permitted": False,
@@ -14388,7 +14425,7 @@ class CurrentLoopCoordinator:
         )
         role = str(artifact.get("role") or "artifact")
         task_summary = {
-            "source": "The requested source artifact is ready.",
+            "source": "The requested source artifact is ready; qCoder stopped at source.",
             "circuit_qasm": "The requested QASM artifact is ready.",
             "results": "The requested local result artifact is ready.",
         }.get(role, "The requested artifact is ready.")

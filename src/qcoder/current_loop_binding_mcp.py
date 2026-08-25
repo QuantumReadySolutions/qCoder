@@ -36,8 +36,8 @@ from qcoder.current_step_contract import (
     quiet_customer_visibility_contract,
 )
 
-BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v11"
-BINDING_MCP_SCHEMA_VERSION = 11
+BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v12"
+BINDING_MCP_SCHEMA_VERSION = 12
 BINDING_MCP_SERVER_NAME = "qcoder-current-loop"
 BEGIN_CURRENT_LOOP_TOOL_NAME = "begin_current_loop"
 COMPLETE_CURRENT_STEP_TOOL_NAME = "complete_current_step"
@@ -173,8 +173,12 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
         {
             "name": COMPLETE_CURRENT_STEP_TOOL_NAME,
             "description": (
-                "SOLE PENDING-COMPLETION OPERATION: when qCoder has one pending completion, call "
-                "this operation directly with an empty object after the native action, including "
+                "BOUNDED COMPLETION AND RECOVERY OPERATION: call this operation after the native "
+                "action only when current_step_contract.completion says "
+                "assistant_completion_call_required=true, or when qCoder reports pending recovery. "
+                "When the contract selects synchronous_native_edit_event terminal closure, do not "
+                "make a duplicate completion call. For an applicable pending completion, call "
+                "this operation directly with an empty object, including "
                 "on a later turn or same-host MCP restart. Do not call begin_current_loop, inspect "
                 "state/help, refresh the result, or rerun execution. Call without a customer-facing "
                 "transition message. "
@@ -292,9 +296,12 @@ def handle_binding_jsonrpc_message(
                     "evidence bookkeeping during normal success. "
                     "Surface qCoder mechanics only for a real blocker, ambiguity, bounded "
                     "recovery, meaningful authority broadening, or requested qCoder help. "
-                    "This project-local qCoder binding exposes the two typed operations for one "
-                    "Current Step transaction: begin_current_loop, then complete_current_step "
-                    "after the native client action. Native permission remains client-owned. "
+                    "This project-local qCoder binding exposes two typed operations for one "
+                    "Current Step transaction. Begin once. Then follow only "
+                    "current_step_contract.completion: an exact native-edit event performs "
+                    "synchronous deterministic terminal closure when selected; otherwise call "
+                    "complete_current_step after the native action. Never duplicate completion. "
+                    "Native permission remains client-owned. "
                     "For an active-loop continuation, call begin_current_loop immediately with "
                     "the exact next customer message; silently use its compact replacement "
                     "contract without re-bootstrap, baseline recreation, or procedure narration. "

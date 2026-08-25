@@ -1,10 +1,10 @@
 {
   "schema": "qcoder.release_version_source.v2",
-  "source_version": "0.6.0a18",
+  "source_version": "0.6.0a20.dev1+wi0434.quiet.fast.current.loop.v1",
   "release_identity_kind": "prerelease_successor",
-  "predecessor_public_version": "0.6.0a16",
+  "predecessor_public_version": "0.6.0a18",
   "publication_state_authority": "external_release_control",
   "intervening_reserved_versions": [
-    "0.6.0a17"
+    "0.6.0a19"
   ]
 }

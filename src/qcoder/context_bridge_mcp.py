@@ -167,8 +167,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 43
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v44"
+CLIENT_BINDING_SCHEMA_VERSION = 44
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v45"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -966,12 +966,14 @@ def _binding_contract_tiers(
                 "reference_is_not_alternate_source_of_truth": True,
             },
             "normal_source_only_choreography": {
-                "qcoder_control_cycles": 2,
+                "qcoder_control_cycles": "one_model_issued_begin_plus_one_deterministic_closure",
                 "expected_model_turns": 3,
                 "cycle_1": "structured_begin_current_loop_and_receive_current_step_contract",
                 "native_action": "one_action_specific_source_write_permission_and_exactly_one_source_write",
-                "cycle_2": "typed_complete_current_step_after_exact_native_action",
-                "cycle_2_hook_acceleration": "first_valid_redundant_native_edit_event_optional",
+                "terminal_closure": "follow_current_step_contract_completion_mode",
+                "hook_present": "native_edit_event_synchronously_validates_registers_and_closes_without_model_procedure_reentry",
+                "hook_absent": "typed_complete_current_step_after_exact_native_action",
+                "duplicate_completion": "prohibited_on_routine_hook_present_success",
                 "intermediate_customer_narration": False,
                 "model_shell_invocation": False,
                 "second_native_approval": False,
@@ -1077,12 +1079,16 @@ contract is required, fetch its exact advertised MCP resource URI, verify SHA-25
 without inference if unavailable or mismatched.
 
 IDE WORK AND ARTIFACT HANDOFF
-BEGIN / NATIVE ACTION / TYPED COMPLETE
+BEGIN / NATIVE ACTION / CONTRACT-SELECTED TERMINAL CLOSURE
 Use only the exact target returned in the Current Step Contract; never search the workspace to
 choose or confirm it. For the exact source action, let the native client apply its own controls and perform only that
 write. qCoder publishes one exact Current Step Contract, but does not grant or observe native
-permission and does not infer an approval click. After the native action, call
-complete_current_step with an empty object. qCoder resolves the contract's durable opaque action
+permission and does not infer an approval click. Follow only current_step_contract.completion. If
+its mode is synchronous_native_edit_event, the successful exact native edit event performs qCoder's
+deterministic validation, registration, and receipt work synchronously; do not call
+complete_current_step and do not re-enter model reasoning about qCoder procedure. If its mode is
+binding_owned_typed_completion, call complete_current_step with an empty object after the native
+action. qCoder resolves the contract's durable opaque action
 and exact bound workspace-relative target. Do not supply a path, digest, role, receipt, revision,
 ceiling, or approval state. qCoder
 computes and validates the actual bytes before one atomic registration. The matcher-free afterFileEdit and unfiltered postToolUse hooks

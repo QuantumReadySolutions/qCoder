@@ -56,7 +56,7 @@ def test_inline_binding_is_compact_tiered_digest_verified_and_keeps_twelve_tools
         token_file=tmp_path / "token.txt",
     )
     assert len(instructions.encode("utf-8")) <= 50_000
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v44"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v45"
     assert len(tool_descriptors()) == len(EXPECTED_TOOLS) == 12
     listed = handle_jsonrpc_message(
         {"jsonrpc": "2.0", "id": 1, "method": "resources/list"},
@@ -120,7 +120,7 @@ def test_normal_source_only_results_are_compact_single_source_of_truth(tmp_path:
     assert action["native_action_sequence"] == [
         "native_client_applies_its_own_controls",
         "perform_exact_external_native_action",
-        "first_valid_native_edit_event_completes_exact_registration",
+        "native_edit_success_event_completes_exact_registration",
     ]
     contract = activated["current_step_contract"]
     assert contract["completion"]["operation"] == "complete_current_step"
@@ -181,7 +181,8 @@ def test_binding_explicitly_requires_same_turn_completion_without_narration(tmp_
     assert "matcher-free afterFileEdit and unfiltered postToolUse hooks" in normalized
     assert "Do not issue or expose a Shell/CLI completion command" in normalized
     assert '"expected_model_turns": 3' in instructions
-    assert '"qcoder_control_cycles": 2' in instructions
+    assert '"hook_present":' in instructions
+    assert "synchronous_native_edit_event" in instructions
 
 
 def test_blueprint_tools_advertise_minimal_shape_and_reject_fields_actionably(

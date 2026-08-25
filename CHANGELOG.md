@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0a20.dev1+wi0434.quiet.fast.current.loop.v1 (unfrozen development rehearsal)
+
+- Bind routine source completion to one issued terminal-closure route: the exact synchronous
+  native-edit event when configured, or the existing typed completion when hooks are absent.
+- Prevent routine hook-present success from prompting a redundant completion call or another
+  model interpretation of qCoder procedure; retain typed recovery and idempotent duplicate safety.
+- Keep source-only authority at exactly one source action and one validated registration, with a
+  concise boundary-stating result and no QASM, execution, result, or forced-close implication.
+- Preserve binding-owned authority, process-and-discard, strict currentness and result manifests,
+  exactly twelve public tools, and exactly two private Current Loop operations.
+
 ## 0.6.0a18
 
 - Replace client reconstruction of separate card, revision, contract, digest, and binding fields

@@ -10,8 +10,8 @@ from typing import Any, Mapping
 from qcoder.current_loop_result_manifest import result_manifest_contract_snapshot
 
 
-CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v10"
-CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 10
+CURRENT_STEP_CONTRACT_SCHEMA_ID = "qcoder.current_loop.current_step_contract.v11"
+CURRENT_STEP_CONTRACT_SCHEMA_VERSION = 11
 COMPLETE_CURRENT_STEP_OPERATION = "complete_current_step"
 
 
@@ -56,7 +56,7 @@ def quiet_customer_visibility_projection() -> dict[str, Any]:
     """Return the bounded Current Step projection of the visibility policy."""
 
     return {
-        "policy": "quiet_current_step_v2",
+        "policy": "quiet_current_step_v3",
         "events": "optional_task_progress_then_task_outcome",
         "mechanics": "silent",
         "native_permission": "only_if_required_once",
@@ -146,6 +146,19 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
     preexisting_satisfaction = bool(
         semantics.get("preexisting_exact_source_satisfaction_requested")
     )
+    terminal_closure = binding.get("terminal_closure")
+    if not isinstance(terminal_closure, Mapping):
+        terminal_closure = {
+            "mode": "binding_owned_typed_completion",
+            "trigger": "explicit_typed_completion_after_native_action",
+        }
+    completion_mode = terminal_closure.get("mode")
+    if completion_mode not in {
+        "synchronous_native_edit_event",
+        "binding_owned_typed_completion",
+    }:
+        raise ValueError("current_step_contract_terminal_closure_invalid")
+    assistant_completion_required = completion_mode == "binding_owned_typed_completion"
     contract = {
         "schema_id": CURRENT_STEP_CONTRACT_SCHEMA_ID,
         "schema_version": CURRENT_STEP_CONTRACT_SCHEMA_VERSION,
@@ -197,10 +210,15 @@ def derive_current_step_contract(state: Mapping[str, Any]) -> dict[str, Any]:
         },
         "completion": {
             "operation": COMPLETE_CURRENT_STEP_OPERATION,
+            "mode": completion_mode,
             "required_arguments": (
-                [] if durable_pending else ["current_action_handle", "artifact_path"]
+                []
+                if durable_pending or not assistant_completion_required
+                else ["current_action_handle", "artifact_path"]
             ),
-            "canonical_arguments": {} if durable_pending else None,
+            "canonical_arguments": (
+                {} if durable_pending and assistant_completion_required else None
+            ),
             **(
                 {"artifact_disposition_derived_by_qcoder": "pre_existing_exact_artifact"}
                 if preexisting_satisfaction
@@ -283,6 +301,12 @@ def current_step_contract_snapshot() -> dict[str, Any]:
         "bounded_independent_of_artifact_size": True,
         "native_permission_owner": "native_client",
         "hooks_optional_accelerators": True,
+        "terminal_closure_modes": [
+            "synchronous_native_edit_event",
+            "binding_owned_typed_completion",
+        ],
+        "hook_present_requires_assistant_completion_call": False,
+        "hook_absent_typed_completion_preserved": True,
         "exact_artifact_target_required": True,
         "preexisting_exact_source_satisfaction_without_write": True,
         "workspace_discovery_permitted": False,

@@ -18,6 +18,7 @@ PRERELEASE_SUCCESSOR = "prerelease_successor"
 EXTERNAL_RELEASE_CONTROL = "external_release_control"
 PRIVATE_CANDIDATE_PATTERN = re.compile(
     r"^(?P<public_version>[0-9]+\.[0-9]+\.[0-9]+a[0-9]+)"
+    r"(?:\.dev[0-9]+)?"
     r"\+wi[0-9]+\.[a-z0-9][a-z0-9.]*$"
 )
 PIN_PATTERN = re.compile(r"\bqcoder(?:\[[A-Za-z0-9_,.-]+\])?==([0-9A-Za-z.!+-]+)")

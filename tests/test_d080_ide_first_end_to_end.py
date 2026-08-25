@@ -166,7 +166,7 @@ def test_binding_route_and_inventory_are_deterministic_and_keep_twelve_tools() -
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v44"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v45"
     assert (
         descriptor["current_request_semantics_contract"]["temporary_current_step_ceiling"] is True
     )
@@ -210,7 +210,8 @@ def test_source_only_real_coordinator_path_enforces_one_write_and_resumable_stop
     assert action["bounded_action_expectation_preissued_by_qcoder"] is True
     assert action["native_client_permission_owner"] == "native_client"
     assert action["native_client_permission_granted_by_qcoder"] is False
-    assert action["normal_path_qcoder_serial_cycles_including_bootstrap"] == 2
+    assert action["qcoder_calls"] == 1
+    assert action["post_source_generation_model_procedure_reentry_required"] is False
     assert "next_invocation" not in activated
 
     before_broadened = deepcopy(coordinator.store.read())

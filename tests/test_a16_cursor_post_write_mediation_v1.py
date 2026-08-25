@@ -146,7 +146,7 @@ def test_semantic_after_file_edit_registers_fresh_or_existing_authorized_source(
     assert action["post_action_transport"] == "private_current_loop_binding"
     assert action["hooks_required_for_correctness"] is False
     assert action["post_action_trigger"] == (
-        "first_valid_hook_event_accelerates_typed_completion"
+        "first_valid_exact_native_edit_event_is_terminal_closure"
     )
     assert action["tool_name_matcher_required"] is False
     assert action["model_shell_invocation_required"] is False
@@ -327,7 +327,7 @@ def test_v27_tool_name_matcher_failure_fixture_is_obsolete_on_v29(tmp_path: Path
     action = corrected["compact_next_action"]
     assert action["post_action_transport"] == "private_current_loop_binding"
     assert action["post_action_trigger"] == (
-        "first_valid_hook_event_accelerates_typed_completion"
+        "first_valid_exact_native_edit_event_is_terminal_closure"
     )
     assert action["tool_name_matcher_required"] is False
     assert not _contains_cli(corrected)

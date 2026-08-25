@@ -54,7 +54,7 @@ def test_binding_and_private_tools_encode_semantic_quiet_success(tmp_path: Path)
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     visibility = descriptor["surfaces"]["current_step_transaction"]["customer_visibility"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v44"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v45"
     assert visibility["normal_success"] == "internal_transaction_silent"
     assert visibility["intermediate_customer_message_permitted"] is False
     assert visibility["final_response"] == "concise_task_outcome_only"
@@ -115,13 +115,13 @@ def test_normal_begin_is_task_level_and_contract_stays_bounded(tmp_path: Path) -
     contract = begun["current_step_contract"]
     assert _wire_bytes(contract) <= 2500
     assert contract["customer_visibility"] == {
-        "policy": "quiet_current_step_v2",
+        "policy": "quiet_current_step_v3",
         "events": "optional_task_progress_then_task_outcome",
         "mechanics": "silent",
         "native_permission": "only_if_required_once",
     }
     assert begun["customer_summary"] == "Proceed with the requested source task."
-    assert begun["compact_next_action"]["normal_path_qcoder_serial_cycles_including_bootstrap"] == 2
+    assert begun["compact_next_action"]["qcoder_calls"] == 2
     assert begun["compact_next_action"]["normal_path_expected_model_turns"] == 3
 
 
@@ -147,7 +147,9 @@ def test_normal_typed_completion_is_compact_task_only_and_final_ready(
     )
     assert completed["schema_id"] == "qcoder.current_loop.typed_completion_result.v5"
     assert completed["current_step_status"] == "complete_resumable"
-    assert completed["customer_summary"] == "The requested source artifact is ready."
+    assert completed["customer_summary"] == (
+        "The requested source artifact is ready; qCoder stopped at source."
+    )
     assert completed["customer_visibility"]["events"] == (
         "optional_task_progress_then_task_outcome"
     )
