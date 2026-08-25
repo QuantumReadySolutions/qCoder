@@ -13,7 +13,7 @@ from qcoder import __version__
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts/verify-release-version.py"
-EXPECTED_VERSION = "0.6.0a18+wi0436.structured.intent.recovery.v1"
+EXPECTED_VERSION = "0.6.0a18+wi0436.atomic.continuation.v1"
 EXPECTED_PREDECESSOR_VERSION = "0.6.0a16"
 EXPECTED_IDENTITY_KIND = "prerelease_successor"
 EXPECTED_INTERVENING: list[str] = ["0.6.0a17"]

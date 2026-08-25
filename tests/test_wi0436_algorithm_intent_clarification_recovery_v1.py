@@ -10,6 +10,9 @@ import pytest
 from qcoder.algorithm_blueprint import with_artifact_digest
 from qcoder.algorithm_intent_recovery import (
     ClarificationRecoveryError,
+    _decode_atomic_capsule,
+    _encode_atomic_capsule,
+    build_atomic_clarification_continuation,
     build_clarification_recovery_contract,
     prepare_clarification_recovery,
 )
@@ -88,23 +91,19 @@ def _envelope(
     *,
     field_values: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    contract = build_clarification_recovery_contract(card)
+    continuation = build_atomic_clarification_continuation(card)
     return {
-        "contract": contract,
-        "prior_algorithm_intent_card": deepcopy(card),
-        "correction": {
-            "card_binding": deepcopy(contract["card_binding"]),
-            "field_values": (
-                {"desired_output": "A reviewed circuit description."}
-                if field_values is None
-                else field_values
-            ),
-            "confirmation_assertion": {"user_reviewed": True},
-        },
+        "continuation_capsule": continuation["continuation_capsule"],
+        "field_values": (
+            {"desired_output": "A reviewed circuit description."}
+            if field_values is None
+            else field_values
+        ),
+        "confirmation_assertion": {"user_reviewed": True},
     }
 
 
-def test_every_needs_clarification_response_gets_exact_machine_contract(tmp_path: Path) -> None:
+def test_every_needs_clarification_response_gets_one_atomic_continuation(tmp_path: Path) -> None:
     card = _card()
     result = post_context_bridge(
         base_url="https://context.example.invalid",
@@ -125,10 +124,9 @@ def test_every_needs_clarification_response_gets_exact_machine_contract(tmp_path
             }
         ),
     )
-    contract = result["clarification_recovery_contract"]
-    assert contract["card_binding"]["artifact_digest"] == card["artifact_digest"]
-    assert contract["card_binding"]["revision_digest"] == card["artifact_digest"]
-    assert contract["unresolved_fields"] == [
+    continuation = result["clarification_continuation"]
+    assert continuation["schema_id"] == "qcoder.algorithm_intent.atomic_continuation.v1"
+    assert continuation["unresolved_fields"] == [
         {
             "field_id": "desired_output",
             "expected_type": "non_empty_string",
@@ -138,13 +136,26 @@ def test_every_needs_clarification_response_gets_exact_machine_contract(tmp_path
             "explicit_confirmation_required": True,
         }
     ]
-    assert contract["supported_next_invocation"]["argument_field"] == ("clarification_recovery")
-    assert contract["binding_guards"] == {
-        "stale_card_refused": True,
-        "cross_card_refused": True,
-        "cross_revision_refused": True,
+    invocation = continuation["supported_next_invocation"]
+    assert invocation["argument_field"] == "clarification_recovery"
+    assert invocation["copy_through_field"] == "continuation_capsule"
+    assert invocation["customer_supplied_fields"] == [
+        "field_values",
+        "confirmation_assertion",
+    ]
+    assert continuation["binding_guards"] == {
+        "atomic_card_contract_revision": True,
+        "tamper_refused": True,
+        "stale_cross_card_cross_revision_refused": True,
+        "exact_copy_through_required": True,
         "hidden_lookup": False,
+        "persistent_secret": False,
     }
+    capsule_payload = _decode_atomic_capsule(continuation["continuation_capsule"])
+    assert capsule_payload["algorithm_intent_card"] == card
+    assert capsule_payload["clarification_contract"] == (
+        build_clarification_recovery_contract(card)
+    )
 
 
 def test_valid_bounded_correction_reaches_confirmed_card_without_hidden_state(
@@ -189,41 +200,52 @@ def test_valid_bounded_correction_reaches_confirmed_card_without_hidden_state(
     assert result["algorithm_intent_card"]["confirmation_state"] == "confirmed"
     assert result["clarification_recovery_applied"] == {
         "recovered_from_card_digest": prior["artifact_digest"],
+        "atomic_capsule_consumed": True,
         "corrected_fields": ["desired_output"],
         "explicit_confirmation_assertion": True,
         "raw_rejected_value_retained": False,
         "retention": "process_and_discard",
     }
-    assert "clarification_recovery_contract" not in result
+    assert "clarification_continuation" not in result
     assert len(observed_requests) == 1
 
 
 @pytest.mark.parametrize(
-    "mutation,category",
+    "mutation,category,trigger_class",
     [
-        ("card", "clarification_recovery_contract_mismatch"),
-        ("contract", "clarification_recovery_contract_mismatch"),
-        ("binding", "clarification_recovery_card_binding_mismatch"),
+        (
+            "wire",
+            "clarification_recovery_capsule_tampered",
+            "tampered_or_unsupported_capsule",
+        ),
+        ("card", "clarification_recovery_card_invalid", "stale_or_cross_card"),
+        (
+            "contract",
+            "clarification_recovery_contract_mismatch",
+            "stale_or_cross_revision",
+        ),
     ],
 )
 def test_stale_cross_card_and_cross_revision_fail_closed(
     mutation: str,
     category: str,
+    trigger_class: str,
 ) -> None:
     prior = _card()
     envelope = _envelope(prior)
-    if mutation == "card":
-        altered = deepcopy(prior)
-        altered.pop("artifact_digest")
-        altered["interpretation"]["execution_intent"] = "A different revision."
-        envelope["prior_algorithm_intent_card"] = with_artifact_digest(altered)
-    elif mutation == "contract":
-        envelope["contract"]["card_binding"]["revision_digest"] = "0" * 64
+    if mutation == "wire":
+        capsule = envelope["continuation_capsule"]
+        envelope["continuation_capsule"] = capsule[:-1] + ("0" if capsule[-1] != "0" else "1")
     else:
-        envelope["correction"]["card_binding"]["revision_digest"] = "f" * 64
+        payload = _decode_atomic_capsule(envelope["continuation_capsule"])
+        if mutation == "card":
+            payload["algorithm_intent_card"]["artifact_digest"] = "f" * 64
+        else:
+            payload["clarification_contract"]["card_binding"]["revision_digest"] = "0" * 64
+        envelope["continuation_capsule"] = _encode_atomic_capsule(payload)
     with pytest.raises(ClarificationRecoveryError, match=category) as captured:
         prepare_clarification_recovery(envelope)
-    assert captured.value.trigger_class == "stale_or_cross_revision"
+    assert captured.value.trigger_class == trigger_class
 
 
 @pytest.mark.parametrize(
@@ -323,7 +345,7 @@ def test_duplicate_or_confirmed_card_recovery_is_not_applicable() -> None:
         ClarificationRecoveryError,
         match="clarification_recovery_card_invalid",
     ):
-        build_clarification_recovery_contract(_card(unresolved=[], state="confirmed"))
+        build_atomic_clarification_continuation(_card(unresolved=[], state="confirmed"))
 
 
 def test_duplicate_recovery_preparation_is_deterministic_and_stateless() -> None:
@@ -331,7 +353,41 @@ def test_duplicate_recovery_preparation_is_deterministic_and_stateless() -> None
     first = prepare_clarification_recovery(envelope)
     second = prepare_clarification_recovery(deepcopy(envelope))
     assert first == second
+    assert first[1]["atomic_capsule_consumed"] is True
     assert first[1]["corrected_fields"] == ["desired_output"]
+
+
+def test_old_multi_object_binding_reconstruction_is_rejected() -> None:
+    card = _card()
+    contract = build_clarification_recovery_contract(card)
+    old_envelope = {
+        "contract": contract,
+        "prior_algorithm_intent_card": card,
+        "correction": {
+            "card_binding": contract["card_binding"],
+            "field_values": {"desired_output": "A reviewed description."},
+            "confirmation_assertion": {"user_reviewed": True},
+        },
+    }
+    with pytest.raises(
+        ClarificationRecoveryError,
+        match="clarification_recovery_envelope_invalid",
+    ):
+        prepare_clarification_recovery(old_envelope)
+
+
+def test_atomic_continuation_requires_every_unresolved_customer_value() -> None:
+    envelope = _envelope(
+        _card(unresolved=["desired_output", "execution_intent"]),
+        field_values={"desired_output": "A reviewed description."},
+    )
+    with pytest.raises(
+        ClarificationRecoveryError,
+        match="clarification_recovery_required_field_missing",
+    ) as captured:
+        prepare_clarification_recovery(envelope)
+    assert captured.value.field == "execution_intent"
+    assert captured.value.trigger_class == "unsupported_correction_shape"
 
 
 def test_binding_and_inventory_publish_recovery_without_new_authority_surface() -> None:
@@ -339,8 +395,10 @@ def test_binding_and_inventory_publish_recovery_without_new_authority_surface() 
         "client_binding_contract"
     ]
     recovery = binding["algorithm_intent_clarification_recovery_contract"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v43"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 42
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v44"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 43
+    assert recovery["atomic_capsule_copy_through"] is True
+    assert recovery["client_reconstructs_binding_fields"] is False
     assert recovery["card_and_revision_bound"] is True
     assert recovery["explicit_confirmation_required"] is True
     assert recovery["raw_rejected_value_returned"] is False

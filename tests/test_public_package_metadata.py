@@ -30,7 +30,7 @@ def test_readme_is_publication_truthful_and_keeps_client_claims_held() -> None:
         in readme
     )
     assert "0.6.0a17" in readme
-    assert "0.6.0a18+wi0436.structured.intent.recovery.v1" in lowered
+    assert "0.6.0a18+wi0436.atomic.continuation.v1" in lowered
     assert "unfrozen, unpublished development identity" in lowered
     assert "release candidate was rejected and must not be published" in lowered
     assert "preserved a17 implementation corrected the a16 mixed-revision limitation" in lowered

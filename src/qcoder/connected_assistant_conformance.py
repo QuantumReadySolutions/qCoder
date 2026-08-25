@@ -13,7 +13,7 @@ from copy import deepcopy
 from hashlib import sha256
 from typing import Any
 
-from qcoder.algorithm_intent_recovery import build_clarification_recovery_contract
+from qcoder.algorithm_intent_recovery import build_atomic_clarification_continuation
 
 CLIENT_CONFORMANCE_CONTRACT_SCHEMA_ID = "qcoder.connected_assistant.client_neutral_conformance.v1"
 CLIENT_CONFORMANCE_CONTRACT_SCHEMA_VERSION = 1
@@ -101,7 +101,7 @@ _SHARED_ASSERTIONS = (
     "truthful_authority_and_next_actions",
     "direct_completion",
     "named_workflow_completion",
-    "clarification_recovery_contract_available",
+    "clarification_atomic_continuation_available",
     "clarification_recovery_exact_card_revision_binding",
     "clarification_recovery_bounded_correction",
     "clarification_recovery_stale_cross_card_refusal",
@@ -204,15 +204,15 @@ def _result_requires_customer_authority(result: Mapping[str, Any]) -> bool:
     )
 
 
-def _clarification_recovery_contract_is_exact(result: Mapping[str, Any]) -> bool:
+def _clarification_continuation_is_exact(result: Mapping[str, Any]) -> bool:
     card = result.get("algorithm_intent_card")
-    contract = result.get("clarification_recovery_contract")
+    continuation = result.get("clarification_continuation")
     if not isinstance(card, Mapping) or card.get("confirmation_state") != "needs_clarification":
         return True
-    if not isinstance(contract, Mapping):
+    if not isinstance(continuation, Mapping):
         return False
     try:
-        return dict(contract) == build_clarification_recovery_contract(card)
+        return dict(continuation) == build_atomic_clarification_continuation(card)
     except ValueError:
         return False
 
@@ -260,11 +260,11 @@ def evaluate_named_workflow_result(
             "classification": GENUINE_BLOCKER,
             "stop_reason": "qcoder_non_success_or_unsupported_state",
         }
-    if not _clarification_recovery_contract_is_exact(structured_result):
+    if not _clarification_continuation_is_exact(structured_result):
         return {
             **base,
             "classification": GENUINE_BLOCKER,
-            "stop_reason": "clarification_recovery_contract_missing_or_mismatched",
+            "stop_reason": "clarification_continuation_missing_or_mismatched",
         }
     if _result_requires_customer_authority(structured_result):
         return {
@@ -277,9 +277,7 @@ def evaluate_named_workflow_result(
                 if tool_name == "create_algorithm_intent_card"
                 else None
             ),
-            "clarification_recovery_contract_available": (
-                tool_name == "create_algorithm_intent_card"
-            ),
+            "clarification_continuation_available": (tool_name == "create_algorithm_intent_card"),
         }
     for state in workflow["customer_terminal_outcomes"]:
         if (

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from qcoder.algorithm_blueprint import with_artifact_digest
-from qcoder.algorithm_intent_recovery import build_clarification_recovery_contract
+from qcoder.algorithm_intent_recovery import build_atomic_clarification_continuation
 from qcoder.connected_assistant_conformance import (
     CUSTOMER_AUTHORITY_OR_DECISION_BOUNDARY,
     CUSTOMER_TERMINAL_OUTCOME,
@@ -233,14 +233,14 @@ def test_algorithm_intent_confirmation_is_a_real_customer_decision_boundary() ->
             tool_name="create_algorithm_intent_card",
             context_status="algorithm_intent_card_ready",
             algorithm_intent_card=card,
-            clarification_recovery_contract=build_clarification_recovery_contract(card),
+            clarification_continuation=build_atomic_clarification_continuation(card),
         ),
     )
 
     assert evaluated["classification"] == CUSTOMER_AUTHORITY_OR_DECISION_BOUNDARY
     assert evaluated["customer_interaction_required"] is True
     assert evaluated["next_tool_name"] == "create_algorithm_intent_card"
-    assert evaluated["clarification_recovery_contract_available"] is True
+    assert evaluated["clarification_continuation_available"] is True
 
 
 def test_genuine_blocker_stops_without_bypass() -> None:
@@ -412,7 +412,7 @@ def test_distributed_binding_and_tool_descriptions_expose_shared_d072_semantics(
     workflow = descriptor["named_workflow_completion"]
     descriptions = {item["name"]: item["description"] for item in tool_descriptors()}
 
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v43"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v44"
     assert len(EXPECTED_TOOLS) == 12
     assert workflow["preparatory_success_is_completion"] is False
     assert workflow["automatic_continuation_scope"] == "already_selected_named_workflow_only"

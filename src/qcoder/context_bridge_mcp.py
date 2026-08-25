@@ -31,7 +31,7 @@ from qcoder.algorithm_blueprint import (
 from qcoder.algorithm_intent_recovery import (
     ClarificationRecoveryError,
     RECOVERY_INPUT_FIELD,
-    build_clarification_recovery_contract,
+    build_atomic_clarification_continuation,
     clarification_recovery_contract_snapshot,
     prepare_clarification_recovery,
 )
@@ -167,8 +167,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 42
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v43"
+CLIENT_BINDING_SCHEMA_VERSION = 43
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v44"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -2356,10 +2356,7 @@ def post_context_bridge(
             )
         envelope = arguments[RECOVERY_INPUT_FIELD]
         if isinstance(envelope, Mapping):
-            correction = envelope.get("correction")
-            field_values = (
-                correction.get("field_values") if isinstance(correction, Mapping) else None
-            )
+            field_values = envelope.get("field_values")
             if isinstance(field_values, Mapping):
                 forbidden_fields = sorted(
                     str(field)
@@ -2588,12 +2585,12 @@ def post_context_bridge(
         card = payload.get("algorithm_intent_card")
         if isinstance(card, Mapping) and card.get("confirmation_state") == "needs_clarification":
             try:
-                payload["clarification_recovery_contract"] = build_clarification_recovery_contract(
+                payload["clarification_continuation"] = build_atomic_clarification_continuation(
                     card
                 )
             except ClarificationRecoveryError:
                 return safe_error(
-                    "clarification_recovery_contract_unavailable",
+                    "clarification_continuation_unavailable",
                     status_category="transport_consistency_failed",
                 )
         if recovery_metadata is not None:
@@ -3046,67 +3043,34 @@ def _tool_property_schemas() -> dict[str, dict[str, Any]]:
         RECOVERY_INPUT_FIELD: {
             "type": "object",
             "properties": {
-                "contract": {
-                    "type": "object",
-                    "required": [
-                        "schema_id",
-                        "schema_version",
-                        "contract_id",
-                        "contract_digest",
-                        "card_binding",
-                        "unresolved_fields",
-                        "safe_correction_shape",
-                        "supported_next_invocation",
-                    ],
-                    "additionalProperties": True,
+                "continuation_capsule": {
+                    "type": "string",
+                    "description": (
+                        "Exact opaque qCoder-supplied capsule. Copy through unchanged; do not "
+                        "decode, reconstruct, reconcile, or modify binding data."
+                    ),
                 },
-                "prior_algorithm_intent_card": {
+                "field_values": {
                     "type": "object",
-                    "required": [
-                        "artifact_type",
-                        "schema_version",
-                        "artifact_digest",
-                        "original_user_intent",
-                        "profile",
-                        "interpretation",
-                        "unresolved_questions",
-                        "field_provenance",
-                        "confirmation_state",
-                    ],
-                    "additionalProperties": True,
+                    "additionalProperties": {"type": "string"},
+                    "description": "Only customer-reviewed values for fields named unresolved by qCoder.",
                 },
-                "correction": {
+                "confirmation_assertion": {
                     "type": "object",
-                    "properties": {
-                        "card_binding": {"type": "object"},
-                        "field_values": {
-                            "type": "object",
-                            "additionalProperties": {"type": "string"},
-                        },
-                        "confirmation_assertion": {
-                            "type": "object",
-                            "properties": {"user_reviewed": {"const": True}},
-                            "required": ["user_reviewed"],
-                            "additionalProperties": False,
-                        },
-                    },
-                    "required": [
-                        "card_binding",
-                        "field_values",
-                        "confirmation_assertion",
-                    ],
+                    "properties": {"user_reviewed": {"const": True}},
+                    "required": ["user_reviewed"],
                     "additionalProperties": False,
                 },
             },
             "required": [
-                "contract",
-                "prior_algorithm_intent_card",
-                "correction",
+                "continuation_capsule",
+                "field_values",
+                "confirmation_assertion",
             ],
             "additionalProperties": False,
             "description": (
-                "Exact stateless continuation returned with a needs-clarification Intent Card. "
-                "Resupply the card and contract unchanged, bind only customer-reviewed values "
+                "Atomic stateless continuation for one needs-clarification Intent Card revision. "
+                "Copy the qCoder-supplied capsule unchanged, supply only customer-reviewed values "
                 "for listed unresolved fields, and include the explicit review assertion."
             ),
         },

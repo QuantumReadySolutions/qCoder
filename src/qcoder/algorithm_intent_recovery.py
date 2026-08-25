@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import base64
 from copy import deepcopy
 import hashlib
+import hmac
 import json
 from typing import Any, Mapping
 
@@ -13,11 +15,15 @@ from qcoder.algorithm_blueprint import (
 )
 
 
-RECOVERY_SCHEMA_ID = "qcoder.algorithm_intent.clarification_recovery.v1"
-RECOVERY_SCHEMA_VERSION = 1
-RECOVERY_CONTRACT_ID = "qcoder.algorithm_intent.clarification_recovery.v1"
+RECOVERY_SCHEMA_ID = "qcoder.algorithm_intent.clarification_recovery.v2"
+RECOVERY_SCHEMA_VERSION = 2
+RECOVERY_CONTRACT_ID = "qcoder.algorithm_intent.clarification_recovery.v2"
 RECOVERY_INPUT_FIELD = "clarification_recovery"
 EXPLICIT_CONFIRMATION_FIELD = "explicit_confirmation_assertion"
+ATOMIC_CONTINUATION_SCHEMA_ID = "qcoder.algorithm_intent.atomic_continuation.v1"
+ATOMIC_CONTINUATION_SCHEMA_VERSION = 1
+CAPSULE_PAYLOAD_SCHEMA_ID = "qcoder.algorithm_intent.atomic_continuation.payload.v1"
+CAPSULE_PREFIX = "qcoder-intent-v1"
 
 
 class ClarificationRecoveryError(ValueError):
@@ -49,6 +55,15 @@ def _canonical_digest(value: Mapping[str, Any], *, omitted: frozenset[str]) -> s
         sort_keys=True,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _canonical_bytes(value: Mapping[str, Any]) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
 
 
 def _card_binding(card: Mapping[str, Any]) -> dict[str, Any]:
@@ -111,7 +126,7 @@ def _field_contract(profile_id: str, field: str) -> dict[str, Any]:
 
 
 def build_clarification_recovery_contract(card: Mapping[str, Any]) -> dict[str, Any]:
-    """Build the exact bounded continuation contract for one returned card revision."""
+    """Build qCoder's internal contract for one exact returned card revision."""
 
     supplied = deepcopy(dict(card))
     if (
@@ -176,16 +191,6 @@ def build_clarification_recovery_contract(card: Mapping[str, Any]) -> dict[str, 
             },
             "additional_properties": False,
         },
-        "supported_next_invocation": {
-            "tool_name": "create_algorithm_intent_card",
-            "argument_field": RECOVERY_INPUT_FIELD,
-            "required_envelope_fields": [
-                "contract",
-                "prior_algorithm_intent_card",
-                "correction",
-            ],
-            "additional_properties": False,
-        },
         "binding_guards": {
             "stale_card_refused": True,
             "cross_card_refused": True,
@@ -202,6 +207,148 @@ def build_clarification_recovery_contract(card: Mapping[str, Any]) -> dict[str, 
     return contract
 
 
+def _encode_atomic_capsule(payload: Mapping[str, Any]) -> str:
+    encoded = _canonical_bytes(payload)
+    body = base64.urlsafe_b64encode(encoded).decode("ascii").rstrip("=")
+    return f"{CAPSULE_PREFIX}.{body}.{hashlib.sha256(encoded).hexdigest()}"
+
+
+def _decode_atomic_capsule(value: object) -> dict[str, Any]:
+    if not isinstance(value, str):
+        raise ClarificationRecoveryError(
+            "clarification_recovery_capsule_invalid",
+            field="continuation_capsule",
+            trigger_class="tampered_or_unsupported_capsule",
+            expected={"type": "qcoder_supplied_atomic_capsule_string"},
+            safe_next_action="copy_the_exact_capsule_returned_for_this_card_revision",
+        )
+    parts = value.split(".")
+    if len(parts) != 3 or parts[0] != CAPSULE_PREFIX or len(parts[2]) != 64:
+        raise ClarificationRecoveryError(
+            "clarification_recovery_capsule_invalid",
+            field="continuation_capsule",
+            trigger_class="tampered_or_unsupported_capsule",
+            expected={"type": "qcoder_supplied_atomic_capsule_string"},
+            safe_next_action="copy_the_exact_capsule_returned_for_this_card_revision",
+        )
+    try:
+        padded = parts[1] + "=" * (-len(parts[1]) % 4)
+        encoded = base64.b64decode(padded, altchars=b"-_", validate=True)
+    except (ValueError, TypeError):
+        encoded = b""
+    observed = hashlib.sha256(encoded).hexdigest()
+    if not encoded or not hmac.compare_digest(observed, parts[2]):
+        raise ClarificationRecoveryError(
+            "clarification_recovery_capsule_tampered",
+            field="continuation_capsule",
+            trigger_class="tampered_or_unsupported_capsule",
+            expected={"integrity": "exact_qcoder_supplied_capsule"},
+            safe_next_action="copy_the_exact_capsule_returned_for_this_card_revision",
+        )
+    try:
+        payload = json.loads(encoded)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        payload = None
+    if (
+        not isinstance(payload, dict)
+        or set(payload)
+        != {
+            "schema_id",
+            "schema_version",
+            "purpose",
+            "algorithm_intent_card",
+            "clarification_contract",
+        }
+        or payload.get("schema_id") != CAPSULE_PAYLOAD_SCHEMA_ID
+        or payload.get("schema_version") != ATOMIC_CONTINUATION_SCHEMA_VERSION
+        or payload.get("purpose") != "confirm_exact_algorithm_intent_card_revision"
+    ):
+        raise ClarificationRecoveryError(
+            "clarification_recovery_capsule_payload_invalid",
+            field="continuation_capsule",
+            trigger_class="tampered_or_unsupported_capsule",
+            expected={"schema_id": CAPSULE_PAYLOAD_SCHEMA_ID},
+            safe_next_action="copy_the_exact_capsule_returned_for_this_card_revision",
+        )
+    return payload
+
+
+def build_atomic_clarification_continuation(card: Mapping[str, Any]) -> dict[str, Any]:
+    """Build one exact copy-through capsule and its bounded correction interface."""
+
+    supplied = deepcopy(dict(card))
+    contract = build_clarification_recovery_contract(supplied)
+    capsule = _encode_atomic_capsule(
+        {
+            "schema_id": CAPSULE_PAYLOAD_SCHEMA_ID,
+            "schema_version": ATOMIC_CONTINUATION_SCHEMA_VERSION,
+            "purpose": "confirm_exact_algorithm_intent_card_revision",
+            "algorithm_intent_card": supplied,
+            "clarification_contract": contract,
+        }
+    )
+    correction_fields = [
+        item["field_id"]
+        for item in contract["unresolved_fields"]
+        if item["field_id"] != EXPLICIT_CONFIRMATION_FIELD
+    ]
+    return {
+        "schema_id": ATOMIC_CONTINUATION_SCHEMA_ID,
+        "schema_version": ATOMIC_CONTINUATION_SCHEMA_VERSION,
+        "continuation_capsule": capsule,
+        "unresolved_fields": deepcopy(contract["unresolved_fields"]),
+        "explicit_confirmation_required": True,
+        "safe_correction_shape": {
+            "type": "object",
+            "required": [
+                "continuation_capsule",
+                "field_values",
+                "confirmation_assertion",
+            ],
+            "properties": {
+                "continuation_capsule": {
+                    "type": "string",
+                    "const": capsule,
+                    "client_action": "copy_through_exactly",
+                },
+                "field_values": {
+                    "type": "object",
+                    "required": correction_fields,
+                    "allowed_fields": correction_fields,
+                    "additional_properties": False,
+                },
+                "confirmation_assertion": {
+                    "type": "object",
+                    "required": ["user_reviewed"],
+                    "properties": {"user_reviewed": {"const": True}},
+                    "additional_properties": False,
+                },
+            },
+            "additional_properties": False,
+        },
+        "supported_next_invocation": {
+            "tool_name": "create_algorithm_intent_card",
+            "argument_field": RECOVERY_INPUT_FIELD,
+            "copy_through_field": "continuation_capsule",
+            "customer_supplied_fields": [
+                "field_values",
+                "confirmation_assertion",
+            ],
+            "additional_properties": False,
+        },
+        "binding_guards": {
+            "atomic_card_contract_revision": True,
+            "tamper_refused": True,
+            "stale_cross_card_cross_revision_refused": True,
+            "exact_copy_through_required": True,
+            "hidden_lookup": False,
+            "persistent_secret": False,
+        },
+        "retention": "process_and_discard",
+        "raw_rejected_value_returned": False,
+    }
+
+
 def clarification_recovery_contract_snapshot() -> dict[str, Any]:
     """Return the client-neutral recovery semantics without card-specific values."""
 
@@ -210,6 +357,9 @@ def clarification_recovery_contract_snapshot() -> dict[str, Any]:
         "schema_version": RECOVERY_SCHEMA_VERSION,
         "contract_id": RECOVERY_CONTRACT_ID,
         "input_field": RECOVERY_INPUT_FIELD,
+        "atomic_continuation_schema_id": ATOMIC_CONTINUATION_SCHEMA_ID,
+        "atomic_capsule_copy_through": True,
+        "client_reconstructs_binding_fields": False,
         "card_and_revision_bound": True,
         "field_local_diagnostics": True,
         "explicit_confirmation_required": True,
@@ -227,46 +377,31 @@ def prepare_clarification_recovery(
     """Validate one exact recovery envelope and expand it to the existing operation."""
 
     if not isinstance(envelope, Mapping) or set(envelope) != {
-        "contract",
-        "prior_algorithm_intent_card",
-        "correction",
+        "continuation_capsule",
+        "field_values",
+        "confirmation_assertion",
     }:
         raise ClarificationRecoveryError(
             "clarification_recovery_envelope_invalid",
             trigger_class="unsupported_correction_shape",
         )
-    prior = envelope.get("prior_algorithm_intent_card")
-    contract = envelope.get("contract")
-    correction = envelope.get("correction")
+    capsule_payload = _decode_atomic_capsule(envelope.get("continuation_capsule"))
+    prior = capsule_payload.get("algorithm_intent_card")
+    contract = capsule_payload.get("clarification_contract")
     if not isinstance(prior, Mapping) or not isinstance(contract, Mapping):
         raise ClarificationRecoveryError(
             "clarification_recovery_binding_invalid",
             trigger_class="stale_or_cross_card",
-            safe_next_action="resupply_the_exact_returned_card_and_contract",
+            safe_next_action="copy_the_exact_capsule_returned_for_this_card_revision",
         )
     expected_contract = build_clarification_recovery_contract(prior)
     if dict(contract) != expected_contract:
         raise ClarificationRecoveryError(
             "clarification_recovery_contract_mismatch",
             trigger_class="stale_or_cross_revision",
-            safe_next_action="use_the_contract_returned_with_this_exact_card_revision",
+            safe_next_action="copy_the_exact_capsule_returned_for_this_card_revision",
         )
-    if not isinstance(correction, Mapping) or set(correction) != {
-        "card_binding",
-        "field_values",
-        "confirmation_assertion",
-    }:
-        raise ClarificationRecoveryError(
-            "clarification_recovery_correction_shape_invalid",
-            trigger_class="unsupported_correction_shape",
-        )
-    if correction.get("card_binding") != expected_contract["card_binding"]:
-        raise ClarificationRecoveryError(
-            "clarification_recovery_card_binding_mismatch",
-            trigger_class="stale_or_cross_revision",
-            safe_next_action="bind_the_correction_to_the_exact_returned_card_revision",
-        )
-    assertion = correction.get("confirmation_assertion")
+    assertion = envelope.get("confirmation_assertion")
     if not isinstance(assertion, Mapping) or dict(assertion) != {"user_reviewed": True}:
         raise ClarificationRecoveryError(
             "clarification_recovery_explicit_confirmation_required",
@@ -275,7 +410,7 @@ def prepare_clarification_recovery(
             expected={"type": "boolean", "machine_domain": [True]},
             safe_next_action="obtain_customer_review_before_resubmitting",
         )
-    field_values = correction.get("field_values")
+    field_values = envelope.get("field_values")
     if not isinstance(field_values, Mapping):
         raise ClarificationRecoveryError(
             "clarification_recovery_field_values_required",
@@ -294,6 +429,15 @@ def prepare_clarification_recovery(
             trigger_class="unsupported_correction_shape",
             expected={"allowed_fields": sorted(allowed)},
             safe_next_action="submit_only_a_field_listed_as_unresolved",
+        )
+    missing = sorted(field for field in allowed if field not in field_values)
+    if missing:
+        raise ClarificationRecoveryError(
+            "clarification_recovery_required_field_missing",
+            field=missing[0],
+            trigger_class="unsupported_correction_shape",
+            expected={"required_fields": sorted(allowed)},
+            safe_next_action="supply_each_customer_reviewed_unresolved_field_once",
         )
     normalized: dict[str, str] = {}
     for field, value in field_values.items():
@@ -334,6 +478,7 @@ def prepare_clarification_recovery(
     }
     return expanded, {
         "recovered_from_card_digest": prior_card["artifact_digest"],
+        "atomic_capsule_consumed": True,
         "corrected_fields": sorted(normalized),
     }
 
@@ -345,6 +490,9 @@ __all__ = [
     "RECOVERY_INPUT_FIELD",
     "RECOVERY_SCHEMA_ID",
     "RECOVERY_SCHEMA_VERSION",
+    "ATOMIC_CONTINUATION_SCHEMA_ID",
+    "ATOMIC_CONTINUATION_SCHEMA_VERSION",
+    "build_atomic_clarification_continuation",
     "build_clarification_recovery_contract",
     "clarification_recovery_contract_snapshot",
     "prepare_clarification_recovery",
