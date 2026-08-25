@@ -13,7 +13,7 @@ from qcoder import __version__
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts/verify-release-version.py"
-EXPECTED_VERSION = "0.6.0a20.dev1+wi0434.quiet.fast.current.loop.v1"
+EXPECTED_VERSION = "0.6.0a20.dev2+wi0434.quiet.fast.current.loop.v1"
 EXPECTED_PREDECESSOR_VERSION = "0.6.0a18"
 EXPECTED_IDENTITY_KIND = "prerelease_successor"
 EXPECTED_INTERVENING: list[str] = ["0.6.0a19"]
@@ -181,10 +181,10 @@ def test_declared_intervening_reserved_pin_is_rejected(tmp_path: Path) -> None:
             "0.6.0a13",
             "0.6.0a14",
             "0.6.0a15",
-                "0.6.0a16",
-                "0.6.0a17",
-                "0.6.0a18",
-                "0.6.0a19",
+            "0.6.0a16",
+            "0.6.0a17",
+            "0.6.0a18",
+            "0.6.0a19",
         ],
         customer_pin="0.6.0a8",
     )

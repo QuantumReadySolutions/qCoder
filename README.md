@@ -56,7 +56,7 @@ Narrowing applies immediately; broadening requires explicit confirmation.
 ### Upgrading an active Current Loop
 
 The unfrozen WI-0434 development rehearsal identifies itself as
-`0.6.0a20.dev1+wi0434.quiet.fast.current.loop.v1` under binding v45. It binds routine source work
+`0.6.0a20.dev2+wi0434.quiet.fast.current.loop.v1` under binding v45. It binds routine source work
 to one contract-selected terminal-closure route so an exact synchronous native-edit event can
 validate and register without a duplicate assistant completion call. Hook-absent clients retain
 the same fail-closed typed completion operation. This identity is not a release candidate, does

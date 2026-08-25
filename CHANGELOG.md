@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.0a20.dev1+wi0434.quiet.fast.current.loop.v1 (unfrozen development rehearsal)
+## 0.6.0a20.dev2+wi0434.quiet.fast.current.loop.v1 (unfrozen development successor)
 
 - Bind routine source completion to one issued terminal-closure route: the exact synchronous
   native-edit event when configured, or the existing typed completion when hooks are absent.

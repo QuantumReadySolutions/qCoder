@@ -13030,9 +13030,7 @@ class CurrentLoopCoordinator:
                 terminal_closure = coordinator.get("terminal_closure_route")
                 if not isinstance(terminal_closure, Mapping):
                     raise CurrentLoopError("terminal_closure_route_missing")
-                cursor_hook_ready = (
-                    terminal_closure.get("mode") == "synchronous_native_edit_event"
-                )
+                cursor_hook_ready = terminal_closure.get("mode") == "synchronous_native_edit_event"
                 compact_action = {
                     "schema_id": "qcoder.current_loop.compact_next_action.v4",
                     "schema_version": 4,
