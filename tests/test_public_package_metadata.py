@@ -115,3 +115,16 @@ def test_a18_release_note_is_publication_truthful_and_keeps_claims_separate() ->
     assert "general framework qualification" in lowered
     assert "private-only" not in lowered
     assert "unfrozen" not in lowered
+
+
+def test_a20_release_note_is_publication_truthful_and_keeps_claims_separate() -> None:
+    note = _normalized(ROOT / "docs/releases/0.6.0a20.md")
+    lowered = note.lower()
+    assert "qcoder 0.6.0a20 is a behavior-changing pre-release successor" in lowered
+    assert "terminal-closure route" in lowered
+    assert "plain 0.6.0a19 remains intentionally reserved" in lowered
+    assert "exactly twelve public context bridge tools" in lowered
+    assert "package publication does not activate a named-client support claim" in lowered
+    assert "latency or quiet-operation guarantee" in lowered
+    assert "private-only" not in lowered
+    assert "unfrozen" not in lowered

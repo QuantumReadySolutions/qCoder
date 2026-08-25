@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.0a20.dev2+wi0434.quiet.fast.current.loop.v1 (unfrozen development successor)
+## 0.6.0a20
 
 - Bind routine source completion to one issued terminal-closure route: the exact synchronous
   native-edit event when configured, or the existing typed completion when hooks are absent.
@@ -10,6 +10,8 @@
   concise boundary-stating result and no QASM, execution, result, or forced-close implication.
 - Preserve binding-owned authority, process-and-discard, strict currentness and result manifests,
   exactly twelve public tools, and exactly two private Current Loop operations.
+- Retain the dev2 rehearsal as immutable provenance and plain 0.6.0a19 as an intentionally reserved
+  intervening identity. Publication and named-client qualification remain separate lifecycle facts.
 
 ## 0.6.0a18
 
