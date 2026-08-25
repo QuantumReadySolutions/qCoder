@@ -53,14 +53,30 @@ revisions, snapshots, and current or prior Run Summaries are bounded to that act
 purged on close. The optional local contract editor uses the same canonical contract as the IDE.
 Narrowing applies immediately; broadening requires explicit confirmation.
 
-### Upgrading an active Current Loop
+### Upgrading from qCoder 0.6.0a18
 
-Version 0.6.0a20 binds routine source work to one contract-selected terminal-closure route under
-binding v45, so an exact synchronous native-edit event can validate and register without a
-duplicate assistant completion call. Hook-absent clients retain the same fail-closed typed
-completion operation. qCoder 0.6.0a20 is a behavior-changing pre-release successor to public
-0.6.0a18; plain 0.6.0a19 remains intentionally reserved. Package publication does not activate a
-named-client support, compatibility, or performance claim.
+Install qCoder 0.6.0a21 for a new installation or before starting a new Current Loop. If qCoder
+0.6.0a18 already has an active Current Loop, upgrade only at a clean Current Loop boundary: before
+a new loop begins or after the current loop has reached a truthful terminal boundary.
+
+Do not upgrade while any binding v44 / Current Step Contract v10 step, completion, continuation
+capsule, pending receipt, or recovery action remains outstanding. Finish the outstanding step on
+qCoder 0.6.0a18, or explicitly abandon it and restart the work under qCoder 0.6.0a21 at a clean
+boundary.
+
+qCoder does not support or claim mid-step migration from binding v44 / Current Step Contract v10
+to binding v45 / Current Step Contract v11. A v44/v10 operation receipt, authority grant,
+completion input, continuation capsule, or pending step must not be reused or reinterpreted under
+v45/v11. Project evidence history may remain; this boundary applies to the active step.
+
+Finish or restart an active qCoder loop before upgrading. The version boundary fails closed
+instead of silently reinterpreting old authority data.
+
+Version 0.6.0a21 preserves qCoder 0.6.0a20's routine source terminal-closure behavior under
+binding v45. Plain 0.6.0a19 remains intentionally reserved. Plain 0.6.0a20 remains immutable,
+unpublished, technically qualified, publication-truth rejected, terminal, and do-not-publish.
+Package publication does not activate a named-client support, compatibility, or performance
+claim.
 
 Version 0.6.0a18 gives Algorithm Intent clarification recovery one atomic qCoder-supplied
 copy-through capsule under binding v44. qCoder 0.6.0a18 is a behavior-changing pre-release
@@ -70,12 +86,8 @@ and must not be published.
 
 The successor preserves the connected-assistant, adaptive-intent input, coordinator-result, and
 vocabulary contracts while retaining a17's causal currentness, strict result-manifest lineage, and
-exact selected-path transport. Finish or restart an active qCoder loop
-before upgrading. An outstanding
-pre-v4 operation receipt cannot be reused. When an old receipt is outstanding, the IDE must
-provide a fresh authority grant for the new runtime. qCoder fails closed instead of silently
-reinterpreting old authority data. This is a local active-loop compatibility boundary, not a
-migration of project history or server-side persistence.
+exact selected-path transport. This is a local active-loop compatibility boundary, not a migration
+of project history or server-side persistence.
 
 The preserved a17 implementation corrected the a16 mixed-revision limitation. Replacing current source or circuit
 evidence invalidates dependent downstream currentness while preserving immutable history. Current
@@ -231,10 +243,10 @@ See the synthetic [`Algorithm Blueprint walkthrough`](examples/09_algorithm_blue
 
 ## Quick start
 
-qCoder 0.6.0a18 is a pre-release. It is not a stable or generally available release. Package
+qCoder 0.6.0a21 is a pre-release. It is not a stable or generally available release. Package
 publication and named-client support claims are governed separately. The commands below describe
-behavior present in this pre-release; plain a17 remains a rejected immutable candidate and is not
-a publication target.
+behavior present in this pre-release; public qCoder 0.6.0a18 remains the predecessor, plain a17
+remains a rejected immutable candidate, and terminal plain a20 is not a publication target.
 
 Analyze a circuit:
 

@@ -1,13 +1,47 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
+MANDATORY_UPGRADE_PARAGRAPHS = (
+    "Install qCoder 0.6.0a21 for a new installation or before starting a new Current Loop. "
+    "If qCoder 0.6.0a18 already has an active Current Loop, upgrade only at a clean Current "
+    "Loop boundary: before a new loop begins or after the current loop has reached a truthful "
+    "terminal boundary.",
+    "Do not upgrade while any binding v44 / Current Step Contract v10 step, completion, "
+    "continuation capsule, pending receipt, or recovery action remains outstanding. Finish "
+    "the outstanding step on qCoder 0.6.0a18, or explicitly abandon it and restart the work "
+    "under qCoder 0.6.0a21 at a clean boundary.",
+    "qCoder does not support or claim mid-step migration from binding v44 / Current Step "
+    "Contract v10 to binding v45 / Current Step Contract v11. A v44/v10 operation receipt, "
+    "authority grant, completion input, continuation capsule, or pending step must not be "
+    "reused or reinterpreted under v45/v11. Project evidence history may remain; this "
+    "boundary applies to the active step.",
+)
+MANDATORY_UPGRADE_TEXT = " ".join(MANDATORY_UPGRADE_PARAGRAPHS)
+MANDATORY_CLAUSES = (
+    "upgrade only at a clean Current Loop boundary",
+    "step, completion, continuation capsule, pending receipt, or recovery action remains outstanding",
+    "Finish the outstanding step on qCoder 0.6.0a18, or explicitly abandon it and restart the work",
+    "does not support or claim mid-step migration",
+    "must not be reused or reinterpreted under v45/v11",
+)
+
 
 def _normalized(path: Path) -> str:
     return " ".join(path.read_text(encoding="utf-8").split())
+
+
+def _assert_exact_upgrade_copy(text: str) -> None:
+    normalized = " ".join(text.split())
+    assert MANDATORY_UPGRADE_TEXT in normalized
+    for clause in MANDATORY_CLAUSES:
+        assert clause in normalized
 
 
 def test_readme_is_publication_truthful_and_keeps_client_claims_held() -> None:
@@ -42,10 +76,10 @@ def test_readme_is_publication_truthful_and_keeps_client_claims_held() -> None:
     assert "WI-0421 development branch" not in readme
     assert "does not scan repositories" in readme
     assert "does not independently generate the Python" in readme
-    assert "Finish or restart an active qCoder loop before upgrading" in readme
-    assert "outstanding pre-v4 operation receipt cannot be reused" in readme
-    assert "IDE must provide a fresh authority grant for the new runtime" in readme
-    assert "fails closed instead of silently reinterpreting old authority data" in readme
+    assert "upgrade only at a clean Current Loop boundary" in readme
+    assert "recovery action remains outstanding" in readme
+    assert "explicitly abandon it and restart the work" in readme
+    assert "must not be reused or reinterpreted under v45/v11" in readme
 
 
 def test_changelog_records_a17_behavior_successor_and_a13_history() -> None:
@@ -128,3 +162,54 @@ def test_a20_release_note_is_publication_truthful_and_keeps_claims_separate() ->
     assert "latency or quiet-operation guarantee" in lowered
     assert "private-only" not in lowered
     assert "unfrozen" not in lowered
+
+
+def test_a20_release_note_is_immutable_historical_do_not_publish_evidence() -> None:
+    lowered = _normalized(ROOT / "docs/releases/0.6.0a20.md").lower()
+    for statement in (
+        "immutable",
+        "unpublished",
+        "technically qualified",
+        "rejected for publication truth",
+        "terminal",
+        "must not be published",
+    ):
+        assert statement in lowered
+
+
+def test_a21_release_note_and_readme_have_exact_upgrade_copy() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    release_note = (ROOT / "docs/releases/0.6.0a21.md").read_text(encoding="utf-8")
+    heading = "## Upgrading from qCoder 0.6.0a18"
+    assert heading in release_note
+    assert heading in readme or f"#{heading}" in readme
+    _assert_exact_upgrade_copy(readme)
+    _assert_exact_upgrade_copy(release_note)
+
+
+@pytest.mark.parametrize("clause", MANDATORY_CLAUSES)
+def test_a21_upgrade_guard_rejects_each_missing_or_changed_clause(clause: str) -> None:
+    assert clause in MANDATORY_UPGRADE_TEXT
+    mutated = MANDATORY_UPGRADE_TEXT.replace(clause, "materially altered clause", 1)
+    with pytest.raises(AssertionError):
+        _assert_exact_upgrade_copy(mutated)
+
+
+def test_a21_release_history_is_complete_and_noncontradictory() -> None:
+    readme = _normalized(ROOT / "README.md").lower()
+    changelog = _normalized(ROOT / "CHANGELOG.md").lower()
+    a20 = _normalized(ROOT / "docs/releases/0.6.0a20.md").lower()
+    a21 = _normalized(ROOT / "docs/releases/0.6.0a21.md").lower()
+    release = json.loads((ROOT / "release-version.json").read_text(encoding="utf-8"))
+    assert release["source_version"] == "0.6.0a21"
+    assert release["predecessor_public_version"] == "0.6.0a18"
+    assert release["intervening_reserved_versions"] == ["0.6.0a19", "0.6.0a20"]
+    assert "0.6.0a19 remains intentionally reserved" in readme
+    assert "0.6.0a19 remains intentionally reserved" in a21
+    assert "0.6.0a20 (unpublished terminal candidate; do not publish)" in changelog
+    assert "must not be published" in a20
+    assert "0.6.0a21" in a21
+    for surface in (readme, changelog, a20, a21):
+        assert "qcoder 0.6.0a20 is public" not in surface
+        assert "publish qcoder 0.6.0a20" not in surface
+        assert "mid-step migration is supported" not in surface

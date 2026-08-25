@@ -13,10 +13,10 @@ from qcoder import __version__
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts/verify-release-version.py"
-EXPECTED_VERSION = "0.6.0a20"
+EXPECTED_VERSION = "0.6.0a21"
 EXPECTED_PREDECESSOR_VERSION = "0.6.0a18"
 EXPECTED_IDENTITY_KIND = "prerelease_successor"
-EXPECTED_INTERVENING: list[str] = ["0.6.0a19"]
+EXPECTED_INTERVENING: list[str] = ["0.6.0a19", "0.6.0a20"]
 
 
 def _load_verifier():
@@ -27,7 +27,7 @@ def _load_verifier():
     return module
 
 
-def test_source_version_identity_is_plain_a20_release_successor() -> None:
+def test_source_version_identity_is_plain_a21_release_successor() -> None:
     verifier = _load_verifier()
     assert verifier.source_versions(REPO_ROOT) == {
         "pyproject": EXPECTED_VERSION,
@@ -185,6 +185,7 @@ def test_declared_intervening_reserved_pin_is_rejected(tmp_path: Path) -> None:
             "0.6.0a17",
             "0.6.0a18",
             "0.6.0a19",
+            "0.6.0a20",
         ],
         customer_pin="0.6.0a8",
     )

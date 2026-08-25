@@ -1,6 +1,21 @@
 # Changelog
 
-## 0.6.0a20
+## 0.6.0a21
+
+- Preserve the exact qCoder 0.6.0a20 runtime behavior under a new publication-truthful version
+  identity, with binding v45/schema 44, Binding MCP v12, Current Step Contract v11, request
+  semantics v5, state schema v16, twelve public tools, and two private operations unchanged.
+- Carry the mandatory clean-Current-Loop-boundary upgrade guidance in the README/package long
+  description and durable a21 release note, guarded fail closed across source and distributions.
+- State that customers must finish or restart an active qCoder loop before upgrading and that the
+  boundary fails closed instead of silently reinterpreting old authority data.
+- Preserve public qCoder 0.6.0a18 as predecessor, plain 0.6.0a19 as intentionally reserved, and
+  plain 0.6.0a20 as immutable, unpublished, technically qualified, publication-truth rejected,
+  terminal, and do-not-publish.
+- Keep publication, qualification acceptance, public claims, tags, and deployment as separate
+  lifecycle decisions.
+
+## 0.6.0a20 (unpublished terminal candidate; do not publish)
 
 - Bind routine source completion to one issued terminal-closure route: the exact synchronous
   native-edit event when configured, or the existing typed completion when hooks are absent.
@@ -12,6 +27,9 @@
   exactly twelve public tools, and exactly two private Current Loop operations.
 - Retain the dev2 rehearsal as immutable provenance and plain 0.6.0a19 as an intentionally reserved
   intervening identity. Publication and named-client qualification remain separate lifecycle facts.
+- Retain plain 0.6.0a20 as immutable, unpublished, technically qualified, publication-truth
+  rejected, terminal evidence. It must not be published, repaired, rebuilt, replaced, or selected
+  again.
 
 ## 0.6.0a18
 
