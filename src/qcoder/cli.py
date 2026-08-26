@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -1018,7 +1019,16 @@ def _cmd_context_bridge(argv: list[str]) -> int:
 
 
 def _cmd_current_loop(argv: list[str]) -> int:
-    from qcoder.context_bridge_mcp import DEFAULT_BASE_URL, default_token_file
+    from qcoder.context_bridge_mcp import (
+        DEFAULT_BASE_URL,
+        default_token_file,
+        resolve_credential_source,
+    )
+    from qcoder.context_bridge_profiles import (
+        CredentialProfileError,
+        SelectedCredential,
+        safe_profile_error,
+    )
     from qcoder.current_loop_coordinator import (
         ContextBridgeTransport,
         CurrentLoopCoordinator,
@@ -2028,10 +2038,29 @@ def _cmd_current_loop(argv: list[str]) -> int:
 
         return serve_binding_mcp_stdio(workspace_root=args.workspace)
     transport = None
+    credential_source = None
     if hasattr(args, "base_url"):
+        try:
+            credential_source = resolve_credential_source(
+                token_file=args.token_file,
+                profile=args.credential_profile,
+                client_context=args.credential_client,
+                workspace_context=(
+                    None
+                    if args.token_file is not None
+                    else (
+                        args.credential_workspace
+                        if args.credential_workspace is not None
+                        else str(Path(args.workspace).expanduser().absolute())
+                    )
+                ),
+            )
+        except CredentialProfileError as exc:
+            print(json.dumps(safe_profile_error(exc), indent=2, sort_keys=True))
+            return 2
         transport = ContextBridgeTransport(
             base_url=args.base_url,
-            token_file=args.token_file,
+            token_file=credential_source,
         )
     coordinator = CurrentLoopCoordinator(
         workspace_root=args.workspace,
@@ -2039,7 +2068,16 @@ def _cmd_current_loop(argv: list[str]) -> int:
         transport=transport,
         runtime_executable=sys.executable,
         hosted_base_url=getattr(args, "base_url", DEFAULT_BASE_URL),
-        hosted_token_file=getattr(args, "token_file", default_token_file()),
+        hosted_token_file=(
+            credential_source
+            if isinstance(credential_source, (str, Path))
+            else getattr(args, "token_file", None)
+        ),
+        hosted_credential_profile=(
+            credential_source.profile_id
+            if isinstance(credential_source, SelectedCredential)
+            else None
+        ),
     )
     try:
         command = args.current_loop_command
@@ -2474,7 +2512,26 @@ def _add_current_loop_transport_arguments(
     default_token_path: Path,
 ) -> None:
     parser.add_argument("--base-url", default=default_base_url)
-    parser.add_argument("--token-file", default=str(default_token_path))
+    parser.add_argument(
+        "--token-file",
+        default=os.getenv("QCODER_CONTEXT_BRIDGE_TOKEN_FILE"),
+        help="Explicit legacy token file; cannot be combined with profile selectors.",
+    )
+    parser.add_argument(
+        "--credential-profile",
+        default=os.getenv("QCODER_CONTEXT_BRIDGE_PROFILE"),
+        help="Exact named Context Bridge profile ID or label.",
+    )
+    parser.add_argument(
+        "--credential-client",
+        default=os.getenv("QCODER_CONTEXT_BRIDGE_CLIENT_CONTEXT"),
+        help="Configured non-secret client selector used when no explicit profile is supplied.",
+    )
+    parser.add_argument(
+        "--credential-workspace",
+        default=os.getenv("QCODER_CONTEXT_BRIDGE_WORKSPACE_CONTEXT"),
+        help="Configured non-secret workspace selector; defaults to the current-loop workspace.",
+    )
 
 
 def _read_current_loop_request(

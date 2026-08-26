@@ -21,22 +21,26 @@ def _verifier():
     return module
 
 
-def test_source_identity_and_relationships_are_exact_v3() -> None:
+def test_private_development_identity_preserves_public_a22_release_record() -> None:
     verifier = _verifier()
-    assert __version__ == "0.6.0a22"
+    assert __version__ == "0.6.0a22.dev1+wi0438.named.context.bridge.profiles.v1"
     assert verifier.source_versions(ROOT) == {
-        "pyproject": "0.6.0a22",
-        "qcoder.__version__": "0.6.0a22",
+        "pyproject": "0.6.0a22.dev1+wi0438.named.context.bridge.profiles.v1",
+        "qcoder.__version__": "0.6.0a22.dev1+wi0438.named.context.bridge.profiles.v1",
         "release_metadata": "0.6.0a22",
     }
-    result = verifier.verify_release_version(source_root=ROOT, customer_roots=[ROOT])
-    assert result["relationships_distinct"] is True
-    assert result["public_upgrade_predecessor"]["version"] == "0.6.0a18"
-    assert result["public_upgrade_predecessor"]["relationship_to_source"] == "behavior_changing"
-    assert result["implementation_lineage_predecessor"]["version"] == "0.6.0a21"
-    assert result["implementation_lineage_predecessor"]["relationship_to_source"].startswith(
-        "behavior_preserving"
+    with pytest.raises(ValueError, match="authoritative_version_mismatch"):
+        verifier.verify_release_version(source_root=ROOT, customer_roots=[ROOT])
+    spec = importlib.util.spec_from_file_location(
+        "development_verifier", ROOT / "scripts/verify-development-version.py"
     )
+    assert spec is not None and spec.loader is not None
+    development_verifier = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(development_verifier)
+    result = development_verifier.verify(ROOT)
+    assert result["ok"] is True
+    assert result["basis_version"] == "0.6.0a22"
+    assert result["publication_permitted"] is False
 
 
 def _write_fixture(root: Path, metadata: dict[str, object]) -> None:

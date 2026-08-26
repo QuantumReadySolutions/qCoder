@@ -27,8 +27,8 @@ from qcoder.current_loop_bounded_control import (
 )
 from qcoder.current_loop_iteration import ITERATION_AUTHORITY_RECEIPT_SCHEMA_ID
 
-INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v10"
-INVOCATION_CONTRACT_SCHEMA_VERSION = 10
+INVOCATION_CONTRACT_SCHEMA_ID = "qcoder.current_loop.operation_invocation.v11"
+INVOCATION_CONTRACT_SCHEMA_VERSION = 11
 OPERATION_INVENTORY_SCHEMA_ID = "qcoder.current_loop.operation_transport_inventory.v10"
 OPERATION_INVENTORY_SCHEMA_VERSION = 10
 
@@ -392,6 +392,7 @@ def build_operation_invocation(
     loop_ref: str,
     checkpoint: str,
     staged_operation: str | None = None,
+    credential_profile: str | None = None,
 ) -> dict[str, Any]:
     """Bind one legacy protocol template into a complete operation invocation."""
 
@@ -419,7 +420,11 @@ def build_operation_invocation(
     if subcommand is not None:
         prefix.append(subcommand)
     if hosted:
-        prefix.extend(["--base-url", base_url, "--token-file", token_file])
+        prefix.extend(["--base-url", base_url])
+        if credential_profile:
+            prefix.extend(["--credential-profile", credential_profile])
+        else:
+            prefix.extend(["--token-file", token_file])
     argument_values = result.get("argument_values")
     dynamic_arguments = deepcopy(argument_values) if isinstance(argument_values, list) else []
     fixed_argument_values = result.get("fixed_argument_values")
@@ -514,7 +519,24 @@ def build_operation_invocation(
         "transport_classification": classification,
         "hosted_access_permitted": hosted,
         "client_environment_permission_may_be_encountered": hosted,
-        "hosted_transport_argument_names": (["--base-url", "--token-file"] if hosted else []),
+        "hosted_transport_argument_names": (
+            [
+                "--base-url",
+                "--credential-profile" if credential_profile else "--token-file",
+            ]
+            if hosted
+            else []
+        ),
+        "credential_selection": (
+            {
+                "kind": "named_profile" if credential_profile else "legacy_file",
+                "profile_id": credential_profile,
+                "secret_included": False,
+                "selection_reconstructed_by_client": False,
+            }
+            if hosted
+            else None
+        ),
         "platform_serialization": {
             "posix": shlex.join(serialized_template),
             "windows": subprocess.list2cmdline(serialized_template),

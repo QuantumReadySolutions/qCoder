@@ -1351,11 +1351,16 @@ class ContextBridgeTransport:
         self,
         *,
         base_url: str,
-        token_file: str | Path,
+        token_file: object,
         opener: Callable[..., Any] | None = None,
     ):
         self.base_url = base_url
-        self.token_file = Path(token_file)
+        self.token_file = token_file
+        self.credential_profile = (
+            str(getattr(token_file, "profile_id"))
+            if isinstance(getattr(token_file, "profile_id", None), str)
+            else None
+        )
         self.opener = opener
 
     def call(self, tool_name: str, arguments: Mapping[str, Any]) -> dict[str, Any]:
@@ -2504,6 +2509,7 @@ class CurrentLoopCoordinator:
         runtime_executable: str | Path | None = None,
         hosted_base_url: str = "https://preview-api.qcoder.ai",
         hosted_token_file: str | Path | None = None,
+        hosted_credential_profile: str | None = None,
         local_only_surface: bool = False,
         clock: Callable[[], float] = time.monotonic,
     ):
@@ -2532,22 +2538,21 @@ class CurrentLoopCoordinator:
                 else hosted_base_url
             )
         )
-        self.hosted_token_file = (
-            ""
-            if local_only_surface
-            else str(
-                Path(
-                    getattr(transport, "token_file")
-                    if transport is not None and hasattr(transport, "token_file")
-                    else (
-                        hosted_token_file
-                        or Path.home() / ".qcoder" / "context-bridge" / "token.txt"
-                    )
-                )
-                .expanduser()
-                .absolute()
-            )
+        transport_profile = (
+            getattr(transport, "credential_profile", None) if transport is not None else None
         )
+        self.hosted_credential_profile = (
+            "" if local_only_surface else str(transport_profile or hosted_credential_profile or "")
+        )
+        transport_token = getattr(transport, "token_file", None) if transport is not None else None
+        self.hosted_token_file = ""
+        if not local_only_surface and not self.hosted_credential_profile:
+            selected_token_path = (
+                transport_token
+                or hosted_token_file
+                or Path.home() / ".qcoder" / "context-bridge" / "token.txt"
+            )
+            self.hosted_token_file = str(Path(selected_token_path).expanduser().absolute())
         self.clock = clock
         try:
             existing = self.store.read()
@@ -14176,6 +14181,7 @@ class CurrentLoopCoordinator:
             workspace=str(state["workspace_root"]),
             base_url=self.hosted_base_url,
             token_file=self.hosted_token_file,
+            credential_profile=self.hosted_credential_profile or None,
             state_revision=int(state["state_revision"]),
             loop_ref=str(state["loop_ref"]),
             checkpoint=str(coordinator["checkpoint_kind"]),
@@ -14191,6 +14197,7 @@ class CurrentLoopCoordinator:
             workspace=str(state["workspace_root"]),
             base_url=self.hosted_base_url,
             token_file=self.hosted_token_file,
+            credential_profile=self.hosted_credential_profile or None,
             state_revision=int(state["state_revision"]),
             loop_ref=str(state["loop_ref"]),
             checkpoint=str(coordinator["checkpoint_kind"]),
@@ -14756,6 +14763,7 @@ class CurrentLoopCoordinator:
                 workspace=str(state["workspace_root"]),
                 base_url=self.hosted_base_url,
                 token_file=self.hosted_token_file,
+                credential_profile=self.hosted_credential_profile or None,
                 state_revision=int(state["state_revision"]),
                 loop_ref=str(state["loop_ref"]),
                 checkpoint=checkpoint_kind,
@@ -15094,6 +15102,7 @@ class CurrentLoopCoordinator:
                 workspace=str(state["workspace_root"]),
                 base_url=self.hosted_base_url,
                 token_file=self.hosted_token_file,
+                credential_profile=self.hosted_credential_profile or None,
                 state_revision=int(state["state_revision"]),
                 loop_ref=str(state["loop_ref"]),
                 checkpoint=checkpoint_kind,
@@ -15369,6 +15378,7 @@ class CurrentLoopCoordinator:
                 workspace=str(state["workspace_root"]),
                 base_url=self.hosted_base_url,
                 token_file=self.hosted_token_file,
+                credential_profile=self.hosted_credential_profile or None,
                 state_revision=int(state["state_revision"]),
                 loop_ref=str(state.get("loop_ref") or "pending-activation"),
                 checkpoint=checkpoint_kind,

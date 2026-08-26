@@ -16,6 +16,15 @@ import urllib.error
 import urllib.request
 
 from qcoder import __version__
+from qcoder.context_bridge_profiles import (
+    CredentialProfileError,
+    CredentialProfileManager,
+    SelectedCredential,
+    credential_profile_contract_snapshot,
+    hidden_secret_prompt,
+    platform_storage_capability,
+    safe_profile_error,
+)
 from qcoder.algorithm_blueprint import (
     ALGORITHM_BLUEPRINT_ARTIFACT_DISCRIMINATORS,
     ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS,
@@ -167,8 +176,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 44
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v45"
+CLIENT_BINDING_SCHEMA_VERSION = 45
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v46"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -579,9 +588,10 @@ Never enumerate, list, search, open, read, copy, hash, parse, inspect, summarize
 reverse-engineer .qcoder or anything below it. Never search for canonical state, inspect parent or
 home-directory qCoder state, or inspect sibling repositories. Never use workspace discovery to
 construct a qCoder review set, turn a listing or search result into candidates, or infer
-neighboring artifacts. Never open, read, print, copy, hash, or validate the token-file contents.
-The declared paths authorize only invoking the declared qCoder runtime and passing its token-file
-path; they grant no general access outside the active workspace. Stop on authentication,
+neighboring artifacts. Never open, read, print, copy, hash, or validate selected credential secret
+material or Legacy default token-file contents. The declared runtime authorizes only invoking
+qCoder with its exact non-secret profile reference or declared Legacy default token-file path; it
+grants no general access outside the active workspace. Stop on authentication,
 entitlement, or hosted-service failure. Never manually sequence Context Bridge tools for an active
 build and never substitute a local or manual review fallback. Do not replace coordinator truth
 with a locally assembled review. Never reconstruct canonical artifacts, transfer raw artifacts,
@@ -642,6 +652,7 @@ def build_client_binding_descriptor(
                 post_result_invocation_contract=post_result_contract,
             ),
             "operation_transport_inventory": operation_transport_inventory(),
+            "local_credential_profile_contract": credential_profile_contract_snapshot(),
             "current_request_semantics_contract": semantics_contract_snapshot(),
             "artifact_target_contract": target_contract_snapshot(),
             "bounded_control_input_contract": bounded_control_contract_snapshot(),
@@ -1119,7 +1130,7 @@ quietly resumable for a later natural-language request.
 def build_client_activation_instructions(
     *,
     base_url: str,
-    token_file: str | Path,
+    token_file: str | Path | SelectedCredential,
     python_executable: str | Path | None = None,
     path_style: str | None = None,
 ) -> str:
@@ -1128,7 +1139,6 @@ def build_client_activation_instructions(
         path_style=path_style,
         preserve_symlink_identity=True,
     )
-    token_path = _resolved_configuration_path(token_file, path_style=path_style)
     runtime = {
         "python_executable": executable,
         "qcoder_version": __version__,
@@ -1140,15 +1150,28 @@ def build_client_activation_instructions(
         ],
         "coordinator_prefix_diagnostics_only": True,
         "base_url": str(base_url),
-        "token_file_path": token_path,
-        "hosted_runtime_configuration": {
-            "binding": "qcoder_owned_operation_specific_invocation_only",
-            "base_url": str(base_url),
-            "token_file_path": token_path,
-            "globally_composable_transport_arguments": False,
-            "assistant_routes_transport": False,
-        },
     }
+    hosted_runtime_configuration: dict[str, object] = {
+        "binding": "qcoder_owned_operation_specific_invocation_only",
+        "base_url": str(base_url),
+        "globally_composable_transport_arguments": False,
+        "assistant_routes_transport": False,
+    }
+    if isinstance(token_file, SelectedCredential):
+        runtime["credential_profile_id"] = token_file.profile_id
+        runtime["credential_profile_selection_source"] = token_file.selection_source
+        hosted_runtime_configuration.update(
+            {
+                "credential_profile_id": token_file.profile_id,
+                "secret_storage_kind": token_file.storage_kind,
+                "secret_material_exposed": False,
+            }
+        )
+    else:
+        token_path = _resolved_configuration_path(token_file, path_style=path_style)
+        runtime["token_file_path"] = token_path
+        hosted_runtime_configuration["token_file_path"] = token_path
+    runtime["hosted_runtime_configuration"] = hosted_runtime_configuration
     binding = build_inline_client_binding_descriptor(
         coordinator_prefix=runtime["coordinator_prefix"],
     )
@@ -1698,7 +1721,14 @@ def _safe_clarification_recovery_error(
     return payload
 
 
-def validate_token_file(token_file: str | Path) -> tuple[bool, str, str]:
+def validate_token_file(
+    token_file: str | Path | SelectedCredential,
+) -> tuple[bool, str, str]:
+    if isinstance(token_file, SelectedCredential):
+        token = token_file.secret.strip()
+        if CONTEXT_BRIDGE_TOKEN_PATTERN.fullmatch(token) is None:
+            return False, "selected_profile_secret_malformed", ""
+        return True, "selected_profile_ready", token
     path = Path(token_file)
     if not path.is_file():
         return False, "token_file_missing", ""
@@ -4444,21 +4474,155 @@ def _parse_selected_next_loop_parent_files(
     return result
 
 
+def _add_credential_selection_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--profile",
+        default=os.getenv("QCODER_CONTEXT_BRIDGE_PROFILE"),
+        help="Exact named profile ID or label. This explicit choice has highest precedence.",
+    )
+    parser.add_argument(
+        "--client-context",
+        default=os.getenv("QCODER_CONTEXT_BRIDGE_CLIENT_CONTEXT"),
+        help="Configured non-secret client selector used only when --profile is absent.",
+    )
+    parser.add_argument(
+        "--workspace-context",
+        default=os.getenv("QCODER_CONTEXT_BRIDGE_WORKSPACE_CONTEXT"),
+        help="Configured non-secret workspace selector used only when --profile is absent.",
+    )
+
+
+def resolve_credential_source(
+    *,
+    token_file: str | Path | None,
+    profile: str | None,
+    client_context: str | None,
+    workspace_context: str | None,
+    manager: CredentialProfileManager | None = None,
+) -> str | Path | SelectedCredential:
+    """Resolve once with D-100 precedence; never try another profile after selection."""
+
+    if token_file is not None:
+        if profile or client_context or workspace_context:
+            raise CredentialProfileError("legacy_file_and_profile_selection_conflict")
+        return Path(token_file).expanduser()
+    return (manager or CredentialProfileManager()).select(
+        explicit_profile=profile,
+        client_selector=client_context,
+        workspace_selector=workspace_context,
+    )
+
+
+def _profile_live_validator(base_url: str) -> Callable[[str], bool]:
+    def validate(secret: str) -> bool:
+        source = SelectedCredential(
+            profile_id="qcp-000000000000000000000000",
+            label="Validation candidate",
+            credential_reference="cbcred-validation-only",
+            account_label="Validation context",
+            storage_kind="process_memory",
+            selection_source="explicit_validation",
+            secret=secret,
+        )
+        return bool(run_smoke(base_url=base_url, token_file=source).get("ok"))
+
+    return validate
+
+
+def _add_profile_metadata_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--label", required=True)
+    parser.add_argument("--credential-reference", required=True)
+    parser.add_argument("--account-label", required=True)
+    parser.add_argument("--client-label", default="")
+    parser.add_argument("--device-label", default="")
+    parser.add_argument("--workspace-label", default="")
+    parser.add_argument("--client-selector", default="")
+    parser.add_argument("--workspace-selector", default="")
+
+
+def _add_profile_storage_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--storage",
+        choices=("auto", "protected", "hardened-file"),
+        default="auto",
+    )
+    parser.add_argument(
+        "--confirm-hardened-file-fallback",
+        action="store_true",
+        help="Explicitly accept one mode-0600 secret file for this profile if protected storage is unavailable.",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="qcoder context-bridge",
         description="qCoder Context Bridge adapter tools for eligible Explorer users.",
     )
     sub = parser.add_subparsers(dest="context_bridge_command")
+    profiles = sub.add_parser(
+        "profiles", help="Manage named local Context Bridge credential profiles safely."
+    )
+    profiles_sub = profiles.add_subparsers(dest="profiles_command")
+    profiles_sub.add_parser("list", help="List only non-secret profile metadata.")
+    profiles_sub.add_parser("storage", help="Show safe local storage capability metadata.")
+
+    create = profiles_sub.add_parser("create", help="Create and validate one named profile.")
+    _add_profile_metadata_arguments(create)
+    _add_profile_storage_arguments(create)
+    create.add_argument("--set-default", action="store_true")
+    create.add_argument(
+        "--base-url", default=os.getenv("QCODER_CONTEXT_BRIDGE_BASE_URL", DEFAULT_BASE_URL)
+    )
+
+    migrate = profiles_sub.add_parser(
+        "migrate-legacy", help="Explicitly import Legacy default without changing token.txt."
+    )
+    _add_profile_metadata_arguments(migrate)
+    _add_profile_storage_arguments(migrate)
+    migrate.add_argument("--set-default", action="store_true")
+    migrate.add_argument("--confirm", action="store_true")
+    migrate.add_argument(
+        "--base-url", default=os.getenv("QCODER_CONTEXT_BRIDGE_BASE_URL", DEFAULT_BASE_URL)
+    )
+
+    default = profiles_sub.add_parser("set-default", help="Choose one deliberate default profile.")
+    default.add_argument("--profile", required=True)
+    profiles_sub.add_parser("clear-default", help="Remove the deliberate default and fail closed.")
+
+    replace = profiles_sub.add_parser(
+        "adopt-replacement",
+        help="Deliberately bind one existing profile to a replacement Account Center credential.",
+    )
+    replace.add_argument("--profile", required=True)
+    replace.add_argument("--credential-reference", required=True)
+    replace.add_argument(
+        "--base-url", default=os.getenv("QCODER_CONTEXT_BRIDGE_BASE_URL", DEFAULT_BASE_URL)
+    )
+
+    verify = profiles_sub.add_parser(
+        "verify", help="Verify one selected profile without exposing it."
+    )
+    verify.add_argument("--profile", required=True)
+    verify.add_argument(
+        "--base-url", default=os.getenv("QCODER_CONTEXT_BRIDGE_BASE_URL", DEFAULT_BASE_URL)
+    )
+
+    remove = profiles_sub.add_parser(
+        "remove", help="Remove one named local profile without touching Legacy default."
+    )
+    remove.add_argument("--profile", required=True)
+    remove.add_argument("--confirm", action="store_true")
+
     mcp = sub.add_parser("mcp", help="Run or smoke-test the local Context Bridge MCP adapter.")
     mcp_sub = mcp.add_subparsers(dest="mcp_command")
 
     serve = mcp_sub.add_parser("serve", help="Run the local stdio MCP adapter.")
     serve.add_argument(
         "--token-file",
-        default=os.getenv("QCODER_CONTEXT_BRIDGE_TOKEN_FILE", str(default_token_file())),
-        help="Path to a local Context Bridge token file. The token value is never printed.",
+        default=os.getenv("QCODER_CONTEXT_BRIDGE_TOKEN_FILE"),
+        help="Explicit legacy token file. It cannot be combined with named-profile selectors.",
     )
+    _add_credential_selection_arguments(serve)
     serve.add_argument(
         "--base-url",
         default=os.getenv("QCODER_CONTEXT_BRIDGE_BASE_URL", DEFAULT_BASE_URL),
@@ -4495,9 +4659,10 @@ def build_parser() -> argparse.ArgumentParser:
     smoke = mcp_sub.add_parser("smoke", help="Check the Context Bridge connection safely.")
     smoke.add_argument(
         "--token-file",
-        default=os.getenv("QCODER_CONTEXT_BRIDGE_TOKEN_FILE", str(default_token_file())),
-        help="Path to a local Context Bridge token file. The token value is never printed.",
+        default=os.getenv("QCODER_CONTEXT_BRIDGE_TOKEN_FILE"),
+        help="Explicit legacy token file. It cannot be combined with named-profile selectors.",
     )
+    _add_credential_selection_arguments(smoke)
     smoke.add_argument(
         "--base-url",
         default=os.getenv("QCODER_CONTEXT_BRIDGE_BASE_URL", DEFAULT_BASE_URL),
@@ -4516,9 +4681,105 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.context_bridge_command is None or getattr(args, "mcp_command", None) is None:
+    if args.context_bridge_command is None:
         parser.print_help()
         return 0
+    if args.context_bridge_command == "profiles":
+        if args.profiles_command is None:
+            parser.parse_args(["profiles", "--help"])
+            return 0
+        manager = CredentialProfileManager()
+        try:
+            if args.profiles_command == "list":
+                result: dict[str, object] = {
+                    "ok": True,
+                    "schema_id": "qcoder.context_bridge.profile_status.v1",
+                    "profiles": manager.list_safe(),
+                    "secret_included": False,
+                }
+            elif args.profiles_command == "storage":
+                result = {"ok": True, **platform_storage_capability()}
+            elif args.profiles_command == "create":
+                manager.preflight_storage(
+                    storage=args.storage,
+                    allow_hardened_file_fallback=args.confirm_hardened_file_fallback,
+                )
+                secret = hidden_secret_prompt()
+                result = {
+                    "ok": True,
+                    **manager.create_profile(
+                        label=args.label,
+                        credential_reference=args.credential_reference,
+                        account_label=args.account_label,
+                        client_label=args.client_label,
+                        device_label=args.device_label,
+                        workspace_label=args.workspace_label,
+                        client_selector=args.client_selector,
+                        workspace_selector=args.workspace_selector,
+                        secret=secret,
+                        storage=args.storage,
+                        allow_hardened_file_fallback=args.confirm_hardened_file_fallback,
+                        set_default=args.set_default,
+                        validator=_profile_live_validator(args.base_url),
+                    ),
+                }
+            elif args.profiles_command == "migrate-legacy":
+                result = manager.migrate_legacy(
+                    label=args.label,
+                    credential_reference=args.credential_reference,
+                    account_label=args.account_label,
+                    client_label=args.client_label,
+                    device_label=args.device_label,
+                    workspace_label=args.workspace_label,
+                    client_selector=args.client_selector,
+                    workspace_selector=args.workspace_selector,
+                    storage=args.storage,
+                    allow_hardened_file_fallback=args.confirm_hardened_file_fallback,
+                    set_default=args.set_default,
+                    validator=_profile_live_validator(args.base_url),
+                    confirmed=args.confirm,
+                )
+            elif args.profiles_command == "set-default":
+                result = manager.set_default(args.profile)
+            elif args.profiles_command == "clear-default":
+                result = manager.set_default(None)
+            elif args.profiles_command == "adopt-replacement":
+                secret = hidden_secret_prompt(
+                    "Replacement Context Bridge credential (input hidden): "
+                )
+                result = manager.replace_credential(
+                    selector=args.profile,
+                    credential_reference=args.credential_reference,
+                    secret=secret,
+                    validator=_profile_live_validator(args.base_url),
+                )
+            elif args.profiles_command == "verify":
+                selected = manager.select(explicit_profile=args.profile)
+                result = {
+                    **run_smoke(base_url=args.base_url, token_file=selected),
+                    "selected_profile": selected.safe_metadata(),
+                }
+            elif args.profiles_command == "remove":
+                result = manager.remove_profile(args.profile, confirmed=args.confirm)
+            else:
+                parser.error("unknown_profile_command")
+        except CredentialProfileError as exc:
+            result = safe_profile_error(exc)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result.get("ok") is True else 2
+    if getattr(args, "mcp_command", None) is None:
+        parser.print_help()
+        return 0
+    try:
+        credential_source = resolve_credential_source(
+            token_file=args.token_file,
+            profile=args.profile,
+            client_context=args.client_context,
+            workspace_context=args.workspace_context,
+        )
+    except CredentialProfileError as exc:
+        print(json.dumps(safe_profile_error(exc), indent=2, sort_keys=True))
+        return 2
     if args.mcp_command == "serve":
         try:
             selected_next_loop_parent_files = _parse_selected_next_loop_parent_files(
@@ -4528,13 +4789,15 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(str(exc))
         return serve_mcp_stdio(
             base_url=args.base_url,
-            token_file=args.token_file,
+            token_file=credential_source,
             selected_portable_bundle_file=args.selected_portable_bundle_file,
             selected_next_loop_seed_file=args.selected_next_loop_seed_file,
             selected_next_loop_parent_files=selected_next_loop_parent_files,
         )
     if args.mcp_command == "smoke":
-        result = run_smoke(base_url=args.base_url, token_file=args.token_file, full=args.full)
+        result = run_smoke(base_url=args.base_url, token_file=credential_source, full=args.full)
+        if isinstance(credential_source, SelectedCredential):
+            result["selected_profile"] = credential_source.safe_metadata()
         if args.json:
             print(json.dumps(result, indent=2, sort_keys=True))
         elif args.full:
