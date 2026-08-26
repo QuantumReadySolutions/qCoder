@@ -108,3 +108,98 @@ def test_non_external_publication_authority_fails(tmp_path: Path) -> None:
     _write_fixture(tmp_path, data)
     with pytest.raises(ValueError, match="publication_authority"):
         verifier.release_metadata(tmp_path)
+
+
+@pytest.mark.parametrize("block_name", ["relationship", "history", "upgrade", "nonclaim"])
+@pytest.mark.parametrize("mutation", ["delete", "substitute"])
+def test_active_publication_copy_mutations_fail_closed(block_name: str, mutation: str) -> None:
+    verifier = _verifier()
+    blocks = {
+        "relationship": verifier.RELATIONSHIP_PRODUCT_BLOCK,
+        "history": verifier.HISTORICAL_STATUS_BLOCK,
+        "upgrade": verifier.UPGRADE_BLOCK,
+        "nonclaim": verifier.NONCLAIM_BLOCK,
+    }
+    complete = "\n\n".join(blocks.values())
+    replacement = "" if mutation == "delete" else "materially altered governed copy"
+    mutated = complete.replace(blocks[block_name], replacement, 1)
+    with pytest.raises(ValueError, match="publication_truth"):
+        verifier._validate_active_surface(mutated, "mutation fixture")
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "conflate_arrows",
+        "reverse_arrows",
+        "reverse_relationship_labels",
+        "public_a21",
+        "remove_contract_change",
+        "support_mid_step",
+        "support_receipt_reuse",
+    ],
+)
+def test_active_relationship_contradiction_matrix_fails_closed(mutation: str) -> None:
+    verifier = _verifier()
+    complete = verifier._normalized("\n\n".join(verifier.ACTIVE_BLOCKS))
+    if mutation == "conflate_arrows":
+        mutated = complete.replace(
+            "qCoder 0.6.0a21 → qCoder 0.6.0a22",
+            "qCoder 0.6.0a18 → qCoder 0.6.0a22",
+            1,
+        )
+    elif mutation == "reverse_arrows":
+        mutated = complete.replace("qCoder 0.6.0a18 → qCoder 0.6.0a22", "__PUBLIC__", 1)
+        mutated = mutated.replace(
+            "qCoder 0.6.0a21 → qCoder 0.6.0a22",
+            "qCoder 0.6.0a18 → qCoder 0.6.0a22",
+            1,
+        ).replace("__PUBLIC__", "qCoder 0.6.0a21 → qCoder 0.6.0a22", 1)
+    elif mutation == "reverse_relationship_labels":
+        mutated = complete.replace(
+            "behavior-changing pre-release successor",
+            "behavior-preserving pre-release successor",
+            1,
+        )
+    elif mutation == "public_a21":
+        mutated = complete.replace(
+            "qCoder 0.6.0a21 was never public",
+            "qCoder 0.6.0a21 was public",
+            1,
+        )
+    elif mutation == "remove_contract_change":
+        mutated = complete.replace(
+            "changes the Current Loop contract from binding v44 / Current Step Contract v10 to binding v45 / Current Step Contract v11",
+            "keeps the same Current Loop contract",
+            1,
+        )
+    elif mutation == "support_mid_step":
+        mutated = complete.replace(
+            "is not a supported mid-step migration", "is a supported mid-step migration", 1
+        )
+    else:
+        mutated = complete.replace(
+            "must not be reused or reinterpreted", "may be reused or reinterpreted", 1
+        )
+    with pytest.raises(ValueError, match="publication_truth"):
+        verifier._validate_active_surface(mutated, "mutation fixture")
+
+
+@pytest.mark.parametrize("mutation", ["delete", "substitute"])
+def test_changelog_and_a21_historical_copy_mutations_fail_closed(mutation: str) -> None:
+    verifier = _verifier()
+    replacement = "" if mutation == "delete" else "materially altered governed copy"
+    changelog = (
+        (ROOT / "CHANGELOG.md")
+        .read_text(encoding="utf-8")
+        .replace(verifier.CHANGELOG_BLOCK, replacement, 1)
+    )
+    history = (
+        (ROOT / "docs/releases/0.6.0a21.md")
+        .read_text(encoding="utf-8")
+        .replace(verifier.A21_HISTORICAL_CORRECTION, replacement, 1)
+    )
+    with pytest.raises(ValueError, match="publication_truth"):
+        verifier._validate_changelog(changelog)
+    with pytest.raises(ValueError, match="publication_truth"):
+        verifier._validate_a21_history(history)
