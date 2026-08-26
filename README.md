@@ -1,5 +1,52 @@
 # qCoder
 
+qCoder 0.6.0a22 is a behavior-changing pre-release successor to public qCoder 0.6.0a18. Its
+runtime implementation and product behavior are preserved from the immutable, unpublished qCoder
+0.6.0a21 candidate, except for release identity, publication-truth documentation, mechanically
+resulting package metadata, and release-only verification. qCoder 0.6.0a21 was never public and
+is not a customer upgrade predecessor.
+
+The public upgrade relationship is qCoder 0.6.0a18 → qCoder 0.6.0a22. The implementation lineage
+relationship is qCoder 0.6.0a21 → qCoder 0.6.0a22. These relationships are distinct and must not
+be conflated.
+
+Relative to public qCoder 0.6.0a18, qCoder 0.6.0a22 changes the Current Loop contract from binding
+v44 / Current Step Contract v10 to binding v45 / Current Step Contract v11 and uses one contract-
+selected terminal-closure route for routine source work. When an exact native-edit integration is
+configured, a successful native edit drives qCoder’s independent validation, single registration,
+receipt, and source-stage stop without a redundant completion call or another interpretation of
+qCoder procedure. Hook-absent clients retain the fail-closed typed-completion route. The a18 →
+a22 upgrade is not behavior-preserving and is not a supported mid-step migration.
+
+Plain 0.6.0a19 remains intentionally reserved and has no accepted frozen or public candidate.
+Plain 0.6.0a20 and plain 0.6.0a21 are immutable, unpublished, technically qualified,
+publication-truth-rejected, terminal, do-not-publish candidates. They are retained evidence, not
+customer releases or upgrade predecessors, and must not be repaired, rebuilt, replaced, tagged,
+published, or selected again.
+
+## Upgrading from qCoder 0.6.0a18
+
+Install qCoder 0.6.0a22 for a new installation or before starting a new Current Loop. If qCoder
+0.6.0a18 already has an active Current Loop, upgrade only at a clean Current Loop boundary:
+before a new loop begins or after the current loop has reached a truthful terminal boundary.
+
+Do not upgrade while any binding v44 / Current Step Contract v10 step, completion, continuation
+capsule, pending receipt, or recovery action remains outstanding. Finish the outstanding step on
+qCoder 0.6.0a18, or explicitly abandon it and restart the work under qCoder 0.6.0a22 at a clean
+boundary.
+
+qCoder does not support or claim mid-step migration from binding v44 / Current Step Contract v10
+to binding v45 / Current Step Contract v11. A v44/v10 operation receipt, authority grant,
+completion input, continuation capsule, or pending step must not be reused or reinterpreted under
+v45/v11. Project evidence history may remain; this boundary applies to the active step.
+
+This release makes no latency, speed, p95, responsiveness, overhead, quiet-operation, or
+consistency guarantee; does not establish universal framework neutrality, general framework
+qualification, or general PennyLane qualification; and does not activate Tested, First-class,
+Client Compatibility, CL-023, named-client support, website, or marketing claims. Publication,
+deployment, qualification evidence, public applicability, and support claims remain separate
+lifecycle and product decisions.
+
 `qcoder` is a local, deterministic quantum circuit evidence CLI.
 
 The current public local path is **qCoder OSS**. OSS commands run locally and do not call hosted services, upload telemetry, or run QPU/simulator jobs.
@@ -52,22 +99,6 @@ Adaptive generation is the default; Blueprint-required governance is available. 
 revisions, snapshots, and current or prior Run Summaries are bounded to that active loop and are
 purged on close. The optional local contract editor uses the same canonical contract as the IDE.
 Narrowing applies immediately; broadening requires explicit confirmation.
-
-### Upgrading from qCoder 0.6.0a18
-
-Install qCoder 0.6.0a21 for a new installation or before starting a new Current Loop. If qCoder
-0.6.0a18 already has an active Current Loop, upgrade only at a clean Current Loop boundary: before
-a new loop begins or after the current loop has reached a truthful terminal boundary.
-
-Do not upgrade while any binding v44 / Current Step Contract v10 step, completion, continuation
-capsule, pending receipt, or recovery action remains outstanding. Finish the outstanding step on
-qCoder 0.6.0a18, or explicitly abandon it and restart the work under qCoder 0.6.0a21 at a clean
-boundary.
-
-qCoder does not support or claim mid-step migration from binding v44 / Current Step Contract v10
-to binding v45 / Current Step Contract v11. A v44/v10 operation receipt, authority grant,
-completion input, continuation capsule, or pending step must not be reused or reinterpreted under
-v45/v11. Project evidence history may remain; this boundary applies to the active step.
 
 Finish or restart an active qCoder loop before upgrading. The version boundary fails closed
 instead of silently reinterpreting old authority data.
@@ -243,10 +274,11 @@ See the synthetic [`Algorithm Blueprint walkthrough`](examples/09_algorithm_blue
 
 ## Quick start
 
-qCoder 0.6.0a21 is a pre-release. It is not a stable or generally available release. Package
+qCoder 0.6.0a22 is a pre-release. It is not a stable or generally available release. Package
 publication and named-client support claims are governed separately. The commands below describe
-behavior present in this pre-release; public qCoder 0.6.0a18 remains the predecessor, plain a17
-remains a rejected immutable candidate, and terminal plain a20 is not a publication target.
+behavior present in this pre-release; public qCoder 0.6.0a18 remains the public upgrade
+predecessor, plain a17 remains a rejected immutable candidate, and terminal plain a20 and a21 are
+not publication targets.
 
 Analyze a circuit:
 

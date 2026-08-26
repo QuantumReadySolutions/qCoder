@@ -1,11 +1,25 @@
 {
-  "schema": "qcoder.release_version_source.v2",
-  "source_version": "0.6.0a21",
+  "schema": "qcoder.release_version_source.v3",
+  "source_version": "0.6.0a22",
   "release_identity_kind": "prerelease_successor",
-  "predecessor_public_version": "0.6.0a18",
   "publication_state_authority": "external_release_control",
-  "intervening_reserved_versions": [
-    "0.6.0a19",
-    "0.6.0a20"
+  "public_upgrade_predecessor": {
+    "version": "0.6.0a18",
+    "source_commit": "2150a0f9953102f23801410d7251a64f3c01f5ea",
+    "source_tree": "fd4c9021ea11258e2aa913d0518cacf7232e13b8",
+    "state": "published_terminal_immutable",
+    "relationship_to_source": "behavior_changing"
+  },
+  "implementation_lineage_predecessor": {
+    "version": "0.6.0a21",
+    "source_commit": "79fb41e447dea52be448447b7212214b5b9004f3",
+    "source_tree": "b16da2374717d3a37bb3310462d086c74d83f264",
+    "state": "frozen_unpublished_technically_qualified_publication_truth_rejected_terminal",
+    "relationship_to_source": "behavior_preserving_except_release_identity_publication_truth_and_release_tooling"
+  },
+  "intervening_nonpublic_versions": [
+    {"version": "0.6.0a19", "state": "intentionally_reserved_unselected_no_accepted_candidate"},
+    {"version": "0.6.0a20", "state": "frozen_unpublished_technically_qualified_publication_truth_rejected_terminal"},
+    {"version": "0.6.0a21", "state": "frozen_unpublished_technically_qualified_publication_truth_rejected_terminal"}
   ]
 }

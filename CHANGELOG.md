@@ -1,6 +1,22 @@
 # Changelog
 
-## 0.6.0a21
+## 0.6.0a22
+
+Public upgrade predecessor: qCoder 0.6.0a18. The a18 → a22 relationship is behavior-changing.
+
+Implementation lineage predecessor: immutable unpublished qCoder 0.6.0a21. The a21 → a22
+relationship preserves runtime implementation and product behavior except for release identity,
+publication-truth documentation, mechanically resulting package metadata, and release-only
+verification.
+
+Plain 0.6.0a19 remains intentionally reserved. Plain 0.6.0a20 and plain 0.6.0a21 remain immutable,
+unpublished, technically qualified, publication-truth-rejected, terminal, and do-not-publish.
+
+Existing installations upgrade only at the clean Current Loop boundary stated in the a22 release
+note and package long description. Mid-step v44/v10 → v45/v11 migration and receipt reuse are not
+supported claims.
+
+## 0.6.0a21 (unpublished terminal candidate; do not publish)
 
 - Preserve the exact qCoder 0.6.0a20 runtime behavior under a new publication-truthful version
   identity, with binding v45/schema 44, Binding MCP v12, Current Step Contract v11, request

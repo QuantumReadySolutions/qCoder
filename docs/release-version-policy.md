@@ -34,3 +34,11 @@ identity, ancestry, and governance only. Mutable lifecycle facts such as "unpubl
 "never published", "private-only", or a publication Boolean belong in external release-control
 evidence, not in immutable package bytes. The package remains truthful before and after a later
 publication event.
+
+For qCoder 0.6.0a22 and later governed successors, `qcoder.release_version_source.v3` records the
+public upgrade predecessor and the implementation-lineage predecessor as distinct relationships.
+The public upgrade predecessor identifies the last public customer version and whether that
+upgrade changes behavior. The implementation-lineage predecessor identifies the exact source
+basis and whether runtime/product behavior is preserved. A generic predecessor field, conflation,
+reversal, or substitution of these relationships fails closed. Intervening reserved and consumed
+non-public versions are recorded separately and never become customer upgrade predecessors.

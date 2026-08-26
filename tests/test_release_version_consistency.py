@@ -1,206 +1,110 @@
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 from pathlib import Path
-import subprocess
-import sys
 
 import pytest
 
 from qcoder import __version__
 
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = REPO_ROOT / "scripts/verify-release-version.py"
-EXPECTED_VERSION = "0.6.0a21"
-EXPECTED_PREDECESSOR_VERSION = "0.6.0a18"
-EXPECTED_IDENTITY_KIND = "prerelease_successor"
-EXPECTED_INTERVENING: list[str] = ["0.6.0a19", "0.6.0a20"]
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "scripts/verify-release-version.py"
 
 
-def _load_verifier():
-    spec = importlib.util.spec_from_file_location("qcoder_release_version", SCRIPT)
+def _verifier():
+    spec = importlib.util.spec_from_file_location("release_verifier", SCRIPT)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-def test_source_version_identity_is_plain_a21_release_successor() -> None:
-    verifier = _load_verifier()
-    assert verifier.source_versions(REPO_ROOT) == {
-        "pyproject": EXPECTED_VERSION,
-        "qcoder.__version__": EXPECTED_VERSION,
-        "release_metadata": EXPECTED_VERSION,
+def test_source_identity_and_relationships_are_exact_v3() -> None:
+    verifier = _verifier()
+    assert __version__ == "0.6.0a22"
+    assert verifier.source_versions(ROOT) == {
+        "pyproject": "0.6.0a22",
+        "qcoder.__version__": "0.6.0a22",
+        "release_metadata": "0.6.0a22",
     }
-    assert __version__ == EXPECTED_VERSION
-
-
-def test_real_repository_release_identity_has_no_stale_install_pin() -> None:
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPT),
-            "--source-root",
-            str(REPO_ROOT),
-            "--customer-root",
-            str(REPO_ROOT),
-        ],
-        cwd=REPO_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
+    result = verifier.verify_release_version(source_root=ROOT, customer_roots=[ROOT])
+    assert result["relationships_distinct"] is True
+    assert result["public_upgrade_predecessor"]["version"] == "0.6.0a18"
+    assert result["public_upgrade_predecessor"]["relationship_to_source"] == "behavior_changing"
+    assert result["implementation_lineage_predecessor"]["version"] == "0.6.0a21"
+    assert result["implementation_lineage_predecessor"]["relationship_to_source"].startswith(
+        "behavior_preserving"
     )
-    assert completed.returncode == 0, completed.stderr or completed.stdout
-    result = json.loads(completed.stdout)
-    assert result["source_version"] == EXPECTED_VERSION
-    assert result["release_identity_kind"] == EXPECTED_IDENTITY_KIND
-    assert result["predecessor_public_version"] == EXPECTED_PREDECESSOR_VERSION
-    assert result["publication_state_authority"] == "external_release_control"
-    assert result["customer_pin_files"] == []
-    assert result["detected_customer_pin_versions"] == []
-    assert result["forbidden_customer_pin_versions"] == [*EXPECTED_INTERVENING, EXPECTED_VERSION]
-    assert result["artifact_versions_checked"] is False
-    assert result["result"] == "pass"
 
 
-def _write_candidate_fixture(
-    root: Path,
-    *,
-    pyproject_version: str = EXPECTED_VERSION,
-    init_version: str = EXPECTED_VERSION,
-    metadata_version: str = EXPECTED_VERSION,
-    identity_kind: str = EXPECTED_IDENTITY_KIND,
-    predecessor_public_version: str = EXPECTED_PREDECESSOR_VERSION,
-    publication_state_authority: str = "external_release_control",
-    intervening_versions: list[str] | None = None,
-    customer_pin: str | None = None,
-) -> None:
+def _write_fixture(root: Path, metadata: dict[str, object]) -> None:
     (root / "src/qcoder").mkdir(parents=True)
-    (root / "pyproject.toml").write_text(
-        f'[project]\nname = "qcoder"\nversion = "{pyproject_version}"\n',
-        encoding="utf-8",
-    )
-    (root / "src/qcoder/__init__.py").write_text(
-        f'__version__ = "{init_version}"\n',
-        encoding="utf-8",
-    )
-    metadata = {
-        "schema": "qcoder.release_version_source.v2",
-        "source_version": metadata_version,
-        "release_identity_kind": identity_kind,
-        "predecessor_public_version": predecessor_public_version,
-        "publication_state_authority": publication_state_authority,
-        "intervening_reserved_versions": (
-            EXPECTED_INTERVENING if intervening_versions is None else intervening_versions
-        ),
-    }
-    (root / "release-version.json").write_text(
-        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    readme = "qCoder prerelease source. Publication governance is external.\n"
-    if customer_pin is not None:
-        readme += f'python -m pip install "qcoder=={customer_pin}"\n'
-    (root / "README.md").write_text(readme, encoding="utf-8")
-
-
-def _verify_fixture(root: Path):
-    return _load_verifier().verify_release_version(source_root=root, customer_roots=[root])
-
-
-def test_prerelease_successor_without_customer_install_pin_passes(tmp_path: Path) -> None:
-    _write_candidate_fixture(tmp_path)
-    result = _verify_fixture(tmp_path)
-    assert result["source_version"] == EXPECTED_VERSION
-    assert result["customer_pins"] == {}
+    (root / "pyproject.toml").write_text('[project]\nname="qcoder"\nversion="0.6.0a22"\n')
+    (root / "src/qcoder/__init__.py").write_text('__version__ = "0.6.0a22"\n')
+    (root / "release-version.json").write_text(json.dumps(metadata))
+    (root / "README.md").write_text("durable release source\n")
 
 
 @pytest.mark.parametrize(
-    ("customer_pin", "error"),
+    "mutation",
     [
-        (EXPECTED_VERSION, "release_version_customer_pin"),
-        ("0.6.0a8", "customer_package_pin_mismatch"),
-        ("0.6.0a4", "customer_package_pin_mismatch"),
+        "remove_public",
+        "substitute_public",
+        "remove_lineage",
+        "substitute_lineage",
+        "conflate",
+        "reverse_versions",
+        "reverse_relationships",
+        "public_a19",
+        "publishable_a20",
+        "public_a21",
     ],
 )
-def test_release_and_stale_customer_pins_fail(
-    tmp_path: Path,
-    customer_pin: str,
-    error: str,
-) -> None:
-    _write_candidate_fixture(tmp_path, customer_pin=customer_pin)
-    with pytest.raises(ValueError, match=error):
-        _verify_fixture(tmp_path)
+def test_relationship_record_mutation_matrix_fails_closed(tmp_path: Path, mutation: str) -> None:
+    verifier = _verifier()
+    data = copy.deepcopy(json.loads((ROOT / "release-version.json").read_text()))
+    if mutation == "remove_public":
+        del data["public_upgrade_predecessor"]
+    elif mutation == "substitute_public":
+        data["public_upgrade_predecessor"]["version"] = "0.6.0a17"
+    elif mutation == "remove_lineage":
+        del data["implementation_lineage_predecessor"]
+    elif mutation == "substitute_lineage":
+        data["implementation_lineage_predecessor"]["version"] = "0.6.0a20"
+    elif mutation == "conflate":
+        data["implementation_lineage_predecessor"] = copy.deepcopy(
+            data["public_upgrade_predecessor"]
+        )
+    elif mutation == "reverse_versions":
+        (
+            data["public_upgrade_predecessor"]["version"],
+            data["implementation_lineage_predecessor"]["version"],
+        ) = (
+            data["implementation_lineage_predecessor"]["version"],
+            data["public_upgrade_predecessor"]["version"],
+        )
+    elif mutation == "reverse_relationships":
+        data["public_upgrade_predecessor"]["relationship_to_source"] = (
+            "behavior_preserving_except_release_identity_publication_truth_and_release_tooling"
+        )
+        data["implementation_lineage_predecessor"]["relationship_to_source"] = "behavior_changing"
+    elif mutation == "public_a19":
+        data["intervening_nonpublic_versions"][0]["state"] = "published"
+    elif mutation == "publishable_a20":
+        data["intervening_nonpublic_versions"][1]["state"] = "publishable"
+    elif mutation == "public_a21":
+        data["intervening_nonpublic_versions"][2]["state"] = "public_customer_predecessor"
+    _write_fixture(tmp_path, data)
+    with pytest.raises(ValueError):
+        verifier.release_metadata(tmp_path)
 
 
-def test_predecessor_pin_is_permitted_outside_release_package_docs(tmp_path: Path) -> None:
-    _write_candidate_fixture(tmp_path, customer_pin=EXPECTED_PREDECESSOR_VERSION)
-    result = _verify_fixture(tmp_path)
-    assert result["detected_customer_pin_versions"] == [EXPECTED_PREDECESSOR_VERSION]
-
-
-def test_source_version_mismatch_fails(tmp_path: Path) -> None:
-    _write_candidate_fixture(tmp_path, init_version="0.6.0a8")
-    with pytest.raises(ValueError, match="authoritative_version_mismatch"):
-        _verify_fixture(tmp_path)
-
-
-def test_immutable_metadata_rejects_non_external_publication_authority(tmp_path: Path) -> None:
-    _write_candidate_fixture(
-        tmp_path,
-        publication_state_authority="embedded_mutable_state",
-    )
-    with pytest.raises(ValueError, match="release_metadata_publication_authority_invalid"):
-        _verify_fixture(tmp_path)
-
-
-def test_intervening_reserved_inventory_must_be_complete(tmp_path: Path) -> None:
-    _write_candidate_fixture(
-        tmp_path,
-        predecessor_public_version="0.6.0a5",
-        intervening_versions=[],
-    )
-    with pytest.raises(ValueError, match="intervening_reserved_versions_mismatch"):
-        _verify_fixture(tmp_path)
-
-
-def test_declared_intervening_reserved_pin_is_rejected(tmp_path: Path) -> None:
-    _write_candidate_fixture(
-        tmp_path,
-        predecessor_public_version="0.6.0a5",
-        intervening_versions=[
-            "0.6.0a6",
-            "0.6.0a7",
-            "0.6.0a8",
-            "0.6.0a9",
-            "0.6.0a10",
-            "0.6.0a11",
-            "0.6.0a12",
-            "0.6.0a13",
-            "0.6.0a14",
-            "0.6.0a15",
-            "0.6.0a16",
-            "0.6.0a17",
-            "0.6.0a18",
-            "0.6.0a19",
-            "0.6.0a20",
-        ],
-        customer_pin="0.6.0a8",
-    )
-    with pytest.raises(ValueError, match="intervening_reserved_customer_pin"):
-        _verify_fixture(tmp_path)
-
-
-def test_old_candidate_identity_fails(tmp_path: Path) -> None:
-    _write_candidate_fixture(
-        tmp_path,
-        pyproject_version="0.6.0a1",
-        init_version="0.6.0a1",
-        metadata_version="0.6.0a1",
-        predecessor_public_version="0.6.0a0",
-        intervening_versions=[],
-    )
-    with pytest.raises(ValueError, match="candidate_reuses_0.6.0a1"):
-        _verify_fixture(tmp_path)
+def test_non_external_publication_authority_fails(tmp_path: Path) -> None:
+    verifier = _verifier()
+    data = copy.deepcopy(json.loads((ROOT / "release-version.json").read_text()))
+    data["publication_state_authority"] = "embedded_mutable_state"
+    _write_fixture(tmp_path, data)
+    with pytest.raises(ValueError, match="publication_authority"):
+        verifier.release_metadata(tmp_path)

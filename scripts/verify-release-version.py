@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify qCoder candidate source, documentation pins, and artifact versions."""
+"""Verify qCoder release identity and distinct predecessor relationships fail closed."""
 
 from __future__ import annotations
 
@@ -7,29 +7,45 @@ import argparse
 import json
 import re
 import tarfile
-import tomllib
 import zipfile
 from pathlib import Path
 
-OLD_CANDIDATE_VERSION = "0.6.0a1"
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10 release tooling
+    import tomli as tomllib
+
 RELEASE_METADATA_FILENAME = "release-version.json"
-RELEASE_METADATA_SCHEMA = "qcoder.release_version_source.v2"
-PRERELEASE_SUCCESSOR = "prerelease_successor"
-EXTERNAL_RELEASE_CONTROL = "external_release_control"
-PRIVATE_CANDIDATE_PATTERN = re.compile(
-    r"^(?P<public_version>[0-9]+\.[0-9]+\.[0-9]+a[0-9]+)"
-    r"(?:\.dev[0-9]+)?"
-    r"\+wi[0-9]+\.[a-z0-9][a-z0-9.]*$"
-)
+RELEASE_METADATA_SCHEMA = "qcoder.release_version_source.v3"
+EXPECTED_VERSION = "0.6.0a22"
+PUBLIC_PREDECESSOR = {
+    "version": "0.6.0a18",
+    "source_commit": "2150a0f9953102f23801410d7251a64f3c01f5ea",
+    "source_tree": "fd4c9021ea11258e2aa913d0518cacf7232e13b8",
+    "state": "published_terminal_immutable",
+    "relationship_to_source": "behavior_changing",
+}
+LINEAGE_PREDECESSOR = {
+    "version": "0.6.0a21",
+    "source_commit": "79fb41e447dea52be448447b7212214b5b9004f3",
+    "source_tree": "b16da2374717d3a37bb3310462d086c74d83f264",
+    "state": "frozen_unpublished_technically_qualified_publication_truth_rejected_terminal",
+    "relationship_to_source": "behavior_preserving_except_release_identity_publication_truth_and_release_tooling",
+}
+INTERVENING = [
+    {"version": "0.6.0a19", "state": "intentionally_reserved_unselected_no_accepted_candidate"},
+    {
+        "version": "0.6.0a20",
+        "state": "frozen_unpublished_technically_qualified_publication_truth_rejected_terminal",
+    },
+    {
+        "version": "0.6.0a21",
+        "state": "frozen_unpublished_technically_qualified_publication_truth_rejected_terminal",
+    },
+]
 PIN_PATTERN = re.compile(r"\bqcoder(?:\[[A-Za-z0-9_,.-]+\])?==([0-9A-Za-z.!+-]+)")
 TEXT_SUFFIXES = {".js", ".json", ".md", ".mdx", ".mjs", ".toml", ".ts", ".tsx"}
 IGNORED_PARTS = {".git", ".docusaurus", ".pytest_cache", "build", "dist", "node_modules"}
-QCODER_ALPHA_VERSION_PATTERN = re.compile(
-    r"^(?P<major>0|[1-9][0-9]*)\."
-    r"(?P<minor>0|[1-9][0-9]*)\."
-    r"(?P<patch>0|[1-9][0-9]*)a"
-    r"(?P<serial>0|[1-9][0-9]*)$"
-)
 
 
 def _metadata_version(text: str) -> str:
@@ -41,68 +57,69 @@ def _metadata_version(text: str) -> str:
 
 def wheel_version(path: Path) -> str:
     with zipfile.ZipFile(path) as archive:
-        metadata = [name for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
-        if len(metadata) != 1:
+        names = [name for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
+        if len(names) != 1:
             raise ValueError("wheel_metadata_inventory_invalid")
-        return _metadata_version(archive.read(metadata[0]).decode("utf-8"))
+        return _metadata_version(archive.read(names[0]).decode())
 
 
 def sdist_version(path: Path) -> str:
     with tarfile.open(path, "r:gz") as archive:
-        metadata = [
-            member
-            for member in archive.getmembers()
-            if member.isfile() and member.name.count("/") == 1 and member.name.endswith("/PKG-INFO")
+        members = [
+            m
+            for m in archive.getmembers()
+            if m.isfile() and m.name.count("/") == 1 and m.name.endswith("/PKG-INFO")
         ]
-        if len(metadata) != 1:
+        if len(members) != 1:
             raise ValueError("sdist_metadata_inventory_invalid")
-        handle = archive.extractfile(metadata[0])
+        handle = archive.extractfile(members[0])
         if handle is None:
             raise ValueError("sdist_metadata_unreadable")
-        return _metadata_version(handle.read().decode("utf-8"))
+        return _metadata_version(handle.read().decode())
 
 
 def release_metadata(source_root: Path) -> dict[str, object]:
-    path = source_root / RELEASE_METADATA_FILENAME
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads((source_root / RELEASE_METADATA_FILENAME).read_text(encoding="utf-8"))
     required = {
         "schema",
         "source_version",
         "release_identity_kind",
-        "predecessor_public_version",
         "publication_state_authority",
-        "intervening_reserved_versions",
+        "public_upgrade_predecessor",
+        "implementation_lineage_predecessor",
+        "intervening_nonpublic_versions",
     }
     if set(data) != required:
         raise ValueError("release_metadata_fields_invalid")
     if data["schema"] != RELEASE_METADATA_SCHEMA:
         raise ValueError("release_metadata_schema_unsupported")
-    for key in (
-        "source_version",
-        "release_identity_kind",
-        "predecessor_public_version",
-        "publication_state_authority",
-    ):
-        if not isinstance(data[key], str):
-            raise ValueError(f"release_metadata_{key}_invalid")
-    if data["release_identity_kind"] != PRERELEASE_SUCCESSOR:
+    if data["source_version"] != EXPECTED_VERSION:
+        raise ValueError("release_metadata_source_version_invalid")
+    if data["release_identity_kind"] != "prerelease_successor":
         raise ValueError("release_metadata_identity_kind_unsupported")
-    if data["publication_state_authority"] != EXTERNAL_RELEASE_CONTROL:
+    if data["publication_state_authority"] != "external_release_control":
         raise ValueError("release_metadata_publication_authority_invalid")
-    intervening = data["intervening_reserved_versions"]
-    if not isinstance(intervening, list) or not all(
-        isinstance(value, str) for value in intervening
+    if data["public_upgrade_predecessor"] != PUBLIC_PREDECESSOR:
+        raise ValueError("public_upgrade_predecessor_invalid")
+    if data["implementation_lineage_predecessor"] != LINEAGE_PREDECESSOR:
+        raise ValueError("implementation_lineage_predecessor_invalid")
+    if data["intervening_nonpublic_versions"] != INTERVENING:
+        raise ValueError("intervening_nonpublic_versions_invalid")
+    if (
+        data["public_upgrade_predecessor"]["version"]
+        == data["implementation_lineage_predecessor"]["version"]
     ):
-        raise ValueError("release_metadata_intervening_versions_invalid")
-    if len(intervening) != len(set(intervening)):
-        raise ValueError("release_metadata_intervening_versions_duplicated")
+        raise ValueError("predecessor_relationships_conflated")
     return data
 
 
 def source_versions(source_root: Path) -> dict[str, str]:
     pyproject = tomllib.loads((source_root / "pyproject.toml").read_text(encoding="utf-8"))
-    init_text = (source_root / "src/qcoder/__init__.py").read_text(encoding="utf-8")
-    match = re.search(r'^__version__\s*=\s*"([^"]+)"$', init_text, re.MULTILINE)
+    match = re.search(
+        r'^__version__\s*=\s*"([^"]+)"$',
+        (source_root / "src/qcoder/__init__.py").read_text(),
+        re.MULTILINE,
+    )
     if match is None:
         raise ValueError("qcoder_dunder_version_missing")
     metadata = release_metadata(source_root)
@@ -114,59 +131,18 @@ def source_versions(source_root: Path) -> dict[str, str]:
 
 
 def customer_pin_versions(roots: list[Path]) -> dict[str, list[str]]:
-    found: dict[str, list[str]] = {}
+    found = {}
     for root in roots:
         for path in sorted(root.rglob("*")):
             if (
-                not path.is_file()
-                or path.suffix not in TEXT_SUFFIXES
-                or any(part in IGNORED_PARTS for part in path.parts)
+                path.is_file()
+                and path.suffix in TEXT_SUFFIXES
+                and not any(part in IGNORED_PARTS for part in path.parts)
             ):
-                continue
-            versions = PIN_PATTERN.findall(path.read_text(encoding="utf-8"))
-            if versions:
-                found[str(path)] = versions
+                versions = PIN_PATTERN.findall(path.read_text(encoding="utf-8"))
+                if versions:
+                    found[str(path)] = versions
     return found
-
-
-def _qcoder_alpha_version(version: str) -> tuple[int, int, int, int]:
-    private_candidate = PRIVATE_CANDIDATE_PATTERN.fullmatch(version)
-    if private_candidate is not None:
-        version = private_candidate.group("public_version")
-    match = QCODER_ALPHA_VERSION_PATTERN.fullmatch(version)
-    if match is None:
-        raise ValueError(f"unsupported_qcoder_release_line:{version}")
-    return tuple(int(match.group(name)) for name in ("major", "minor", "patch", "serial"))
-
-
-def _repository_pin_inventory(
-    source_root: Path,
-    raw_pins: dict[str, list[str]],
-) -> dict[str, list[str]]:
-    inventory: dict[str, list[str]] = {}
-    source_root = source_root.resolve()
-    for raw_path, versions in raw_pins.items():
-        path = Path(raw_path).resolve()
-        try:
-            display_path = path.relative_to(source_root).as_posix()
-        except ValueError:
-            display_path = f"absolute:{path.as_posix()}"
-        inventory[display_path] = list(versions)
-    return dict(sorted(inventory.items()))
-
-
-def _expected_intervening_alpha_versions(
-    current_public_version: str,
-    source_version: str,
-) -> list[str]:
-    public_identity = _qcoder_alpha_version(current_public_version)
-    source_identity = _qcoder_alpha_version(source_version)
-    if public_identity[:3] != source_identity[:3]:
-        raise ValueError("candidate_and_public_release_line_mismatch")
-    if source_identity <= public_identity:
-        raise ValueError("candidate_not_newer_than_current_public_version")
-    prefix = ".".join(str(part) for part in source_identity[:3])
-    return [f"{prefix}a{serial}" for serial in range(public_identity[3] + 1, source_identity[3])]
 
 
 def verify_release_version(
@@ -179,78 +155,33 @@ def verify_release_version(
     source_root = source_root.resolve()
     metadata = release_metadata(source_root)
     versions = source_versions(source_root)
-    expected = versions["pyproject"]
     if (wheel is None) != (sdist is None):
         raise ValueError("artifact_pair_incomplete")
     if wheel is not None and sdist is not None:
-        versions["wheel"] = wheel_version(wheel)
-        versions["sdist"] = sdist_version(sdist)
-    local_match = PRIVATE_CANDIDATE_PATTERN.fullmatch(expected)
-    release_identity_kind = str(metadata["release_identity_kind"])
-    predecessor_public_version = str(metadata["predecessor_public_version"])
-    pins = _repository_pin_inventory(
-        source_root,
-        customer_pin_versions([root.resolve() for root in customer_roots]),
-    )
-    mismatches = {source: value for source, value in versions.items() if value != expected}
-    if expected == OLD_CANDIDATE_VERSION:
-        raise ValueError("candidate_reuses_0.6.0a1")
-    if mismatches:
-        raise ValueError(f"authoritative_version_mismatch:{mismatches}")
-    if predecessor_public_version == expected:
-        raise ValueError("successor_equals_predecessor_version")
-    expected_intervening = _expected_intervening_alpha_versions(
-        predecessor_public_version, expected
-    )
-    declared_intervening = list(metadata["intervening_reserved_versions"])
-    if declared_intervening != expected_intervening:
-        raise ValueError(
-            "intervening_reserved_versions_mismatch:"
-            f"expected={expected_intervening}:declared={declared_intervening}"
-        )
-    candidate_pin_occurrences = [
-        {"path": path, "version": version}
-        for path, values in pins.items()
-        for version in values
-        if version == expected
-    ]
-    intervening_pin_occurrences = [
-        {"path": path, "version": version}
-        for path, values in pins.items()
-        for version in values
-        if version in declared_intervening
-    ]
-    if candidate_pin_occurrences:
-        raise ValueError(f"release_version_customer_pin:{candidate_pin_occurrences}")
-    if intervening_pin_occurrences:
-        raise ValueError(f"intervening_reserved_customer_pin:{intervening_pin_occurrences}")
-    pin_mismatches = {
-        path: values
-        for path, values in pins.items()
-        if any(value != predecessor_public_version for value in values)
+        versions.update({"wheel": wheel_version(wheel), "sdist": sdist_version(sdist)})
+    if any(value != EXPECTED_VERSION for value in versions.values()):
+        raise ValueError(f"authoritative_version_mismatch:{versions}")
+    pins = customer_pin_versions([root.resolve() for root in customer_roots])
+    allowed = PUBLIC_PREDECESSOR["version"]
+    bad = {
+        path: values for path, values in pins.items() if any(value != allowed for value in values)
     }
-    if pin_mismatches:
-        raise ValueError(f"customer_package_pin_mismatch:{pin_mismatches}")
-    detected_pin_versions = sorted({version for values in pins.values() for version in values})
+    if bad:
+        raise ValueError(f"customer_package_pin_mismatch:{bad}")
     return {
         "ok": True,
         "result": "pass",
-        "version": expected,
-        "source_version": expected,
-        "release_identity_kind": release_identity_kind,
-        "predecessor_public_version": predecessor_public_version,
+        "version": EXPECTED_VERSION,
+        "source_version": EXPECTED_VERSION,
+        "release_identity_kind": metadata["release_identity_kind"],
         "publication_state_authority": metadata["publication_state_authority"],
-        "private_candidate_identity": local_match is not None,
+        "public_upgrade_predecessor": metadata["public_upgrade_predecessor"],
+        "implementation_lineage_predecessor": metadata["implementation_lineage_predecessor"],
+        "intervening_nonpublic_versions": metadata["intervening_nonpublic_versions"],
         "authoritative_versions": versions,
-        "customer_pin_files": sorted(pins),
         "customer_pins": pins,
-        "detected_customer_pin_versions": detected_pin_versions,
-        "candidate_pin_occurrences": [],
-        "intervening_reserved_pin_occurrences": [],
-        "reserved_or_rejected_pin_occurrences": [],
-        "forbidden_customer_pin_versions": [*declared_intervening, expected],
         "artifact_versions_checked": wheel is not None,
-        "old_candidate_identity_absent": True,
+        "relationships_distinct": True,
     }
 
 
@@ -263,10 +194,10 @@ def main() -> int:
     args = parser.parse_args()
     try:
         result = verify_release_version(
-            source_root=args.source_root.resolve(),
-            wheel=args.wheel.resolve() if args.wheel is not None else None,
-            sdist=args.sdist.resolve() if args.sdist is not None else None,
-            customer_roots=[root.resolve() for root in args.customer_root],
+            source_root=args.source_root,
+            wheel=args.wheel,
+            sdist=args.sdist,
+            customer_roots=args.customer_root,
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(json.dumps({"ok": False, "result": "fail", "error": str(exc)}, sort_keys=True))
