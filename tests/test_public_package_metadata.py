@@ -5,40 +5,45 @@ from pathlib import Path
 
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 MANDATORY_UPGRADE_PARAGRAPHS = (
-    "Install qCoder 0.6.0a22 for a new installation or before starting a new Current Loop. "
-    "If qCoder 0.6.0a18 already has an active Current Loop, upgrade only at a clean Current "
-    "Loop boundary: before a new loop begins or after the current loop has reached a truthful "
-    "terminal boundary.",
-    "Do not upgrade while any binding v44 / Current Step Contract v10 step, completion, "
-    "continuation capsule, pending receipt, or recovery action remains outstanding. Finish "
-    "the outstanding step on qCoder 0.6.0a18, or explicitly abandon it and restart the work "
-    "under qCoder 0.6.0a22 at a clean boundary.",
-    "qCoder does not support or claim mid-step migration from binding v44 / Current Step "
-    "Contract v10 to binding v45 / Current Step Contract v11. A v44/v10 operation receipt, "
-    "authority grant, completion input, continuation capsule, or pending step must not be "
-    "reused or reinterpreted under v45/v11. Project evidence history may remain; this "
-    "boundary applies to the active step.",
+    (
+        "Install qCoder 0.6.0a23 for a new installation or before starting a new Current Loop. "
+        "If qCoder 0.6.0a22 already has an active Current Loop, upgrade only at a clean Current "
+        "Loop boundary: before a new loop begins or after the current loop has reached a truthful "
+        "terminal boundary."
+    ),
+    (
+        "Do not upgrade while any binding v45 / Current Step Contract v11 step, completion, "
+        "continuation capsule, pending receipt, or recovery action remains outstanding. Finish "
+        "the outstanding step on qCoder 0.6.0a22, or explicitly abandon it and restart the work "
+        "under qCoder 0.6.0a23 at a clean boundary."
+    ),
+    (
+        "qCoder does not support or claim mid-step migration from binding v45 / Current Step "
+        "Contract v11 to binding v47 / Current Step Contract v11. A v45/v11 operation receipt, "
+        "authority grant, completion input, continuation capsule, or pending step must not be "
+        "reused or reinterpreted under v47/v11. Project evidence history may remain; this "
+        "boundary applies to the active step."
+    ),
 )
 MANDATORY_UPGRADE_TEXT = " ".join(MANDATORY_UPGRADE_PARAGRAPHS)
 MANDATORY_CLAUSES = (
     "upgrade only at a clean Current Loop boundary",
     "step, completion, continuation capsule, pending receipt, or recovery action remains outstanding",
-    "Finish the outstanding step on qCoder 0.6.0a18, or explicitly abandon it and restart the work",
+    "Finish the outstanding step on qCoder 0.6.0a22, or explicitly abandon it and restart the work",
     "does not support or claim mid-step migration",
-    "must not be reused or reinterpreted under v45/v11",
+    "must not be reused or reinterpreted under v47/v11",
 )
 RELATIONSHIP_CLAUSES = (
-    "qCoder 0.6.0a22 is a behavior-changing pre-release successor to public qCoder 0.6.0a18",
-    "runtime implementation and product behavior are preserved from the immutable, unpublished qCoder 0.6.0a21 candidate",
-    "qCoder 0.6.0a21 was never public and is not a customer upgrade predecessor",
-    "The public upgrade relationship is qCoder 0.6.0a18 → qCoder 0.6.0a22",
-    "The implementation lineage relationship is qCoder 0.6.0a21 → qCoder 0.6.0a22",
+    "qCoder 0.6.0a23 is a behavior-changing pre-release successor to public qCoder 0.6.0a22",
+    "runtime implementation and product behavior are preserved from the accepted private qCoder 0.6.0a22.dev2+wi0440.natural.first.value.v1 candidate",
+    "private candidate was never public and is not a customer upgrade predecessor",
+    "The public upgrade relationship is qCoder 0.6.0a22 → qCoder 0.6.0a23",
+    "The implementation lineage relationship is qCoder 0.6.0a22.dev2+wi0440.natural.first.value.v1 → qCoder 0.6.0a23",
     "These relationships are distinct and must not be conflated",
-    "The a18 → a22 upgrade is not behavior-preserving and is not a supported mid-step migration",
+    "The a22 → a23 upgrade is not behavior-preserving and is not a supported mid-step migration",
     "Plain 0.6.0a19 remains intentionally reserved and has no accepted frozen or public candidate",
     "Plain 0.6.0a20 and plain 0.6.0a21 are immutable, unpublished, technically qualified, publication-truth-rejected, terminal, do-not-publish candidates",
     "does not activate Tested, First-class, Client Compatibility, CL-023, named-client support, website, or marketing claims",
@@ -60,7 +65,7 @@ def _assert_relationship_truth(text: str) -> None:
     normalized = " ".join(text.split())
     for clause in RELATIONSHIP_CLAUSES:
         assert clause in normalized
-    assert "behavior-preserving pre-release successor to public qCoder 0.6.0a18" not in normalized
+    assert "behavior-preserving pre-release successor to public qCoder 0.6.0a22" not in normalized
 
 
 def test_readme_is_publication_truthful_and_keeps_client_claims_held() -> None:
@@ -98,7 +103,7 @@ def test_readme_is_publication_truthful_and_keeps_client_claims_held() -> None:
     assert "upgrade only at a clean Current Loop boundary" in readme
     assert "recovery action remains outstanding" in readme
     assert "explicitly abandon it and restart the work" in readme
-    assert "must not be reused or reinterpreted under v45/v11" in readme
+    assert "must not be reused or reinterpreted under v47/v11" in readme
 
 
 def test_changelog_records_a17_behavior_successor_and_a13_history() -> None:
@@ -196,10 +201,10 @@ def test_a20_release_note_is_immutable_historical_do_not_publish_evidence() -> N
         assert statement in lowered
 
 
-def test_a22_release_note_and_readme_have_exact_relationship_and_upgrade_copy() -> None:
+def test_a23_release_note_and_readme_have_exact_relationship_and_upgrade_copy() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    release_note = (ROOT / "docs/releases/0.6.0a22.md").read_text(encoding="utf-8")
-    heading = "## Upgrading from qCoder 0.6.0a18"
+    release_note = (ROOT / "docs/releases/0.6.0a23.md").read_text(encoding="utf-8")
+    heading = "## Upgrading from qCoder 0.6.0a22"
     assert heading in release_note
     assert heading in readme or f"#{heading}" in readme
     _assert_exact_upgrade_copy(readme)
@@ -209,7 +214,7 @@ def test_a22_release_note_and_readme_have_exact_relationship_and_upgrade_copy() 
 
 
 @pytest.mark.parametrize("clause", MANDATORY_CLAUSES)
-def test_a22_upgrade_guard_rejects_each_missing_or_changed_clause(clause: str) -> None:
+def test_a23_upgrade_guard_rejects_each_missing_or_changed_clause(clause: str) -> None:
     assert clause in MANDATORY_UPGRADE_TEXT
     mutated = MANDATORY_UPGRADE_TEXT.replace(clause, "materially altered clause", 1)
     with pytest.raises(AssertionError):
@@ -217,27 +222,25 @@ def test_a22_upgrade_guard_rejects_each_missing_or_changed_clause(clause: str) -
 
 
 @pytest.mark.parametrize("clause", RELATIONSHIP_CLAUSES)
-def test_a22_relationship_guard_rejects_removal_or_substitution(clause: str) -> None:
+def test_a23_relationship_guard_rejects_removal_or_substitution(clause: str) -> None:
     complete = " ".join(RELATIONSHIP_CLAUSES)
     for replacement in ("", "materially altered relationship"):
         with pytest.raises(AssertionError):
             _assert_relationship_truth(complete.replace(clause, replacement, 1))
 
 
-def test_a22_release_history_is_complete_and_noncontradictory() -> None:
+def test_a23_release_history_is_complete_and_noncontradictory() -> None:
     readme = _normalized(ROOT / "README.md").lower()
     changelog = _normalized(ROOT / "CHANGELOG.md").lower()
     a20 = _normalized(ROOT / "docs/releases/0.6.0a20.md").lower()
     a21 = _normalized(ROOT / "docs/releases/0.6.0a21.md").lower()
     release = json.loads((ROOT / "release-version.json").read_text(encoding="utf-8"))
-    assert release["source_version"] == "0.6.0a22"
-    assert release["public_upgrade_predecessor"]["version"] == "0.6.0a18"
-    assert release["implementation_lineage_predecessor"]["version"] == "0.6.0a21"
-    assert [item["version"] for item in release["intervening_nonpublic_versions"]] == [
-        "0.6.0a19",
-        "0.6.0a20",
-        "0.6.0a21",
-    ]
+    assert release["source_version"] == "0.6.0a23"
+    assert release["public_upgrade_predecessor"]["version"] == "0.6.0a22"
+    assert release["implementation_lineage_predecessor"]["version"] == (
+        "0.6.0a22.dev2+wi0440.natural.first.value.v1"
+    )
+    assert release["intervening_nonpublic_versions"] == []
     assert "0.6.0a19 remains intentionally reserved" in readme
     assert "0.6.0a20 (unpublished terminal candidate; do not publish)" in changelog
     assert "must not be published" in a20

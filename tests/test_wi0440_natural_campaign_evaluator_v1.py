@@ -91,7 +91,7 @@ def _campaign() -> dict[str, object]:
             "fast_mode": False,
         },
         "public_version": "0.6.0a22",
-        "candidate_version": "0.6.0a22.dev2+wi0440.natural.first.value.v1",
+        "candidate_version": "0.6.0a23",
         "runs": runs,
         "attempt_ledger_count": len(runs),
         "matched_source_overhead_seconds": [5.0, 6.0, 7.0, 8.0, 9.0],

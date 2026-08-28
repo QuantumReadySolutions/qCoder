@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.6.0a23
+
+Public upgrade predecessor: qCoder 0.6.0a22. The a22 → a23 relationship is behavior-changing.
+
+Implementation lineage predecessor: accepted private qCoder
+0.6.0a22.dev2+wi0440.natural.first.value.v1 at commit
+`a0d0d39237c2e51c0346fdc0214566c4d473639c`. The private candidate → a23 relationship
+preserves runtime implementation and product behavior except for release identity, release-truth
+documentation, mechanically resulting package metadata, and release-only verification.
+
+- Add deterministic named Context Bridge profile selection.
+- Provide one transactional managed 12+2 setup that preserves unrelated configuration and
+  restores exact prior configuration on failure.
+- Present the recommended Algorithm Blueprint interpretation and bounded choices before explicit
+  confirmation.
+- Advance the connected-assistant contract from binding v45 / schema 44 to binding v47 / schema
+  46 while preserving Binding MCP v12, Current Step Contract v11, request semantics v5, state
+  schema v16, exactly twelve public tools, and exactly two private Current Loop operations.
+- Require existing a22 installations to upgrade only at a clean Current Loop boundary; mid-step
+  v45/v11 → v47/v11 migration and receipt reuse are not supported claims.
+- Keep publication, deployment, named-client qualification, compatibility, performance, website,
+  and marketing claims as separate lifecycle and product decisions.
+
 ## 0.6.0a22
 
 Public upgrade predecessor: qCoder 0.6.0a18. The a18 → a22 relationship is behavior-changing.
