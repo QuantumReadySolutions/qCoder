@@ -24,7 +24,7 @@ def verify(root: Path) -> dict[str, object]:
     if development.get("schema_id") != EXPECTED_SCHEMA:
         raise ValueError("development_version_schema_invalid")
     version = development.get("version")
-    if not isinstance(version, str) or "+wi0438.named.context.bridge.profiles.v1" not in version:
+    if not isinstance(version, str) or "+wi0440.natural.first.value.v1" not in version:
         raise ValueError("development_version_identity_invalid")
     if pyproject["project"]["version"] != version or match is None or match.group(1) != version:
         raise ValueError("development_version_sources_diverge")

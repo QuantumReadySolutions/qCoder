@@ -23,6 +23,7 @@ from qcoder.algorithm_blueprint import (
     extract_selected_python_file_evidence,
     with_artifact_digest,
 )
+from qcoder.algorithm_blueprint_first_value import build_first_value_dialogue
 from qcoder.context_loop import (
     CURRENT_BUILD_EVIDENCE_PARENT_ORDER,
     build_circuit_manifestation,
@@ -4421,6 +4422,13 @@ class CurrentLoopCoordinator:
                     awaiting_confirmation_fields=awaiting,
                 )
                 self._set_pending_intent_review(pending, summary=summary)
+                first_value_dialogue = intent_payload.get("first_value_dialogue")
+                if not isinstance(first_value_dialogue, Mapping):
+                    first_value_dialogue = build_first_value_dialogue(
+                        intent,
+                        proposed_interpretation=interpretation,
+                        unresolved_field_ids=awaiting,
+                    )
                 return self._result(
                     operation="prepare_generation",
                     ok=True,
@@ -4439,6 +4447,7 @@ class CurrentLoopCoordinator:
                         "generation_context_created": False,
                         "protected_call_made": True,
                         "identical_pending_review_reused": False,
+                        "first_value_dialogue": deepcopy(dict(first_value_dialogue)),
                     },
                     checkpoint_protocol={
                         "confirmation_transmission_state": (
@@ -14155,6 +14164,7 @@ class CurrentLoopCoordinator:
             protocol=protocol,
         )
         result_details = deepcopy(dict(details or {}))
+        first_value_dialogue = result_details.pop("first_value_dialogue", None)
         result_details = self._attach_executable_recovery_alternatives(
             state=state,
             checkpoint_kind=str(coordinator["checkpoint_kind"]),
@@ -14256,6 +14266,8 @@ class CurrentLoopCoordinator:
             },
             **protocol,
         }
+        if isinstance(first_value_dialogue, Mapping):
+            result["first_value_dialogue"] = deepcopy(dict(first_value_dialogue))
         if isinstance(request_semantics, Mapping):
             result["current_request_semantics"] = deepcopy(dict(request_semantics))
             current_layers = deepcopy(dict(request_semantics["authority_layers"]))

@@ -23,10 +23,10 @@ def _verifier():
 
 def test_private_development_identity_preserves_public_a22_release_record() -> None:
     verifier = _verifier()
-    assert __version__ == "0.6.0a22.dev1+wi0438.named.context.bridge.profiles.v1"
+    assert __version__ == "0.6.0a22.dev2+wi0440.natural.first.value.v1"
     assert verifier.source_versions(ROOT) == {
-        "pyproject": "0.6.0a22.dev1+wi0438.named.context.bridge.profiles.v1",
-        "qcoder.__version__": "0.6.0a22.dev1+wi0438.named.context.bridge.profiles.v1",
+        "pyproject": "0.6.0a22.dev2+wi0440.natural.first.value.v1",
+        "qcoder.__version__": "0.6.0a22.dev2+wi0440.natural.first.value.v1",
         "release_metadata": "0.6.0a22",
     }
     with pytest.raises(ValueError, match="authoritative_version_mismatch"):

@@ -37,6 +37,10 @@ from qcoder.algorithm_blueprint import (
     algorithm_blueprint_contract_snapshot,
     compact_selected_python_source_evidence_for_hosted,
 )
+from qcoder.algorithm_blueprint_first_value import (
+    build_first_value_dialogue,
+    first_value_dialogue_contract_snapshot,
+)
 from qcoder.algorithm_intent_recovery import (
     ClarificationRecoveryError,
     RECOVERY_INPUT_FIELD,
@@ -176,8 +180,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 45
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v46"
+CLIENT_BINDING_SCHEMA_VERSION = 46
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v47"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -653,6 +657,8 @@ def build_client_binding_descriptor(
             ),
             "operation_transport_inventory": operation_transport_inventory(),
             "local_credential_profile_contract": credential_profile_contract_snapshot(),
+            "customer_managed_connection_contract": _customer_managed_connection_contract(),
+            "blueprint_first_value_dialogue_contract": first_value_dialogue_contract_snapshot(),
             "current_request_semantics_contract": semantics_contract_snapshot(),
             "artifact_target_contract": target_contract_snapshot(),
             "bounded_control_input_contract": bounded_control_contract_snapshot(),
@@ -1119,6 +1125,15 @@ share-safe projection protected-side, and stops at Result Review. Never scan the
 send local paths/raw artifacts protected-side. For tool calls, use each descriptor's MINIMAL HAPPY
 PATH shape first and treat bounded field errors as correction instructions, not permission to
 inspect schemas or source.
+
+BLUEPRINT FIRST VALUE
+For an unconfirmed Algorithm Intent Card, make first_value_dialogue the first useful customer
+response. Present its compact recommended interpretation, then the exact actions Use recommended
+choices and Review or change choices. Show no more than its three initial decision groups.
+Progressively disclose remaining consequential choices only when the customer selects review.
+Never infer either selection and never confirm automatically. Keep setup, tool, operation, schema,
+workflow-selection, model/tool choreography, and internal-receipt narration out of the response.
+Real blockers and explicit confirmation remain visible.
 
 QUIET COMPLETION
 After successful exact registration, give one concise truthful final and stop. Do not narrate
@@ -1841,10 +1856,28 @@ def _canonical_tool_name(tool_name: str) -> str:
     return TOOL_ALIASES.get(tool_name, tool_name)
 
 
+def _customer_managed_connection_contract() -> dict[str, Any]:
+    from qcoder.context_bridge_setup import setup_contract_snapshot
+
+    return setup_contract_snapshot()
+
+
 def _client_visible_tool_payload(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Expose nested core-contract metadata without changing the service response."""
 
-    if tool_name != "create_run_readiness_card" or payload.get("ok") is not True:
+    if payload.get("ok") is not True:
+        return payload
+    if tool_name == "create_algorithm_intent_card":
+        card = payload.get("algorithm_intent_card")
+        if isinstance(card, Mapping) and card.get("confirmation_state") in {
+            "proposed",
+            "needs_clarification",
+        }:
+            projected = dict(payload)
+            projected.setdefault("first_value_dialogue", build_first_value_dialogue(card))
+            return projected
+        return payload
+    if tool_name != "create_run_readiness_card":
         return payload
     readiness_card = payload.get("readiness_card")
     if not isinstance(readiness_card, dict):
@@ -2619,6 +2652,14 @@ def post_context_bridge(
             return safe_error(portable_error)
     if 200 <= status < 300 and canonical_tool_name == "create_algorithm_intent_card":
         card = payload.get("algorithm_intent_card")
+        if isinstance(card, Mapping) and card.get("confirmation_state") in {
+            "proposed",
+            "needs_clarification",
+        }:
+            payload["first_value_dialogue"] = build_first_value_dialogue(
+                card,
+                proposed_interpretation=arguments.get("proposed_interpretation"),
+            )
         if isinstance(card, Mapping) and card.get("confirmation_state") == "needs_clarification":
             try:
                 payload["clarification_continuation"] = build_atomic_clarification_continuation(
@@ -3576,6 +3617,10 @@ def tool_descriptors() -> list[dict[str, Any]]:
         "create_algorithm_intent_card": (
             "Preserve an explicitly supplied quantum algorithm request, validate a proposed interpretation, "
             "surface profile questions and provenance, and require explicit user-reviewed confirmation. For "
+            "the first customer response, present first_value_dialogue's compact recommended interpretation "
+            "before anything else, then offer the exact actions Use recommended choices and Review or change "
+            "choices. Show no more than its three initial decision groups and progressively disclose the rest. "
+            "Do not narrate setup, tools, schemas, workflow mechanics, or choreography. "
             "the named Algorithm Blueprint / Generation Context workflow, algorithm_intent_card_ready with a "
             "confirmed card is preparatory: quietly continue with create_implementation_blueprint. A proposed "
             "or needs-clarification card is a customer decision boundary and must not be auto-confirmed. Every "
@@ -4559,6 +4604,43 @@ def build_parser() -> argparse.ArgumentParser:
         description="qCoder Context Bridge adapter tools for eligible Explorer users.",
     )
     sub = parser.add_subparsers(dest="context_bridge_command")
+
+    connect = sub.add_parser(
+        "connect",
+        help=(
+            "Select one named profile and configure the existing Context Bridge and "
+            "Current Loop servers as one customer setup."
+        ),
+    )
+    connect.add_argument(
+        "--workspace",
+        required=True,
+        help="Exact trusted workspace to configure for the selected client.",
+    )
+    connect.add_argument(
+        "--client",
+        choices=("cursor",),
+        default="cursor",
+        help="Exact supported client binding to generate.",
+    )
+    connect.add_argument(
+        "--profile",
+        default=os.getenv("QCODER_CONTEXT_BRIDGE_PROFILE"),
+        help="Exact named profile ID or label; otherwise deterministic binding/default selection applies.",
+    )
+    connect.add_argument(
+        "--workspace-context",
+        default=os.getenv("QCODER_CONTEXT_BRIDGE_WORKSPACE_CONTEXT"),
+        help="Nonsecret profile workspace selector; defaults to the exact --workspace.",
+    )
+    connect.add_argument(
+        "--base-url", default=os.getenv("QCODER_CONTEXT_BRIDGE_BASE_URL", DEFAULT_BASE_URL)
+    )
+    connect.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit bounded nonsecret diagnostics instead of the one-line customer result.",
+    )
     profiles = sub.add_parser(
         "profiles", help="Manage named local Context Bridge credential profiles safely."
     )
@@ -4683,6 +4765,43 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.context_bridge_command is None:
         parser.print_help()
+        return 0
+    if args.context_bridge_command == "connect":
+        from qcoder.context_bridge_setup import (
+            ContextBridgeSetupError,
+            connect_cursor_workspace,
+        )
+
+        try:
+            result = connect_cursor_workspace(
+                workspace_root=args.workspace,
+                profile=args.profile,
+                client_context=args.client,
+                workspace_context=args.workspace_context,
+                executable=sys.executable,
+                base_url=args.base_url,
+            )
+        except (ContextBridgeSetupError, CredentialProfileError) as exc:
+            category = str(getattr(exc, "category", exc))
+            print(
+                json.dumps(
+                    {
+                        "schema_id": "qcoder.customer_managed_connection.rejection.v1",
+                        "ok": False,
+                        "category": category,
+                        "safe_next_action": "correct_the_named_profile_or_client_workspace_selection_and_retry",
+                        "configuration_restored": category
+                        != "client_configuration_rollback_failed",
+                        "secret_included": False,
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            print("qCoder connected")
         return 0
     if args.context_bridge_command == "profiles":
         if args.profiles_command is None:
