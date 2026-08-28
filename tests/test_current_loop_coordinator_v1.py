@@ -80,7 +80,9 @@ def test_context_bridge_confirmation_uses_nonidentifying_explicit_user_marker(
         semantic_confirmation="I confirm proposal proposal-example.",
     )
     assert result == {"ok": True}
-    confirmation = captured["message"]["params"]["arguments"]["resolution_confirmation"]
+    confirmation = captured["message"]["params"]["arguments"][
+        "resolution_confirmation"
+    ]
     assert confirmation == {
         "confirmed": True,
         "confirmed_by": "explicit_current_user",
@@ -451,7 +453,9 @@ class PublicBuilderTransport:
         records = [deepcopy(item) for item in supplied["decision_records"]]
         proposal = build_carry_forward_proposal(
             selected_action=supplied["selected_action"],
-            profile_id=decision_inventory_binding(supplied["algorithm_intent_card"])["profile_id"],
+            profile_id=decision_inventory_binding(supplied["algorithm_intent_card"])[
+                "profile_id"
+            ],
             decision_records=records,
             parent_artifacts=supplied["evidence_parent_artifacts"],
             current_build_context=supplied["current_build_context"],
@@ -641,15 +645,15 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "registration_authorizes_review": False,
         "operation_receipt_supported": True,
         "operation_receipt_single_use": True,
-        "operation_receipt_single_use_meaning": (
-            "consumed_after_successful_atomic_canonical_registration"
-        ),
-        "bounded_action_expectation_supported": True,
-        "native_client_permission_owner": "native_client",
-        "native_client_permission_granted_or_observed_by_qcoder": False,
-        "native_action_completion_evidence_required_for_d081": True,
-        "explicit_client_approval_telemetry": "optional_provenance_only",
-        "authorization_source_client_supplied": False,
+            "operation_receipt_single_use_meaning": (
+                "consumed_after_successful_atomic_canonical_registration"
+            ),
+            "bounded_action_expectation_supported": True,
+            "native_client_permission_owner": "native_client",
+            "native_client_permission_granted_or_observed_by_qcoder": False,
+            "native_action_completion_evidence_required_for_d081": True,
+            "explicit_client_approval_telemetry": "optional_provenance_only",
+            "authorization_source_client_supplied": False,
         "registered_and_presentation_currentness_separate": True,
     }
     contract_digest = hashlib.sha256(
@@ -671,11 +675,11 @@ def test_contract_surface_is_additive_and_inventory_is_unchanged() -> None:
         "artifact_candidate_provenance_conflict",
         "artifact_format_unsupported",
         "authorization_declined",
-        "authorization_partial",
-        "canonical_artifact_modified",
-        "canonical_parent_set_incomplete",
-        "causal_continuation_blocked",
-        "circuit_format_unsupported",
+            "authorization_partial",
+            "canonical_artifact_modified",
+            "canonical_parent_set_incomplete",
+            "causal_continuation_blocked",
+            "circuit_format_unsupported",
         "client_state_conflict",
         "contract_adjustment_value_invalid",
         "contract_broadening_proposal_stale",
@@ -1689,10 +1693,14 @@ def test_one_proposal_selected_bundle_confirmation_and_next_loop(
         "blueprint_decision"
     )
     assert proposal_arguments["proposed_updates"][0]["evidence_expectation"]
-    assert proposal_arguments["algorithm_intent_card"]["artifact_type"] == ("algorithm_intent_card")
+    assert proposal_arguments["algorithm_intent_card"]["artifact_type"] == (
+        "algorithm_intent_card"
+    )
     assert proposal_arguments["intent_relationship"] == {
         "relationship_type": "represented_by",
-        "parent_artifact_digest": proposal_arguments["algorithm_intent_card"]["artifact_digest"],
+        "parent_artifact_digest": proposal_arguments["algorithm_intent_card"][
+            "artifact_digest"
+        ],
     }
     assert all(
         set(parent) == {"artifact_ref", "artifact_digest", "artifact_type"}
