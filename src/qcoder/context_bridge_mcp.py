@@ -4021,6 +4021,7 @@ def _record_connection_exchange_best_effort(
     *,
     connection_state_root: str | Path | None,
     connection_generation: str | None,
+    connection_session_sha256: str | None,
     message: object,
     response: Mapping[str, Any] | None,
 ) -> None:
@@ -4029,6 +4030,7 @@ def _record_connection_exchange_best_effort(
     if (
         connection_state_root is None
         or connection_generation is None
+        or connection_session_sha256 is None
         or not isinstance(message, Mapping)
     ):
         return
@@ -4036,6 +4038,7 @@ def _record_connection_exchange_best_effort(
         record_server_exchange(
             state_root=connection_state_root,
             setup_generation=connection_generation,
+            configured_client_session_sha256=connection_session_sha256,
             server_name="qcoder-context-bridge",
             request=message,
             response=response,
@@ -4054,6 +4057,7 @@ def serve_mcp_stdio(
     selected_next_loop_parent_files: Mapping[str, str | Path] | None = None,
     connection_state_root: str | Path | None = None,
     connection_generation: str | None = None,
+    connection_session_sha256: str | None = None,
 ) -> int:
     stdin = sys.stdin.buffer
     while True:
@@ -4080,6 +4084,7 @@ def serve_mcp_stdio(
             _record_connection_exchange_best_effort(
                 connection_state_root=connection_state_root,
                 connection_generation=connection_generation,
+                connection_session_sha256=connection_session_sha256,
                 message=message,
                 response=response,
             )
@@ -4117,6 +4122,7 @@ def serve_mcp_stdio(
         _record_connection_exchange_best_effort(
             connection_state_root=connection_state_root,
             connection_generation=connection_generation,
+            connection_session_sha256=connection_session_sha256,
             message=message,
             response=response,
         )
@@ -4834,6 +4840,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     serve.add_argument("--connection-state-root", help=argparse.SUPPRESS)
     serve.add_argument("--connection-generation", help=argparse.SUPPRESS)
+    serve.add_argument("--connection-session-sha256", help=argparse.SUPPRESS)
     serve.set_defaults(context_bridge_command="mcp", mcp_command="serve")
 
     smoke = mcp_sub.add_parser(
@@ -5054,6 +5061,7 @@ def main(argv: list[str] | None = None) -> int:
             selected_next_loop_parent_files=selected_next_loop_parent_files,
             connection_state_root=args.connection_state_root,
             connection_generation=args.connection_generation,
+            connection_session_sha256=args.connection_session_sha256,
         )
     if args.mcp_command == "smoke":
         result = run_smoke(base_url=args.base_url, token_file=credential_source, full=args.full)

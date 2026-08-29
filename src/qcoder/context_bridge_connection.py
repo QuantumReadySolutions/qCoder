@@ -4,6 +4,12 @@ Configuration and direct server preflight are deliberately insufficient here.  A
 workspace is connected only after the configured client has initialized both
 stdio servers, discovered their exact inventories, and completed one read-only
 public qCoder request with process-and-discard retention.
+
+One fresh nonsecret session digest binds the manifest to both canonical server
+definitions and their sanitized receipts.  The separately observed MCP
+``clientInfo`` digest must also agree across both server initializations.  Those
+facts establish one configured client/session and one protocol identity; they do
+not, and must not be described as, proof that the servers share an OS process.
 """
 
 from __future__ import annotations
@@ -55,6 +61,7 @@ _RECEIPT_KEYS = {
     "schema_version",
     "setup_generation",
     "server_name",
+    "configured_client_session_sha256",
     "client_identity_sha256",
     "initialized",
     "inventory_verified",
@@ -68,6 +75,26 @@ _RECEIPT_KEYS = {
     "raw_response_retained",
     "secret_included",
 }
+_MANIFEST_KEYS = {
+    "schema_id",
+    "schema_version",
+    "setup_generation",
+    "client",
+    "configured_client_session_sha256",
+    "configured",
+    "configuration_verified",
+    "credential_verified",
+    "servers",
+    "public_tool_count",
+    "private_operation_count",
+    "direct_server_smoke_establishes_connection",
+    "client_connection_verified",
+    "configured_session_binding_scope",
+    "os_process_identity_established",
+    "secret_included",
+    "raw_configuration_included",
+}
+_SESSION_BINDING_SCOPE = "canonical_server_definitions_and_mcp_protocol_observations"
 
 
 class ConnectionObservationError(ValueError):
@@ -105,13 +132,35 @@ def _chain_has_symlink(path: Path, *, stop: Path) -> bool:
         current = current.parent
 
 
+def _is_sha256(value: object) -> bool:
+    return bool(
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
 def _validate_generation(value: object) -> str:
-    generation = str(value or "")
-    if len(generation) != 64 or any(
-        character not in "0123456789abcdef" for character in generation
-    ):
+    if not _is_sha256(value):
         raise ConnectionObservationError("connection_setup_generation_invalid")
-    return generation
+    return value
+
+
+def _validate_session_digest(value: object) -> str:
+    if not _is_sha256(value):
+        raise ConnectionObservationError("connection_session_binding_invalid")
+    return value
+
+
+def _new_session_digest(*, client: str, setup_generation: str) -> str:
+    projection = {
+        "client": client,
+        "nonce": secrets.token_hex(32),
+        "setup_generation": setup_generation,
+    }
+    return hashlib.sha256(
+        json.dumps(projection, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
 
 
 def _atomic_json_write(path: Path, value: Mapping[str, Any]) -> None:
@@ -156,20 +205,30 @@ def prepare_connection_state(
     workspace = Path(workspace_root).expanduser().absolute()
     if not workspace.is_dir() or workspace.is_symlink():
         raise ConnectionObservationError("connection_workspace_invalid")
-    generation = _validate_generation(setup_generation or secrets.token_hex(32))
+    if not isinstance(client, str) or not client or len(client) > 128:
+        raise ConnectionObservationError("connection_client_invalid")
+    if type(configuration_verified) is not bool or type(credential_verified) is not bool:
+        raise ConnectionObservationError("connection_configuration_state_invalid")
+    generation = _validate_generation(
+        secrets.token_hex(32) if setup_generation is None else setup_generation
+    )
+    session_digest = _new_session_digest(client=client, setup_generation=generation)
     manifest = {
         "schema_id": CONNECTION_MANIFEST_SCHEMA_ID,
         "schema_version": 1,
         "setup_generation": generation,
-        "client": str(client),
-        "configured": bool(configuration_verified and credential_verified),
-        "configuration_verified": bool(configuration_verified),
-        "credential_verified": bool(credential_verified),
+        "client": client,
+        "configured_client_session_sha256": session_digest,
+        "configured": configuration_verified and credential_verified,
+        "configuration_verified": configuration_verified,
+        "credential_verified": credential_verified,
         "servers": list(SERVER_NAMES),
         "public_tool_count": len(PUBLIC_TOOL_NAMES),
         "private_operation_count": len(PRIVATE_OPERATION_NAMES),
         "direct_server_smoke_establishes_connection": False,
         "client_connection_verified": False,
+        "configured_session_binding_scope": _SESSION_BINDING_SCOPE,
+        "os_process_identity_established": False,
         "secret_included": False,
         "raw_configuration_included": False,
     }
@@ -187,6 +246,19 @@ def prepare_connection_state(
     return deepcopy(manifest)
 
 
+def _reject_json_constant(_value: str) -> None:
+    raise ValueError("non_finite_json_value")
+
+
+def _strict_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError("duplicate_json_key")
+        value[key] = item
+    return value
+
+
 def _safe_read_json(path: Path) -> tuple[dict[str, Any], os.stat_result]:
     if path.is_symlink() or not path.is_file():
         raise ConnectionObservationError("connection_state_invalid")
@@ -194,23 +266,33 @@ def _safe_read_json(path: Path) -> tuple[dict[str, Any], os.stat_result]:
         info = path.stat()
         if info.st_size > MAX_STATE_FILE_BYTES:
             raise ConnectionObservationError("connection_state_invalid")
-        if os.name != "nt" and stat.S_IMODE(info.st_mode) & 0o077:
+        if os.name != "nt" and stat.S_IMODE(info.st_mode) != 0o600:
             raise ConnectionObservationError("connection_state_invalid")
         raw = path.read_bytes()
-        value = json.loads(raw.decode("utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        value = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_strict_json_object,
+            parse_constant=_reject_json_constant,
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError, ValueError) as exc:
         raise ConnectionObservationError("connection_state_invalid") from exc
     if not isinstance(value, dict):
         raise ConnectionObservationError("connection_state_invalid")
     return value, info
 
 
-def _new_receipt(*, setup_generation: str, server_name: str) -> dict[str, Any]:
+def _new_receipt(
+    *,
+    setup_generation: str,
+    server_name: str,
+    configured_client_session_sha256: str,
+) -> dict[str, Any]:
     return {
         "schema_id": CONNECTION_RECEIPT_SCHEMA_ID,
         "schema_version": 1,
         "setup_generation": setup_generation,
         "server_name": server_name,
+        "configured_client_session_sha256": configured_client_session_sha256,
         "client_identity_sha256": "",
         "initialized": False,
         "inventory_verified": False,
@@ -227,13 +309,35 @@ def _new_receipt(*, setup_generation: str, server_name: str) -> dict[str, Any]:
 
 
 def _valid_receipt_shape(value: Mapping[str, Any], *, server_name: str) -> bool:
-    return bool(
-        set(value) == _RECEIPT_KEYS
-        and value.get("schema_id") == CONNECTION_RECEIPT_SCHEMA_ID
+    if set(value) != _RECEIPT_KEYS:
+        return False
+    expected_names = (
+        PUBLIC_TOOL_NAMES if server_name == PUBLIC_SERVER_NAME else PRIVATE_OPERATION_NAMES
+    )
+    expected_inventory_sha256 = _inventory_digest(expected_names)
+    initialized = value.get("initialized")
+    inventory_verified = value.get("inventory_verified")
+    read_only_verified = value.get("read_only_qcoder_request_verified")
+    request_failed = value.get("qcoder_request_failed")
+    sequence = value.get("event_sequence")
+    inventory_count = value.get("inventory_count")
+    client_digest = value.get("client_identity_sha256")
+    inventory_digest = value.get("inventory_sha256")
+    if not (
+        value.get("schema_id") == CONNECTION_RECEIPT_SCHEMA_ID
+        and type(value.get("schema_version")) is int
         and value.get("schema_version") == 1
         and value.get("server_name") == server_name
-        and isinstance(value.get("event_sequence"), int)
-        and int(value.get("event_sequence", -1)) >= 0
+        and _is_sha256(value.get("setup_generation"))
+        and _is_sha256(value.get("configured_client_session_sha256"))
+        and type(sequence) is int
+        and sequence >= 0
+        and type(inventory_count) is int
+        and 0 <= inventory_count <= 1_048_576
+        and type(initialized) is bool
+        and type(inventory_verified) is bool
+        and type(read_only_verified) is bool
+        and type(request_failed) is bool
         and all(
             value.get(key) is False
             for key in (
@@ -243,23 +347,67 @@ def _valid_receipt_shape(value: Mapping[str, Any], *, server_name: str) -> bool:
                 "secret_included",
             )
         )
-    )
+    ):
+        return False
+    if initialized is False:
+        return bool(
+            sequence == 0
+            and client_digest == ""
+            and inventory_verified is False
+            and inventory_count == 0
+            and inventory_digest == ""
+            and read_only_verified is False
+            and request_failed is False
+        )
+    if not _is_sha256(client_digest) or sequence < 1:
+        return False
+    if inventory_verified is True:
+        if (
+            inventory_count != len(expected_names)
+            or inventory_digest != expected_inventory_sha256
+            or sequence < 2
+        ):
+            return False
+    elif inventory_digest != "":
+        return False
+    if server_name == PRIVATE_SERVER_NAME:
+        return read_only_verified is False and request_failed is False
+    if read_only_verified is True:
+        return bool(inventory_verified is True and request_failed is False and sequence >= 3)
+    return bool(request_failed is False or (inventory_verified is True and sequence >= 3))
 
 
 def _load_receipt_for_update(
-    path: Path, *, setup_generation: str, server_name: str
+    path: Path,
+    *,
+    setup_generation: str,
+    server_name: str,
+    configured_client_session_sha256: str,
 ) -> dict[str, Any]:
     if not path.exists():
-        return _new_receipt(setup_generation=setup_generation, server_name=server_name)
+        return _new_receipt(
+            setup_generation=setup_generation,
+            server_name=server_name,
+            configured_client_session_sha256=configured_client_session_sha256,
+        )
     try:
         value, _ = _safe_read_json(path)
     except ConnectionObservationError:
-        return _new_receipt(setup_generation=setup_generation, server_name=server_name)
+        return _new_receipt(
+            setup_generation=setup_generation,
+            server_name=server_name,
+            configured_client_session_sha256=configured_client_session_sha256,
+        )
     if (
         not _valid_receipt_shape(value, server_name=server_name)
         or value.get("setup_generation") != setup_generation
+        or value.get("configured_client_session_sha256") != configured_client_session_sha256
     ):
-        return _new_receipt(setup_generation=setup_generation, server_name=server_name)
+        return _new_receipt(
+            setup_generation=setup_generation,
+            server_name=server_name,
+            configured_client_session_sha256=configured_client_session_sha256,
+        )
     return value
 
 
@@ -285,6 +433,12 @@ def _response_result(response: Mapping[str, Any] | None) -> Mapping[str, Any] | 
     return result if isinstance(result, Mapping) else None
 
 
+def _inventory_digest(expected_names: tuple[str, ...]) -> str:
+    return hashlib.sha256(
+        json.dumps(sorted(expected_names), separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
 def _inventory_projection(
     response: Mapping[str, Any] | None, *, expected_names: tuple[str, ...]
 ) -> tuple[bool, int, str]:
@@ -298,11 +452,7 @@ def _inventory_projection(
         and all(isinstance(name, str) for name in names)
         and sorted(names) == sorted(expected_names)
     )
-    digest = (
-        hashlib.sha256(json.dumps(sorted(names), separators=(",", ":")).encode("utf-8")).hexdigest()
-        if valid
-        else ""
-    )
+    digest = _inventory_digest(expected_names) if valid else ""
     return valid, len(names), digest
 
 
@@ -329,6 +479,7 @@ def record_server_exchange(
     *,
     state_root: str | Path,
     setup_generation: str,
+    configured_client_session_sha256: str,
     server_name: str,
     request: Mapping[str, Any],
     response: Mapping[str, Any] | None,
@@ -341,6 +492,7 @@ def record_server_exchange(
 
     try:
         generation = _validate_generation(setup_generation)
+        session_digest = _validate_session_digest(configured_client_session_sha256)
         if server_name not in SERVER_NAMES or not isinstance(request, Mapping):
             return False
         root = Path(state_root).expanduser().absolute()
@@ -350,6 +502,7 @@ def record_server_exchange(
             receipt_path,
             setup_generation=generation,
             server_name=server_name,
+            configured_client_session_sha256=session_digest,
         )
         method = request.get("method")
         result = _response_result(response)
@@ -362,11 +515,15 @@ def record_server_exchange(
                 and isinstance(server_info, Mapping)
                 and server_info.get("name") == server_name
             ):
-                receipt = _new_receipt(setup_generation=generation, server_name=server_name)
-                receipt["initialized"] = True
-                receipt["client_identity_sha256"] = digest
-                receipt["event_sequence"] = 1
-                changed = True
+                if receipt.get("initialized") is False:
+                    receipt["initialized"] = True
+                    receipt["client_identity_sha256"] = digest
+                    receipt["event_sequence"] = 1
+                    changed = True
+                elif receipt.get("client_identity_sha256") == digest:
+                    # Repeated initialization from the same observed protocol identity
+                    # is not an improvement and cannot erase later successful facts.
+                    changed = False
         elif method == "tools/list" and receipt.get("initialized") is True:
             expected = (
                 PUBLIC_TOOL_NAMES if server_name == PUBLIC_SERVER_NAME else PRIVATE_OPERATION_NAMES
@@ -374,11 +531,12 @@ def record_server_exchange(
             exact, count, inventory_digest = _inventory_projection(
                 response, expected_names=expected
             )
-            receipt["inventory_verified"] = exact
-            receipt["inventory_count"] = count
-            receipt["inventory_sha256"] = inventory_digest
-            receipt["event_sequence"] = int(receipt["event_sequence"]) + 1
-            changed = True
+            if receipt.get("inventory_verified") is not True:
+                receipt["inventory_verified"] = exact
+                receipt["inventory_count"] = count
+                receipt["inventory_sha256"] = inventory_digest
+                receipt["event_sequence"] += 1
+                changed = True
         elif (
             method == "tools/call"
             and server_name == PUBLIC_SERVER_NAME
@@ -386,10 +544,11 @@ def record_server_exchange(
             and receipt.get("inventory_verified") is True
         ):
             successful = _successful_read_only_call(request, response)
-            receipt["read_only_qcoder_request_verified"] = successful
-            receipt["qcoder_request_failed"] = not successful
-            receipt["event_sequence"] = int(receipt["event_sequence"]) + 1
-            changed = True
+            if receipt.get("read_only_qcoder_request_verified") is not True:
+                receipt["read_only_qcoder_request_verified"] = successful
+                receipt["qcoder_request_failed"] = not successful
+                receipt["event_sequence"] += 1
+                changed = True
         if not changed:
             return False
         _atomic_json_write(receipt_path, receipt)
@@ -411,6 +570,10 @@ def _base_status(*, configured: bool, category: str) -> dict[str, Any]:
         "category": category,
         "client_connection_verified": False,
         "client_originated": False,
+        "configured_client_session_bound": False,
+        "observed_mcp_client_info_matched": False,
+        "connection_proof_scope": _SESSION_BINDING_SCOPE,
+        "os_process_identity_established": False,
         "servers_initialized": [],
         "public_server_initialized": False,
         "private_server_initialized": False,
@@ -430,27 +593,49 @@ def _base_status(*, configured: bool, category: str) -> dict[str, Any]:
 
 
 def _valid_manifest(value: Mapping[str, Any]) -> bool:
-    try:
-        _validate_generation(value.get("setup_generation"))
-    except ConnectionObservationError:
-        return False
     return bool(
-        value.get("schema_id") == CONNECTION_MANIFEST_SCHEMA_ID
+        set(value) == _MANIFEST_KEYS
+        and value.get("schema_id") == CONNECTION_MANIFEST_SCHEMA_ID
+        and type(value.get("schema_version")) is int
         and value.get("schema_version") == 1
+        and _is_sha256(value.get("setup_generation"))
+        and isinstance(value.get("client"), str)
+        and 0 < len(value["client"]) <= 128
+        and _is_sha256(value.get("configured_client_session_sha256"))
         and value.get("configured") is True
         and value.get("configuration_verified") is True
         and value.get("credential_verified") is True
         and value.get("servers") == list(SERVER_NAMES)
+        and type(value.get("public_tool_count")) is int
         and value.get("public_tool_count") == len(PUBLIC_TOOL_NAMES)
+        and type(value.get("private_operation_count")) is int
         and value.get("private_operation_count") == len(PRIVATE_OPERATION_NAMES)
+        and value.get("direct_server_smoke_establishes_connection") is False
+        and value.get("client_connection_verified") is False
+        and value.get("configured_session_binding_scope") == _SESSION_BINDING_SCOPE
+        and value.get("os_process_identity_established") is False
         and value.get("secret_included") is False
         and value.get("raw_configuration_included") is False
     )
 
 
+def _state_root_is_strict(workspace_root: Path, manifest_path: Path) -> bool:
+    root = manifest_path.parent
+    try:
+        if _chain_has_symlink(root, stop=workspace_root) or not root.is_dir():
+            return False
+        return os.name == "nt" or stat.S_IMODE(root.stat().st_mode) == 0o700
+    except OSError:
+        return False
+
+
 def _evaluate_connection(workspace_root: Path) -> dict[str, Any]:
     manifest_path, public_path, private_path = connection_state_paths(workspace_root)
-    if not manifest_path.exists() or manifest_path.is_symlink():
+    if (
+        not _state_root_is_strict(workspace_root, manifest_path)
+        or not manifest_path.exists()
+        or manifest_path.is_symlink()
+    ):
         return _base_status(configured=False, category="qcoder_not_configured")
     try:
         manifest, manifest_info = _safe_read_json(manifest_path)
@@ -483,12 +668,20 @@ def _evaluate_connection(workspace_root: Path) -> dict[str, Any]:
     public, public_info = receipts[PUBLIC_SERVER_NAME]
     private, private_info = receipts[PRIVATE_SERVER_NAME]
     generation = manifest["setup_generation"]
+    session_digest = manifest["configured_client_session_sha256"]
     if (
         public.get("setup_generation") != generation
         or private.get("setup_generation") != generation
     ):
         status["category"] = "connection_receipt_generation_mismatch"
         return status
+    if (
+        public.get("configured_client_session_sha256") != session_digest
+        or private.get("configured_client_session_sha256") != session_digest
+    ):
+        status["category"] = "connection_receipt_session_mismatch"
+        return status
+    status["configured_client_session_bound"] = True
     status["public_server_initialized"] = public.get("initialized") is True
     status["private_server_initialized"] = private.get("initialized") is True
     status["servers_initialized"] = [
@@ -510,13 +703,14 @@ def _evaluate_connection(workspace_root: Path) -> dict[str, Any]:
     ):
         status["category"] = "connection_observation_window_mismatch"
         return status
+    status["observed_mcp_client_info_matched"] = True
     status["public_tool_inventory_verified"] = public.get("inventory_verified") is True
-    status["public_tools_discovered"] = int(public.get("inventory_count") or 0)
+    status["public_tools_discovered"] = public["inventory_count"]
     if not status["public_tool_inventory_verified"]:
         status["category"] = "public_tool_inventory_not_verified"
         return status
     status["private_operation_inventory_verified"] = private.get("inventory_verified") is True
-    status["private_operations_discovered"] = int(private.get("inventory_count") or 0)
+    status["private_operations_discovered"] = private["inventory_count"]
     if not status["private_operation_inventory_verified"]:
         status["category"] = "private_operation_inventory_not_verified"
         return status

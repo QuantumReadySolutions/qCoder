@@ -108,6 +108,14 @@ def cursor_post_write_hook_definition(*, executable: str | Path) -> dict[str, An
     return cursor_after_file_edit_hook_definition(executable=executable)
 
 
+def _is_lower_sha256(value: object) -> bool:
+    return bool(
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
 def _hooks_path(workspace_root: str | Path) -> Path:
     return Path(workspace_root).expanduser().absolute() / ".cursor" / "hooks.json"
 
@@ -190,6 +198,7 @@ def cursor_binding_mcp_server_definition(
     workspace_root: str | Path,
     connection_state_root: str | Path | None = None,
     connection_generation: str | None = None,
+    configured_client_session_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Return the project-local private structured-activation MCP server."""
 
@@ -200,13 +209,28 @@ def cursor_binding_mcp_server_definition(
         "--workspace",
         str(Path(workspace_root).expanduser().absolute()),
     ]
-    if connection_state_root is not None and connection_generation is not None:
+    observation_values = (
+        connection_state_root,
+        connection_generation,
+        configured_client_session_sha256,
+    )
+    if any(value is not None for value in observation_values) and not all(
+        value is not None for value in observation_values
+    ):
+        raise CursorPostWriteHookError("connection_observation_binding_incomplete")
+    if all(value is not None for value in observation_values):
+        if not _is_lower_sha256(connection_generation):
+            raise CursorPostWriteHookError("connection_setup_generation_invalid")
+        if not _is_lower_sha256(configured_client_session_sha256):
+            raise CursorPostWriteHookError("connection_session_binding_invalid")
         args.extend(
             [
                 "--connection-state-root",
                 str(Path(connection_state_root).expanduser().absolute()),
                 "--connection-generation",
                 connection_generation,
+                "--connection-session-sha256",
+                configured_client_session_sha256,
             ]
         )
     args.append("serve-binding-mcp")
@@ -247,6 +271,7 @@ def cursor_post_write_hook_status(
     executable: str | Path,
     connection_state_root: str | Path | None = None,
     connection_generation: str | None = None,
+    configured_client_session_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Verify the exact project-local hooks without modifying the workspace."""
 
@@ -259,6 +284,7 @@ def cursor_post_write_hook_status(
         workspace_root=workspace_root,
         connection_state_root=connection_state_root,
         connection_generation=connection_generation,
+        configured_client_session_sha256=configured_client_session_sha256,
     )
     result = {
         "schema_id": CURSOR_POST_WRITE_HOOK_SCHEMA_ID,
@@ -354,6 +380,7 @@ def install_cursor_post_write_hook(
     executable: str | Path | None = None,
     connection_state_root: str | Path | None = None,
     connection_generation: str | None = None,
+    configured_client_session_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Install structured activation, redundant edit signals, and bounded recovery."""
 
@@ -442,6 +469,7 @@ def install_cursor_post_write_hook(
         workspace_root=workspace,
         connection_state_root=connection_state_root,
         connection_generation=connection_generation,
+        configured_client_session_sha256=configured_client_session_sha256,
     )
     existing_binding = mcp_servers.get(BINDING_MCP_SERVER_NAME)
     predecessor_binding = cursor_binding_mcp_server_definition(
@@ -475,6 +503,7 @@ def install_cursor_post_write_hook(
         executable=runtime,
         connection_state_root=connection_state_root,
         connection_generation=connection_generation,
+        configured_client_session_sha256=configured_client_session_sha256,
     )
     if status.get("configured") is not True:
         raise CursorPostWriteHookError("cursor_hook_installation_verification_failed")

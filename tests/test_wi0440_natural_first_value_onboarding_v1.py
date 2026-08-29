@@ -133,11 +133,17 @@ def test_one_managed_setup_configures_existing_12_plus_2_without_claiming_connec
     manifest_path = workspace / ".qcoder/context-bridge/connection-manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     generation = manifest["setup_generation"]
+    session_digest = manifest["configured_client_session_sha256"]
     state_root = str(manifest_path.parent)
     assert public_args[public_args.index("--connection-state-root") + 1] == state_root
     assert public_args[public_args.index("--connection-generation") + 1] == generation
+    assert public_args[public_args.index("--connection-session-sha256") + 1] == session_digest
     assert private_args[private_args.index("--connection-state-root") + 1] == state_root
     assert private_args[private_args.index("--connection-generation") + 1] == generation
+    assert private_args[private_args.index("--connection-session-sha256") + 1] == session_digest
+    assert len(session_digest) == 64
+    assert result["configured_client_session_sha256"] == session_digest
+    assert result["os_process_identity_established"] is False
     configured_status = connection_status(workspace_root=workspace)
     assert configured_status["customer_result"] == "qCoder configured"
     assert configured_status["category"] == "client_mcp_initialization_not_observed"

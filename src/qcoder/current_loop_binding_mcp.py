@@ -843,12 +843,14 @@ def _record_connection_exchange_best_effort(
     *,
     connection_state_root: str | Path | None,
     connection_generation: str | None,
+    connection_session_sha256: str | None,
     message: object,
     response: Mapping[str, Any] | None,
 ) -> None:
     if (
         connection_state_root is None
         or connection_generation is None
+        or connection_session_sha256 is None
         or not isinstance(message, Mapping)
     ):
         return
@@ -856,6 +858,7 @@ def _record_connection_exchange_best_effort(
         record_server_exchange(
             state_root=connection_state_root,
             setup_generation=connection_generation,
+            configured_client_session_sha256=connection_session_sha256,
             server_name=BINDING_MCP_SERVER_NAME,
             request=message,
             response=response,
@@ -869,6 +872,7 @@ def serve_binding_mcp_stdio(
     workspace_root: str | Path,
     connection_state_root: str | Path | None = None,
     connection_generation: str | None = None,
+    connection_session_sha256: str | None = None,
 ) -> int:
     """Serve the internal binding MCP over JSON-lines or Content-Length stdio."""
 
@@ -916,6 +920,7 @@ def serve_binding_mcp_stdio(
             _record_connection_exchange_best_effort(
                 connection_state_root=connection_state_root,
                 connection_generation=connection_generation,
+                connection_session_sha256=connection_session_sha256,
                 message=message,
                 response=response,
             )

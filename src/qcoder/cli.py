@@ -1059,6 +1059,11 @@ def _cmd_current_loop(argv: list[str]) -> int:
         help=argparse.SUPPRESS,
     )
     parser.add_argument(
+        "--connection-session-sha256",
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
         "--state-file",
         default=None,
         help="Explicit external local-state file; never selected automatically.",
@@ -2050,6 +2055,7 @@ def _cmd_current_loop(argv: list[str]) -> int:
             workspace_root=args.workspace,
             connection_state_root=args.connection_state_root,
             connection_generation=args.connection_generation,
+            connection_session_sha256=args.connection_session_sha256,
         )
     transport = None
     credential_source = None

@@ -121,6 +121,14 @@ def _load_mcp(snapshot: _FileSnapshot) -> dict[str, Any]:
     return value
 
 
+def _is_lower_sha256(value: object) -> bool:
+    return bool(
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
 def public_server_definition(
     *,
     executable: str | Path,
@@ -130,6 +138,7 @@ def public_server_definition(
     base_url: str,
     connection_state_root: str | Path | None = None,
     connection_generation: str | None = None,
+    configured_client_session_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Return one nonsecret explicit-profile definition for the public server."""
 
@@ -148,13 +157,28 @@ def public_server_definition(
         "--base-url",
         base_url,
     ]
-    if connection_state_root is not None and connection_generation is not None:
+    observation_values = (
+        connection_state_root,
+        connection_generation,
+        configured_client_session_sha256,
+    )
+    if any(value is not None for value in observation_values) and not all(
+        value is not None for value in observation_values
+    ):
+        raise ContextBridgeSetupError("connection_observation_binding_incomplete")
+    if all(value is not None for value in observation_values):
+        if not _is_lower_sha256(connection_generation):
+            raise ContextBridgeSetupError("connection_setup_generation_invalid")
+        if not _is_lower_sha256(configured_client_session_sha256):
+            raise ContextBridgeSetupError("connection_session_binding_invalid")
         arguments.extend(
             [
                 "--connection-state-root",
                 str(Path(connection_state_root).expanduser().absolute()),
                 "--connection-generation",
                 str(connection_generation),
+                "--connection-session-sha256",
+                str(configured_client_session_sha256),
             ]
         )
     return {
@@ -234,6 +258,7 @@ def configure_cursor_workspace(
         )
         state_root = connection_state_root(workspace)
         generation = str(manifest["setup_generation"])
+        session_digest = str(manifest["configured_client_session_sha256"])
         expected_public = public_server_definition(
             executable=runtime,
             selected=selected,
@@ -242,6 +267,7 @@ def configure_cursor_workspace(
             base_url=base_url,
             connection_state_root=state_root,
             connection_generation=generation,
+            configured_client_session_sha256=session_digest,
         )
         current_public = existing_mcp["mcpServers"].get(PUBLIC_SERVER_NAME)
         if current_public is not None and current_public not in (
@@ -254,6 +280,7 @@ def configure_cursor_workspace(
             executable=runtime,
             connection_state_root=state_root,
             connection_generation=generation,
+            configured_client_session_sha256=session_digest,
         )
         current = _read_snapshot(mcp_path)
         mcp_value = _load_mcp(current)
@@ -265,6 +292,7 @@ def configure_cursor_workspace(
             executable=runtime,
             connection_state_root=state_root,
             connection_generation=generation,
+            configured_client_session_sha256=session_digest,
         )
         verified = _load_mcp(_read_snapshot(mcp_path))
         if (
@@ -319,6 +347,11 @@ def configure_cursor_workspace(
         "canonical_server_definitions_verified": True,
         "credential_verified": True,
         "credential_preflight_verified": True,
+        "configured_client_session_sha256": session_digest,
+        "configured_session_binding_scope": (
+            "canonical_server_definitions_and_mcp_protocol_observations"
+        ),
+        "os_process_identity_established": False,
         "direct_server_smoke_verified": True,
         "client_originated_initialization_verified": False,
         "client_originated_inventory_verified": False,
@@ -364,6 +397,9 @@ def setup_contract_snapshot() -> dict[str, Any]:
         "selected_credential_failure_fallback": False,
         "configuration_transaction": "restore_exact_prior_files_on_failure",
         "client_originated_connection_verification": True,
+        "configured_session_binding": "fresh_nonsecret_digest_in_both_server_definitions",
+        "observed_protocol_identity_binding": "same_mcp_client_info_digest_across_both_servers",
+        "os_process_identity_established": False,
         "direct_server_smoke_establishes_connection": False,
         "direct_server_smoke_establishes_client_connection": False,
         "connection_verification_command": "qcoder context-bridge verify-connection",

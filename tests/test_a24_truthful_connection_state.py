@@ -59,32 +59,21 @@ def _write_manifest(
     setup_generation: str = SETUP_GENERATION,
     configured: bool = True,
 ) -> Path:
-    root = _state_root(workspace)
-    root.mkdir(parents=True)
-    path = root / "connection-manifest.json"
-    path.write_text(
-        json.dumps(
-            {
-                "schema_id": "qcoder.context_bridge.connection_manifest.v1",
-                "schema_version": 1,
-                "setup_generation": setup_generation,
-                "client": "cursor",
-                "configured": configured,
-                "configuration_verified": configured,
-                "credential_verified": configured,
-                "servers": [PUBLIC_SERVER, PRIVATE_SERVER],
-                "public_tool_count": 12,
-                "private_operation_count": 2,
-                "secret_included": False,
-                "raw_configuration_included": False,
-            },
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
+    connection.prepare_connection_state(
+        workspace,
+        client="cursor",
+        configuration_verified=configured,
+        credential_verified=configured,
+        setup_generation=setup_generation,
     )
-    path.chmod(0o600)
-    return path
+    return _state_root(workspace) / "connection-manifest.json"
+
+
+def _session_digest(workspace: Path) -> str:
+    value = json.loads(
+        (_state_root(workspace) / "connection-manifest.json").read_text(encoding="utf-8")
+    )
+    return str(value["configured_client_session_sha256"])
 
 
 def _token_file(workspace: Path) -> Path:
@@ -151,10 +140,12 @@ def _record(
     response: dict,
     *,
     generation: str = SETUP_GENERATION,
+    session_digest: str | None = None,
 ) -> None:
     connection.record_server_exchange(
         state_root=_state_root(workspace),
         setup_generation=generation,
+        configured_client_session_sha256=session_digest or _session_digest(workspace),
         server_name=server_name,
         request=request,
         response=response,
@@ -283,11 +274,7 @@ def test_direct_server_readiness_and_exact_configuration_mean_configured_only(
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    manifest = _write_manifest(workspace)
-    value = json.loads(manifest.read_text(encoding="utf-8"))
-    value["direct_server_smoke_passed"] = True
-    value["server_inventory_verified_without_client"] = True
-    manifest.write_text(json.dumps(value, sort_keys=True) + "\n", encoding="utf-8")
+    _write_manifest(workspace)
 
     status = connection.connection_status(workspace_root=workspace)
 
@@ -559,10 +546,7 @@ def test_verify_connection_cli_reports_connected_only_after_complete_proof(
     _write_manifest(workspace)
     _record_complete_connection(workspace)
 
-    assert (
-        context_bridge_main(["verify-connection", "--workspace", str(workspace), "--json"])
-        == 0
-    )
+    assert context_bridge_main(["verify-connection", "--workspace", str(workspace), "--json"]) == 0
     result = json.loads(capsys.readouterr().out)
     assert result["customer_result"] == "qCoder connected"
     assert result["client_connection_verified"] is True
