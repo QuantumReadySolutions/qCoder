@@ -127,7 +127,7 @@ def evaluate(document: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("campaign_client_profile_mismatch")
     if document.get("public_version") != "0.6.0a22":
         raise ValueError("campaign_public_version_mismatch")
-    if document.get("candidate_version") != "0.6.0a23":
+    if document.get("candidate_version") != "0.6.0a24":
         raise ValueError("campaign_candidate_version_mismatch")
     if document.get("raw_evidence_retained") is not False:
         raise ValueError("campaign_raw_evidence_retention_invalid")

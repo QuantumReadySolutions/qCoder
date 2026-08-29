@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.6.0a24
+
+Public upgrade predecessor: qCoder 0.6.0a22. The a22 → a24 relationship is behavior-changing.
+
+Implementation lineage predecessor: frozen terminal unpublished qCoder 0.6.0a23 at commit
+`9c984936ab0067d2109eb24b9b1ea072b09b686d`. The a23 → a24 relationship is
+behavior-changing. The a23 artifacts are consumed, terminal, do-not-publish evidence and are not
+a customer upgrade predecessor.
+
+Product correction basis: commit `59f0755e965f55a782d220f292ddb8e789af35a1`. That exact
+product basis → a24 relationship preserves runtime implementation and product behavior except
+for release identity, release-truth documentation, mechanically resulting package metadata, and
+release-only verification.
+
+- Report managed setup truthfully as `qCoder configured`; setup verifies credential selection,
+  canonical server definitions, and direct server readiness but does not claim a client connection.
+- Add a bounded `qcoder context-bridge verify-connection` diagnostic. `qCoder connected` now
+  requires one actual client to initialize both canonical servers, discover exactly twelve public
+  tools and two private operations, and complete one successful read-only qCoder request.
+- Retain only bounded sanitized connection observations; direct-server smoke and partial, mixed,
+  stale, invalid, or failed client evidence cannot establish connection or qualification.
+- Advance the connected-assistant contract from binding v47 / schema 46 to binding v48 / schema
+  47 while preserving Binding MCP v12, Current Step Contract v11, request semantics v5, state
+  schema v16, Evidence Review, Algorithm Blueprint, Current Loop, exactly twelve public tools,
+  and exactly two private Current Loop operations.
+- Keep publication, deployment, named-client qualification, compatibility, performance, website,
+  and marketing claims as separate lifecycle and product decisions.
+
 ## 0.6.0a23
 
 Public upgrade predecessor: qCoder 0.6.0a22. The a22 → a23 relationship is behavior-changing.

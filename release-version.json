@@ -1,6 +1,6 @@
 {
   "schema": "qcoder.release_version_source.v3",
-  "source_version": "0.6.0a23",
+  "source_version": "0.6.0a24",
   "release_identity_kind": "prerelease_successor",
   "publication_state_authority": "external_release_control",
   "public_upgrade_predecessor": {
@@ -11,10 +11,16 @@
     "relationship_to_source": "behavior_changing"
   },
   "implementation_lineage_predecessor": {
-    "version": "0.6.0a22.dev2+wi0440.natural.first.value.v1",
-    "source_commit": "a0d0d39237c2e51c0346fdc0214566c4d473639c",
-    "source_tree": "580188c5b3225297382fda1e7a8c4a407d393d62",
-    "state": "accepted_private_unfrozen_development_candidate_selected_as_a23_implementation_predecessor_not_publishable",
+    "version": "0.6.0a23",
+    "source_commit": "9c984936ab0067d2109eb24b9b1ea072b09b686d",
+    "source_tree": "ea21765a855ed03642e729b10453bdfc17b8d27e",
+    "state": "consumed_terminal_unpublished_do_not_publish",
+    "relationship_to_source": "behavior_changing"
+  },
+  "product_correction_basis": {
+    "source_commit": "59f0755e965f55a782d220f292ddb8e789af35a1",
+    "source_tree": "457352e54bc0320aff00efaaddf66634ba8233a5",
+    "state": "private_unfrozen_a24_truthful_connection_state_product_basis_not_publishable",
     "relationship_to_source": "behavior_preserving_except_release_identity_release_truth_mechanically_resulting_package_metadata_and_release_only_verification"
   },
   "intervening_nonpublic_versions": []

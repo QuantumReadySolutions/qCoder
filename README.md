@@ -1,24 +1,24 @@
 # qCoder
 
-qCoder 0.6.0a23 is a behavior-changing pre-release successor to public qCoder 0.6.0a22. Its
-runtime implementation and product behavior are preserved from the accepted private qCoder
-0.6.0a22.dev2+wi0440.natural.first.value.v1 candidate at commit
-`a0d0d39237c2e51c0346fdc0214566c4d473639c`, except for release identity, release-truth
-documentation, mechanically resulting package metadata, and release-only verification. The
-private candidate was never public and is not a customer upgrade predecessor.
+qCoder 0.6.0a24 is a behavior-changing pre-release successor to public qCoder 0.6.0a22. Public
+qCoder 0.6.0a22 is its customer upgrade predecessor. Frozen qCoder 0.6.0a23 at commit
+`9c984936ab0067d2109eb24b9b1ea072b09b686d` is the implementation lineage predecessor; a23 is
+unpublished, consumed, terminal, do-not-publish evidence and is not a customer release.
 
-The public upgrade relationship is qCoder 0.6.0a22 → qCoder 0.6.0a23. The implementation lineage
-relationship is qCoder 0.6.0a22.dev2+wi0440.natural.first.value.v1 → qCoder 0.6.0a23. These
-relationships are distinct and must not be conflated.
+The a24 product correction basis is commit `59f0755e965f55a782d220f292ddb8e789af35a1`,
+tree `457352e54bc0320aff00efaaddf66634ba8233a5`. That exact basis → a24 relationship
+preserves runtime implementation and product behavior except for release identity, release-truth
+documentation, mechanically resulting package metadata, and release-only verification. The public
+a22 → a24 and terminal a23 → a24 relationships are behavior-changing.
 
-Relative to public qCoder 0.6.0a22, qCoder 0.6.0a23 adds deterministic named Context Bridge
-profile selection, one transactional managed 12+2 setup that preserves unrelated configuration
-and restores exact prior configuration on failure, and an Algorithm Blueprint first-value path
-that presents its recommended interpretation and bounded choices before explicit confirmation.
-The connected-assistant contract advances from binding v45 / schema 44 to binding v47 / schema
-46 while preserving Binding MCP v12, Current Step Contract v11, request semantics v5, state
-schema v16, exactly twelve public tools, and exactly two private Current Loop operations. The
-a22 → a23 upgrade is not behavior-preserving and is not a supported mid-step migration.
+Relative to a23, qCoder 0.6.0a24 corrects the customer-visible distinction between a configured
+client workspace and a connected client. Managed setup now reports `qCoder configured`. A bounded
+verification command reports `qCoder connected` only after an actual client initializes both
+canonical MCP servers, discovers exactly twelve public tools plus two private operations, and
+completes a successful read-only qCoder request. Direct server smoke is only a credential and
+server-readiness preflight. Evidence Review, Algorithm Blueprint, Current Loop, Binding MCP v12,
+Current Step Contract v11, request semantics v5, and state schema v16 are preserved. The umbrella
+connected-assistant contract advances from binding v47 / schema 46 to binding v48 / schema 47.
 
 Plain 0.6.0a19 remains intentionally reserved and has no accepted frozen or public candidate.
 Plain 0.6.0a20 and plain 0.6.0a21 are immutable, unpublished, technically qualified,
@@ -26,25 +26,24 @@ publication-truth-rejected, terminal, do-not-publish candidates. They are retain
 customer releases or upgrade predecessors, and must not be repaired, rebuilt, replaced, tagged,
 published, or selected again.
 
-The accepted private qCoder 0.6.0a22.dev2+wi0440.natural.first.value.v1 candidate is the sole
-implementation predecessor for a23. It remains an unfrozen, unpublishable development identity
-and must not be relabelled, uploaded, or treated as a customer release.
+Frozen qCoder 0.6.0a23 is the sole implementation lineage predecessor for a24. It must not be
+published, repaired, rebuilt, replaced, tagged, or treated as a customer release.
 
 ## Upgrading from qCoder 0.6.0a22
 
-Install qCoder 0.6.0a23 for a new installation or before starting a new Current Loop. If qCoder
+Install qCoder 0.6.0a24 for a new installation or before starting a new Current Loop. If qCoder
 0.6.0a22 already has an active Current Loop, upgrade only at a clean Current Loop boundary:
 before a new loop begins or after the current loop has reached a truthful terminal boundary.
 
 Do not upgrade while any binding v45 / Current Step Contract v11 step, completion, continuation
 capsule, pending receipt, or recovery action remains outstanding. Finish the outstanding step on
-qCoder 0.6.0a22, or explicitly abandon it and restart the work under qCoder 0.6.0a23 at a clean
+qCoder 0.6.0a22, or explicitly abandon it and restart the work under qCoder 0.6.0a24 at a clean
 boundary.
 
 qCoder does not support or claim mid-step migration from binding v45 / Current Step Contract v11
-to binding v47 / Current Step Contract v11. A v45/v11 operation receipt, authority grant,
+to binding v48 / Current Step Contract v11. A v45/v11 operation receipt, authority grant,
 completion input, continuation capsule, or pending step must not be reused or reinterpreted under
-v47/v11. Project evidence history may remain; this boundary applies to the active step.
+v48/v11. Project evidence history may remain; this boundary applies to the active step.
 
 This release makes no latency, speed, p95, responsiveness, overhead, quiet-operation, or
 consistency guarantee; does not establish universal framework neutrality, general framework
@@ -77,7 +76,7 @@ adapter for eligible Explorer users. Pro is not launched and is not a current pu
 
 - **OSS commands** (`analyze`, `batch`, `context`, `review`) are Apache-2.0, local-first/offline, and useful without an account or token. They do not upload data, call a qCoder hosted service, or run QPU/simulator jobs.
 - **Explorer Beta commands** (`qcoder explorer status`, `qcoder explorer demo`, `qcoder explorer evidence`) are account-backed checks for Explorer Beta status, built-in guided evidence samples, and derived-context guided evidence for user-owned OpenQASM 2 artifacts. The older `qcoder student ...` commands remain available as beta compatibility aliases.
-- **Context Bridge adapter commands** (`qcoder context-bridge mcp serve`, `qcoder context-bridge mcp smoke`) are for eligible Explorer users who create a display-once token through Account Center. Support handles revocation and lost-token replacement. The adapter exposes bounded current-evidence context tools to a configured connected client and reads the token from a local token file. Client qualification is separate from connection or tool discovery.
+- **Context Bridge adapter commands** (`qcoder context-bridge setup`, `qcoder context-bridge verify-connection`, `qcoder context-bridge mcp serve`, `qcoder context-bridge mcp smoke`) are for eligible Explorer users who create a display-once token through Account Center. Support handles revocation and lost-token replacement. Setup configures the canonical two-server 12+2 topology and verifies credential/server readiness. It does not claim that a client connected. Connection requires client-originated initialization, exact discovery, and a successful read-only qCoder request. Client qualification remains separate.
 - Explorer Beta custom evidence uses locally derived qCoder context/features. The CLI may read QASM locally, but the hosted request must not include raw QASM, raw source text, local paths, operation lists, raw counts, notebooks, prompts, tokens, auth headers, or cookies.
 - Explorer Beta custom evidence is stateless in this v0 slice; it does not create persistent Explorer history.
 - **`qcoder pro` bootstrap/workflow commands** are archived pilot/client-contract surfaces. They are not a Pro purchase path, not a current public signup path, and not generally available hosted Pro.
@@ -109,9 +108,10 @@ Narrowing applies immediately; broadening requires explicit confirmation.
 Finish or restart an active qCoder loop before upgrading. The version boundary fails closed
 instead of silently reinterpreting old authority data.
 
-Version 0.6.0a23 preserves qCoder 0.6.0a22's routine source terminal-closure behavior and Current
-Step Contract v11 while advancing the connected-assistant binding to v47 for managed setup and
-first-value dialogue. Plain 0.6.0a19 remains intentionally reserved. Plain 0.6.0a20 and plain
+Version 0.6.0a24 preserves qCoder 0.6.0a22's routine source terminal-closure behavior and Current
+Step Contract v11 while advancing the connected-assistant binding to v48 for truthful connection
+state, managed setup, and first-value dialogue. Frozen a23 is consumed, terminal, and
+do-not-publish. Plain 0.6.0a19 remains intentionally reserved. Plain 0.6.0a20 and plain
 0.6.0a21 remain immutable, unpublished, technically qualified, publication-truth rejected,
 terminal, and do-not-publish. Package publication does not activate a named-client support,
 compatibility, or performance claim.
@@ -247,8 +247,8 @@ Core Evidence Review output uses these provenance and evidence-status labels: **
 Local qCoder OSS commands provide deterministic local analysis and review artifacts. Circuit
 Workbench is the machine-local selected-evidence surface for explicitly supplied artifacts. Explorer
 Evidence Review supplies bounded current-session interpretation within the complete Explorer
-Context Loop; Context Bridge carries the operations into a configured connected client but does not own
-the workflow or retain lineage. ChatGPT uses a manual share-safe Prompt Context handoff and is
+Context Loop; Context Bridge carries the operations into a client whose connection has been
+verified, but does not own the workflow or retain lineage. ChatGPT uses a manual share-safe Prompt Context handoff and is
 not a connected Context Bridge client.
 
 See the sanitized [`Evidence Review walkthrough`](examples/08_evidence_review.md).
@@ -281,11 +281,11 @@ See the synthetic [`Algorithm Blueprint walkthrough`](examples/09_algorithm_blue
 
 ## Quick start
 
-qCoder 0.6.0a23 is a pre-release. It is not a stable or generally available release. Package
+qCoder 0.6.0a24 is a pre-release. It is not a stable or generally available release. Package
 publication and named-client support claims are governed separately. The commands below describe
 behavior present in this pre-release; public qCoder 0.6.0a22 remains the public upgrade
-predecessor, plain a17 remains a rejected immutable candidate, and terminal plain a20 and a21 are
-not publication targets.
+predecessor; plain a17 remains a rejected immutable candidate; terminal plain a20, a21, and a23
+are not publication targets.
 
 Analyze a circuit:
 
@@ -328,11 +328,26 @@ qcoder explorer evidence --context-json preflight.context.json
 qcoder explorer evidence --qasm path/to/circuit.qasm --out-json explorer.json --out-md explorer.md --share-safe
 python -m qcoder context-bridge mcp serve --help
 python -m qcoder context-bridge mcp smoke --token-file ~/.qcoder/context-bridge/token.txt
+qcoder context-bridge setup --workspace /exact/trusted/workspace
+qcoder context-bridge verify-connection --workspace /exact/trusted/workspace
 python -m qcoder current-loop --help
 qcoder pro --help
 ```
 
-Run the Context Bridge commands in the Python environment where qCoder is installed. The default smoke prints a concise connection result. Add `--json` for structured troubleshooting, or `--full` for the exhaustive support/release diagnostic; full mode stops without automatic retry when the current rate window requires a pause.
+Run the Context Bridge commands in the Python environment where qCoder is installed. The default
+smoke is a direct credential/server-readiness preflight; it does not establish a client
+connection. Add `--json` for structured troubleshooting, or `--full` for the exhaustive
+support/release diagnostic; full mode stops without automatic retry when the current rate window
+requires a pause.
+
+Managed setup returns `qCoder configured` after the credential selection and canonical
+`qcoder-context-bridge` plus `qcoder-current-loop` definitions are verified. Reload the configured
+client, ask it `Use qCoder to check this connection.`, then run `verify-connection` for the same
+exact workspace. The verifier waits only when `--wait-seconds` is supplied (maximum 30 seconds),
+returns a bounded category on incomplete or invalid evidence, and reports `qCoder connected` only
+after that client initializes both servers, discovers exact 12+2, and completes one successful
+read-only qCoder request. Add `--json` for sanitized diagnostics. Neither configured nor connected
+creates a named-client qualification or support claim.
 
 Connected clients receive an explicit opt-in Current Loop instruction from the local Context Bridge
 server. The instruction activates only after the customer asks to use qCoder or accepts an offer,

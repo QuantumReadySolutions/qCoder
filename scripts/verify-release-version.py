@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the fail-closed qCoder 0.6.0a23 release identity and lineage."""
+"""Verify the fail-closed qCoder 0.6.0a24 release identity and lineage."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 release tooling
 
 RELEASE_METADATA_FILENAME = "release-version.json"
 RELEASE_METADATA_SCHEMA = "qcoder.release_version_source.v3"
-EXPECTED_VERSION = "0.6.0a23"
+EXPECTED_VERSION = "0.6.0a24"
 PUBLIC_PREDECESSOR = {
     "version": "0.6.0a22",
     "source_commit": "eafc00fd9ebd99f0fa485261f388612278407092",
@@ -27,39 +27,39 @@ PUBLIC_PREDECESSOR = {
     "relationship_to_source": "behavior_changing",
 }
 LINEAGE_PREDECESSOR = {
-    "version": "0.6.0a22.dev2+wi0440.natural.first.value.v1",
-    "source_commit": "a0d0d39237c2e51c0346fdc0214566c4d473639c",
-    "source_tree": "580188c5b3225297382fda1e7a8c4a407d393d62",
-    "state": (
-        "accepted_private_unfrozen_development_candidate_selected_as_a23_"
-        "implementation_predecessor_not_publishable"
-    ),
-    "relationship_to_source": (
-        "behavior_preserving_except_release_identity_release_truth_mechanically_"
-        "resulting_package_metadata_and_release_only_verification"
-    ),
+    "version": "0.6.0a23",
+    "source_commit": "9c984936ab0067d2109eb24b9b1ea072b09b686d",
+    "source_tree": "ea21765a855ed03642e729b10453bdfc17b8d27e",
+    "state": "consumed_terminal_unpublished_do_not_publish",
+    "relationship_to_source": "behavior_changing",
+}
+PRODUCT_CORRECTION_BASIS = {
+    "source_commit": "59f0755e965f55a782d220f292ddb8e789af35a1",
+    "source_tree": "457352e54bc0320aff00efaaddf66634ba8233a5",
+    "state": "private_unfrozen_a24_truthful_connection_state_product_basis_not_publishable",
+    "relationship_to_source": "behavior_preserving_except_release_identity_release_truth_mechanically_resulting_package_metadata_and_release_only_verification",
 }
 INTERVENING: list[dict[str, str]] = []
 
-RELATIONSHIP_PRODUCT_BLOCK = """qCoder 0.6.0a23 is a behavior-changing pre-release successor to public qCoder 0.6.0a22. Its
-runtime implementation and product behavior are preserved from the accepted private qCoder
-0.6.0a22.dev2+wi0440.natural.first.value.v1 candidate at commit
-`a0d0d39237c2e51c0346fdc0214566c4d473639c`, except for release identity, release-truth
-documentation, mechanically resulting package metadata, and release-only verification. The
-private candidate was never public and is not a customer upgrade predecessor.
+RELATIONSHIP_PRODUCT_BLOCK = """qCoder 0.6.0a24 is a behavior-changing pre-release successor to public qCoder 0.6.0a22. Public
+qCoder 0.6.0a22 is its customer upgrade predecessor. Frozen qCoder 0.6.0a23 at commit
+`9c984936ab0067d2109eb24b9b1ea072b09b686d` is the implementation lineage predecessor; a23 is
+unpublished, consumed, terminal, do-not-publish evidence and is not a customer release.
 
-The public upgrade relationship is qCoder 0.6.0a22 → qCoder 0.6.0a23. The implementation lineage
-relationship is qCoder 0.6.0a22.dev2+wi0440.natural.first.value.v1 → qCoder 0.6.0a23. These
-relationships are distinct and must not be conflated.
+The a24 product correction basis is commit `59f0755e965f55a782d220f292ddb8e789af35a1`,
+tree `457352e54bc0320aff00efaaddf66634ba8233a5`. That exact basis → a24 relationship
+preserves runtime implementation and product behavior except for release identity, release-truth
+documentation, mechanically resulting package metadata, and release-only verification. The public
+a22 → a24 and terminal a23 → a24 relationships are behavior-changing.
 
-Relative to public qCoder 0.6.0a22, qCoder 0.6.0a23 adds deterministic named Context Bridge
-profile selection, one transactional managed 12+2 setup that preserves unrelated configuration
-and restores exact prior configuration on failure, and an Algorithm Blueprint first-value path
-that presents its recommended interpretation and bounded choices before explicit confirmation.
-The connected-assistant contract advances from binding v45 / schema 44 to binding v47 / schema
-46 while preserving Binding MCP v12, Current Step Contract v11, request semantics v5, state
-schema v16, exactly twelve public tools, and exactly two private Current Loop operations. The
-a22 → a23 upgrade is not behavior-preserving and is not a supported mid-step migration."""
+Relative to a23, qCoder 0.6.0a24 corrects the customer-visible distinction between a configured
+client workspace and a connected client. Managed setup now reports `qCoder configured`. A bounded
+verification command reports `qCoder connected` only after an actual client initializes both
+canonical MCP servers, discovers exactly twelve public tools plus two private operations, and
+completes a successful read-only qCoder request. Direct server smoke is only a credential and
+server-readiness preflight. Evidence Review, Algorithm Blueprint, Current Loop, Binding MCP v12,
+Current Step Contract v11, request semantics v5, and state schema v16 are preserved. The umbrella
+connected-assistant contract advances from binding v47 / schema 46 to binding v48 / schema 47."""
 
 HISTORICAL_STATUS_BLOCK = """Plain 0.6.0a19 remains intentionally reserved and has no accepted frozen or public candidate.
 Plain 0.6.0a20 and plain 0.6.0a21 are immutable, unpublished, technically qualified,
@@ -67,23 +67,22 @@ publication-truth-rejected, terminal, do-not-publish candidates. They are retain
 customer releases or upgrade predecessors, and must not be repaired, rebuilt, replaced, tagged,
 published, or selected again.
 
-The accepted private qCoder 0.6.0a22.dev2+wi0440.natural.first.value.v1 candidate is the sole
-implementation predecessor for a23. It remains an unfrozen, unpublishable development identity
-and must not be relabelled, uploaded, or treated as a customer release."""
+Frozen qCoder 0.6.0a23 is the sole implementation lineage predecessor for a24. It must not be
+published, repaired, rebuilt, replaced, tagged, or treated as a customer release."""
 
-UPGRADE_BLOCK = """Install qCoder 0.6.0a23 for a new installation or before starting a new Current Loop. If qCoder
+UPGRADE_BLOCK = """Install qCoder 0.6.0a24 for a new installation or before starting a new Current Loop. If qCoder
 0.6.0a22 already has an active Current Loop, upgrade only at a clean Current Loop boundary:
 before a new loop begins or after the current loop has reached a truthful terminal boundary.
 
 Do not upgrade while any binding v45 / Current Step Contract v11 step, completion, continuation
 capsule, pending receipt, or recovery action remains outstanding. Finish the outstanding step on
-qCoder 0.6.0a22, or explicitly abandon it and restart the work under qCoder 0.6.0a23 at a clean
+qCoder 0.6.0a22, or explicitly abandon it and restart the work under qCoder 0.6.0a24 at a clean
 boundary.
 
 qCoder does not support or claim mid-step migration from binding v45 / Current Step Contract v11
-to binding v47 / Current Step Contract v11. A v45/v11 operation receipt, authority grant,
+to binding v48 / Current Step Contract v11. A v45/v11 operation receipt, authority grant,
 completion input, continuation capsule, or pending step must not be reused or reinterpreted under
-v47/v11. Project evidence history may remain; this boundary applies to the active step."""
+v48/v11. Project evidence history may remain; this boundary applies to the active step."""
 
 NONCLAIM_BLOCK = """This release makes no latency, speed, p95, responsiveness, overhead, quiet-operation, or
 consistency guarantee; does not establish universal framework neutrality, general framework
@@ -92,16 +91,38 @@ Client Compatibility, CL-023, named-client support, website, or marketing claims
 deployment, qualification evidence, public applicability, and support claims remain separate
 lifecycle and product decisions."""
 
-CHANGELOG_BLOCK = """Public upgrade predecessor: qCoder 0.6.0a22. The a22 → a23 relationship is behavior-changing.
+CHANGELOG_BLOCK = """Public upgrade predecessor: qCoder 0.6.0a22. The a22 → a24 relationship is behavior-changing.
 
-Implementation lineage predecessor: accepted private qCoder
-0.6.0a22.dev2+wi0440.natural.first.value.v1 at commit
-`a0d0d39237c2e51c0346fdc0214566c4d473639c`. The private candidate → a23 relationship
-preserves runtime implementation and product behavior except for release identity, release-truth
-documentation, mechanically resulting package metadata, and release-only verification."""
+Implementation lineage predecessor: frozen terminal unpublished qCoder 0.6.0a23 at commit
+`9c984936ab0067d2109eb24b9b1ea072b09b686d`. The a23 → a24 relationship is
+behavior-changing. The a23 artifacts are consumed, terminal, do-not-publish evidence and are not
+a customer upgrade predecessor.
+
+Product correction basis: commit `59f0755e965f55a782d220f292ddb8e789af35a1`. That exact
+product basis → a24 relationship preserves runtime implementation and product behavior except
+for release identity, release-truth documentation, mechanically resulting package metadata, and
+release-only verification."""
 
 ACTIVE_BLOCKS = (RELATIONSHIP_PRODUCT_BLOCK, HISTORICAL_STATUS_BLOCK, UPGRADE_BLOCK, NONCLAIM_BLOCK)
+RELEASE_NOTE_REQUIRED_CLAUSES = (
+    "qCoder 0.6.0a24 is a behavior-changing pre-release successor to public qCoder 0.6.0a22",
+    "a23 is unpublished, consumed, terminal, do-not-publish evidence and is not a customer release",
+    "59f0755e965f55a782d220f292ddb8e789af35a1",
+    "457352e54bc0320aff00efaaddf66634ba8233a5",
+    "That exact basis → a24 relationship preserves runtime implementation and product behavior except for release identity",
+    "Managed setup now reports `qCoder configured`",
+    "A bounded verification command reports `qCoder connected` only after an actual client initializes both canonical MCP servers",
+    "both canonical MCP servers initialized",
+    "exactly twelve public tools and two private Current Loop operations were discovered",
+    "one public read-only qCoder request completed successfully with canonical process-and-discard retention",
+    "Connection does not create a client qualification or support claim",
+    "binding v47 / schema 46 to binding v48 / schema 47",
+    "Evidence Review, Algorithm Blueprint, Current Loop",
+    "only at a clean Current Loop boundary",
+    "does not activate Tested, First-class, Client Compatibility, CL-023, named-client support, website, or marketing claims",
+)
 A22_RELEASE_NOTE_SHA256 = "6d9b26a650f4260cd314ee9b98cd86906c575edbdfd0636add1b36ba9540548e"
+A23_RELEASE_NOTE_SHA256 = "c763fa12dc955e9471b893f7b99c3330a4d6288c0663fde65662811950b21946"
 PIN_PATTERN = re.compile(r"\bqcoder(?:\[[A-Za-z0-9_,.-]+\])?==([0-9A-Za-z.!+-]+)")
 TEXT_SUFFIXES = {".js", ".json", ".md", ".mdx", ".mjs", ".toml", ".ts", ".tsx"}
 IGNORED_PARTS = {".git", ".docusaurus", ".pytest_cache", "build", "dist", "node_modules"}
@@ -148,6 +169,9 @@ def _validate_active_surface(text: str, surface: str) -> None:
             raise ValueError(f"release_truth_block_missing:{surface}")
     forbidden = (
         "behavior-preserving pre-release successor to public qCoder 0.6.0a22",
+        "behavior-preserving successor to qCoder 0.6.0a23",
+        "qCoder 0.6.0a23 is a customer upgrade predecessor",
+        "direct server smoke test establishes client connection",
         "private candidate was public",
         "private candidate is a customer upgrade predecessor",
         "mid-step migration is supported",
@@ -158,22 +182,36 @@ def _validate_active_surface(text: str, surface: str) -> None:
 
 
 def _validate_changelog(text: str) -> None:
-    if "## 0.6.0a23" not in text or _normalized(CHANGELOG_BLOCK) not in _normalized(text):
+    if "## 0.6.0a24" not in text or _normalized(CHANGELOG_BLOCK) not in _normalized(text):
         raise ValueError("release_truth_changelog_block_missing")
+
+
+def _validate_release_note(text: str, surface: str) -> None:
+    normalized = _normalized(text)
+    for clause in RELEASE_NOTE_REQUIRED_CLAUSES:
+        if _normalized(clause) not in normalized:
+            raise ValueError(f"release_truth_note_clause_missing:{surface}")
+    _validate_active_surface(
+        "\n\n".join(ACTIVE_BLOCKS),
+        surface,
+    )
 
 
 def publication_truth(
     source_root: Path, wheel: Path | None = None, sdist: Path | None = None
 ) -> dict[str, object]:
     readme = (source_root / "README.md").read_text(encoding="utf-8")
-    note_path = source_root / "docs/releases/0.6.0a23.md"
+    note_path = source_root / "docs/releases/0.6.0a24.md"
     note = note_path.read_text(encoding="utf-8")
     _validate_active_surface(readme, "README.md")
-    _validate_active_surface(note, str(note_path.relative_to(source_root)))
+    _validate_release_note(note, str(note_path.relative_to(source_root)))
     _validate_changelog((source_root / "CHANGELOG.md").read_text(encoding="utf-8"))
     historical = source_root / "docs/releases/0.6.0a22.md"
     if hashlib.sha256(historical.read_bytes()).hexdigest() != A22_RELEASE_NOTE_SHA256:
         raise ValueError("historical_a22_release_note_changed")
+    terminal_a23 = source_root / "docs/releases/0.6.0a23.md"
+    if hashlib.sha256(terminal_a23.read_bytes()).hexdigest() != A23_RELEASE_NOTE_SHA256:
+        raise ValueError("terminal_a23_release_note_changed")
     policy = _normalized(
         (source_root / "docs/release-version-policy.md").read_text(encoding="utf-8")
     )
@@ -192,10 +230,11 @@ def publication_truth(
         _validate_active_surface(_sdist_pkg_info(sdist), "sdist PKG-INFO")
         artifacts = True
     return {
-        "source_surfaces_checked": 5,
+        "source_surfaces_checked": 6,
         "artifact_surfaces_checked": 2 if artifacts else 0,
         "exact_active_blocks": len(ACTIVE_BLOCKS),
         "historical_a22_note_immutable": True,
+        "terminal_a23_note_immutable": True,
         "relationships_distinct": True,
     }
 
@@ -209,6 +248,7 @@ def release_metadata(source_root: Path) -> dict[str, object]:
         "publication_state_authority",
         "public_upgrade_predecessor",
         "implementation_lineage_predecessor",
+        "product_correction_basis",
         "intervening_nonpublic_versions",
     }
     if set(data) != required:
@@ -220,6 +260,7 @@ def release_metadata(source_root: Path) -> dict[str, object]:
         "publication_state_authority": "external_release_control",
         "public_upgrade_predecessor": PUBLIC_PREDECESSOR,
         "implementation_lineage_predecessor": LINEAGE_PREDECESSOR,
+        "product_correction_basis": PRODUCT_CORRECTION_BASIS,
         "intervening_nonpublic_versions": INTERVENING,
     }
     for key, value in expected.items():
@@ -303,6 +344,7 @@ def verify_release_version(
         "publication_state_authority": metadata["publication_state_authority"],
         "public_upgrade_predecessor": metadata["public_upgrade_predecessor"],
         "implementation_lineage_predecessor": metadata["implementation_lineage_predecessor"],
+        "product_correction_basis": metadata["product_correction_basis"],
         "intervening_nonpublic_versions": metadata["intervening_nonpublic_versions"],
         "authoritative_versions": versions,
         "customer_pins": pins,

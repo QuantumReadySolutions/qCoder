@@ -21,17 +21,17 @@ def _verifier():
     return module
 
 
-def test_a23_authoritative_identity_and_release_truth_pass() -> None:
+def test_a24_authoritative_identity_and_release_truth_pass() -> None:
     verifier = _verifier()
-    assert __version__ == "0.6.0a23"
+    assert __version__ == "0.6.0a24"
     assert verifier.source_versions(ROOT) == {
-        "pyproject": "0.6.0a23",
-        "qcoder.__version__": "0.6.0a23",
-        "release_metadata": "0.6.0a23",
+        "pyproject": "0.6.0a24",
+        "qcoder.__version__": "0.6.0a24",
+        "release_metadata": "0.6.0a24",
     }
     result = verifier.verify_release_version(source_root=ROOT, customer_roots=[ROOT / "examples"])
     assert result["ok"] is True
-    assert result["version"] == "0.6.0a23"
+    assert result["version"] == "0.6.0a24"
     assert result["relationships_distinct"] is True
     assert result["intervening_nonpublic_versions"] == []
     assert not (ROOT / "development-version.json").exists()
@@ -53,6 +53,8 @@ def _write_fixture(root: Path, metadata: dict[str, object]) -> None:
         "reverse_relationships",
         "add_intervening",
         "publication_authority",
+        "remove_product_basis",
+        "substitute_product_basis",
     ],
 )
 def test_relationship_record_mutations_fail_closed(tmp_path: Path, mutation: str) -> None:
@@ -71,11 +73,15 @@ def test_relationship_record_mutations_fail_closed(tmp_path: Path, mutation: str
             data["public_upgrade_predecessor"]
         )
     elif mutation == "reverse_relationships":
-        data["public_upgrade_predecessor"]["relationship_to_source"] = verifier.LINEAGE_PREDECESSOR[
-            "relationship_to_source"
-        ]
+        data["public_upgrade_predecessor"]["relationship_to_source"] = (
+            verifier.PRODUCT_CORRECTION_BASIS["relationship_to_source"]
+        )
     elif mutation == "add_intervening":
         data["intervening_nonpublic_versions"] = [{"version": "0.6.0a22.dev3", "state": "unknown"}]
+    elif mutation == "remove_product_basis":
+        del data["product_correction_basis"]
+    elif mutation == "substitute_product_basis":
+        data["product_correction_basis"]["source_commit"] = "0" * 40
     else:
         data["publication_state_authority"] = "embedded_mutable_state"
     _write_fixture(tmp_path, data)
@@ -109,6 +115,9 @@ def test_active_release_copy_mutations_fail_closed(block_name: str, mutation: st
         "private candidate is a customer upgrade predecessor",
         "mid-step migration is supported",
         "receipt reuse is supported",
+        "behavior-preserving successor to qCoder 0.6.0a23",
+        "qCoder 0.6.0a23 is a customer upgrade predecessor",
+        "direct server smoke test establishes client connection",
     ],
 )
 def test_active_release_contradictions_fail_closed(contradiction: str) -> None:
@@ -118,7 +127,7 @@ def test_active_release_contradictions_fail_closed(contradiction: str) -> None:
         verifier._validate_active_surface(f"{complete}\n{contradiction}", "mutation fixture")
 
 
-def test_changelog_and_historical_a22_are_guarded() -> None:
+def test_changelog_and_historical_release_notes_are_guarded() -> None:
     verifier = _verifier()
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     with pytest.raises(ValueError, match="changelog"):
@@ -126,4 +135,8 @@ def test_changelog_and_historical_a22_are_guarded() -> None:
     assert (
         __import__("hashlib").sha256((ROOT / "docs/releases/0.6.0a22.md").read_bytes()).hexdigest()
         == verifier.A22_RELEASE_NOTE_SHA256
+    )
+    assert (
+        __import__("hashlib").sha256((ROOT / "docs/releases/0.6.0a23.md").read_bytes()).hexdigest()
+        == verifier.A23_RELEASE_NOTE_SHA256
     )

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove that a23 differs from its selected private basis only at release surfaces."""
+"""Prove that a24 release normalization preserves its product-correction basis."""
 
 from __future__ import annotations
 
@@ -12,11 +12,16 @@ from pathlib import Path
 from qcoder.context_bridge_mcp import EXPECTED_TOOLS, build_client_binding_descriptor
 from qcoder.current_loop_binding_mcp import binding_tool_descriptors
 
-BASIS_COMMIT = "a0d0d39237c2e51c0346fdc0214566c4d473639c"
-BASIS_TREE = "580188c5b3225297382fda1e7a8c4a407d393d62"
-EXPECTED_VERSION = "0.6.0a23"
-EXPECTED_CONTRACT = "qcoder.connected_assistant.client_binding.v47"
-EXPECTED_SCHEMA = 46
+PRODUCT_BASIS_COMMIT = "59f0755e965f55a782d220f292ddb8e789af35a1"
+PRODUCT_BASIS_TREE = "457352e54bc0320aff00efaaddf66634ba8233a5"
+TERMINAL_A23_COMMIT = "9c984936ab0067d2109eb24b9b1ea072b09b686d"
+TERMINAL_A23_TREE = "ea21765a855ed03642e729b10453bdfc17b8d27e"
+TERMINAL_A23_RELEASE_NOTE_SHA256 = (
+    "c763fa12dc955e9471b893f7b99c3330a4d6288c0663fde65662811950b21946"
+)
+EXPECTED_VERSION = "0.6.0a24"
+EXPECTED_CONTRACT = "qcoder.connected_assistant.client_binding.v48"
+EXPECTED_SCHEMA = 47
 EXPECTED_PUBLIC_TOOLS = (
     "get_guided_evidence_context",
     "create_prompt_context",
@@ -35,16 +40,16 @@ EXPECTED_PRIVATE_OPERATIONS = ("begin_current_loop", "complete_current_step")
 ALLOWED_PATHS = {
     "CHANGELOG.md",
     "README.md",
-    "development-version.json",
-    "docs/releases/0.6.0a23.md",
+    "docs/releases/0.6.0a24.md",
     "pyproject.toml",
     "release-version.json",
     "scripts/verify-a23-release-normalization.py",
-    "scripts/verify-development-version.py",
+    "scripts/verify-a24-release-normalization.py",
     "scripts/verify-release-version.py",
     "scripts/wi0440-natural-campaign-evaluate.py",
     "src/qcoder/__init__.py",
     "tests/test_a23_release_normalization.py",
+    "tests/test_a24_release_normalization.py",
     "tests/test_local_evidence_review_v1.py",
     "tests/test_public_package_metadata.py",
     "tests/test_release_version_consistency.py",
@@ -61,7 +66,9 @@ def _canonical(value: object) -> bytes:
 
 
 def _changed_paths(root: Path) -> set[str]:
-    tracked = set(filter(None, _git(root, "diff", "--name-only", BASIS_COMMIT, "--").splitlines()))
+    tracked = set(
+        filter(None, _git(root, "diff", "--name-only", PRODUCT_BASIS_COMMIT, "--").splitlines())
+    )
     untracked = set(
         filter(None, _git(root, "ls-files", "--others", "--exclude-standard").splitlines())
     )
@@ -70,29 +77,34 @@ def _changed_paths(root: Path) -> set[str]:
 
 def verify(root: Path) -> dict[str, object]:
     root = root.resolve()
-    if _git(root, "rev-parse", f"{BASIS_COMMIT}^{{tree}}") != BASIS_TREE:
-        raise ValueError("a23_basis_tree_mismatch")
+    if _git(root, "rev-parse", f"{PRODUCT_BASIS_COMMIT}^{{tree}}") != PRODUCT_BASIS_TREE:
+        raise ValueError("a24_product_basis_tree_mismatch")
+    if _git(root, "rev-parse", f"{TERMINAL_A23_COMMIT}^{{tree}}") != TERMINAL_A23_TREE:
+        raise ValueError("a24_terminal_a23_tree_mismatch")
     changed = _changed_paths(root)
     unexpected = sorted(changed - ALLOWED_PATHS)
     if unexpected:
-        raise ValueError(f"a23_normalization_path_outside_allowlist:{unexpected}")
+        raise ValueError(f"a24_normalization_path_outside_allowlist:{unexpected}")
     runtime_changed = sorted(path for path in changed if path.startswith("src/qcoder/"))
     if runtime_changed != ["src/qcoder/__init__.py"]:
-        raise ValueError(f"a23_runtime_delta_invalid:{runtime_changed}")
+        raise ValueError(f"a24_runtime_delta_invalid:{runtime_changed}")
     init_text = (root / "src/qcoder/__init__.py").read_text(encoding="utf-8")
-    expected_init = '__all__ = []\n__version__ = "0.6.0a23"\nfile = __file__\n'
+    expected_init = '__all__ = []\n__version__ = "0.6.0a24"\nfile = __file__\n'
     if init_text != expected_init:
-        raise ValueError("a23_runtime_version_surface_invalid")
+        raise ValueError("a24_runtime_version_surface_invalid")
+    historical_note = root / "docs/releases/0.6.0a23.md"
+    if hashlib.sha256(historical_note.read_bytes()).hexdigest() != TERMINAL_A23_RELEASE_NOTE_SHA256:
+        raise ValueError("a24_terminal_a23_release_note_changed")
     if (root / "development-version.json").exists() or (
         root / "scripts/verify-development-version.py"
     ).exists():
-        raise ValueError("a23_private_development_identity_retained")
+        raise ValueError("a24_private_development_identity_retained")
     public_tools = tuple(EXPECTED_TOOLS)
     private_operations = tuple(item["name"] for item in binding_tool_descriptors())
     if public_tools != EXPECTED_PUBLIC_TOOLS:
-        raise ValueError("a23_public_tool_inventory_changed")
+        raise ValueError("a24_public_tool_inventory_changed")
     if private_operations != EXPECTED_PRIVATE_OPERATIONS:
-        raise ValueError("a23_private_operation_inventory_changed")
+        raise ValueError("a24_private_operation_inventory_changed")
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
@@ -100,13 +112,15 @@ def verify(root: Path) -> dict[str, object]:
         descriptor.get("contract_id") != EXPECTED_CONTRACT
         or descriptor.get("schema_version") != EXPECTED_SCHEMA
     ):
-        raise ValueError("a23_binding_identity_changed")
+        raise ValueError("a24_binding_identity_changed")
     descriptor_sha256 = hashlib.sha256(_canonical(descriptor)).hexdigest()
     return {
         "ok": True,
         "result": "pass",
-        "basis_commit": BASIS_COMMIT,
-        "basis_tree": BASIS_TREE,
+        "product_basis_commit": PRODUCT_BASIS_COMMIT,
+        "product_basis_tree": PRODUCT_BASIS_TREE,
+        "terminal_a23_commit": TERMINAL_A23_COMMIT,
+        "terminal_a23_tree": TERMINAL_A23_TREE,
         "version": EXPECTED_VERSION,
         "changed_paths": sorted(changed),
         "runtime_delta": runtime_changed,
@@ -115,7 +129,9 @@ def verify(root: Path) -> dict[str, object]:
         "binding_descriptor_sha256": descriptor_sha256,
         "public_tool_count": len(public_tools),
         "private_operation_count": len(private_operations),
-        "behavior_preserving_from_private_basis": True,
+        "behavior_preserving_from_product_basis": True,
+        "behavior_changing_from_terminal_a23": True,
+        "terminal_a23_release_note_immutable": True,
     }
 
 
