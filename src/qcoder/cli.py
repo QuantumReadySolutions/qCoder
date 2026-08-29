@@ -1049,6 +1049,16 @@ def _cmd_current_loop(argv: list[str]) -> int:
         help="Explicit current-loop workspace (default: current directory).",
     )
     parser.add_argument(
+        "--connection-state-root",
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--connection-generation",
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
         "--state-file",
         default=None,
         help="Explicit external local-state file; never selected automatically.",
@@ -2036,7 +2046,11 @@ def _cmd_current_loop(argv: list[str]) -> int:
     if args.current_loop_command == "serve-binding-mcp":
         from qcoder.current_loop_binding_mcp import serve_binding_mcp_stdio
 
-        return serve_binding_mcp_stdio(workspace_root=args.workspace)
+        return serve_binding_mcp_stdio(
+            workspace_root=args.workspace,
+            connection_state_root=args.connection_state_root,
+            connection_generation=args.connection_generation,
+        )
     transport = None
     credential_source = None
     if hasattr(args, "base_url"):

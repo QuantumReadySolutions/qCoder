@@ -185,20 +185,34 @@ def _recovery_marker_present(workspace: Path) -> bool:
 
 
 def cursor_binding_mcp_server_definition(
-    *, executable: str | Path, workspace_root: str | Path
+    *,
+    executable: str | Path,
+    workspace_root: str | Path,
+    connection_state_root: str | Path | None = None,
+    connection_generation: str | None = None,
 ) -> dict[str, Any]:
     """Return the project-local private structured-activation MCP server."""
 
+    args = [
+        "-m",
+        "qcoder",
+        "current-loop",
+        "--workspace",
+        str(Path(workspace_root).expanduser().absolute()),
+    ]
+    if connection_state_root is not None and connection_generation is not None:
+        args.extend(
+            [
+                "--connection-state-root",
+                str(Path(connection_state_root).expanduser().absolute()),
+                "--connection-generation",
+                connection_generation,
+            ]
+        )
+    args.append("serve-binding-mcp")
     return {
         "command": str(Path(executable).expanduser().absolute()),
-        "args": [
-            "-m",
-            "qcoder",
-            "current-loop",
-            "--workspace",
-            str(Path(workspace_root).expanduser().absolute()),
-            "serve-binding-mcp",
-        ],
+        "args": args,
     }
 
 
@@ -228,7 +242,11 @@ def _is_qcoder_completion_command(value: object) -> bool:
 
 
 def cursor_post_write_hook_status(
-    *, workspace_root: str | Path, executable: str | Path
+    *,
+    workspace_root: str | Path,
+    executable: str | Path,
+    connection_state_root: str | Path | None = None,
+    connection_generation: str | None = None,
 ) -> dict[str, Any]:
     """Verify the exact project-local hooks without modifying the workspace."""
 
@@ -237,7 +255,10 @@ def cursor_post_write_hook_status(
     expected_post = cursor_post_tool_use_hook_definition(executable=executable)
     expected_stop = cursor_stop_recovery_hook_definition(executable=executable)
     expected_binding = cursor_binding_mcp_server_definition(
-        executable=executable, workspace_root=workspace_root
+        executable=executable,
+        workspace_root=workspace_root,
+        connection_state_root=connection_state_root,
+        connection_generation=connection_generation,
     )
     result = {
         "schema_id": CURSOR_POST_WRITE_HOOK_SCHEMA_ID,
@@ -328,7 +349,11 @@ def _validated_hook_list(hooks: dict[str, Any], event: str) -> list[dict[str, An
 
 
 def install_cursor_post_write_hook(
-    *, workspace_root: str | Path, executable: str | Path | None = None
+    *,
+    workspace_root: str | Path,
+    executable: str | Path | None = None,
+    connection_state_root: str | Path | None = None,
+    connection_generation: str | None = None,
 ) -> dict[str, Any]:
     """Install structured activation, redundant edit signals, and bounded recovery."""
 
@@ -413,10 +438,20 @@ def install_cursor_post_write_hook(
         mcp_value = deepcopy(supplied_mcp)
     mcp_servers = mcp_value["mcpServers"]
     expected_binding = cursor_binding_mcp_server_definition(
-        executable=runtime, workspace_root=workspace
+        executable=runtime,
+        workspace_root=workspace,
+        connection_state_root=connection_state_root,
+        connection_generation=connection_generation,
     )
     existing_binding = mcp_servers.get(BINDING_MCP_SERVER_NAME)
-    if existing_binding is not None and existing_binding != expected_binding:
+    predecessor_binding = cursor_binding_mcp_server_definition(
+        executable=runtime,
+        workspace_root=workspace,
+    )
+    if existing_binding is not None and existing_binding not in (
+        expected_binding,
+        predecessor_binding,
+    ):
         raise CursorPostWriteHookError("cursor_binding_mcp_name_conflict")
     mcp_servers[BINDING_MCP_SERVER_NAME] = expected_binding
     mcp_encoded = (json.dumps(mcp_value, indent=2, sort_keys=True) + "\n").encode("utf-8")
@@ -435,7 +470,12 @@ def install_cursor_post_write_hook(
             Path(mcp_temporary).unlink()
         except FileNotFoundError:
             pass
-    status = cursor_post_write_hook_status(workspace_root=workspace, executable=runtime)
+    status = cursor_post_write_hook_status(
+        workspace_root=workspace,
+        executable=runtime,
+        connection_state_root=connection_state_root,
+        connection_generation=connection_generation,
+    )
     if status.get("configured") is not True:
         raise CursorPostWriteHookError("cursor_hook_installation_verification_failed")
     return {

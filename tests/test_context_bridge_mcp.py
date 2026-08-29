@@ -2121,7 +2121,7 @@ def test_impossible_issuer_values_are_malformed_and_make_zero_network_requests(
         ok, category, token = validate_token_file(token_file)
         assert (ok, category, token) == (False, "token_file_malformed", "")
         result = run_smoke(base_url="https://example.invalid", token_file=token_file)
-        assert result["connection_status_category"] == "token_file_not_ready"
+        assert result["server_preflight_status_category"] == "token_file_not_ready"
         assert result["token_file_category"] == "token_file_malformed"
         assert result["instruction_category"] == "copy_token_and_replace_local_file_value"
         assert result["message"] == MALFORMED_CONTEXT_BRIDGE_TOKEN_MESSAGE
@@ -2163,7 +2163,7 @@ def test_well_formed_server_invalid_token_reaches_authoritative_service_once(
     monkeypatch.setattr(context_bridge_mcp, "post_context_bridge", rejected)
     result = run_smoke(base_url="https://example.invalid", token_file=token_file)
     assert network_calls == 1
-    assert result["connection_status_category"] == "token_rejected"
+    assert result["server_preflight_status_category"] == "token_rejected"
     assert result["token_file_category"] == "present_safe"
     assert result["token_accepted"] == "no"
 
@@ -2665,12 +2665,16 @@ def test_default_smoke_is_concise_and_uses_one_bounded_network_call(
     result = run_smoke(base_url="https://example.invalid", token_file=token_file)
 
     assert result["ok"] is True
-    assert result["connection_status_category"] == "ready"
+    assert result["server_preflight_status_category"] == "ready"
     assert result["token_accepted"] == "yes"
     assert result["tools_discovered"] == 12
     assert result["tools_visible"] == list(EXPECTED_TOOLS)
     assert result["bounded_call_passed"] is True
     assert result["unsafe_input_rejected"] is True
+    assert result["diagnostic_scope"] == "direct_server_preflight"
+    assert result["direct_server_smoke_verified"] is True
+    assert result["direct_server_smoke_establishes_connection"] is False
+    assert result["client_connection_verified"] is False
     assert network_calls == ["create_context_session_card"]
 
 
@@ -2679,7 +2683,7 @@ def test_default_smoke_human_output_and_json_compatibility(monkeypatch, tmp_path
     _write_token(token_file)
     result = {
         "ok": True,
-        "connection_status_category": "ready",
+        "server_preflight_status_category": "ready",
         "token_accepted": "yes",
         "tools_discovered": 8,
         "metadata_only": True,
@@ -2691,7 +2695,8 @@ def test_default_smoke_human_output_and_json_compatibility(monkeypatch, tmp_path
         rc = context_bridge_mcp.main(["mcp", "smoke", "--token-file", str(token_file)])
     assert rc == 0
     assert human.getvalue().splitlines() == [
-        "Context Bridge connection: ready",
+        "Context Bridge server preflight: ready",
+        "Client connection verified: no",
         "Token accepted: yes",
         "Tools discovered: 8",
     ]

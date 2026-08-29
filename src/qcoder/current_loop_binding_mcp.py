@@ -15,6 +15,7 @@ import sys
 from typing import Any, Mapping
 
 from qcoder import __version__
+from qcoder.context_bridge_connection import record_server_exchange
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.current_loop_artifact_targets import (
     ArtifactTargetError,
@@ -838,7 +839,37 @@ def _write_content_length_response(response: Mapping[str, Any]) -> None:
     sys.stdout.buffer.flush()
 
 
-def serve_binding_mcp_stdio(*, workspace_root: str | Path) -> int:
+def _record_connection_exchange_best_effort(
+    *,
+    connection_state_root: str | Path | None,
+    connection_generation: str | None,
+    message: object,
+    response: Mapping[str, Any] | None,
+) -> None:
+    if (
+        connection_state_root is None
+        or connection_generation is None
+        or not isinstance(message, Mapping)
+    ):
+        return
+    try:
+        record_server_exchange(
+            state_root=connection_state_root,
+            setup_generation=connection_generation,
+            server_name=BINDING_MCP_SERVER_NAME,
+            request=message,
+            response=response,
+        )
+    except Exception:  # noqa: BLE001 - diagnostic failure must not alter the protocol response
+        return
+
+
+def serve_binding_mcp_stdio(
+    *,
+    workspace_root: str | Path,
+    connection_state_root: str | Path | None = None,
+    connection_generation: str | None = None,
+) -> int:
     """Serve the internal binding MCP over JSON-lines or Content-Length stdio."""
 
     stdin = sys.stdin.buffer
@@ -881,6 +912,12 @@ def serve_binding_mcp_stdio(*, workspace_root: str | Path) -> int:
                 handle_binding_jsonrpc_message(message, workspace_root=workspace_root)
                 if isinstance(message, Mapping)
                 else _error(None, -32600, "invalid_request")
+            )
+            _record_connection_exchange_best_effort(
+                connection_state_root=connection_state_root,
+                connection_generation=connection_generation,
+                message=message,
+                response=response,
             )
         if response is None:
             continue

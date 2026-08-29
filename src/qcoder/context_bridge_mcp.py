@@ -16,6 +16,11 @@ import urllib.error
 import urllib.request
 
 from qcoder import __version__
+from qcoder.context_bridge_connection import (
+    ConnectionObservationError,
+    connection_status,
+    record_server_exchange,
+)
 from qcoder.context_bridge_profiles import (
     CredentialProfileError,
     CredentialProfileManager,
@@ -180,8 +185,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 46
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v47"
+CLIENT_BINDING_SCHEMA_VERSION = 47
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v48"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -1832,7 +1837,7 @@ def _has_explicit_side(value: object) -> bool:
 def decode_json(raw: bytes) -> dict[str, Any]:
     try:
         decoded = json.loads(raw.decode("utf-8"))
-    except Exception:
+    except Exception:  # noqa: BLE001 - diagnostic failure must not alter the protocol response
         return {"ok": False, "error_category": "non_json_response"}
     return (
         decoded
@@ -4012,6 +4017,34 @@ def _read_mcp_headers(first_line: bytes) -> dict[str, str]:
     return headers
 
 
+def _record_connection_exchange_best_effort(
+    *,
+    connection_state_root: str | Path | None,
+    connection_generation: str | None,
+    message: object,
+    response: Mapping[str, Any] | None,
+) -> None:
+    """Observe one real stdio exchange without changing its protocol outcome."""
+
+    if (
+        connection_state_root is None
+        or connection_generation is None
+        or not isinstance(message, Mapping)
+    ):
+        return
+    try:
+        record_server_exchange(
+            state_root=connection_state_root,
+            setup_generation=connection_generation,
+            server_name="qcoder-context-bridge",
+            request=message,
+            response=response,
+        )
+    except Exception:
+        # Connection evidence is diagnostic only.  It must never alter MCP behavior.
+        return
+
+
 def serve_mcp_stdio(
     *,
     base_url: str,
@@ -4019,6 +4052,8 @@ def serve_mcp_stdio(
     selected_portable_bundle_file: str | Path | None = None,
     selected_next_loop_seed_file: str | Path | None = None,
     selected_next_loop_parent_files: Mapping[str, str | Path] | None = None,
+    connection_state_root: str | Path | None = None,
+    connection_generation: str | None = None,
 ) -> int:
     stdin = sys.stdin.buffer
     while True:
@@ -4028,6 +4063,7 @@ def serve_mcp_stdio(
         if not first_line.strip():
             continue
         if first_line.lstrip().startswith(b"{"):
+            message: object = None
             try:
                 message = json.loads(first_line.decode("utf-8"))
             except json.JSONDecodeError:
@@ -4041,6 +4077,12 @@ def serve_mcp_stdio(
                     selected_next_loop_seed_file=selected_next_loop_seed_file,
                     selected_next_loop_parent_files=selected_next_loop_parent_files,
                 )
+            _record_connection_exchange_best_effort(
+                connection_state_root=connection_state_root,
+                connection_generation=connection_generation,
+                message=message,
+                response=response,
+            )
             if response is not None:
                 print(json.dumps(response, sort_keys=True), flush=True)
             continue
@@ -4055,6 +4097,7 @@ def serve_mcp_stdio(
             _write_content_length_response(_jsonrpc_error(None, -32600, "missing_content_length"))
             continue
         raw = stdin.read(content_length)
+        message = None
         try:
             message = json.loads(raw.decode("utf-8"))
         except json.JSONDecodeError:
@@ -4071,6 +4114,12 @@ def serve_mcp_stdio(
                     selected_next_loop_seed_file=selected_next_loop_seed_file,
                     selected_next_loop_parent_files=selected_next_loop_parent_files,
                 )
+        _record_connection_exchange_best_effort(
+            connection_state_root=connection_state_root,
+            connection_generation=connection_generation,
+            message=message,
+            response=response,
+        )
         if response is not None:
             _write_content_length_response(response)
     return 0
@@ -4393,25 +4442,47 @@ def _run_full_smoke(*, base_url: str, token_file: str | Path) -> dict[str, Any]:
     return result
 
 
+def _with_direct_server_preflight_truth(result: dict[str, Any]) -> dict[str, Any]:
+    """Label direct smoke accurately; it never proves a client connection."""
+
+    return {
+        **result,
+        "diagnostic_scope": "direct_server_preflight",
+        "direct_server_smoke_verified": result.get("ok") is True,
+        "direct_server_smoke_establishes_connection": False,
+        "direct_server_smoke_establishes_client_connection": False,
+        "client_connection_verified": False,
+        "client_qualification_created": False,
+        "support_claim_created": False,
+    }
+
+
 def run_smoke(*, base_url: str, token_file: str | Path, full: bool = False) -> dict[str, Any]:
     if full:
         preflight = run_smoke(base_url=base_url, token_file=token_file)
         if not preflight.get("ok"):
-            category = str(preflight.get("connection_status_category") or "connection_check_failed")
-            return {
-                **preflight,
-                "diagnostic_mode": "full",
-                "diagnostic_status_category": category,
-                "token_onboarding_failure": category in {"token_file_not_ready", "token_rejected"},
-            }
-        return _run_full_smoke(base_url=base_url, token_file=token_file)
+            category = str(
+                preflight.get("server_preflight_status_category") or "server_preflight_failed"
+            )
+            return _with_direct_server_preflight_truth(
+                {
+                    **preflight,
+                    "diagnostic_mode": "full",
+                    "diagnostic_status_category": category,
+                    "token_onboarding_failure": category
+                    in {"token_file_not_ready", "token_rejected"},
+                }
+            )
+        return _with_direct_server_preflight_truth(
+            _run_full_smoke(base_url=base_url, token_file=token_file)
+        )
 
     token_ok, token_category, _ = validate_token_file(token_file)
     if not token_ok:
         result = {
             "ok": False,
             "metadata_only": True,
-            "connection_status_category": "token_file_not_ready",
+            "server_preflight_status_category": "token_file_not_ready",
             "token_file_category": token_category,
             "token_accepted": "no",
             "tools_visible": list(EXPECTED_TOOLS),
@@ -4427,7 +4498,7 @@ def run_smoke(*, base_url: str, token_file: str | Path, full: bool = False) -> d
         }
         if token_category == "token_file_malformed":
             result["message"] = MALFORMED_CONTEXT_BRIDGE_TOKEN_MESSAGE
-        return result
+        return _with_direct_server_preflight_truth(result)
 
     safe_text = (
         "Share-safe current qCoder evidence summary for a harmless connection check. "
@@ -4457,48 +4528,50 @@ def run_smoke(*, base_url: str, token_file: str | Path, full: bool = False) -> d
     )
     unsafe_case = _case_summary(payload=unsafe_payload, expected_success=False)
     ready = bounded_case["expected_outcome_met"] and unsafe_case["expected_outcome_met"]
-    return {
-        "ok": bool(ready),
-        "metadata_only": True,
-        "connection_status_category": (
-            "ready"
+    return _with_direct_server_preflight_truth(
+        {
+            "ok": bool(ready),
+            "metadata_only": True,
+            "server_preflight_status_category": (
+                "ready"
+                if ready
+                else "rate_limit_pause_required"
+                if rate_limited
+                else "token_rejected"
+                if token_rejected
+                else "server_preflight_failed"
+            ),
+            "token_file_category": "present_safe",
+            "token_accepted": "yes"
             if ready
-            else "rate_limit_pause_required"
+            else "not_rejected"
             if rate_limited
-            else "token_rejected"
+            else "no"
             if token_rejected
-            else "connection_check_failed"
-        ),
-        "token_file_category": "present_safe",
-        "token_accepted": "yes"
-        if ready
-        else "not_rejected"
-        if rate_limited
-        else "no"
-        if token_rejected
-        else "unknown",
-        "endpoint_reachable": endpoint_reachable,
-        "tools_visible": list(EXPECTED_TOOLS),
-        "tools_exact": True,
-        "tools_discovered": len(EXPECTED_TOOLS),
-        "bounded_call_passed": bounded_case["expected_outcome_met"],
-        "unsafe_input_rejected": unsafe_case["expected_outcome_met"],
-        "retry_after_category": str(bounded_payload.get("retry_after_category") or "absent"),
-        "token_printed": False,
-        "raw_payload_echo": "no"
-        if bounded_case["raw_payload_echo_absent"] and unsafe_case["raw_payload_echo_absent"]
-        else "yes",
-        "retention_category": "process_and_discard_or_rejected",
-        "retained_artifacts_empty": "yes"
-        if bounded_case["retained_artifacts_empty_or_absent"]
-        and unsafe_case["retained_artifacts_empty_or_absent"]
-        else "no",
-        "payment_auth_billing_mutation": "no",
-        "cases": {
-            "context_session_card_allowed": bounded_case,
-            "unsafe_input_rejected": unsafe_case,
-        },
-    }
+            else "unknown",
+            "endpoint_reachable": endpoint_reachable,
+            "tools_visible": list(EXPECTED_TOOLS),
+            "tools_exact": True,
+            "tools_discovered": len(EXPECTED_TOOLS),
+            "bounded_call_passed": bounded_case["expected_outcome_met"],
+            "unsafe_input_rejected": unsafe_case["expected_outcome_met"],
+            "retry_after_category": str(bounded_payload.get("retry_after_category") or "absent"),
+            "token_printed": False,
+            "raw_payload_echo": "no"
+            if bounded_case["raw_payload_echo_absent"] and unsafe_case["raw_payload_echo_absent"]
+            else "yes",
+            "retention_category": "process_and_discard_or_rejected",
+            "retained_artifacts_empty": "yes"
+            if bounded_case["retained_artifacts_empty_or_absent"]
+            and unsafe_case["retained_artifacts_empty_or_absent"]
+            else "no",
+            "payment_auth_billing_mutation": "no",
+            "cases": {
+                "context_session_card_allowed": bounded_case,
+                "unsafe_input_rejected": unsafe_case,
+            },
+        }
+    )
 
 
 def _parse_selected_next_loop_parent_files(
@@ -4605,41 +4678,64 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="context_bridge_command")
 
-    connect = sub.add_parser(
-        "connect",
+    setup = sub.add_parser(
+        "setup",
         help=(
             "Select one named profile and configure the existing Context Bridge and "
-            "Current Loop servers as one customer setup."
+            "Current Loop servers without claiming that the client has connected."
         ),
     )
-    connect.add_argument(
+    setup.add_argument(
         "--workspace",
         required=True,
         help="Exact trusted workspace to configure for the selected client.",
     )
-    connect.add_argument(
+    setup.add_argument(
         "--client",
         choices=("cursor",),
         default="cursor",
         help="Exact supported client binding to generate.",
     )
-    connect.add_argument(
+    setup.add_argument(
         "--profile",
         default=os.getenv("QCODER_CONTEXT_BRIDGE_PROFILE"),
         help="Exact named profile ID or label; otherwise deterministic binding/default selection applies.",
     )
-    connect.add_argument(
+    setup.add_argument(
         "--workspace-context",
         default=os.getenv("QCODER_CONTEXT_BRIDGE_WORKSPACE_CONTEXT"),
         help="Nonsecret profile workspace selector; defaults to the exact --workspace.",
     )
-    connect.add_argument(
+    setup.add_argument(
         "--base-url", default=os.getenv("QCODER_CONTEXT_BRIDGE_BASE_URL", DEFAULT_BASE_URL)
     )
-    connect.add_argument(
+    setup.add_argument(
         "--json",
         action="store_true",
         help="Emit bounded nonsecret diagnostics instead of the one-line customer result.",
+    )
+    verify_connection = sub.add_parser(
+        "verify-connection",
+        help=(
+            "Verify a real client-originated two-server initialization, exact 12+2 discovery, "
+            "and one successful read-only qCoder request."
+        ),
+    )
+    verify_connection.add_argument(
+        "--workspace",
+        required=True,
+        help="Exact configured workspace whose bounded connection receipts should be checked.",
+    )
+    verify_connection.add_argument(
+        "--wait-seconds",
+        type=float,
+        default=0.0,
+        help="Wait at most 0 to 30 seconds for the client-originated evidence.",
+    )
+    verify_connection.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit the bounded sanitized connection-verification result.",
     )
     profiles = sub.add_parser(
         "profiles", help="Manage named local Context Bridge credential profiles safely."
@@ -4736,9 +4832,14 @@ def build_parser() -> argparse.ArgumentParser:
             "Repeat for each required role."
         ),
     )
+    serve.add_argument("--connection-state-root", help=argparse.SUPPRESS)
+    serve.add_argument("--connection-generation", help=argparse.SUPPRESS)
     serve.set_defaults(context_bridge_command="mcp", mcp_command="serve")
 
-    smoke = mcp_sub.add_parser("smoke", help="Check the Context Bridge connection safely.")
+    smoke = mcp_sub.add_parser(
+        "smoke",
+        help="Preflight the credential and direct Context Bridge server without claiming client connection.",
+    )
     smoke.add_argument(
         "--token-file",
         default=os.getenv("QCODER_CONTEXT_BRIDGE_TOKEN_FILE"),
@@ -4766,14 +4867,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.context_bridge_command is None:
         parser.print_help()
         return 0
-    if args.context_bridge_command == "connect":
+    if args.context_bridge_command == "setup":
         from qcoder.context_bridge_setup import (
             ContextBridgeSetupError,
-            connect_cursor_workspace,
+            configure_cursor_workspace,
         )
 
         try:
-            result = connect_cursor_workspace(
+            result = configure_cursor_workspace(
                 workspace_root=args.workspace,
                 profile=args.profile,
                 client_context=args.client,
@@ -4786,12 +4887,20 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 json.dumps(
                     {
-                        "schema_id": "qcoder.customer_managed_connection.rejection.v1",
+                        "schema_id": "qcoder.customer_managed_configuration.rejection.v2",
+                        "schema_version": 2,
                         "ok": False,
+                        "configured": False,
+                        "connected": False,
+                        "qualified": False,
+                        "customer_result": "qCoder not configured",
                         "category": category,
                         "safe_next_action": "correct_the_named_profile_or_client_workspace_selection_and_retry",
                         "configuration_restored": category
                         != "client_configuration_rollback_failed",
+                        "client_connection_verified": False,
+                        "client_qualification_created": False,
+                        "support_claim_created": False,
                         "secret_included": False,
                     },
                     sort_keys=True,
@@ -4801,8 +4910,39 @@ def main(argv: list[str] | None = None) -> int:
         if args.json:
             print(json.dumps(result, indent=2, sort_keys=True))
         else:
-            print("qCoder connected")
+            print(str(result["customer_result"]))
         return 0
+    if args.context_bridge_command == "verify-connection":
+        try:
+            result = connection_status(
+                workspace_root=args.workspace,
+                wait_seconds=args.wait_seconds,
+            )
+        except ConnectionObservationError as exc:
+            result = {
+                "schema_id": "qcoder.customer_connection_verification.v1",
+                "schema_version": 1,
+                "ok": False,
+                "configured": False,
+                "connected": False,
+                "qualified": False,
+                "customer_result": "qCoder not configured",
+                "category": exc.category,
+                "client_connection_verified": False,
+                "client_qualification_created": False,
+                "support_claim_created": False,
+                "secret_included": False,
+                "raw_client_stream_retained": False,
+                "raw_request_retained": False,
+                "raw_response_retained": False,
+            }
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            print(str(result["customer_result"]))
+            if result.get("connected") is not True:
+                print(f"Connection diagnostic: {result['category']}")
+        return 0 if result.get("connected") is True else 2
     if args.context_bridge_command == "profiles":
         if args.profiles_command is None:
             parser.parse_args(["profiles", "--help"])
@@ -4912,6 +5052,8 @@ def main(argv: list[str] | None = None) -> int:
             selected_portable_bundle_file=args.selected_portable_bundle_file,
             selected_next_loop_seed_file=args.selected_next_loop_seed_file,
             selected_next_loop_parent_files=selected_next_loop_parent_files,
+            connection_state_root=args.connection_state_root,
+            connection_generation=args.connection_generation,
         )
     if args.mcp_command == "smoke":
         result = run_smoke(base_url=args.base_url, token_file=credential_source, full=args.full)
@@ -4933,9 +5075,10 @@ def main(argv: list[str] | None = None) -> int:
             status = (
                 "ready"
                 if result.get("ok")
-                else result.get("connection_status_category", "check required")
+                else result.get("server_preflight_status_category", "check required")
             )
-            print(f"Context Bridge connection: {status}")
+            print(f"Context Bridge server preflight: {status}")
+            print("Client connection verified: no")
             print(f"Token accepted: {result.get('token_accepted', 'unknown')}")
             print(f"Tools discovered: {result.get('tools_discovered', 0)}")
             if result.get("message"):

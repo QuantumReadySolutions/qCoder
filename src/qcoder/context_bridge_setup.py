@@ -11,6 +11,11 @@ import sys
 import tempfile
 from typing import Any, Callable, Mapping
 
+from qcoder.context_bridge_connection import (
+    connection_state_paths,
+    connection_state_root,
+    prepare_connection_state,
+)
 from qcoder.context_bridge_mcp import DEFAULT_BASE_URL, EXPECTED_TOOLS, run_smoke
 from qcoder.context_bridge_profiles import CredentialProfileManager, SelectedCredential
 from qcoder.current_loop_binding_mcp import (
@@ -26,7 +31,7 @@ from qcoder.cursor_post_write_hook import (
 )
 
 
-SETUP_SCHEMA_ID = "qcoder.customer_managed_connection.v1"
+SETUP_SCHEMA_ID = "qcoder.customer_managed_configuration.v2"
 PUBLIC_SERVER_NAME = "qcoder-context-bridge"
 SUPPORTED_CLIENT = "cursor"
 MAX_CONFIGURATION_BYTES = 65_536
@@ -123,30 +128,42 @@ def public_server_definition(
     client_context: str,
     workspace_context: str,
     base_url: str,
+    connection_state_root: str | Path | None = None,
+    connection_generation: str | None = None,
 ) -> dict[str, Any]:
     """Return one nonsecret explicit-profile definition for the public server."""
 
+    arguments = [
+        "-m",
+        "qcoder",
+        "context-bridge",
+        "mcp",
+        "serve",
+        "--profile",
+        selected.profile_id,
+        "--client-context",
+        client_context,
+        "--workspace-context",
+        workspace_context,
+        "--base-url",
+        base_url,
+    ]
+    if connection_state_root is not None and connection_generation is not None:
+        arguments.extend(
+            [
+                "--connection-state-root",
+                str(Path(connection_state_root).expanduser().absolute()),
+                "--connection-generation",
+                str(connection_generation),
+            ]
+        )
     return {
         "command": str(Path(executable).expanduser().absolute()),
-        "args": [
-            "-m",
-            "qcoder",
-            "context-bridge",
-            "mcp",
-            "serve",
-            "--profile",
-            selected.profile_id,
-            "--client-context",
-            client_context,
-            "--workspace-context",
-            workspace_context,
-            "--base-url",
-            base_url,
-        ],
+        "args": arguments,
     }
 
 
-def _validate_inventory(smoke: Mapping[str, Any]) -> None:
+def _validate_server_preflight(smoke: Mapping[str, Any]) -> None:
     private = [item.get("name") for item in binding_tool_descriptors()]
     if (
         smoke.get("ok") is not True
@@ -155,13 +172,13 @@ def _validate_inventory(smoke: Mapping[str, Any]) -> None:
         or smoke.get("tools_discovered") != len(EXPECTED_TOOLS)
     ):
         raise ContextBridgeSetupError(
-            str(smoke.get("connection_status_category") or "context_bridge_verification_failed")
+            str(smoke.get("server_preflight_status_category") or "server_preflight_failed")
         )
     if private != [BEGIN_CURRENT_LOOP_TOOL_NAME, COMPLETE_CURRENT_STEP_TOOL_NAME]:
         raise ContextBridgeSetupError("current_loop_operation_inventory_mismatch")
 
 
-def connect_cursor_workspace(
+def configure_cursor_workspace(
     *,
     workspace_root: str | Path,
     profile: str | None = None,
@@ -172,7 +189,7 @@ def connect_cursor_workspace(
     manager: CredentialProfileManager | None = None,
     smoke_runner: Callable[..., dict[str, Any]] = run_smoke,
 ) -> dict[str, Any]:
-    """Select, verify, and atomically configure Cursor for the existing 12+2 servers."""
+    """Select, preflight, and configure Cursor without claiming client connection."""
 
     if client_context != SUPPORTED_CLIENT:
         raise ContextBridgeSetupError("client_setup_not_supported")
@@ -187,33 +204,68 @@ def connect_cursor_workspace(
         workspace_selector=selection_workspace,
     )
     smoke = smoke_runner(base_url=base_url, token_file=selected)
-    _validate_inventory(smoke)
+    _validate_server_preflight(smoke)
 
     runtime = Path(executable or sys.executable).expanduser().absolute()
     cursor_root = workspace / ".cursor"
     mcp_path = cursor_root / "mcp.json"
     hooks_path = cursor_root / "hooks.json"
-    snapshots = (_read_snapshot(mcp_path), _read_snapshot(hooks_path))
+    state_paths = connection_state_paths(workspace)
+    snapshots = (
+        _read_snapshot(mcp_path),
+        _read_snapshot(hooks_path),
+        *(_read_snapshot(path) for path in state_paths),
+    )
     existing_mcp = _load_mcp(snapshots[0])
-    expected_public = public_server_definition(
+    predecessor_public = public_server_definition(
         executable=runtime,
         selected=selected,
         client_context=client_context,
         workspace_context=selection_workspace,
         base_url=base_url,
     )
-    current_public = existing_mcp["mcpServers"].get(PUBLIC_SERVER_NAME)
-    if current_public is not None and current_public != expected_public:
-        raise ContextBridgeSetupError("context_bridge_mcp_name_conflict")
 
     try:
-        install_cursor_post_write_hook(workspace_root=workspace, executable=runtime)
+        manifest = prepare_connection_state(
+            workspace,
+            client=SUPPORTED_CLIENT,
+            configuration_verified=True,
+            credential_verified=True,
+        )
+        state_root = connection_state_root(workspace)
+        generation = str(manifest["setup_generation"])
+        expected_public = public_server_definition(
+            executable=runtime,
+            selected=selected,
+            client_context=client_context,
+            workspace_context=selection_workspace,
+            base_url=base_url,
+            connection_state_root=state_root,
+            connection_generation=generation,
+        )
+        current_public = existing_mcp["mcpServers"].get(PUBLIC_SERVER_NAME)
+        if current_public is not None and current_public not in (
+            predecessor_public,
+            expected_public,
+        ):
+            raise ContextBridgeSetupError("context_bridge_mcp_name_conflict")
+        install_cursor_post_write_hook(
+            workspace_root=workspace,
+            executable=runtime,
+            connection_state_root=state_root,
+            connection_generation=generation,
+        )
         current = _read_snapshot(mcp_path)
         mcp_value = _load_mcp(current)
         mcp_value["mcpServers"][PUBLIC_SERVER_NAME] = expected_public
         encoded = (json.dumps(mcp_value, indent=2, sort_keys=True) + "\n").encode("utf-8")
         _atomic_write(mcp_path, encoded)
-        status = cursor_post_write_hook_status(workspace_root=workspace, executable=runtime)
+        status = cursor_post_write_hook_status(
+            workspace_root=workspace,
+            executable=runtime,
+            connection_state_root=state_root,
+            connection_generation=generation,
+        )
         verified = _load_mcp(_read_snapshot(mcp_path))
         if (
             status.get("configured") is not True
@@ -231,9 +283,13 @@ def connect_cursor_workspace(
 
     return {
         "schema_id": SETUP_SCHEMA_ID,
-        "schema_version": 1,
+        "schema_version": 2,
         "ok": True,
-        "customer_result": "qCoder connected",
+        "customer_result": "qCoder configured",
+        "connection_state": "configured",
+        "configured": True,
+        "connected": False,
+        "qualified": False,
         "client": SUPPORTED_CLIENT,
         "profile": {
             "profile_id": selected.profile_id,
@@ -253,12 +309,26 @@ def connect_cursor_workspace(
         "servers": [PUBLIC_SERVER_NAME, BINDING_MCP_SERVER_NAME],
         "public_tool_count": len(EXPECTED_TOOLS),
         "private_operation_count": 2,
+        "declared_public_tool_count": len(EXPECTED_TOOLS),
+        "declared_private_operation_count": 2,
         "private_operations": [
             BEGIN_CURRENT_LOOP_TOOL_NAME,
             COMPLETE_CURRENT_STEP_TOOL_NAME,
         ],
         "configuration_verified": True,
+        "canonical_server_definitions_verified": True,
         "credential_verified": True,
+        "credential_preflight_verified": True,
+        "direct_server_smoke_verified": True,
+        "client_originated_initialization_verified": False,
+        "client_originated_inventory_verified": False,
+        "client_originated_qcoder_request_verified": False,
+        "client_connection_verified": False,
+        "direct_server_smoke_establishes_connection": False,
+        "direct_server_smoke_establishes_client_connection": False,
+        "client_qualification_created": False,
+        "support_claim_created": False,
+        "safe_next_action": "reload_cursor_then_ask_use_qcoder_to_check_this_connection",
         "secret_included": False,
         "raw_configuration_included": False,
         "rollback_snapshot_retained": False,
@@ -266,12 +336,24 @@ def connect_cursor_workspace(
 
 
 def setup_contract_snapshot() -> dict[str, Any]:
-    """Return the stable nonsecret D-105 setup contract."""
+    """Return the stable truthful configured-versus-connected setup contract."""
 
     return {
         "schema_id": SETUP_SCHEMA_ID,
-        "schema_version": 1,
-        "customer_result": "qCoder connected",
+        "schema_version": 2,
+        "customer_result": "qCoder configured",
+        "configured": True,
+        "connected": False,
+        "qualified": False,
+        "client_connection_verified": False,
+        "connection_state_after_setup": "configured",
+        "configured_meaning": (
+            "credential selection and canonical server definitions are verified and ready"
+        ),
+        "connected_meaning": (
+            "one client initialized both servers, discovered exact 12+2, and completed "
+            "one read-only qCoder request"
+        ),
         "supported_client": SUPPORTED_CLIENT,
         "server_entries": [PUBLIC_SERVER_NAME, BINDING_MCP_SERVER_NAME],
         "public_tool_count": len(EXPECTED_TOOLS),
@@ -281,6 +363,13 @@ def setup_contract_snapshot() -> dict[str, Any]:
         "explicit_profile_pinned_after_selection": True,
         "selected_credential_failure_fallback": False,
         "configuration_transaction": "restore_exact_prior_files_on_failure",
+        "client_originated_connection_verification": True,
+        "direct_server_smoke_establishes_connection": False,
+        "direct_server_smoke_establishes_client_connection": False,
+        "connection_verification_command": "qcoder context-bridge verify-connection",
+        "connection_check_customer_request": "Use qCoder to check this connection.",
+        "client_qualification_created": False,
+        "support_claim_created": False,
         "secret_in_configuration": False,
         "server_consolidation": False,
     }
