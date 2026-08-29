@@ -18,8 +18,8 @@
     "relationship_to_source": "behavior_changing"
   },
   "product_correction_basis": {
-    "source_commit": "59f0755e965f55a782d220f292ddb8e789af35a1",
-    "source_tree": "457352e54bc0320aff00efaaddf66634ba8233a5",
+    "source_commit": "75babdcc27f894094f776bc9e3d1382ab9e1496f",
+    "source_tree": "6887f0fbdf27cfce7c2316f2eed336f663ac2bf2",
     "state": "private_unfrozen_a24_truthful_connection_state_product_basis_not_publishable",
     "relationship_to_source": "behavior_preserving_except_release_identity_release_truth_mechanically_resulting_package_metadata_and_release_only_verification"
   },

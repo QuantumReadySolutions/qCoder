@@ -20,8 +20,8 @@ def _verifier():
 def test_exact_a24_release_normalization_passes() -> None:
     result = _verifier().verify(ROOT)
     assert result["ok"] is True
-    assert result["product_basis_commit"] == "59f0755e965f55a782d220f292ddb8e789af35a1"
-    assert result["product_basis_tree"] == "457352e54bc0320aff00efaaddf66634ba8233a5"
+    assert result["product_basis_commit"] == "75babdcc27f894094f776bc9e3d1382ab9e1496f"
+    assert result["product_basis_tree"] == "6887f0fbdf27cfce7c2316f2eed336f663ac2bf2"
     assert result["terminal_a23_commit"] == "9c984936ab0067d2109eb24b9b1ea072b09b686d"
     assert result["terminal_a23_tree"] == "ea21765a855ed03642e729b10453bdfc17b8d27e"
     assert result["runtime_delta"] == ["src/qcoder/__init__.py"]

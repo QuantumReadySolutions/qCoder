@@ -5,8 +5,8 @@ qCoder 0.6.0a22 is its customer upgrade predecessor. Frozen qCoder 0.6.0a23 at c
 `9c984936ab0067d2109eb24b9b1ea072b09b686d` is the implementation lineage predecessor; a23 is
 unpublished, consumed, terminal, do-not-publish evidence and is not a customer release.
 
-The a24 product correction basis is commit `59f0755e965f55a782d220f292ddb8e789af35a1`,
-tree `457352e54bc0320aff00efaaddf66634ba8233a5`. That exact basis → a24 relationship
+The a24 product correction basis is commit `75babdcc27f894094f776bc9e3d1382ab9e1496f`,
+tree `6887f0fbdf27cfce7c2316f2eed336f663ac2bf2`. That exact basis → a24 relationship
 preserves runtime implementation and product behavior except for release identity, release-truth
 documentation, mechanically resulting package metadata, and release-only verification. The public
 a22 → a24 and terminal a23 → a24 relationships are behavior-changing.

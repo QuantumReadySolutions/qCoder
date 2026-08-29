@@ -41,7 +41,7 @@ RELATIONSHIP_CLAUSES = (
     "Public qCoder 0.6.0a22 is its customer upgrade predecessor",
     "Frozen qCoder 0.6.0a23 at commit `9c984936ab0067d2109eb24b9b1ea072b09b686d` is the implementation lineage predecessor",
     "a23 is unpublished, consumed, terminal, do-not-publish evidence and is not a customer release",
-    "The a24 product correction basis is commit `59f0755e965f55a782d220f292ddb8e789af35a1`",
+    "The a24 product correction basis is commit `75babdcc27f894094f776bc9e3d1382ab9e1496f`",
     "That exact basis → a24 relationship preserves runtime implementation and product behavior except for release identity",
     "The public a22 → a24 and terminal a23 → a24 relationships are behavior-changing",
     "Managed setup now reports `qCoder configured`",
@@ -246,7 +246,7 @@ def test_a24_release_history_is_complete_and_noncontradictory() -> None:
         "consumed_terminal_unpublished_do_not_publish"
     )
     assert release["product_correction_basis"]["source_commit"] == (
-        "59f0755e965f55a782d220f292ddb8e789af35a1"
+        "75babdcc27f894094f776bc9e3d1382ab9e1496f"
     )
     assert release["intervening_nonpublic_versions"] == []
     assert "0.6.0a19 remains intentionally reserved" in readme

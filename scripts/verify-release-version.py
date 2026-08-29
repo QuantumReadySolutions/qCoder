@@ -34,8 +34,8 @@ LINEAGE_PREDECESSOR = {
     "relationship_to_source": "behavior_changing",
 }
 PRODUCT_CORRECTION_BASIS = {
-    "source_commit": "59f0755e965f55a782d220f292ddb8e789af35a1",
-    "source_tree": "457352e54bc0320aff00efaaddf66634ba8233a5",
+    "source_commit": "75babdcc27f894094f776bc9e3d1382ab9e1496f",
+    "source_tree": "6887f0fbdf27cfce7c2316f2eed336f663ac2bf2",
     "state": "private_unfrozen_a24_truthful_connection_state_product_basis_not_publishable",
     "relationship_to_source": "behavior_preserving_except_release_identity_release_truth_mechanically_resulting_package_metadata_and_release_only_verification",
 }
@@ -46,8 +46,8 @@ qCoder 0.6.0a22 is its customer upgrade predecessor. Frozen qCoder 0.6.0a23 at c
 `9c984936ab0067d2109eb24b9b1ea072b09b686d` is the implementation lineage predecessor; a23 is
 unpublished, consumed, terminal, do-not-publish evidence and is not a customer release.
 
-The a24 product correction basis is commit `59f0755e965f55a782d220f292ddb8e789af35a1`,
-tree `457352e54bc0320aff00efaaddf66634ba8233a5`. That exact basis → a24 relationship
+The a24 product correction basis is commit `75babdcc27f894094f776bc9e3d1382ab9e1496f`,
+tree `6887f0fbdf27cfce7c2316f2eed336f663ac2bf2`. That exact basis → a24 relationship
 preserves runtime implementation and product behavior except for release identity, release-truth
 documentation, mechanically resulting package metadata, and release-only verification. The public
 a22 → a24 and terminal a23 → a24 relationships are behavior-changing.
@@ -98,7 +98,7 @@ Implementation lineage predecessor: frozen terminal unpublished qCoder 0.6.0a23 
 behavior-changing. The a23 artifacts are consumed, terminal, do-not-publish evidence and are not
 a customer upgrade predecessor.
 
-Product correction basis: commit `59f0755e965f55a782d220f292ddb8e789af35a1`. That exact
+Product correction basis: commit `75babdcc27f894094f776bc9e3d1382ab9e1496f`. That exact
 product basis → a24 relationship preserves runtime implementation and product behavior except
 for release identity, release-truth documentation, mechanically resulting package metadata, and
 release-only verification."""
@@ -107,8 +107,8 @@ ACTIVE_BLOCKS = (RELATIONSHIP_PRODUCT_BLOCK, HISTORICAL_STATUS_BLOCK, UPGRADE_BL
 RELEASE_NOTE_REQUIRED_CLAUSES = (
     "qCoder 0.6.0a24 is a behavior-changing pre-release successor to public qCoder 0.6.0a22",
     "a23 is unpublished, consumed, terminal, do-not-publish evidence and is not a customer release",
-    "59f0755e965f55a782d220f292ddb8e789af35a1",
-    "457352e54bc0320aff00efaaddf66634ba8233a5",
+    "75babdcc27f894094f776bc9e3d1382ab9e1496f",
+    "6887f0fbdf27cfce7c2316f2eed336f663ac2bf2",
     "That exact basis → a24 relationship preserves runtime implementation and product behavior except for release identity",
     "Managed setup now reports `qCoder configured`",
     "A bounded verification command reports `qCoder connected` only after an actual client initializes both canonical MCP servers",

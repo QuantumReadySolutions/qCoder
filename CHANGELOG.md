@@ -9,7 +9,7 @@ Implementation lineage predecessor: frozen terminal unpublished qCoder 0.6.0a23 
 behavior-changing. The a23 artifacts are consumed, terminal, do-not-publish evidence and are not
 a customer upgrade predecessor.
 
-Product correction basis: commit `59f0755e965f55a782d220f292ddb8e789af35a1`. That exact
+Product correction basis: commit `75babdcc27f894094f776bc9e3d1382ab9e1496f`. That exact
 product basis → a24 relationship preserves runtime implementation and product behavior except
 for release identity, release-truth documentation, mechanically resulting package metadata, and
 release-only verification.

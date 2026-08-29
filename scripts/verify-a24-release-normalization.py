@@ -12,8 +12,8 @@ from pathlib import Path
 from qcoder.context_bridge_mcp import EXPECTED_TOOLS, build_client_binding_descriptor
 from qcoder.current_loop_binding_mcp import binding_tool_descriptors
 
-PRODUCT_BASIS_COMMIT = "59f0755e965f55a782d220f292ddb8e789af35a1"
-PRODUCT_BASIS_TREE = "457352e54bc0320aff00efaaddf66634ba8233a5"
+PRODUCT_BASIS_COMMIT = "75babdcc27f894094f776bc9e3d1382ab9e1496f"
+PRODUCT_BASIS_TREE = "6887f0fbdf27cfce7c2316f2eed336f663ac2bf2"
 TERMINAL_A23_COMMIT = "9c984936ab0067d2109eb24b9b1ea072b09b686d"
 TERMINAL_A23_TREE = "ea21765a855ed03642e729b10453bdfc17b8d27e"
 TERMINAL_A23_RELEASE_NOTE_SHA256 = (
