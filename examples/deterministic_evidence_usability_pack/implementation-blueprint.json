@@ -1,0 +1,11 @@
+{
+  "artifact_digest": "aca5c8497578f86271995c85b443dc8ae3168ff2f91109d359a07664132eefbb",
+  "artifact_type": "implementation_blueprint",
+  "confirmation_state": "confirmed",
+  "profile_id": "generic_qiskit",
+  "requirements": [
+    "Use two logical qubits.",
+    "Include explicit measurements for both logical qubits."
+  ],
+  "schema_version": 1
+}

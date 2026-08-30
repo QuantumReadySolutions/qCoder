@@ -40,6 +40,7 @@ from qcoder.current_loop_run_summary import EVIDENCE_VIEW_IDS
 from qcoder.current_loop_quiet_workflow import HELP_TOPICS
 from qcoder.engines.review.local_evidence import LocalEvidenceError
 from qcoder.engines.review.local_evidence_markdown import render_local_evidence_markdown
+from qcoder.evidence_usability import EvidenceUsabilityError, write_evidence_usability_pack
 
 EXPLORER_BETA_DOCS_URL = "https://qcoder.ai/manual/student-beta/"
 OSS_DOCS_URL = "https://qcoder.ai/manual/oss/"
@@ -309,12 +310,16 @@ def _cmd_context(argv: list[str]) -> int:
 def _cmd_review(argv: list[str]) -> int:
     if argv and argv[0] == "local-evidence":
         return _cmd_review_local_evidence(argv[1:])
+    if argv and argv[0] == "usability-pack":
+        return _cmd_review_usability_pack(argv[1:])
     p = argparse.ArgumentParser(
         prog="qcoder review",
         add_help=True,
         epilog=(
             "Review local evidence from explicit files with: "
-            "qcoder review local-evidence FILE [FILE ...]"
+            "qcoder review local-evidence FILE [FILE ...]. Create deterministic share-safe "
+            "evidence, readiness, and intent views with: "
+            "qcoder review usability-pack FILE [FILE ...] --out-dir DIR"
         ),
     )
     p.add_argument("--counts-json", required=True, help="Input counts JSON path")
@@ -457,6 +462,60 @@ def _cmd_review_local_evidence(argv: list[str]) -> int:
         if output:
             print(f"Wrote {label} to {output}", file=sys.stderr)
     return 0 if report["status"] == "completed" else 2
+
+
+def _cmd_review_usability_pack(argv: list[str]) -> int:
+    p = argparse.ArgumentParser(
+        prog="qcoder review usability-pack",
+        description=(
+            "Create deterministic, share-safe Evidence Prompt Pack, Run Readiness Checklist, "
+            "and Blueprint Intent Card views from explicitly selected local evidence. No source "
+            "or circuit execution, repository scan, model, account, credential, or network is used."
+        ),
+    )
+    p.add_argument(
+        "files",
+        nargs="+",
+        metavar="FILE",
+        help="Explicit supported evidence files; directories, globs, and discovery are not accepted.",
+    )
+    p.add_argument(
+        "--python-profile",
+        choices=PROFILE_IDS,
+        default="generic_qiskit",
+        help="Existing bounded Python evidence profile (default: generic_qiskit).",
+    )
+    p.add_argument(
+        "--intent-json",
+        default=None,
+        help="Optional explicitly selected Algorithm Intent Card JSON.",
+    )
+    p.add_argument(
+        "--blueprint-json",
+        default=None,
+        help="Optional explicitly selected Implementation Blueprint JSON.",
+    )
+    p.add_argument(
+        "--out-dir",
+        required=True,
+        help="Directory for the six deterministic JSON and Markdown projection files.",
+    )
+    args = p.parse_args(argv)
+    try:
+        written = write_evidence_usability_pack(
+            paths=list(args.files),
+            out_dir=args.out_dir,
+            python_profile=args.python_profile,
+            intent_json=args.intent_json,
+            blueprint_json=args.blueprint_json,
+        )
+    except (EvidenceUsabilityError, LocalEvidenceError, OSError, ValueError) as exc:
+        print(f"qcoder review usability-pack: {exc}", file=sys.stderr)
+        return 2
+    for path in written:
+        print(f"Wrote {path.name}", file=sys.stderr)
+    print("Deterministic evidence usability pack complete.")
+    return 0
 
 
 def _run_pro_preview_demo_check(

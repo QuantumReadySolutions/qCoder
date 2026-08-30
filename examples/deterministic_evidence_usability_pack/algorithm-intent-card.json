@@ -1,0 +1,15 @@
+{
+  "artifact_digest": "b47b84e6535c93ff152ec60dcd2070814d459dbe075f384dc12675f0315b5cf8",
+  "artifact_type": "algorithm_intent_card",
+  "confirmation_state": "confirmed",
+  "field_provenance": {
+    "original_user_intent": "user"
+  },
+  "interpretation": {},
+  "original_user_intent": "Prepare a Bell-state circuit example without executing it.",
+  "profile": {
+    "id": "generic_qiskit"
+  },
+  "schema_version": 1,
+  "unresolved_questions": []
+}

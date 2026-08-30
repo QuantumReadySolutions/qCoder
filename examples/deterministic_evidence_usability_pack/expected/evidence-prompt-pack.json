@@ -1,0 +1,79 @@
+{
+  "boundaries": {
+    "assistant_quality_guaranteed": false,
+    "customer_review_required_before_sharing": true,
+    "model_called": false,
+    "network_accessed": false,
+    "persistent_memory_created": false,
+    "repository_scanned": false,
+    "source_or_circuit_executed": false
+  },
+  "bounded_next_checks": [
+    {
+      "basis": "existing_local_evidence_supported_next_action",
+      "check_id": "existing-next-check-openqasm-2-1",
+      "instruction": "qcoder review local-evidence <redacted-local-path> --out-json local-evidence.json"
+    },
+    {
+      "basis": "existing_local_evidence_supported_next_action",
+      "check_id": "existing-next-check-openqasm-2-2",
+      "instruction": "Supply counts JSON separately to review supplied run evidence."
+    },
+    {
+      "basis": "existing_local_evidence_supported_next_action",
+      "check_id": "existing-next-check-python-qiskit-source-1",
+      "instruction": "qcoder review local-evidence <redacted-local-path> --python-profile generic_qiskit --out-json local-evidence.json"
+    },
+    {
+      "basis": "existing_local_evidence_supported_next_action",
+      "check_id": "existing-next-check-python-qiskit-source-2",
+      "instruction": "Supply an exported OpenQASM 2 file to review constructed circuit facts."
+    },
+    {
+      "basis": "existing_local_evidence_supported_next_action",
+      "check_id": "existing-next-check-python-qiskit-source-3",
+      "instruction": "Supply counts JSON to review factual run results."
+    }
+  ],
+  "limitations": [
+    "Circuit stage identity is not guessed from structure.",
+    "Repeated operations are not inferred to be a semantic repeated region.",
+    "Static QASM2 syntax only; custom or unsupported statements may be summarized as custom.",
+    "Static source evidence does not prove implementation correctness, completeness, algorithm identity, constructed-circuit behavior, target compatibility, or runtime behavior."
+  ],
+  "projection_role": "share_safe_assistant_input_from_explicitly_selected_evidence",
+  "schema_id": "qcoder.evidence_prompt_pack.v1",
+  "schema_version": 1,
+  "selected_artifacts": [
+    {
+      "artifact_id": "selected-evidence-ae0cd14257479613",
+      "artifact_kind": "openqasm_2",
+      "evidence_schemas": [
+        "qcoder.circuit_manifestation.v1"
+      ],
+      "selection": "explicit_file_argument",
+      "sha256": "ae0cd142574796138ef95bd28378ae0a56b611999e3e31369cdacefe51a7b825"
+    },
+    {
+      "artifact_id": "selected-evidence-f0b51fc97bc92568",
+      "artifact_kind": "python_qiskit_source",
+      "evidence_schemas": [
+        "qcoder.development_evidence.v0"
+      ],
+      "selection": "explicit_file_argument",
+      "sha256": "f0b51fc97bc9256872868b5b23dc4448a105e73c0c8cb46a2ef09036e85c80f6"
+    }
+  ],
+  "supported_findings": [
+    "Circuit width 2, depth 2, operation count 4, and measurement count 2 were deterministically established within parser bounds.",
+    "Observed motif structures: qiskit.circuit.construction, qiskit.measurement.mapping, qiskit.controlled.operations.",
+    "The explicitly selected Python file was parsed with bounded static AST inspection.",
+    "The input declares OpenQASM 2.0."
+  ],
+  "unsupported_statements": [
+    "A structural Grover or QAOA match does not establish complete or correct algorithm identity.",
+    "Circuit correctness, runtime behavior, output-state entanglement, and algorithm identity were not established.",
+    "Constructed circuit behavior, runtime behavior, and result causation were not established.",
+    "No motif evidence was inferred from QASM."
+  ]
+}

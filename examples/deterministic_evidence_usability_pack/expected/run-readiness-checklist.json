@@ -1,0 +1,102 @@
+{
+  "boundaries": {
+    "execution_performed": false,
+    "network_accessed": false,
+    "new_evidence_created": false,
+    "prediction_performed": false,
+    "repository_scanned": false
+  },
+  "checks": [
+    {
+      "check_id": "selected-artifact-validation",
+      "disposition": "ready",
+      "explanation": "Every explicitly selected artifact was parsed within a supported local evidence path.",
+      "label": "Selected artifact validation",
+      "limitation": "This validation does not establish correctness or execution success.",
+      "supporting_evidence_ids": [
+        "selected-evidence-ae0cd14257479613",
+        "selected-evidence-f0b51fc97bc92568"
+      ]
+    },
+    {
+      "check_id": "supported-input-format",
+      "disposition": "ready",
+      "explanation": "The selected formats are supported by the existing bounded local evidence readers.",
+      "label": "Supported input format",
+      "limitation": "Format support is not backend, hardware, or runtime suitability.",
+      "supporting_evidence_ids": [
+        "selected-evidence-ae0cd14257479613",
+        "selected-evidence-f0b51fc97bc92568"
+      ]
+    },
+    {
+      "check_id": "openqasm-2-readiness",
+      "disposition": "ready",
+      "explanation": "Explicit OpenQASM 2 evidence is available.",
+      "label": "OpenQASM 2 evidence availability",
+      "limitation": "Static QASM parsing does not establish executable hardware support.",
+      "supporting_evidence_ids": [
+        "selected-evidence-ae0cd14257479613"
+      ]
+    },
+    {
+      "check_id": "measurement-evidence",
+      "disposition": "ready",
+      "explanation": "The selected circuit evidence records 2 measurement operation(s).",
+      "label": "Measurement evidence",
+      "limitation": "Measurement presence does not establish output quality or statistical sufficiency.",
+      "supporting_evidence_ids": [
+        "selected-evidence-ae0cd14257479613",
+        "selected-evidence-f0b51fc97bc92568"
+      ]
+    },
+    {
+      "check_id": "supplied-result-evidence",
+      "disposition": "missing_evidence",
+      "explanation": "No supported result-evidence artifact was explicitly selected.",
+      "label": "Supplied result evidence",
+      "limitation": "Result presence does not establish circuit lineage unless that relationship is explicit in the evidence.",
+      "supporting_evidence_ids": []
+    }
+  ],
+  "disposition_vocabulary": [
+    "ready",
+    "warning",
+    "missing_evidence",
+    "unsupported",
+    "not_applicable"
+  ],
+  "prohibited_conclusions": [
+    "runtime prediction",
+    "fidelity prediction",
+    "backend ranking",
+    "optimal shot count",
+    "algorithm correctness",
+    "execution success",
+    "hardware suitability",
+    "statistical sufficiency"
+  ],
+  "projection_role": "customer_readable_view_of_existing_preflight_evidence",
+  "schema_id": "qcoder.run_readiness_checklist.v1",
+  "schema_version": 1,
+  "selected_artifacts": [
+    {
+      "artifact_id": "selected-evidence-ae0cd14257479613",
+      "artifact_kind": "openqasm_2",
+      "evidence_schemas": [
+        "qcoder.circuit_manifestation.v1"
+      ],
+      "selection": "explicit_file_argument",
+      "sha256": "ae0cd142574796138ef95bd28378ae0a56b611999e3e31369cdacefe51a7b825"
+    },
+    {
+      "artifact_id": "selected-evidence-f0b51fc97bc92568",
+      "artifact_kind": "python_qiskit_source",
+      "evidence_schemas": [
+        "qcoder.development_evidence.v0"
+      ],
+      "selection": "explicit_file_argument",
+      "sha256": "f0b51fc97bc9256872868b5b23dc4448a105e73c0c8cb46a2ef09036e85c80f6"
+    }
+  ]
+}

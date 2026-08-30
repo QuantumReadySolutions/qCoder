@@ -19,6 +19,9 @@ The public `qcoder` package on `main` ships:
 - `qcoder review local-evidence` — one bounded OSS-local presentation composed from existing
   canonical evidence for explicitly selected files; it adds no registry, persistence, or network
   service.
+- `qcoder review usability-pack` — an unpublished deterministic projection of explicitly selected
+  local evidence into share-safe prompt, readiness, and intent views; it adds no evidence or intent
+  authority, execution, discovery, model, network, or persistence.
 - `qcoder explorer status`, `qcoder explorer demo`, and `qcoder explorer evidence` — primary Explorer Beta commands for account-backed status, built-in evidence, and derived-context custom evidence checks. `qcoder student ...` remains a compatibility alias during beta.
 - `qcoder pro` — archived pilot/client-contract plumbing only. Pro is not launched and is not a current public product path.
 

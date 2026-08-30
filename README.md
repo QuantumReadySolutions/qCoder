@@ -232,6 +232,28 @@ section meanings.
 This section describes behavior present in qCoder 0.6.0a18. Package publication and public client-
 claim status remain separate facts governed outside the package documentation.
 
+### Deterministic evidence usability views (unpublished development candidate)
+
+`qcoder review usability-pack` composes explicitly selected local evidence into a share-safe
+Evidence Prompt Pack, an evidence-grounded Run Readiness Checklist, and a Blueprint Intent Card.
+It produces deterministic JSON and Markdown without executing source or circuits, scanning a
+repository, calling a model or service, or creating persistent memory. Intent is accepted only
+from explicit or already-confirmed Intent Card and Blueprint state; observed circuit structure is
+kept separate.
+
+```bash
+qcoder review usability-pack \
+  examples/deterministic_evidence_usability_pack/bell.py \
+  examples/deterministic_evidence_usability_pack/bell.qasm \
+  --intent-json examples/deterministic_evidence_usability_pack/algorithm-intent-card.json \
+  --blueprint-json examples/deterministic_evidence_usability_pack/implementation-blueprint.json \
+  --out-dir evidence-usability-output
+```
+
+This surface is part of the private unpublished development candidate, not public qCoder 0.6.0a24.
+See [`docs/deterministic-evidence-usability-pack.md`](docs/deterministic-evidence-usability-pack.md)
+and the checked Bell replay for boundaries and expected output.
+
 ### Explorer Evidence Review
 
 Evidence Review is an Explorer capability for understanding what explicitly supplied current evidence supports, what remains unproven, what changed within one bounded workflow, and what the user may choose to check next. It uses the existing Context Bridge operations:
