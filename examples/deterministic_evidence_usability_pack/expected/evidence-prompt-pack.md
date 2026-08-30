@@ -27,10 +27,10 @@ Selected evidence:
 
 ## Bounded next checks
 
-- qcoder review local-evidence <redacted-local-path> --out-json local-evidence.json
-- Supply counts JSON separately to review supplied run evidence.
+- Supply counts JSON to review factual run results.
 - qcoder review local-evidence <redacted-local-path> --python-profile generic_qiskit --out-json local-evidence.json
 - Supply an exported OpenQASM 2 file to review constructed circuit facts.
-- Supply counts JSON to review factual run results.
+- Supply counts JSON separately to review supplied run evidence.
+- qcoder review local-evidence <redacted-local-path> --out-json local-evidence.json
 
 This pack is local, deterministic, share-safe by default, and does not guarantee an assistant's answer.

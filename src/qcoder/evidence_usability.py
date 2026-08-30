@@ -15,7 +15,7 @@ from typing import Any, Mapping, Sequence
 
 from qcoder.algorithm_blueprint import artifact_digest_matches
 from qcoder.blueprint_decisions import decision_record_error, unpack_decision_record_set
-from qcoder.core.share_safe import contains_local_path, redact_local_paths
+from qcoder.core.share_safe import contains_local_path, contains_token_or_header, redact_local_paths
 from qcoder.engines.review.local_evidence import (
     build_local_evidence_review,
     build_share_safe_local_evidence_review,
@@ -43,6 +43,9 @@ _SENSITIVE_KEY_RE = re.compile(
 _RAW_KEY_RE = re.compile(
     r"(?:^|_)(?:raw_(?:client|model|mcp|request|response|stream)|authentication_state|configuration_body)(?:_|$)",
     re.IGNORECASE,
+)
+_SENSITIVE_ASSIGNMENT_RE = re.compile(
+    r"(?im)(?P<prefix>['\"]?\b(?:api[_-]?key|authorization|cookie|credential|password|secret|session|token)\b['\"]?\s*[:=]\s*)(?P<value>[^\s,;]+|['\"][^'\"\n]*['\"])",
 )
 _PROHIBITED_PREDICTIONS = (
     "runtime prediction",
@@ -74,6 +77,9 @@ def _sha256(path: Path) -> str:
 
 def _safe_text(value: object) -> str:
     text = redact_local_paths(str(value).strip())
+    text = _SENSITIVE_ASSIGNMENT_RE.sub(
+        lambda match: match.group("prefix") + "<redacted-sensitive-value>", text
+    )
     return " ".join(text.split())
 
 
@@ -100,6 +106,8 @@ def _privacy_error(value: object, *, path: str = "$") -> str | None:
         return None
     if isinstance(value, str) and contains_local_path(value):
         return f"unsafe_output_path:{path}"
+    if isinstance(value, str) and contains_token_or_header(value):
+        return f"unsafe_output_secret:{path}"
     return None
 
 
@@ -143,19 +151,18 @@ def _statements(report: Mapping[str, Any], field: str) -> list[str]:
 
 
 def _next_checks(report: Mapping[str, Any]) -> list[dict[str, str]]:
-    rows = []
+    rows: dict[str, dict[str, str]] = {}
     for item in report["artifacts"]:
-        for index, instruction in enumerate(item.get("supported_next_actions") or [], start=1):
+        for instruction in item.get("supported_next_actions") or []:
             text = _safe_text(instruction)
             if text:
-                rows.append(
-                    {
-                        "check_id": f"existing-next-check-{str(item['input']['kind']).replace('_', '-')}-{index}",
-                        "instruction": text,
-                        "basis": "existing_local_evidence_supported_next_action",
-                    }
-                )
-    return sorted(rows, key=lambda row: (row["check_id"], row["instruction"]))
+                check_id = "existing-next-check-" + hashlib.sha256(text.encode()).hexdigest()[:16]
+                rows[check_id] = {
+                    "check_id": check_id,
+                    "instruction": text,
+                    "basis": "existing_local_evidence_supported_next_action",
+                }
+    return [rows[key] for key in sorted(rows)]
 
 
 def build_evidence_prompt_pack(

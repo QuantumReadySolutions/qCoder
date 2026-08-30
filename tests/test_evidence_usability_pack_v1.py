@@ -218,6 +218,23 @@ def test_blueprint_intent_preserves_confirmed_proposed_and_absent_states(tmp_pat
     assert "Bell" not in canonical_json(absent)
 
 
+def test_intent_projection_redacts_token_and_credential_assignments(tmp_path: Path) -> None:
+    unsafe = _intent()
+    unsafe.pop("artifact_digest")
+    unsafe["original_user_intent"] = (
+        "Prepare the selected example; token=fixture-token-value and password=fixture-password."
+    )
+    path = _write_json(tmp_path / "intent.json", with_artifact_digest(unsafe))
+    card = build_blueprint_intent_card(
+        report=build_local_evidence_review([str(BELL_QASM)]),
+        intent_json=str(path),
+    )
+    serialized = canonical_json(card)
+    assert "fixture-token-value" not in serialized
+    assert "fixture-password" not in serialized
+    assert serialized.count("<redacted-sensitive-value>") == 2
+
+
 def test_blueprint_decision_states_are_separated(monkeypatch: pytest.MonkeyPatch) -> None:
     records = [
         {
@@ -300,6 +317,20 @@ def test_projection_validators_reject_extra_fields(
     mutated["unexpected"] = "unsafe"
     with pytest.raises(EvidenceUsabilityError):
         validator(mutated)  # type: ignore[operator]
+
+
+@pytest.mark.parametrize("mutation", ["missing_schema", "unsupported_schema", "malformed_digest"])
+def test_projection_schema_mutations_fail_closed(tmp_path: Path, mutation: str) -> None:
+    output = build_evidence_usability_pack(paths=[str(BELL_QASM)])["evidence-prompt-pack"][0]
+    mutated = deepcopy(output)
+    if mutation == "missing_schema":
+        mutated.pop("schema_id")
+    elif mutation == "unsupported_schema":
+        mutated["schema_version"] = 2
+    else:
+        mutated["selected_artifacts"][0]["sha256"] = "not-a-digest"
+    with pytest.raises(EvidenceUsabilityError):
+        validate_evidence_prompt_pack(mutated)
 
 
 def test_renderers_are_byte_deterministic(tmp_path: Path) -> None:

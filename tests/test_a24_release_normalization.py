@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import subprocess
 
 import pytest
 
@@ -17,8 +18,28 @@ def _verifier():
     return module
 
 
-def test_exact_a24_release_normalization_passes() -> None:
-    result = _verifier().verify(ROOT)
+def test_exact_a24_release_normalization_passes(tmp_path: Path) -> None:
+    release_root = tmp_path / "exact-public-a24"
+    subprocess.run(
+        ["git", "clone", "--shared", "--no-checkout", str(ROOT), str(release_root)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(release_root),
+            "checkout",
+            "--detach",
+            "c7ac21237cb6ce65d36d827cf0c93e78672dbbed",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    result = _verifier().verify(release_root)
     assert result["ok"] is True
     assert result["product_basis_commit"] == "75babdcc27f894094f776bc9e3d1382ab9e1496f"
     assert result["product_basis_tree"] == "6887f0fbdf27cfce7c2316f2eed336f663ac2bf2"
