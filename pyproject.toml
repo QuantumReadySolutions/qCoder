@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qcoder"
-version = "0.6.0a24"
+version = "0.6.0a24.dev1+deterministic.evidence.usability.pack.v1"
 description = "Quantum circuit analysis and structured feature extraction tools."
 readme = "README.md"
 requires-python = ">=3.11"

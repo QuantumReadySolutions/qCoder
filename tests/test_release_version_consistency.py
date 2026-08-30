@@ -21,21 +21,31 @@ def _verifier():
     return module
 
 
-def test_a24_authoritative_identity_and_release_truth_pass() -> None:
+def test_private_development_identity_preserves_public_a24_release_truth() -> None:
     verifier = _verifier()
-    assert __version__ == "0.6.0a24"
+    development_version = "0.6.0a24.dev1+deterministic.evidence.usability.pack.v1"
+    assert __version__ == development_version
     assert verifier.source_versions(ROOT) == {
-        "pyproject": "0.6.0a24",
-        "qcoder.__version__": "0.6.0a24",
+        "pyproject": development_version,
+        "qcoder.__version__": development_version,
         "release_metadata": "0.6.0a24",
     }
-    result = verifier.verify_release_version(source_root=ROOT, customer_roots=[ROOT / "examples"])
-    assert result["ok"] is True
-    assert result["version"] == "0.6.0a24"
-    assert result["relationships_distinct"] is True
-    assert result["intervening_nonpublic_versions"] == []
-    assert not (ROOT / "development-version.json").exists()
-    assert not (ROOT / "scripts/verify-development-version.py").exists()
+    with pytest.raises(ValueError, match="authoritative_version_mismatch"):
+        verifier.verify_release_version(source_root=ROOT, customer_roots=[ROOT / "examples"])
+    spec = importlib.util.spec_from_file_location(
+        "development_verifier", ROOT / "scripts/verify-development-version.py"
+    )
+    assert spec is not None and spec.loader is not None
+    development_verifier = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(development_verifier)
+    result = development_verifier.verify(ROOT)
+    assert result == {
+        "ok": True,
+        "version": development_version,
+        "basis_version": "0.6.0a24",
+        "public_release_record_unchanged": True,
+        "publication_permitted": False,
+    }
 
 
 def _write_fixture(root: Path, metadata: dict[str, object]) -> None:

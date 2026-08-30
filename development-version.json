@@ -1,0 +1,14 @@
+{
+  "basis_commit": "c00037a86352de3ccca40edc118acadb199fae5d",
+  "basis_tree": "f660574ae6fc4636450ca900a76873b2c03befaa",
+  "basis_version": "0.6.0a24",
+  "binding": "qcoder.connected_assistant.client_binding.v48",
+  "binding_schema": 47,
+  "identity_kind": "private_unfrozen_development_successor",
+  "publication_permitted": false,
+  "public_release_record_preserved_in": "release-version.json",
+  "public_successor_selected": false,
+  "schema_id": "qcoder.private_development_version.v1",
+  "version": "0.6.0a24.dev1+deterministic.evidence.usability.pack.v1",
+  "work_identity": "QCODER_DETERMINISTIC_EVIDENCE_USABILITY_PACK_V1"
+}
