@@ -327,7 +327,7 @@ qcoder explorer evidence --qasm path/to/circuit.qasm
 qcoder explorer evidence --context-json preflight.context.json
 qcoder explorer evidence --qasm path/to/circuit.qasm --out-json explorer.json --out-md explorer.md --share-safe
 python -m qcoder context-bridge mcp serve --help
-python -m qcoder context-bridge mcp smoke --token-file ~/.qcoder/context-bridge/token.txt
+python -m qcoder context-bridge mcp smoke --profile "My Account - Cursor - This device"
 qcoder context-bridge setup --workspace /exact/trusted/workspace
 qcoder context-bridge verify-connection --workspace /exact/trusted/workspace
 python -m qcoder current-loop --help
@@ -339,6 +339,9 @@ smoke is a direct credential/server-readiness preflight; it does not establish a
 connection. Add `--json` for structured troubleshooting, or `--full` for the exhaustive
 support/release diagnostic; full mode stops without automatic retry when the current rate window
 requires a pause.
+
+Use a named profile for the current customer path. `--token-file` is available only for an
+explicitly selected `Legacy default` token-file path; it is not the current profile setup.
 
 Managed setup returns `qCoder configured` after the credential selection and canonical
 `qcoder-context-bridge` plus `qcoder-current-loop` definitions are verified. Reload the configured

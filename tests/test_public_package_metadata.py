@@ -107,6 +107,15 @@ def test_readme_is_publication_truthful_and_keeps_client_claims_held() -> None:
     assert "recovery action remains outstanding" in readme
     assert "explicitly abandon it and restart the work" in readme
     assert "must not be reused or reinterpreted under v48/v11" in readme
+    assert (
+        'python -m qcoder context-bridge mcp smoke --profile "My Account - Cursor - This device"'
+        in readme
+    )
+    assert "--token-file ~/.qcoder/context-bridge/token.txt" not in readme
+    assert (
+        "`--token-file` is available only for an explicitly selected `Legacy default` "
+        "token-file path" in readme
+    )
 
 
 def test_changelog_records_a17_behavior_successor_and_a13_history() -> None:
