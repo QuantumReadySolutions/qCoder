@@ -35,6 +35,35 @@ READINESS_DISPOSITIONS = (
     "not_applicable",
 )
 
+_PROMPT_PACK_PROJECTION_ROLE = "share_safe_assistant_input_from_explicitly_selected_evidence"
+_PROMPT_PACK_BOUNDARIES = {
+    "assistant_quality_guaranteed": False,
+    "model_called": False,
+    "network_accessed": False,
+    "repository_scanned": False,
+    "source_or_circuit_executed": False,
+    "persistent_memory_created": False,
+    "customer_review_required_before_sharing": True,
+}
+_NEXT_CHECK_BASIS = "existing_local_evidence_supported_next_action"
+_READINESS_PROJECTION_ROLE = "customer_readable_view_of_existing_preflight_evidence"
+_READINESS_BOUNDARIES = {
+    "execution_performed": False,
+    "prediction_performed": False,
+    "new_evidence_created": False,
+    "repository_scanned": False,
+    "network_accessed": False,
+}
+_INTENT_CARD_PROJECTION_ROLE = "view_of_existing_intent_and_confirmed_blueprint_state"
+_INTENT_CARD_BOUNDARIES = {
+    "intent_inferred_from_source_or_circuit": False,
+    "choice_auto_confirmed": False,
+    "confirmation_authority_changed": False,
+    "persistent_source_of_truth_created": False,
+    "model_called": False,
+}
+_OBSERVED_EVIDENCE_AUTHORITY = "selected_evidence_only_not_intent"
+
 _DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 _SENSITIVE_KEY_RE = re.compile(
     r"(?:^|_)(?:api_key|authorization|cookie|credential|password|secret|session|token)(?:_|$)",
@@ -56,6 +85,41 @@ _PROHIBITED_PREDICTIONS = (
     "execution success",
     "hardware suitability",
     "statistical sufficiency",
+)
+_PROHIBITED_PROMPT_PACK_CLAIMS = (
+    re.compile(r"\b(?:a |the )?model (?:was |is |has been )?(?:called|used|invoked)\b", re.I),
+    re.compile(
+        r"\b(?:a |the )?(?:protected )?service (?:was |is |has been )?(?:called|used|contacted)\b",
+        re.I,
+    ),
+    re.compile(r"\b(?:source|circuit) (?:was |is |has been )?executed\b", re.I),
+    re.compile(r"\bpersistent memory (?:was |is |has been )?created\b", re.I),
+    re.compile(
+        r"\b(?:new |intent )?authority (?:was |is |has been )?(?:created|established|granted)\b",
+        re.I,
+    ),
+)
+_PROHIBITED_READINESS_CLAIMS = (
+    re.compile(r"\b(?:overall )?execution[- ]ready\b", re.I),
+    re.compile(r"\b(?:will|can) execute successfully\b", re.I),
+    re.compile(r"\bexecution success (?:is|was|has been) established\b", re.I),
+    re.compile(r"\balgorithm (?:is|was) correct\b", re.I),
+    re.compile(r"\balgorithm correctness (?:is|was|has been) established\b", re.I),
+    re.compile(r"\bruntime (?:is|will be|equals)\b", re.I),
+    re.compile(r"\bfidelity (?:is|will be|equals)\b", re.I),
+    re.compile(r"\b(?:best|recommended|optimal) backend\b", re.I),
+    re.compile(r"\bbackend ranking (?:is|was|has been) established\b", re.I),
+    re.compile(r"\bhardware (?:is|will be) suitable\b", re.I),
+    re.compile(r"\boptimal shot count (?:is|will be|equals)\b", re.I),
+    re.compile(r"\b\d+ shots? (?:is|are) optimal\b", re.I),
+    re.compile(r"\b(?:is|was) statistically sufficient\b", re.I),
+    re.compile(r"\bstatistical sufficiency (?:is|was|has been) established\b", re.I),
+)
+_PROHIBITED_OBSERVED_INTENT_CLAIMS = (
+    re.compile(
+        r"\b(?:confirms?|confirmed|establishes?|established) (?:the )?(?:user )?intent\b", re.I
+    ),
+    re.compile(r"\bintent (?:is|was|has been) (?:confirmed|established)\b", re.I),
 )
 
 
@@ -160,7 +224,7 @@ def _next_checks(report: Mapping[str, Any]) -> list[dict[str, str]]:
                 rows[check_id] = {
                     "check_id": check_id,
                     "instruction": text,
-                    "basis": "existing_local_evidence_supported_next_action",
+                    "basis": _NEXT_CHECK_BASIS,
                 }
     return [rows[key] for key in sorted(rows)]
 
@@ -177,21 +241,13 @@ def build_evidence_prompt_pack(
     value = {
         "schema_id": PROMPT_PACK_SCHEMA_ID,
         "schema_version": SCHEMA_VERSION,
-        "projection_role": "share_safe_assistant_input_from_explicitly_selected_evidence",
+        "projection_role": _PROMPT_PACK_PROJECTION_ROLE,
         "selected_artifacts": selected,
         "supported_findings": supported,
         "limitations": limitations,
         "unsupported_statements": unsupported,
         "bounded_next_checks": _next_checks(report),
-        "boundaries": {
-            "assistant_quality_guaranteed": False,
-            "model_called": False,
-            "network_accessed": False,
-            "repository_scanned": False,
-            "source_or_circuit_executed": False,
-            "persistent_memory_created": False,
-            "customer_review_required_before_sharing": True,
-        },
+        "boundaries": dict(_PROMPT_PACK_BOUNDARIES),
     }
     validate_evidence_prompt_pack(value)
     return value
@@ -302,18 +358,12 @@ def build_run_readiness_checklist(
     value = {
         "schema_id": READINESS_SCHEMA_ID,
         "schema_version": SCHEMA_VERSION,
-        "projection_role": "customer_readable_view_of_existing_preflight_evidence",
+        "projection_role": _READINESS_PROJECTION_ROLE,
         "selected_artifacts": selected,
         "disposition_vocabulary": list(READINESS_DISPOSITIONS),
         "checks": checks,
         "prohibited_conclusions": list(_PROHIBITED_PREDICTIONS),
-        "boundaries": {
-            "execution_performed": False,
-            "prediction_performed": False,
-            "new_evidence_created": False,
-            "repository_scanned": False,
-            "network_accessed": False,
-        },
+        "boundaries": dict(_READINESS_BOUNDARIES),
     }
     validate_run_readiness_checklist(value)
     return value
@@ -335,8 +385,11 @@ def _load_json(path_value: str | None, *, label: str) -> dict[str, Any] | None:
 def _validate_intent_card(value: Mapping[str, Any]) -> None:
     if value.get("artifact_type") != "algorithm_intent_card" or value.get("schema_version") != 1:
         raise EvidenceUsabilityError("algorithm_intent_card_schema_unsupported")
-    if value.get("confirmation_state") not in {"proposed", "needs_clarification", "confirmed"}:
+    confirmation_state = value.get("confirmation_state")
+    if confirmation_state not in {"proposed", "needs_clarification", "confirmed"}:
         raise EvidenceUsabilityError("algorithm_intent_card_confirmation_state_invalid")
+    if confirmation_state == "confirmed" and "artifact_digest" not in value:
+        raise EvidenceUsabilityError("algorithm_intent_card_confirmed_digest_required")
     if "artifact_digest" in value and not artifact_digest_matches(value):
         raise EvidenceUsabilityError("algorithm_intent_card_digest_invalid")
     original = value.get("original_user_intent")
@@ -347,8 +400,11 @@ def _validate_intent_card(value: Mapping[str, Any]) -> None:
 def _validate_blueprint(value: Mapping[str, Any]) -> list[dict[str, Any]]:
     if value.get("artifact_type") != "implementation_blueprint" or value.get("schema_version") != 1:
         raise EvidenceUsabilityError("implementation_blueprint_schema_unsupported")
-    if value.get("confirmation_state") not in {"proposed", "needs_clarification", "confirmed"}:
+    confirmation_state = value.get("confirmation_state")
+    if confirmation_state not in {"proposed", "needs_clarification", "confirmed"}:
         raise EvidenceUsabilityError("implementation_blueprint_confirmation_state_invalid")
+    if confirmation_state == "confirmed" and "artifact_digest" not in value:
+        raise EvidenceUsabilityError("implementation_blueprint_confirmed_digest_required")
     if "artifact_digest" in value and not artifact_digest_matches(value):
         raise EvidenceUsabilityError("implementation_blueprint_digest_invalid")
     record_set = value.get("blueprint_decision_records")
@@ -436,7 +492,7 @@ def build_blueprint_intent_card(
                 }
             )
     observed = [
-        {"observation": statement, "authority": "selected_evidence_only_not_intent"}
+        {"observation": statement, "authority": _OBSERVED_EVIDENCE_AUTHORITY}
         for statement in _statements(report, "established")
     ]
     unsupported = _statements(report, "not_established")
@@ -444,7 +500,7 @@ def build_blueprint_intent_card(
     value = {
         "schema_id": INTENT_CARD_SCHEMA_ID,
         "schema_version": SCHEMA_VERSION,
-        "projection_role": "view_of_existing_intent_and_confirmed_blueprint_state",
+        "projection_role": _INTENT_CARD_PROJECTION_ROLE,
         "intent_state": intent_state,
         "user_stated_intent": stated,
         "confirmed_blueprint_decisions": sorted(confirmed, key=lambda row: row["decision_id"]),
@@ -452,13 +508,7 @@ def build_blueprint_intent_card(
         "unresolved_choices": sorted(unresolved, key=lambda row: row["decision_id"]),
         "explicitly_deferred_choices": sorted(deferred, key=lambda row: row["decision_id"]),
         "unsupported_assumptions": _unique_text(unsupported),
-        "boundaries": {
-            "intent_inferred_from_source_or_circuit": False,
-            "choice_auto_confirmed": False,
-            "confirmation_authority_changed": False,
-            "persistent_source_of_truth_created": False,
-            "model_called": False,
-        },
+        "boundaries": dict(_INTENT_CARD_BOUNDARIES),
     }
     validate_blueprint_intent_card(value)
     return value
@@ -476,6 +526,10 @@ def _validate_selected(rows: object) -> None:
             raise EvidenceUsabilityError("selected_artifact_selection_invalid")
         if not isinstance(mapped["evidence_schemas"], list):
             raise EvidenceUsabilityError("selected_artifact_schemas_invalid")
+
+
+def _contains_semantic_claim(values: Sequence[str], patterns: Sequence[re.Pattern[str]]) -> bool:
+    return any(pattern.search(value) for value in values for pattern in patterns)
 
 
 def validate_evidence_prompt_pack(value: object) -> None:
@@ -496,6 +550,8 @@ def validate_evidence_prompt_pack(value: object) -> None:
     )
     if mapped["schema_id"] != PROMPT_PACK_SCHEMA_ID or mapped["schema_version"] != 1:
         raise EvidenceUsabilityError("evidence_prompt_pack_schema_unsupported")
+    if mapped["projection_role"] != _PROMPT_PACK_PROJECTION_ROLE:
+        raise EvidenceUsabilityError("evidence_prompt_pack_projection_role_invalid")
     _validate_selected(mapped["selected_artifacts"])
     for key in ("supported_findings", "limitations", "unsupported_statements"):
         if not isinstance(mapped[key], list) or any(
@@ -505,9 +561,25 @@ def validate_evidence_prompt_pack(value: object) -> None:
     next_keys = {"check_id", "instruction", "basis"}
     if not isinstance(mapped["bounded_next_checks"], list):
         raise EvidenceUsabilityError("evidence_prompt_pack_next_checks_invalid")
+    next_check_ids: set[str] = set()
     for row in mapped["bounded_next_checks"]:
-        _require_exact_keys(row, next_keys, "evidence_prompt_pack_next_check")
-    _require_exact_keys(
+        check = _require_exact_keys(row, next_keys, "evidence_prompt_pack_next_check")
+        instruction = check["instruction"]
+        if (
+            not isinstance(instruction, str)
+            or not instruction
+            or _safe_text(instruction) != instruction
+        ):
+            raise EvidenceUsabilityError("evidence_prompt_pack_next_check_instruction_invalid")
+        expected_check_id = (
+            "existing-next-check-" + hashlib.sha256(instruction.encode()).hexdigest()[:16]
+        )
+        if check["check_id"] != expected_check_id or check["check_id"] in next_check_ids:
+            raise EvidenceUsabilityError("evidence_prompt_pack_next_check_identity_invalid")
+        if check["basis"] != _NEXT_CHECK_BASIS:
+            raise EvidenceUsabilityError("evidence_prompt_pack_next_check_basis_invalid")
+        next_check_ids.add(check["check_id"])
+    boundaries = _require_exact_keys(
         mapped["boundaries"],
         {
             "assistant_quality_guaranteed",
@@ -520,6 +592,16 @@ def validate_evidence_prompt_pack(value: object) -> None:
         },
         "evidence_prompt_pack_boundaries",
     )
+    if boundaries != _PROMPT_PACK_BOUNDARIES:
+        raise EvidenceUsabilityError("evidence_prompt_pack_boundaries_invalid")
+    customer_text = [
+        *mapped["supported_findings"],
+        *mapped["limitations"],
+        *mapped["unsupported_statements"],
+        *(row["instruction"] for row in mapped["bounded_next_checks"]),
+    ]
+    if _contains_semantic_claim(customer_text, _PROHIBITED_PROMPT_PACK_CLAIMS):
+        raise EvidenceUsabilityError("evidence_prompt_pack_prohibited_meaning")
     error = _privacy_error(mapped)
     if error:
         raise EvidenceUsabilityError(error)
@@ -542,6 +624,8 @@ def validate_run_readiness_checklist(value: object) -> None:
     )
     if mapped["schema_id"] != READINESS_SCHEMA_ID or mapped["schema_version"] != 1:
         raise EvidenceUsabilityError("run_readiness_checklist_schema_unsupported")
+    if mapped["projection_role"] != _READINESS_PROJECTION_ROLE:
+        raise EvidenceUsabilityError("run_readiness_projection_role_invalid")
     _validate_selected(mapped["selected_artifacts"])
     if mapped["disposition_vocabulary"] != list(READINESS_DISPOSITIONS):
         raise EvidenceUsabilityError("run_readiness_disposition_vocabulary_invalid")
@@ -559,7 +643,15 @@ def validate_run_readiness_checklist(value: object) -> None:
         check = _require_exact_keys(row, check_keys, "run_readiness_check")
         if check["disposition"] not in READINESS_DISPOSITIONS:
             raise EvidenceUsabilityError("run_readiness_disposition_invalid")
-    _require_exact_keys(
+        if (
+            not isinstance(check["explanation"], str)
+            or not isinstance(check["limitation"], str)
+            or not isinstance(check["supporting_evidence_ids"], list)
+        ):
+            raise EvidenceUsabilityError("run_readiness_check_semantics_invalid")
+    if mapped["prohibited_conclusions"] != list(_PROHIBITED_PREDICTIONS):
+        raise EvidenceUsabilityError("run_readiness_prohibited_conclusions_invalid")
+    boundaries = _require_exact_keys(
         mapped["boundaries"],
         {
             "execution_performed",
@@ -570,6 +662,13 @@ def validate_run_readiness_checklist(value: object) -> None:
         },
         "run_readiness_boundaries",
     )
+    if boundaries != _READINESS_BOUNDARIES:
+        raise EvidenceUsabilityError("run_readiness_boundaries_invalid")
+    customer_text = [
+        text for row in mapped["checks"] for text in (row["explanation"], row["limitation"])
+    ]
+    if _contains_semantic_claim(customer_text, _PROHIBITED_READINESS_CLAIMS):
+        raise EvidenceUsabilityError("run_readiness_prohibited_conclusion")
     error = _privacy_error(mapped)
     if error:
         raise EvidenceUsabilityError(error)
@@ -595,8 +694,22 @@ def validate_blueprint_intent_card(value: object) -> None:
     )
     if mapped["schema_id"] != INTENT_CARD_SCHEMA_ID or mapped["schema_version"] != 1:
         raise EvidenceUsabilityError("blueprint_intent_card_schema_unsupported")
+    if mapped["projection_role"] != _INTENT_CARD_PROJECTION_ROLE:
+        raise EvidenceUsabilityError("blueprint_intent_projection_role_invalid")
     if mapped["intent_state"] not in {"absent", "proposed_unconfirmed", "confirmed"}:
         raise EvidenceUsabilityError("blueprint_intent_state_invalid")
+    if not isinstance(mapped["user_stated_intent"], list) or any(
+        not isinstance(item, str) for item in mapped["user_stated_intent"]
+    ):
+        raise EvidenceUsabilityError("blueprint_intent_user_stated_intent_invalid")
+    if mapped["intent_state"] == "confirmed" and not mapped["user_stated_intent"]:
+        raise EvidenceUsabilityError("blueprint_intent_implicit_confirmation_invalid")
+    if mapped["intent_state"] == "absent" and mapped["user_stated_intent"]:
+        raise EvidenceUsabilityError("blueprint_intent_absent_state_invalid")
+    if not isinstance(mapped["unsupported_assumptions"], list) or any(
+        not isinstance(item, str) for item in mapped["unsupported_assumptions"]
+    ):
+        raise EvidenceUsabilityError("blueprint_intent_unsupported_assumptions_invalid")
     choice_keys = {"decision_id", "resolution_state", "user_disposition", "selected_value"}
     for field in (
         "confirmed_blueprint_decisions",
@@ -606,12 +719,42 @@ def validate_blueprint_intent_card(value: object) -> None:
         if not isinstance(mapped[field], list):
             raise EvidenceUsabilityError(f"blueprint_intent_{field}_invalid")
         for row in mapped[field]:
-            _require_exact_keys(row, choice_keys, "blueprint_intent_choice")
+            choice = _require_exact_keys(row, choice_keys, "blueprint_intent_choice")
+            if field == "confirmed_blueprint_decisions" and (
+                choice["resolution_state"] != "resolved"
+                or choice["user_disposition"]
+                not in {"selected_choice", "bounded_alternatives", "bounded_value_range"}
+            ):
+                raise EvidenceUsabilityError("blueprint_intent_confirmed_decision_invalid")
+            if field == "unresolved_choices" and (
+                choice["resolution_state"] == "resolved"
+                or choice["user_disposition"]
+                in {"selected_choice", "bounded_alternatives", "bounded_value_range"}
+            ):
+                raise EvidenceUsabilityError("blueprint_intent_unresolved_choice_invalid")
+            if field == "explicitly_deferred_choices" and (
+                choice["resolution_state"] != "evidence_deferred"
+                and choice["user_disposition"]
+                not in {"deferred_to_source_evidence", "deferred_to_later_evidence"}
+            ):
+                raise EvidenceUsabilityError("blueprint_intent_deferred_choice_invalid")
     if not isinstance(mapped["observed_evidence"], list):
         raise EvidenceUsabilityError("blueprint_intent_observed_evidence_invalid")
     for row in mapped["observed_evidence"]:
-        _require_exact_keys(row, {"observation", "authority"}, "blueprint_intent_observation")
-    _require_exact_keys(
+        observation = _require_exact_keys(
+            row, {"observation", "authority"}, "blueprint_intent_observation"
+        )
+        if (
+            not isinstance(observation["observation"], str)
+            or observation["authority"] != _OBSERVED_EVIDENCE_AUTHORITY
+        ):
+            raise EvidenceUsabilityError("blueprint_intent_observation_authority_invalid")
+    if _contains_semantic_claim(
+        [row["observation"] for row in mapped["observed_evidence"]],
+        _PROHIBITED_OBSERVED_INTENT_CLAIMS,
+    ):
+        raise EvidenceUsabilityError("blueprint_intent_observation_meaning_invalid")
+    boundaries = _require_exact_keys(
         mapped["boundaries"],
         {
             "intent_inferred_from_source_or_circuit",
@@ -622,6 +765,8 @@ def validate_blueprint_intent_card(value: object) -> None:
         },
         "blueprint_intent_boundaries",
     )
+    if boundaries != _INTENT_CARD_BOUNDARIES:
+        raise EvidenceUsabilityError("blueprint_intent_boundaries_invalid")
     error = _privacy_error(mapped)
     if error:
         raise EvidenceUsabilityError(error)

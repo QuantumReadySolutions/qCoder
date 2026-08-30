@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from packaging.version import Version
 from pathlib import Path
 import re
 
@@ -12,7 +13,7 @@ except ModuleNotFoundError:  # pragma: no cover
 
 
 EXPECTED_SCHEMA = "qcoder.private_development_version.v1"
-EXPECTED_VERSION = "0.6.0a24.dev1+deterministic.evidence.usability.pack.v1"
+EXPECTED_VERSION = "0.6.0a24.post0.dev1+deterministic.evidence.usability.pack.v1"
 EXPECTED_BASIS = "0.6.0a24"
 EXPECTED_WORK_IDENTITY = "QCODER_DETERMINISTIC_EVIDENCE_USABILITY_PACK_V1"
 
@@ -59,12 +60,21 @@ def verify(root: Path) -> dict[str, object]:
         raise ValueError("development_publication_must_be_prohibited")
     if development.get("public_successor_selected") is not False:
         raise ValueError("development_public_successor_must_remain_unselected")
+    candidate = Version(EXPECTED_VERSION)
+    basis = Version(EXPECTED_BASIS)
+    if candidate <= basis or not candidate.is_devrelease:
+        raise ValueError("development_version_pep440_ordering_invalid")
+    if candidate.release != basis.release or candidate.pre != basis.pre:
+        raise ValueError("development_public_successor_selected")
     return {
         "ok": True,
         "version": EXPECTED_VERSION,
         "basis_version": EXPECTED_BASIS,
         "public_release_record_unchanged": True,
         "publication_permitted": False,
+        "pep440_ordering_after_basis": True,
+        "development_release": True,
+        "public_successor_selected": False,
     }
 
 

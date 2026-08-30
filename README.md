@@ -237,9 +237,9 @@ claim status remain separate facts governed outside the package documentation.
 `qcoder review usability-pack` composes explicitly selected local evidence into a share-safe
 Evidence Prompt Pack, an evidence-grounded Run Readiness Checklist, and a Blueprint Intent Card.
 It produces deterministic JSON and Markdown without executing source or circuits, scanning a
-repository, calling a model or service, or creating persistent memory. Intent is accepted only
-from explicit or already-confirmed Intent Card and Blueprint state; observed circuit structure is
-kept separate.
+repository, calling a model or service, or creating persistent memory. Confirmed Intent Card and
+Blueprint inputs require a valid artifact digest; proposed or clarification-needed inputs may omit
+one and remain visibly unconfirmed. Observed circuit structure is kept separate from intent.
 
 ```bash
 qcoder review usability-pack \

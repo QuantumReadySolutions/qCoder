@@ -380,7 +380,7 @@ def test_local_help_reuses_v2_and_states_oss_boundaries(tmp_path: Path) -> None:
     assert help_payload["projection_type"] == "oss_local_evidence"
     assert (
         help_payload["installed_qcoder_version"]
-        == "0.6.0a24.dev1+deterministic.evidence.usability.pack.v1"
+        == "0.6.0a24.post0.dev1+deterministic.evidence.usability.pack.v1"
     )
     assert help_payload["local_oss_mode"] is True
     assert help_payload["account_required"] is False

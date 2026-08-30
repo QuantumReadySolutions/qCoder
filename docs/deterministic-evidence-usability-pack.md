@@ -34,8 +34,9 @@ predict runtime, fidelity, backend quality, shot count, correctness, execution s
 suitability, or scientific value.
 
 The Blueprint Intent Card accepts current Algorithm Intent Card and Implementation Blueprint v1
-inputs. A digest-bearing input must validate. Proposed or clarification-needed intent remains
-unconfirmed; source structure never fills an intent gap or confirms a choice.
+inputs. Confirmed inputs require a valid artifact digest. Proposed or clarification-needed inputs
+may omit the digest and remain unconfirmed; if they supply one, it must validate. Source structure
+never fills an intent gap or confirms a choice.
 
 See [`examples/deterministic_evidence_usability_pack/`](../examples/deterministic_evidence_usability_pack/)
 for the checked Bell replay and byte-exact expected outputs.

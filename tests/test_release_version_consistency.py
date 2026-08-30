@@ -5,6 +5,7 @@ import importlib.util
 import json
 from pathlib import Path
 
+from packaging.version import Version
 import pytest
 
 from qcoder import __version__
@@ -23,7 +24,7 @@ def _verifier():
 
 def test_private_development_identity_preserves_public_a24_release_truth() -> None:
     verifier = _verifier()
-    development_version = "0.6.0a24.dev1+deterministic.evidence.usability.pack.v1"
+    development_version = "0.6.0a24.post0.dev1+deterministic.evidence.usability.pack.v1"
     assert __version__ == development_version
     assert verifier.source_versions(ROOT) == {
         "pyproject": development_version,
@@ -45,7 +46,20 @@ def test_private_development_identity_preserves_public_a24_release_truth() -> No
         "basis_version": "0.6.0a24",
         "public_release_record_unchanged": True,
         "publication_permitted": False,
+        "pep440_ordering_after_basis": True,
+        "development_release": True,
+        "public_successor_selected": False,
     }
+    candidate = Version(development_version)
+    public_basis = Version("0.6.0a24")
+    assert candidate > public_basis
+    assert candidate.is_devrelease is True
+    assert candidate.release == public_basis.release
+    assert candidate.pre == public_basis.pre
+    development = json.loads((ROOT / "development-version.json").read_text(encoding="utf-8"))
+    assert development["basis_version"] == "0.6.0a24"
+    assert development["publication_permitted"] is False
+    assert development["public_successor_selected"] is False
 
 
 def _write_fixture(root: Path, metadata: dict[str, object]) -> None:

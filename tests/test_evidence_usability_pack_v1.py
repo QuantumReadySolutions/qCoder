@@ -259,18 +259,17 @@ def test_blueprint_decision_states_are_separated(monkeypatch: pytest.MonkeyPatch
     )
     monkeypatch.setattr("qcoder.evidence_usability.decision_record_error", lambda value: None)
     report = build_local_evidence_review([str(BELL_QASM)])
+    confirmed_blueprint = with_artifact_digest(
+        {
+            "artifact_type": "implementation_blueprint",
+            "schema_version": 1,
+            "confirmation_state": "confirmed",
+            "blueprint_decision_records": {"synthetic": True},
+        }
+    )
     monkeypatch.setattr(
         "qcoder.evidence_usability._load_json",
-        lambda path, label: (
-            None
-            if path is None
-            else {
-                "artifact_type": "implementation_blueprint",
-                "schema_version": 1,
-                "confirmation_state": "confirmed",
-                "blueprint_decision_records": {"synthetic": True},
-            }
-        ),
+        lambda path, label: None if path is None else confirmed_blueprint,
     )
     card = build_blueprint_intent_card(report=report, blueprint_json="selected.json")
     assert [row["decision_id"] for row in card["confirmed_blueprint_decisions"]] == [
@@ -294,6 +293,90 @@ def test_invalid_confirmed_inputs_fail_closed(tmp_path: Path, field: str) -> Non
             report=build_local_evidence_review([str(BELL_QASM)]),
             intent_json=str(path),
         )
+
+
+@pytest.mark.parametrize(
+    ("kind", "missing", "expected"),
+    [
+        ("intent", True, "algorithm_intent_card_confirmed_digest_required"),
+        ("intent", False, "algorithm_intent_card_digest_invalid"),
+        ("blueprint", True, "implementation_blueprint_confirmed_digest_required"),
+        ("blueprint", False, "implementation_blueprint_digest_invalid"),
+    ],
+)
+def test_confirmed_inputs_require_valid_artifact_digest(
+    tmp_path: Path, kind: str, missing: bool, expected: str
+) -> None:
+    selected = _intent() if kind == "intent" else _blueprint()
+    if missing:
+        selected.pop("artifact_digest")
+    else:
+        selected["artifact_digest"] = "0" * 64
+    selected_path = _write_json(tmp_path / f"{kind}.json", selected)
+    kwargs = {f"{kind}_json": str(selected_path)}
+    with pytest.raises(EvidenceUsabilityError, match=expected):
+        build_blueprint_intent_card(
+            report=build_local_evidence_review([str(BELL_QASM)]),
+            **kwargs,
+        )
+
+
+@pytest.mark.parametrize(
+    ("kind", "state"),
+    [
+        ("intent", "proposed"),
+        ("intent", "needs_clarification"),
+        ("blueprint", "proposed"),
+        ("blueprint", "needs_clarification"),
+    ],
+)
+def test_unconfirmed_inputs_may_omit_artifact_digest(tmp_path: Path, kind: str, state: str) -> None:
+    selected = _intent(state) if kind == "intent" else _blueprint(state)
+    selected.pop("artifact_digest")
+    selected_path = _write_json(tmp_path / f"{kind}.json", selected)
+    kwargs = {f"{kind}_json": str(selected_path)}
+    card = build_blueprint_intent_card(
+        report=build_local_evidence_review([str(BELL_QASM)]),
+        **kwargs,
+    )
+    if kind == "intent":
+        assert card["intent_state"] == "proposed_unconfirmed"
+    else:
+        assert card["confirmed_blueprint_decisions"] == []
+
+
+@pytest.mark.parametrize(
+    ("kind", "state"),
+    [
+        ("intent", "proposed"),
+        ("intent", "needs_clarification"),
+        ("blueprint", "proposed"),
+        ("blueprint", "needs_clarification"),
+    ],
+)
+def test_unconfirmed_inputs_reject_invalid_supplied_digest(
+    tmp_path: Path, kind: str, state: str
+) -> None:
+    selected = _intent(state) if kind == "intent" else _blueprint(state)
+    selected["artifact_digest"] = "0" * 64
+    selected_path = _write_json(tmp_path / f"{kind}.json", selected)
+    kwargs = {f"{kind}_json": str(selected_path)}
+    with pytest.raises(EvidenceUsabilityError, match=f"{kind}.*digest_invalid"):
+        build_blueprint_intent_card(
+            report=build_local_evidence_review([str(BELL_QASM)]),
+            **kwargs,
+        )
+
+
+def test_valid_confirmed_intent_and_blueprint_project(tmp_path: Path) -> None:
+    intent_path, blueprint_path = _inputs(tmp_path)
+    card = build_blueprint_intent_card(
+        report=build_local_evidence_review([str(BELL_QASM)]),
+        intent_json=str(intent_path),
+        blueprint_json=str(blueprint_path),
+    )
+    assert card["intent_state"] == "confirmed"
+    assert card["confirmed_blueprint_decisions"]
 
 
 @pytest.mark.parametrize(
@@ -331,6 +414,156 @@ def test_projection_schema_mutations_fail_closed(tmp_path: Path, mutation: str) 
         mutated["selected_artifacts"][0]["sha256"] = "not-a-digest"
     with pytest.raises(EvidenceUsabilityError):
         validate_evidence_prompt_pack(mutated)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "projection_role",
+        "boundary:assistant_quality_guaranteed",
+        "boundary:model_called",
+        "boundary:network_accessed",
+        "boundary:repository_scanned",
+        "boundary:source_or_circuit_executed",
+        "boundary:persistent_memory_created",
+        "boundary:customer_review_required_before_sharing",
+        "next_check_basis",
+        "next_check_identity",
+        "duplicate_next_check",
+        "prohibited_model_meaning",
+    ],
+)
+def test_prompt_pack_semantic_invariant_mutations_fail_closed(
+    mutation: str,
+) -> None:
+    paths = [str(BELL_QASM)]
+    original = build_evidence_prompt_pack(paths=paths, report=build_local_evidence_review(paths))
+    mutated = deepcopy(original)
+    if mutation == "projection_role":
+        mutated["projection_role"] = "general_assistant_authority"
+    elif mutation.startswith("boundary:"):
+        key = mutation.partition(":")[2]
+        mutated["boundaries"][key] = not mutated["boundaries"][key]
+    elif mutation == "next_check_basis":
+        mutated["bounded_next_checks"][0]["basis"] = "model_recommendation"
+    elif mutation == "next_check_identity":
+        mutated["bounded_next_checks"][0]["check_id"] = "existing-next-check-0000000000000000"
+    elif mutation == "duplicate_next_check":
+        mutated["bounded_next_checks"].append(deepcopy(mutated["bounded_next_checks"][0]))
+    else:
+        mutated["supported_findings"].append("A model was called to establish this finding.")
+    with pytest.raises(EvidenceUsabilityError):
+        validate_evidence_prompt_pack(mutated)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "projection_role",
+        "boundary:execution_performed",
+        "boundary:prediction_performed",
+        "boundary:new_evidence_created",
+        "boundary:repository_scanned",
+        "boundary:network_accessed",
+        "vocabulary_reordered",
+        "vocabulary_substituted",
+        "prohibited_missing",
+        "prohibited_added",
+        "prohibited_substituted",
+        "prohibited_reordered",
+        "overall_execution_ready",
+        "correctness_conclusion",
+        "runtime_conclusion",
+        "fidelity_conclusion",
+        "backend_conclusion",
+        "hardware_conclusion",
+        "shot_count_conclusion",
+        "statistical_conclusion",
+    ],
+)
+def test_readiness_semantic_invariant_mutations_fail_closed(mutation: str) -> None:
+    paths = [str(BELL_QASM)]
+    original = build_run_readiness_checklist(paths=paths, report=build_local_evidence_review(paths))
+    mutated = deepcopy(original)
+    if mutation == "projection_role":
+        mutated["projection_role"] = "execution_readiness_authority"
+    elif mutation.startswith("boundary:"):
+        key = mutation.partition(":")[2]
+        mutated["boundaries"][key] = not mutated["boundaries"][key]
+    elif mutation == "vocabulary_reordered":
+        mutated["disposition_vocabulary"].reverse()
+    elif mutation == "vocabulary_substituted":
+        mutated["disposition_vocabulary"][0] = "execution_ready"
+    elif mutation == "prohibited_missing":
+        mutated["prohibited_conclusions"].pop()
+    elif mutation == "prohibited_added":
+        mutated["prohibited_conclusions"].append("model recommendation")
+    elif mutation == "prohibited_substituted":
+        mutated["prohibited_conclusions"][0] = "estimated duration"
+    elif mutation == "prohibited_reordered":
+        mutated["prohibited_conclusions"].reverse()
+    else:
+        claims = {
+            "overall_execution_ready": "The selected artifact is execution-ready.",
+            "correctness_conclusion": "The algorithm is correct.",
+            "runtime_conclusion": "Runtime will be 10 seconds.",
+            "fidelity_conclusion": "Fidelity is 99 percent.",
+            "backend_conclusion": "This is the best backend.",
+            "hardware_conclusion": "Hardware is suitable.",
+            "shot_count_conclusion": "The optimal shot count is 1024.",
+            "statistical_conclusion": "The evidence is statistically sufficient.",
+        }
+        mutated["checks"][0]["explanation"] = claims[mutation]
+    with pytest.raises(EvidenceUsabilityError):
+        validate_run_readiness_checklist(mutated)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "projection_role",
+        "boundary:intent_inferred_from_source_or_circuit",
+        "boundary:choice_auto_confirmed",
+        "boundary:confirmation_authority_changed",
+        "boundary:persistent_source_of_truth_created",
+        "boundary:model_called",
+        "observed_authority",
+        "observed_intent_meaning",
+        "confirmed_resolution",
+        "confirmed_disposition",
+        "implicit_confirmation",
+        "second_authority",
+    ],
+)
+def test_intent_projection_semantic_invariant_mutations_fail_closed(
+    tmp_path: Path, mutation: str
+) -> None:
+    intent_path, blueprint_path = _inputs(tmp_path)
+    original = build_blueprint_intent_card(
+        report=build_local_evidence_review([str(BELL_QASM)]),
+        intent_json=str(intent_path),
+        blueprint_json=str(blueprint_path),
+    )
+    mutated = deepcopy(original)
+    if mutation == "projection_role":
+        mutated["projection_role"] = "intent_confirmation_authority"
+    elif mutation.startswith("boundary:"):
+        key = mutation.partition(":")[2]
+        mutated["boundaries"][key] = not mutated["boundaries"][key]
+    elif mutation == "observed_authority":
+        mutated["observed_evidence"][0]["authority"] = "confirms_intent"
+    elif mutation == "observed_intent_meaning":
+        mutated["observed_evidence"][0]["observation"] = "The circuit confirms user intent."
+    elif mutation == "confirmed_resolution":
+        mutated["confirmed_blueprint_decisions"][0]["resolution_state"] = "unresolved"
+    elif mutation == "confirmed_disposition":
+        mutated["confirmed_blueprint_decisions"][0]["user_disposition"] = "left_unresolved"
+    elif mutation == "implicit_confirmation":
+        mutated["user_stated_intent"] = []
+    else:
+        mutated["intent_authority"] = {"confirmed": True}
+    with pytest.raises(EvidenceUsabilityError):
+        validate_blueprint_intent_card(mutated)
 
 
 def test_renderers_are_byte_deterministic(tmp_path: Path) -> None:

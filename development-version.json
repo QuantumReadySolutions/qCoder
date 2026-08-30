@@ -9,6 +9,6 @@
   "public_release_record_preserved_in": "release-version.json",
   "public_successor_selected": false,
   "schema_id": "qcoder.private_development_version.v1",
-  "version": "0.6.0a24.dev1+deterministic.evidence.usability.pack.v1",
+  "version": "0.6.0a24.post0.dev1+deterministic.evidence.usability.pack.v1",
   "work_identity": "QCODER_DETERMINISTIC_EVIDENCE_USABILITY_PACK_V1"
 }
