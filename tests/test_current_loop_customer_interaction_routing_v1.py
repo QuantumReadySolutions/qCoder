@@ -283,7 +283,7 @@ def test_binding_v18_routes_governance_and_finish_without_document_fanout() -> N
     )
     normalized_instructions = " ".join(instructions.split())
     assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v49"
-    assert binding["schema_version"] == 47
+    assert binding["schema_version"] == 48
     assert len(EXPECTED_TOOLS) == 12
     assert "contract_management" in normalized_instructions
     assert "quiet_iteration_routing_contract" in normalized_instructions
