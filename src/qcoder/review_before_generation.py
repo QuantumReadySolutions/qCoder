@@ -320,6 +320,10 @@ def _authority_items(axes: Mapping[str, str]) -> list[dict[str, str]]:
             "Authority separation",
             "Confirmation of source generation does not authorize execution.",
         ),
+        _qcoder_item(
+            "Deferred execution choices",
+            "Backend, shots, seed, and result handling remain deferred.",
+        ),
     ]
 
 

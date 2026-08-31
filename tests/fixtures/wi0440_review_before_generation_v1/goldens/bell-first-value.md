@@ -26,6 +26,7 @@ Create a minimal two-qubit Qiskit program that prepares \|Φ+\> = (\|00\> + \|11
 - **Generation authority:** Python source is produced only after the stored displayed review is confirmed.
 - **Execution authority:** Execution was not requested and is not authorized.
 - **Authority separation:** Confirmation of source generation does not authorize execution.
+- **Deferred execution choices:** Backend, shots, seed, and result handling remain deferred.
 
 ## Deferred choices
 

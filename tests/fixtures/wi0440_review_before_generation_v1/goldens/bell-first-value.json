@@ -125,6 +125,11 @@
           "attribution": "qcoder_deterministic_boundary",
           "label": "Authority separation",
           "value": "Confirmation of source generation does not authorize execution."
+        },
+        {
+          "attribution": "qcoder_deterministic_boundary",
+          "label": "Deferred execution choices",
+          "value": "Backend, shots, seed, and result handling remain deferred."
         }
       ],
       "label": "Output and authority"

@@ -158,6 +158,9 @@ def test_qcoder_generates_only_axis_consistent_visible_authority() -> None:
     assert values["Authority separation"] == (
         "Confirmation of source generation does not authorize execution."
     )
+    assert values["Deferred execution choices"] == (
+        "Backend, shots, seed, and result handling remain deferred."
+    )
     assert all(
         item["attribution"] == "qcoder_deterministic_boundary"
         for item in authority
