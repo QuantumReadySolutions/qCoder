@@ -426,6 +426,7 @@ class _Parser:
         self.statement_count = 0
         self.maximum_broadcast = 0
         self.fatal_error: dict[str, Any] | None = None
+        self.limit_observed_overrides: dict[str, int] = {}
 
     def _token_span(self) -> dict[str, int]:
         if self.tokens:
@@ -442,6 +443,7 @@ class _Parser:
         severity: str = "limitation",
     ) -> None:
         if len(self.diagnostics) >= MAX_DIAGNOSTICS:
+            self.limit_observed_overrides["diagnostics"] = MAX_DIAGNOSTICS + 1
             self._fatal("parser_limit_exceeded", "The diagnostic limit was exceeded.", tokens)
             return
         self.diagnostics.append(
@@ -484,6 +486,7 @@ class _Parser:
         }
         self.constructs.append(row)
         if len(self.constructs) > MAX_LEDGER_ENTRIES:
+            self.limit_observed_overrides["construct_ledger_entries"] = len(self.constructs)
             self._fatal("parser_limit_exceeded", "The construct-ledger limit was exceeded.", tokens)
         if classification in {
             "partially_supported",
@@ -524,6 +527,7 @@ class _Parser:
                 severity="error",
             )
             if len(self.recoveries) > MAX_RECOVERY_EVENTS:
+                self.limit_observed_overrides["recovery_events"] = len(self.recoveries)
                 self._fatal(
                     "parser_limit_exceeded", "The recovery-event limit was exceeded.", tokens
                 )
@@ -677,6 +681,7 @@ class _Parser:
             return
         total_declarations = len(self.quantum_declarations) + len(self.classical_declarations)
         if total_declarations >= MAX_DECLARATIONS:
+            self.limit_observed_overrides["declarations"] = total_declarations + 1
             self._fatal("parser_limit_exceeded", "The declaration limit was exceeded.", tokens)
             return
         target = self.quantum if kind == "qubit" else self.classical
@@ -1048,6 +1053,7 @@ class _Parser:
                 category = "unsupported_construct"
                 limitation = "Register broadcasting requires mechanically known equal widths."
             elif expansion > MAX_BROADCAST_EXPANSION:
+                self.limit_observed_overrides["broadcast_expansion"] = expansion
                 self._fatal(
                     "parser_limit_exceeded", "The broadcast-expansion limit was exceeded.", tokens
                 )
@@ -1087,6 +1093,9 @@ class _Parser:
             )
         if classification == "supported" and emit_operation and formal_qubits is None:
             if len(self.operations) + len(expanded_targets) > MAX_OPERATIONS:
+                self.limit_observed_overrides["operations"] = len(self.operations) + len(
+                    expanded_targets
+                )
                 self._fatal("parser_limit_exceeded", "The operation limit was exceeded.", tokens)
             else:
                 for targets in expanded_targets:
@@ -1173,6 +1182,7 @@ class _Parser:
             )
             return
         if len(self.custom_gates) >= MAX_CUSTOM_GATES:
+            self.limit_observed_overrides["custom_gates"] = len(self.custom_gates) + 1
             self._fatal(
                 "parser_limit_exceeded", "The custom-gate definition limit was exceeded.", tokens
             )
@@ -1381,12 +1391,15 @@ class _Parser:
             form = "arrow" if any(token.value == "->" for token in tokens) else "unassigned"
             self._measurement(tokens, tokens[:-1], form=form)
             return
-        if len(tokens) > 3 and tokens[1].value == "=" and tokens[2].value == "measure":
+        assignment = next(
+            (index for index, token in enumerate(tokens[:-1]) if token.value == "="), None
+        )
+        if assignment is not None and tokens[assignment + 1].value == "measure":
             self._measurement(
                 tokens,
-                tokens[2:-1],
+                tokens[assignment + 1 : -1],
                 form="assignment",
-                destination_tokens=tokens[:1],
+                destination_tokens=tokens[:assignment],
             )
             return
         if first in {"reset", "barrier"}:
@@ -1418,9 +1431,12 @@ class _Parser:
             self.tokens, self.maximum_nesting = _tokenize(self.text)
         except OpenQASM3ParseError as exc:
             category = "parser_limit_exceeded" if "limit" in str(exc) else "malformed_syntax"
+            if category == "parser_limit_exceeded":
+                self.limit_observed_overrides["tokens"] = MAX_TOKENS + 1
             self._fatal(category, "Lexical structure is not safely bounded.", ())
             return self._result()
         if self.maximum_nesting > MAX_NESTING_DEPTH:
+            self.limit_observed_overrides["nesting_depth"] = self.maximum_nesting
             self._fatal(
                 "parser_limit_exceeded",
                 "The scope or expression nesting limit was exceeded.",
@@ -1536,7 +1552,7 @@ class _Parser:
                 "exactness": "exact" if depth_value is not None else "not_established",
             },
             "interaction_graph": {
-                "value": [list(edge) for edge in edges],
+                "value": [] if fatal else [list(edge) for edge in edges],
                 "exactness": "not_established"
                 if fatal
                 else "partial"
@@ -1544,7 +1560,7 @@ class _Parser:
                 else "exact",
             },
             "gate_statistics": {
-                "value": counts,
+                "value": {} if fatal else counts,
                 "exactness": "not_established" if fatal else "partial" if partial else "exact",
             },
         }
@@ -1567,6 +1583,7 @@ class _Parser:
             "diagnostics": len(self.diagnostics),
             "construct_ledger_entries": len(self.constructs),
         }
+        observed.update(self.limit_observed_overrides)
         return {
             name: {
                 "maximum": maximum,
@@ -1687,6 +1704,22 @@ def parse_openqasm3_bytes(
         parser._fatal("invalid_encoding", "The selected source is not valid UTF-8.", ())
         return parser._result()
     return _Parser(raw, text, artifact_label).parse()
+
+
+def is_openqasm3_candidate(raw: bytes) -> bool:
+    """Identify a 3.x declaration candidate using only bounded lexical inspection."""
+
+    try:
+        text = raw.decode("utf-8")
+        tokens, _ = _tokenize(text[:MAX_SOURCE_BYTES])
+    except (UnicodeDecodeError, OpenQASM3ParseError):
+        return False
+    return bool(
+        len(tokens) >= 2
+        and tokens[0].value.casefold() == "openqasm"
+        and tokens[1].kind == "number"
+        and tokens[1].value.startswith("3")
+    )
 
 
 def parse_openqasm3_text(

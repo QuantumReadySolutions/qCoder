@@ -13,6 +13,7 @@ from qcoder.engines.feature_extraction.openqasm3_bounded_parser import (
     parse_openqasm3_bytes,
     parse_openqasm3_text,
 )
+from qcoder.engines.feature_extraction.parsers import parse_circuit_file
 from qcoder.engines.feature_extraction.openqasm3_static_evidence import (
     LANGUAGE_BUILTINS,
     OPENQASM3_PARSER_ID,
@@ -232,6 +233,13 @@ def test_measurement_width_mismatch_is_partial() -> None:
     assert result.sidecar["measurements"][0]["exactness"] == "partial"
 
 
+def test_indexed_measurement_assignment_is_supported() -> None:
+    result = _parse("qubit[2] q; bit[2] c; c[0] = measure q[1];")
+    assert result.sidecar["file_status"] == "supported"
+    assert result.sidecar["measurements"][0]["quantum_targets"] == [1]
+    assert result.sidecar["measurements"][0]["classical_targets"] == [0]
+
+
 def test_custom_gate_formals_prior_calls_and_opaque_depth() -> None:
     result = _parse(
         'include "stdgates.inc"; gate pair(theta) a,b { rx(theta) a; cx a,b; } '
@@ -323,6 +331,31 @@ def test_unknown_gate_is_unrecognized_not_custom() -> None:
     assert result.sidecar["construct_ledger"][-1]["family"] == "quantum_operation"
 
 
+@pytest.mark.parametrize(
+    "statement",
+    ["x q[0:1];", "x {q[0],q[1]};", "q[0] ++ q[1];"],
+)
+def test_slice_set_and_concatenation_are_bounded_unsupported(statement: str) -> None:
+    result = _parse(f'include "stdgates.inc"; qubit[2] q; {statement}')
+    assert result.sidecar["file_status"] == "partial"
+    assert result.sidecar["fatal_error"] is None
+    assert result.circuit_ir is None
+
+
+def test_comment_prefixed_openqasm3_routes_without_extension(tmp_path) -> None:
+    selected = tmp_path / "selected.qasm"
+    selected.write_text("// selected\nOPENQASM 3; qubit q; U(0,0,0) q;\n", encoding="utf-8")
+    result = parse_circuit_file(str(selected))
+    assert result.qasm_format == "qasm3"
+
+
+def test_case_incorrect_openqasm3_routes_to_bounded_header_failure(tmp_path) -> None:
+    selected = tmp_path / "selected.qasm"
+    selected.write_text("/* selected */ openqasm 3; qubit q;\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="openqasm3_complete_circuit_ir_not_established"):
+        parse_circuit_file(str(selected))
+
+
 def test_recoverable_malformed_statement_is_not_repaired_or_complete() -> None:
     result = _parse('include "stdgates.inc"; qubit[0] bad; qubit q; x q;')
     assert result.sidecar["file_status"] == "partial"
@@ -387,6 +420,19 @@ def test_strict_sidecar_validator_rejects_semantic_mutations() -> None:
     mutations.append(changed)
     changed = deepcopy(result.sidecar)
     changed["artifact_label"] = "/home/customer/private.qasm3"
+    mutations.append(changed)
+    changed = deepcopy(result.sidecar)
+    changed["construct_ledger"][0]["construct_id"] = "construct-9999"
+    mutations.append(changed)
+    changed = deepcopy(result.sidecar)
+    changed["derived_facts"]["operation_count"]["value"] += 1
+    mutations.append(changed)
+    changed = deepcopy(result.sidecar)
+    changed["circuit_ir"]["n_qubits"] += 1
+    mutations.append(changed)
+    partial = _parse("qubit q; mystery q;").sidecar
+    changed = deepcopy(partial)
+    changed["unsupported_region_ledger"] = []
     mutations.append(changed)
     for mutation in mutations:
         with pytest.raises(OpenQASM3EvidenceError):

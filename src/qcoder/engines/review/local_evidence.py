@@ -43,7 +43,10 @@ from qcoder.development_evidence import (
     extract_qiskit_source_development_evidence,
     validate_development_evidence,
 )
-from qcoder.engines.feature_extraction.openqasm3_bounded_parser import parse_openqasm3_bytes
+from qcoder.engines.feature_extraction.openqasm3_bounded_parser import (
+    is_openqasm3_candidate,
+    parse_openqasm3_bytes,
+)
 from qcoder.engines.feature_extraction.openqasm3_static_evidence import (
     OPENQASM3_STATIC_EVIDENCE_SCHEMA_ID,
     validate_openqasm3_static_evidence,
@@ -341,10 +344,15 @@ def _ir_projection(text: str) -> dict[str, Any]:
 
 def _review_qasm(path: Path, position: int) -> dict[str, Any]:
     text = _read_text(path, maximum=100_000)
+    raw = path.read_bytes()
     qasm_format = _qasm_format(text)
     declared_version = _declared_qasm_version(text)
-    if qasm_format == "openqasm_3" or path.suffix.casefold() == ".qasm3":
-        result = parse_openqasm3_bytes(path.read_bytes(), artifact_label=path.name)
+    if (
+        qasm_format == "openqasm_3"
+        or path.suffix.casefold() == ".qasm3"
+        or is_openqasm3_candidate(raw)
+    ):
+        result = parse_openqasm3_bytes(raw, artifact_label=path.name)
         sidecar = result.sidecar
         validate_openqasm3_static_evidence(sidecar)
         file_status = sidecar["file_status"]
@@ -355,6 +363,7 @@ def _review_qasm(path: Path, position: int) -> dict[str, Any]:
                 artifact_ref=_reference(position, 3),
             )
             if file_status == "supported"
+            and sidecar["derived_facts"]["depth"]["exactness"] == "exact"
             else None
         )
         facts = sidecar["derived_facts"]

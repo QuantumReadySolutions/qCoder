@@ -311,7 +311,7 @@ def validate_openqasm3_static_evidence(value: object) -> None:
     if not isinstance(mapped["construct_ledger"], list):
         raise OpenQASM3EvidenceError("sidecar_construct_ledger_invalid")
     construct_ids: set[str] = set()
-    for row in mapped["construct_ledger"]:
+    for construct_index, row in enumerate(mapped["construct_ledger"], start=1):
         item = _exact_keys(
             row,
             {
@@ -328,7 +328,7 @@ def validate_openqasm3_static_evidence(value: object) -> None:
         )
         if (
             not isinstance(item["construct_id"], str)
-            or not re.fullmatch(r"construct-[0-9]{4,5}", item["construct_id"])
+            or item["construct_id"] != f"construct-{construct_index:04d}"
             or item["construct_id"] in construct_ids
             or not isinstance(item["family"], str)
             or not item["family"]
@@ -349,10 +349,14 @@ def validate_openqasm3_static_evidence(value: object) -> None:
     region_keys = {"construct_id", "classification", "category", "span", "limitation"}
     if not isinstance(mapped["unsupported_region_ledger"], list):
         raise OpenQASM3EvidenceError("sidecar_unsupported_regions_invalid")
+    constructs_by_id = {row["construct_id"]: row for row in mapped["construct_ledger"]}
+    unsupported_region_ids: list[str] = []
     for row in mapped["unsupported_region_ledger"]:
         item = _exact_keys(row, region_keys, "sidecar_unsupported_region_invalid")
+        construct = constructs_by_id.get(item["construct_id"])
         if (
-            item["construct_id"] not in construct_ids
+            construct is None
+            or item["classification"] != construct["classification"]
             or item["classification"]
             not in {"partially_supported", "recognized_but_unsupported", "unrecognized"}
             or item["category"] not in DIAGNOSTIC_CATEGORIES
@@ -360,10 +364,12 @@ def validate_openqasm3_static_evidence(value: object) -> None:
             or not item["limitation"]
         ):
             raise OpenQASM3EvidenceError("sidecar_unsupported_region_invalid")
+        unsupported_region_ids.append(item["construct_id"])
         _span(item["span"])
 
     if not isinstance(mapped["recovery_ledger"], list):
         raise OpenQASM3EvidenceError("sidecar_recovery_ledger_invalid")
+    recovery_ids: list[str] = []
     for row in mapped["recovery_ledger"]:
         item = _exact_keys(
             row,
@@ -377,7 +383,26 @@ def validate_openqasm3_static_evidence(value: object) -> None:
             or item["source_repaired"] is not False
         ):
             raise OpenQASM3EvidenceError("sidecar_recovery_invalid")
+        recovery_ids.append(item["construct_id"])
         _span(item["span"])
+
+    expected_unsupported_ids = [
+        row["construct_id"]
+        for row in mapped["construct_ledger"]
+        if row["classification"]
+        in {"partially_supported", "recognized_but_unsupported", "unrecognized"}
+    ]
+    expected_recovery_ids = [
+        row["construct_id"]
+        for row in mapped["construct_ledger"]
+        if row["classification"] == "malformed"
+    ]
+    if len(unsupported_region_ids) != len(set(unsupported_region_ids)) or set(
+        unsupported_region_ids
+    ) != set(expected_unsupported_ids):
+        raise OpenQASM3EvidenceError("sidecar_unsupported_region_coverage_invalid")
+    if recovery_ids != expected_recovery_ids:
+        raise OpenQASM3EvidenceError("sidecar_recovery_coverage_invalid")
 
     if not isinstance(mapped["modifier_chains"], list):
         raise OpenQASM3EvidenceError("sidecar_modifier_chains_invalid")
@@ -508,6 +533,58 @@ def validate_openqasm3_static_evidence(value: object) -> None:
     ):
         raise OpenQASM3EvidenceError("sidecar_gate_statistics_invalid")
 
+    scalar_fact_names = (
+        "quantum_width",
+        "classical_width",
+        "operation_count",
+        "measurement_count",
+        "depth",
+    )
+    if mapped["file_status"] == "fatal":
+        if any(
+            facts[name]["value"] is not None or facts[name]["exactness"] != "not_established"
+            for name in scalar_fact_names
+        ):
+            raise OpenQASM3EvidenceError("sidecar_fatal_fact_semantics_invalid")
+        if graph != {"value": [], "exactness": "not_established"} or stats != {
+            "value": {},
+            "exactness": "not_established",
+        }:
+            raise OpenQASM3EvidenceError("sidecar_fatal_fact_semantics_invalid")
+    elif mapped["file_status"] == "partial":
+        independently_nonexecuting_families = {
+            "include",
+            "input_declaration",
+            "output_declaration",
+            "pragma",
+            "annotation",
+        }
+        execution_may_be_incomplete = any(
+            row["classification"] != "supported"
+            and row["family"] not in independently_nonexecuting_families
+            for row in mapped["construct_ledger"]
+        )
+        permitted_count_exactness = (
+            {"lower_bound", "not_established"}
+            if execution_may_be_incomplete
+            else {"exact", "lower_bound", "not_established"}
+        )
+        if facts["operation_count"]["exactness"] not in permitted_count_exactness:
+            raise OpenQASM3EvidenceError("sidecar_partial_fact_semantics_invalid")
+        if facts["measurement_count"]["exactness"] not in permitted_count_exactness:
+            raise OpenQASM3EvidenceError("sidecar_partial_fact_semantics_invalid")
+        if facts["depth"]["exactness"] != "not_established":
+            raise OpenQASM3EvidenceError("sidecar_partial_fact_semantics_invalid")
+        if graph["exactness"] not in {"partial", "not_established"}:
+            raise OpenQASM3EvidenceError("sidecar_partial_fact_semantics_invalid")
+        if stats["exactness"] not in {"partial", "not_established"}:
+            raise OpenQASM3EvidenceError("sidecar_partial_fact_semantics_invalid")
+    elif any(
+        facts[name]["exactness"] != "exact"
+        for name in ("quantum_width", "classical_width", "operation_count", "measurement_count")
+    ):
+        raise OpenQASM3EvidenceError("sidecar_supported_fact_semantics_invalid")
+
     if (
         not isinstance(mapped["parser_limits"], Mapping)
         or tuple(mapped["parser_limits"]) != LIMIT_KEYS
@@ -545,6 +622,14 @@ def validate_openqasm3_static_evidence(value: object) -> None:
             or not isinstance(ir["operations"], list)
         ):
             raise OpenQASM3EvidenceError("sidecar_circuit_ir_invalid")
+        if (
+            ir["n_qubits"] != facts["quantum_width"]["value"]
+            or ir["n_cbits"] != facts["classical_width"]["value"]
+            or len(ir["operations"]) != facts["operation_count"]["value"]
+            or sum(operation.get("name") == "measure" for operation in ir["operations"])
+            != facts["measurement_count"]["value"]
+        ):
+            raise OpenQASM3EvidenceError("sidecar_circuit_ir_fact_mismatch")
     if mapped["file_status"] != "supported" and circuit_ir is not None:
         raise OpenQASM3EvidenceError("sidecar_partial_circuit_ir_prohibited")
 

@@ -51,6 +51,8 @@ def build_openqasm3_circuit_manifestation(
     projection = sidecar.get("circuit_ir")
     if sidecar.get("file_status") != "supported" or not isinstance(projection, Mapping):
         raise ValueError("openqasm3_complete_circuit_ir_required")
+    if sidecar["derived_facts"]["depth"]["exactness"] != "exact":
+        raise ValueError("openqasm3_complete_manifestation_facts_required")
     operations = projection["operations"]
     counts = Counter(str(operation["name"]) for operation in operations)
     ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))

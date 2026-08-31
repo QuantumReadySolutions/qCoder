@@ -73,6 +73,21 @@ def test_partial_sidecar_cannot_feed_complete_manifestation() -> None:
         build_openqasm3_circuit_manifestation(sidecar)
 
 
+def test_opaque_custom_gate_call_does_not_feed_complete_manifestation(tmp_path: Path) -> None:
+    source = "OPENQASM 3; gate custom a { U(0,0,0) a; } qubit q; custom q;\n"
+    sidecar = parse_openqasm3_text(source).sidecar
+    assert sidecar["file_status"] == "supported"
+    assert sidecar["derived_facts"]["depth"]["exactness"] == "not_established"
+    with pytest.raises(ValueError, match="complete_manifestation_facts_required"):
+        build_openqasm3_circuit_manifestation(sidecar)
+
+    selected = _write(tmp_path / "custom.qasm3", source)
+    report = build_local_evidence_review([str(selected)])
+    assert [
+        artifact["schema_id"] for artifact in report["artifacts"][0]["canonical_artifacts"]
+    ] == ["qcoder.openqasm3_static_evidence.v1"]
+
+
 def test_local_review_complete_and_partial_boundaries(tmp_path: Path) -> None:
     supported = _write(tmp_path / "bell.qasm3", SUPPORTED)
     partial = _write(tmp_path / "partial.qasm3", PARTIAL)

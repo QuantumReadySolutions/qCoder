@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from qcoder.engines.feature_extraction.openqasm3_bounded_parser import (
     MAX_BROADCAST_EXPANSION,
     MAX_CUSTOM_GATES,
@@ -219,6 +217,7 @@ def test_operation_limit_at_and_above() -> None:
     assert at.sidecar["file_status"] == "supported"
     assert len(at.circuit_ir.operations) == MAX_OPERATIONS
     assert above.sidecar["file_status"] == "fatal"
+    assert above.sidecar["parser_limits"]["operations"]["status"] == "exceeded"
 
 
 def test_custom_gate_limit_at_and_above() -> None:
