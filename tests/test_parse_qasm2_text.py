@@ -68,7 +68,7 @@ class TestParseQasm2Text(unittest.TestCase):
         ir = parse_qasm2_text(oq3)
         self.assertEqual(ir.qasm_format, "qasm3")
 
-    def test_qasm3_routed_through_parse_circuit_file_raises(self) -> None:
+    def test_partial_qasm3_routed_through_parse_circuit_file_fails_closed(self) -> None:
         oq3 = "OPENQASM 3.0;\nqreg q[1];\n"
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".qasm", delete=False, encoding="utf-8"
@@ -76,9 +76,24 @@ class TestParseQasm2Text(unittest.TestCase):
             f.write(oq3)
             path = f.name
         try:
-            with self.assertRaises(NotImplementedError) as ctx:
+            with self.assertRaises(ValueError) as ctx:
                 parse_circuit_file(path)
-            self.assertIn("OpenQASM 3", str(ctx.exception))
+            self.assertEqual(str(ctx.exception), "openqasm3_complete_circuit_ir_not_established")
+        finally:
+            Path(path).unlink(missing_ok=True)
+
+    def test_supported_qasm3_routed_through_parse_circuit_file(self) -> None:
+        oq3 = "OPENQASM 3.0;\nqubit q;\nU(0, 0, 0) q;\n"
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".qasm3", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(oq3)
+            path = f.name
+        try:
+            ir = parse_circuit_file(path)
+            self.assertEqual(ir.qasm_format, "qasm3")
+            self.assertEqual(ir.n_qubits, 1)
+            self.assertEqual([operation.name for operation in ir.operations], ["U"])
         finally:
             Path(path).unlink(missing_ok=True)
 

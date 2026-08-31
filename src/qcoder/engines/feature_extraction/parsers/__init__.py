@@ -1,21 +1,35 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from ..ir import CircuitIR
+from ..openqasm3_bounded_parser import (
+    OpenQASM3ParseResult,
+    parse_openqasm3_bytes,
+    parse_openqasm3_text,
+)
 from ..qasm2_regex_parser import parse_qasm2_file, parse_qasm2_text
 
-__all__ = ["parse_circuit_file", "parse_qasm2_file", "parse_qasm2_text"]
+__all__ = [
+    "OpenQASM3ParseResult",
+    "parse_circuit_file",
+    "parse_openqasm3_bytes",
+    "parse_openqasm3_text",
+    "parse_qasm2_file",
+    "parse_qasm2_text",
+]
 
 
 def parse_circuit_file(path: str) -> CircuitIR:
     """
     Parser routing point.
-    Today: OpenQASM2 (regex parser).
-    Future: OpenQASM3, QIR, other IR adapters.
+    OpenQASM2 keeps its established parser. Fully supported OpenQASM 3 may
+    produce the same complete CircuitIR; partial evidence never does.
     """
-    ir = parse_qasm2_file(path)
-
-    # For now: we accept qasm2 and unknown headers (still parseable),
-    # but explicitly reject qasm3 until implemented.
-    if ir.qasm_format == "qasm3":
-        raise NotImplementedError("OpenQASM 3 parsing is not implemented yet.")
-    return ir
+    raw = Path(path).read_bytes()
+    if raw.lstrip().startswith((b"OPENQASM 3;", b"OPENQASM 3.0;")):
+        result = parse_openqasm3_bytes(raw, artifact_label=Path(path).name)
+        if result.circuit_ir is None:
+            raise ValueError("openqasm3_complete_circuit_ir_not_established")
+        return result.circuit_ir
+    return parse_qasm2_file(path)
