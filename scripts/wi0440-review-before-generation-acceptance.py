@@ -54,7 +54,15 @@ def _proposal(request: str, algorithm: str = "Bell") -> dict[str, Any]:
     return proposal
 
 
-def _binding_call(workspace: Path, request: str, proposal: dict[str, Any]) -> dict[str, Any]:
+def _binding_payload(
+    workspace: Path,
+    request: str,
+    proposal: dict[str, Any] | None = None,
+    **arguments: object,
+) -> dict[str, Any]:
+    call_arguments: dict[str, object] = {"request_text": request, **arguments}
+    if proposal is not None:
+        call_arguments["connected_assistant_proposal"] = proposal
     response = handle_binding_jsonrpc_message(
         {
             "jsonrpc": "2.0",
@@ -62,17 +70,23 @@ def _binding_call(workspace: Path, request: str, proposal: dict[str, Any]) -> di
             "method": "tools/call",
             "params": {
                 "name": "begin_current_loop",
-                "arguments": {
-                    "request_text": request,
-                    "connected_assistant_proposal": proposal,
-                },
+                "arguments": call_arguments,
             },
         },
         workspace_root=workspace,
     )
     if response is None:
         raise RuntimeError("binding_response_missing")
-    payload = response["result"]["structuredContent"]
+    return response["result"]["structuredContent"]
+
+
+def _binding_call(
+    workspace: Path,
+    request: str,
+    proposal: dict[str, Any] | None = None,
+    **arguments: object,
+) -> dict[str, Any]:
+    payload = _binding_payload(workspace, request, proposal, **arguments)
     if payload.get("ok") is not True:
         raise RuntimeError(str(payload.get("category") or "binding_failed"))
     return payload
@@ -124,6 +138,13 @@ def main() -> int:
     rendering: list[float] = []
     combined: list[float] = []
     revisions: set[str] = set()
+    scenario_counts = {
+        "review_first_value": 0,
+        "duplicate_call": 0,
+        "stale_revision": 0,
+        "source_modification": 0,
+        "direct_generation_control": 0,
+    }
     for _ in range(args.repetitions):
         for request, algorithm in cases:
             proposal = _proposal(request, algorithm)
@@ -139,6 +160,92 @@ def main() -> int:
             rendering.append(rendering_elapsed)
             combined.append(transaction_elapsed + rendering_elapsed)
             revisions.add(payload["review_before_generation"]["review_revision"])
+            scenario_counts["review_first_value"] += 1
+
+        duplicate_proposal = _proposal(EXACT_REQUEST)
+        with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-duplicate-") as directory:
+            workspace = Path(directory)
+            first = _binding_call(workspace, EXACT_REQUEST, deepcopy(duplicate_proposal))
+            started = time.monotonic()
+            duplicate = _binding_call(workspace, EXACT_REQUEST, deepcopy(duplicate_proposal))
+            duplicate_elapsed = time.monotonic() - started
+        if duplicate.get("category") != "review_before_generation_duplicate":
+            raise RuntimeError("duplicate_call_not_idempotent")
+        transaction.append(duplicate_elapsed)
+        rendering.append(0.0)
+        combined.append(duplicate_elapsed)
+        revisions.add(first["review_before_generation"]["review_revision"])
+        scenario_counts["duplicate_call"] += 1
+
+        with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-stale-") as directory:
+            workspace = Path(directory)
+            _binding_call(workspace, EXACT_REQUEST, deepcopy(duplicate_proposal))
+            started = time.monotonic()
+            stale = _binding_payload(
+                workspace,
+                EXACT_REQUEST,
+                deepcopy(duplicate_proposal),
+                review_action="Use recommended choices",
+                displayed_review_revision="review-revision-" + "0" * 64,
+            )
+            stale_elapsed = time.monotonic() - started
+        if stale.get("category") != "review_confirmation_stale_revision" or stale.get("ok"):
+            raise RuntimeError("stale_revision_not_rejected")
+        transaction.append(stale_elapsed)
+        rendering.append(0.0)
+        combined.append(stale_elapsed)
+        scenario_counts["stale_revision"] += 1
+
+        modification_request = (
+            "Use qCoder to review proposed Qiskit implementation changes to selected.py before "
+            "modifying the source."
+        )
+        modification_proposal = _proposal(modification_request)
+        modification_proposal["semantic_axes"].update(
+            {
+                "ultimate_outcome": "source_modification",
+                "immediate_interaction": "review_proposed_changes",
+                "temporal_order": "review_then_confirm_before_modification",
+                "review_object": "proposed_changes",
+            }
+        )
+        with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-modification-") as directory:
+            workspace = Path(directory)
+            (workspace / "selected.py").write_text("ORIGINAL\n", encoding="utf-8")
+            started = time.monotonic()
+            modification = _binding_call(
+                workspace,
+                modification_request,
+                modification_proposal,
+                selected_artifact_paths=["selected.py"],
+            )
+            modification_elapsed = time.monotonic() - started
+            if (workspace / "selected.py").read_text(encoding="utf-8") != "ORIGINAL\n":
+                raise RuntimeError("source_modified_before_confirmation")
+        transaction.append(modification_elapsed)
+        rendering.append(0.0)
+        combined.append(modification_elapsed)
+        revisions.add(modification["review_before_generation"]["review_revision"])
+        scenario_counts["source_modification"] += 1
+
+        direct_request = "Use qCoder to create a small Qiskit program in direct.py now."
+        with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-direct-") as directory:
+            workspace = Path(directory)
+            started = time.monotonic()
+            direct = _binding_call(
+                workspace,
+                direct_request,
+                intended_artifact_paths={"source": "direct.py"},
+            )
+            direct_elapsed = time.monotonic() - started
+            if (workspace / "direct.py").exists():
+                raise RuntimeError("direct_generation_control_created_source")
+        if direct.get("review_before_generation") is not None:
+            raise RuntimeError("direct_generation_control_received_review_ceremony")
+        transaction.append(direct_elapsed)
+        rendering.append(0.0)
+        combined.append(direct_elapsed)
+        scenario_counts["direct_generation_control"] += 1
 
     transaction_summary = _summary(transaction)
     rendering_summary = _summary(rendering)
@@ -150,10 +257,11 @@ def main() -> int:
     )
     result = {
         "schema_id": "qcoder.wi0440.local_timing_acceptance.v1",
-        "population_cases": len(cases),
+        "population_cases": len(cases) + 4,
         "repetitions": args.repetitions,
         "samples": len(combined),
         "unique_request_bound_revisions": len(revisions),
+        "scenario_counts": scenario_counts,
         "connected_assistant_model": "not_measured_fixture_driven_automation",
         "qcoder_local_transaction": transaction_summary,
         "protected_service_seconds": 0,

@@ -693,8 +693,15 @@ def test_local_timing_acceptance_population_passes_without_network() -> None:
         text=True,
     )
     result = json.loads(completed.stdout)
-    assert result["population_cases"] == 19
-    assert result["samples"] == 19
+    assert result["population_cases"] == 23
+    assert result["samples"] == 23
+    assert result["scenario_counts"] == {
+        "review_first_value": 19,
+        "duplicate_call": 1,
+        "stale_revision": 1,
+        "source_modification": 1,
+        "direct_generation_control": 1,
+    }
     assert result["connected_assistant_model"] == "not_measured_fixture_driven_automation"
     assert result["protected_service_seconds"] == 0
     assert result["first_useful_interpretation_budget_pass"] is True
