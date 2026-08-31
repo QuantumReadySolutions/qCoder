@@ -3,7 +3,10 @@ from __future__ import annotations
 from copy import deepcopy
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -44,10 +47,26 @@ FIXTURE = (
     Path(__file__).parents[1]
     / "src/qcoder/model_packs/wi0440_bell_review_before_generation_v1.json"
 )
+MATRIX_FIXTURE = (
+    Path(__file__).parents[1]
+    / "src/qcoder/model_packs/wi0440_review_before_generation_class_matrix_v1.json"
+)
+GOLDEN_DIR = Path(__file__).parent / "fixtures/wi0440_review_before_generation_v1/goldens"
 
 
 def bell_proposal() -> dict[str, object]:
     return json.loads(FIXTURE.read_text(encoding="utf-8"))
+
+
+def class_matrix() -> dict[str, object]:
+    return json.loads(MATRIX_FIXTURE.read_text(encoding="utf-8"))
+
+
+def _set_group_item(proposal: dict[str, object], group: int, item_id: str, value: str) -> None:
+    item = next(
+        item for item in proposal["review_groups"][group]["items"] if item["item_id"] == item_id
+    )
+    item["value"] = value
 
 
 def proposal_for(
@@ -59,32 +78,19 @@ def proposal_for(
     proposal = bell_proposal()
     proposal["exact_request_utf8_sha256"] = sha256(request.encode("utf-8")).hexdigest()
     if algorithm != "Bell":
-        concrete = (
-            construction
-            or {
-                "GHZ": "QuantumCircuit with H on q0, chained CX operations, and matching measurements",
-                "Grover": "Qiskit circuit with an explicit phase oracle and diffusion operation",
-                "Teleportation": (
-                    "QuantumCircuit with Bell-pair preparation, sender measurements, and conditional "
-                    "X/Z corrections"
-                ),
-                "QAOA": (
-                    "Qiskit QAOA ansatz with explicit cost and mixer layers and symbolic parameters"
-                ),
-            }[algorithm]
-        )
-        proposal["recommended_interpretation"] = (
-            f"Create a concrete {algorithm} Qiskit source example after the customer confirms "
-            "this implementation review."
-        )
-        proposal["review_groups"][0]["items"][0]["value"] = (
-            f"A bounded {algorithm} source-generation example in Python"
-        )
-        proposal["review_groups"][0]["items"][1]["value"] = (
-            f"The explicitly requested {algorithm} construction"
-        )
-        proposal["review_groups"][1]["items"][1]["value"] = concrete
+        profile = class_matrix()["profiles"][algorithm]
+        concrete = construction or profile["construction"]
+        proposal["recommended_interpretation"] = profile["recommended_interpretation"]
+        _set_group_item(proposal, 0, "intended_artifact", profile["intended_artifact"])
+        _set_group_item(proposal, 0, "quantum_scope", profile["quantum_scope"])
+        _set_group_item(proposal, 0, "classical_scope", profile["classical_scope"])
+        _set_group_item(proposal, 0, "measurement_basis", profile["measurement_basis"])
+        _set_group_item(proposal, 1, "construction", concrete)
+        _set_group_item(proposal, 1, "measurement_mapping", profile["measurement_mapping"])
+        _set_group_item(proposal, 1, "output_structure", profile["output_structure"])
         proposal["material_choices"][1]["recommended_value"] = concrete
+        proposal["material_choices"][2]["recommended_value"] = profile["measurement_mapping"]
+        proposal["material_choices"][3]["recommended_value"] = profile["output_structure"]
     return proposal
 
 
@@ -421,6 +427,28 @@ def test_non_bell_proposals_are_concrete_without_correctness_or_execution_claims
     assert any("correctness" in item["value"] for item in first["limitations_nonclaims"])
 
 
+@pytest.mark.parametrize("case", class_matrix()["cases"], ids=lambda case: case["case_id"])
+def test_non_bell_connected_assistant_class_matrix(case: dict[str, object]) -> None:
+    proposal = proposal_for(str(case["request"]), algorithm=str(case["algorithm"]))
+    proposal["blocking_clarification"] = case.get("blocking_clarification")
+    first = build_first_value(str(case["request"]), proposal)
+    assert first["semantic_axes"]["immediate_interaction"] == (
+        "review_proposed_intent_and_implementation"
+    )
+    assert first["source_or_qasm_included"] is False
+    assert first["execution_performed"] is False
+    assert first["qcoder_authored_recommendation"] is False
+    assert first["review_revision"].startswith("review-revision-")
+    if case["variant"] == "material_blocker":
+        assert first["confirmable"] is False
+        assert first["customer_actions"] == []
+        assert first["blocking_clarification"] == case["blocking_clarification"]
+    else:
+        assert first["confirmable"] is True
+        assert first["customer_actions"] == list(CUSTOMER_ACTIONS)
+        assert all(group["items"] for group in first["initial_decision_groups"])
+
+
 def test_material_blocker_is_specific_and_has_no_actions() -> None:
     request = "Use qCoder to review the oracle choice before generating a Grover Qiskit program."
     proposal = proposal_for(request, algorithm="Grover")
@@ -603,7 +631,7 @@ def test_review_change_action_exposes_only_ordinary_material_choices(tmp_path: P
     assert result["category"] == "review_choices_unchanged"
     assert result["internal_field_ids_exposed"] is False
     assert {frozenset(item) for item in result["material_choice_fields"]} == {
-        frozenset({"choice_id", "label", "current_value"})
+        frozenset({"label", "current_value"})
     }
     serialized = json.dumps(result, sort_keys=True)
     assert "eligibility" not in serialized
@@ -634,3 +662,43 @@ def test_abandon_discards_transient_proposal_and_exact_request(tmp_path: Path) -
     assert result["ok"] is True
     assert result["phase"] == "abandoned"
     assert not state_file.exists()
+
+
+def test_bell_json_and_markdown_match_deterministic_goldens() -> None:
+    first = build_first_value(EXACT_BELL_REQUEST, bell_proposal())
+    assert (
+        canonical_json(first).encode("utf-8") == (GOLDEN_DIR / "bell-first-value.json").read_bytes()
+    )
+    assert (
+        render_first_value_markdown(first).encode("utf-8")
+        == (GOLDEN_DIR / "bell-first-value.md").read_bytes()
+    )
+
+
+def test_local_timing_acceptance_population_passes_without_network() -> None:
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(Path(__file__).parents[1] / "src")
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(
+                Path(__file__).parents[1] / "scripts/wi0440-review-before-generation-acceptance.py"
+            ),
+            "--repetitions",
+            "1",
+        ],
+        check=True,
+        capture_output=True,
+        env=environment,
+        text=True,
+    )
+    result = json.loads(completed.stdout)
+    assert result["population_cases"] == 19
+    assert result["samples"] == 19
+    assert result["connected_assistant_model"] == "not_measured_fixture_driven_automation"
+    assert result["protected_service_seconds"] == 0
+    assert result["first_useful_interpretation_budget_pass"] is True
+    assert result["first_material_decision_budget_pass"] is True
+    assert result["customer_visible_end_to_end"] == (
+        "pending_targeted_native_windows_cursor_repeat"
+    )

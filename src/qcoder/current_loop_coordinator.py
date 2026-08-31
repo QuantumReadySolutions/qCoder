@@ -2950,7 +2950,6 @@ class CurrentLoopCoordinator:
                 "review_before_generation": deepcopy(existing["first_value"]),
                 "material_choice_fields": [
                     {
-                        "choice_id": item["choice_id"],
                         "label": item["label"],
                         "current_value": item["recommended_value"],
                     }
