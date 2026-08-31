@@ -21,6 +21,9 @@ from qcoder.engines.review.local_evidence import (
     build_share_safe_local_evidence_review,
     resolve_explicit_files,
 )
+from qcoder.engines.feature_extraction.openqasm3_static_evidence import (
+    OPENQASM3_STATIC_EVIDENCE_SCHEMA_ID,
+)
 
 
 PROMPT_PACK_SCHEMA_ID = "qcoder.evidence_prompt_pack.v1"
@@ -269,46 +272,48 @@ def build_run_readiness_checklist(
     items = list(report["artifacts"])
     artifacts = _canonical_artifacts(report)
     unsupported_items = [item for item in items if item["status"] in {"unsupported", "invalid"}]
+    qualified_items = [item for item in items if item["status"] == "partial"]
     qasm_items = [item for item in items if str(item["input"]["kind"]).startswith("openqasm")]
     qasm2_items = [item for item in items if item["input"]["kind"] == "openqasm_2"]
+    qasm3_items = [item for item in items if item["input"]["kind"] == "openqasm_3"]
+    qasm3_sidecars = [
+        artifact
+        for artifact in artifacts
+        if artifact.get("schema_id") == OPENQASM3_STATIC_EVIDENCE_SCHEMA_ID
+    ]
+    qasm3_partial = any(artifact.get("file_status") != "supported" for artifact in qasm3_sidecars)
     measurement_count = sum(
         int((artifact.get("structural_metrics") or {}).get("measurement_count") or 0)
         for artifact in artifacts
     )
-    result_evidence = any(
-        artifact.get("schema_id")
-        in {
-            "qcoder.result_manifestation.v1",
-            "qcoder.current_loop_run_summary.v1",
-        }
-        for artifact in artifacts
+    measurement_count += sum(
+        int(
+            ((artifact.get("derived_facts") or {}).get("measurement_count") or {}).get("value") or 0
+        )
+        for artifact in qasm3_sidecars
+        if artifact.get("file_status") != "supported"
     )
-    checks = [
+    qasm_check = (
         {
-            "check_id": "selected-artifact-validation",
-            "label": "Selected artifact validation",
-            "disposition": "unsupported" if unsupported_items else "ready",
-            "explanation": (
-                "One or more explicitly selected artifacts are unsupported or invalid."
-                if unsupported_items
-                else "Every explicitly selected artifact was parsed within a supported local evidence path."
+            "check_id": "openqasm-static-readiness",
+            "label": "OpenQASM 3 static evidence availability",
+            "disposition": (
+                "unsupported" if unsupported_items else "warning" if qasm3_partial else "ready"
             ),
-            "supporting_evidence_ids": [row["artifact_id"] for row in selected],
-            "limitation": "This validation does not establish correctness or execution success.",
-        },
-        {
-            "check_id": "supported-input-format",
-            "label": "Supported input format",
-            "disposition": "unsupported" if unsupported_items else "ready",
             "explanation": (
-                "At least one selected format is outside the supported local evidence set."
+                "The selected OpenQASM 3 file did not pass bounded static validation."
                 if unsupported_items
-                else "The selected formats are supported by the existing bounded local evidence readers."
+                else "The selected OpenQASM 3 evidence is partial; affected facts remain qualified."
+                if qasm3_partial
+                else "The selected OpenQASM 3 file is fully represented within the bounded static subset."
             ),
-            "supporting_evidence_ids": [row["artifact_id"] for row in selected],
-            "limitation": "Format support is not backend, hardware, or runtime suitability.",
-        },
-        {
+            "supporting_evidence_ids": [
+                row["artifact_id"] for row in selected if row["artifact_kind"] == "openqasm_3"
+            ],
+            "limitation": "Static OpenQASM 3 evidence is not execution readiness, language compliance, or hardware suitability.",
+        }
+        if qasm3_items and not qasm2_items
+        else {
             "check_id": "openqasm-2-readiness",
             "label": "OpenQASM 2 evidence availability",
             "disposition": (
@@ -327,11 +332,54 @@ def build_run_readiness_checklist(
                 if row["artifact_kind"].startswith("openqasm")
             ],
             "limitation": "Static QASM parsing does not establish executable hardware support.",
+        }
+    )
+    result_evidence = any(
+        artifact.get("schema_id")
+        in {
+            "qcoder.result_manifestation.v1",
+            "qcoder.current_loop_run_summary.v1",
+        }
+        for artifact in artifacts
+    )
+    checks = [
+        {
+            "check_id": "selected-artifact-validation",
+            "label": "Selected artifact validation",
+            "disposition": (
+                "unsupported" if unsupported_items else "warning" if qualified_items else "ready"
+            ),
+            "explanation": (
+                "One or more explicitly selected artifacts are unsupported or invalid."
+                if unsupported_items
+                else "One or more explicitly selected artifacts provide qualified partial evidence."
+                if qualified_items
+                else "Every explicitly selected artifact was parsed within a supported local evidence path."
+            ),
+            "supporting_evidence_ids": [row["artifact_id"] for row in selected],
+            "limitation": "This validation does not establish correctness or execution success.",
         },
+        {
+            "check_id": "supported-input-format",
+            "label": "Supported input format",
+            "disposition": (
+                "unsupported" if unsupported_items else "warning" if qualified_items else "ready"
+            ),
+            "explanation": (
+                "At least one selected format is outside the supported local evidence set."
+                if unsupported_items
+                else "The selected formats are supported, with at least one partial evidence result."
+                if qualified_items
+                else "The selected formats are supported by the existing bounded local evidence readers."
+            ),
+            "supporting_evidence_ids": [row["artifact_id"] for row in selected],
+            "limitation": "Format support is not backend, hardware, or runtime suitability.",
+        },
+        qasm_check,
         {
             "check_id": "measurement-evidence",
             "label": "Measurement evidence",
-            "disposition": "ready" if measurement_count else "warning",
+            "disposition": "ready" if measurement_count and not qasm3_partial else "warning",
             "explanation": (
                 f"The selected circuit evidence records {measurement_count} measurement operation(s)."
                 if measurement_count

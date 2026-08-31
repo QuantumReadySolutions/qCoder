@@ -6,6 +6,9 @@ from typing import Any, Mapping
 
 from qcoder.current_loop_run_summary import RUN_SUMMARY_SCHEMA_ID
 from qcoder.development_evidence import DEVELOPMENT_EVIDENCE_SCHEMA_ID
+from qcoder.engines.feature_extraction.openqasm3_static_evidence import (
+    OPENQASM3_STATIC_EVIDENCE_SCHEMA_ID,
+)
 
 
 def _bullets(lines: list[str], values: object, *, empty: str = "None.") -> None:
@@ -159,6 +162,19 @@ def render_local_evidence_markdown(report: Mapping[str, Any]) -> str:
                         "measurement_count",
                     ):
                         lines.append(f"  - {name}: `{metrics.get(name)}`")
+                elif artifact.get("schema_id") == OPENQASM3_STATIC_EVIDENCE_SCHEMA_ID:
+                    circuit_seen = True
+                    lines.append(
+                        f"- Artifact {item.get('position')} bounded OpenQASM 3 static facts:"
+                    )
+                    for name, fact in artifact.get("derived_facts", {}).items():
+                        if isinstance(fact, Mapping):
+                            lines.append(
+                                f"  - {name}: `{fact.get('value')}` — `{fact.get('exactness')}`"
+                            )
+                    lines.append(
+                        f"  - complete CircuitIR: `{artifact.get('circuit_ir') is not None}`"
+                    )
     if not circuit_seen:
         lines.append("- No supported constructed-circuit evidence was selected.")
     lines.append("")

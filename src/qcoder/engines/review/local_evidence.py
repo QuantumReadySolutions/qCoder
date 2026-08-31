@@ -43,8 +43,16 @@ from qcoder.development_evidence import (
     extract_qiskit_source_development_evidence,
     validate_development_evidence,
 )
+from qcoder.engines.feature_extraction.openqasm3_bounded_parser import parse_openqasm3_bytes
+from qcoder.engines.feature_extraction.openqasm3_static_evidence import (
+    OPENQASM3_STATIC_EVIDENCE_SCHEMA_ID,
+    validate_openqasm3_static_evidence,
+)
 from qcoder.engines.feature_extraction.qasm2_regex_parser import parse_qasm2_text
 from qcoder.engines.review.counts_v0 import normalize_counts_v0
+from qcoder.engines.review.openqasm3_manifestation import (
+    build_openqasm3_circuit_manifestation,
+)
 from qcoder.engines.review.qiskit_counts import normalize_qiskit_counts_payload
 
 
@@ -335,25 +343,69 @@ def _review_qasm(path: Path, position: int) -> dict[str, Any]:
     text = _read_text(path, maximum=100_000)
     qasm_format = _qasm_format(text)
     declared_version = _declared_qasm_version(text)
-    if qasm_format == "openqasm_3":
+    if qasm_format == "openqasm_3" or path.suffix.casefold() == ".qasm3":
+        result = parse_openqasm3_bytes(path.read_bytes(), artifact_label=path.name)
+        sidecar = result.sidecar
+        validate_openqasm3_static_evidence(sidecar)
+        file_status = sidecar["file_status"]
+        manifestation = (
+            build_openqasm3_circuit_manifestation(
+                sidecar,
+                stage="logical_circuit",
+                artifact_ref=_reference(position, 3),
+            )
+            if file_status == "supported"
+            else None
+        )
+        facts = sidecar["derived_facts"]
+        established = [
+            f"The explicitly selected input declares OpenQASM {sidecar['declared_language_version']}.",
+            f"Bounded static support status: {file_status}.",
+        ]
+        for label, key in (
+            ("Quantum width", "quantum_width"),
+            ("Classical width", "classical_width"),
+            ("Operation count", "operation_count"),
+            ("Measurement count", "measurement_count"),
+            ("Depth", "depth"),
+        ):
+            fact = facts[key]
+            if fact["value"] is not None:
+                established.append(
+                    f"{label}: {fact['value']} ({fact['exactness']} static evidence)."
+                )
+        diagnostics = [str(row["message"]) for row in sidecar["diagnostics"]]
         return _canonical_item(
             position=position,
             path=path,
             input_kind="openqasm_3",
-            status="unsupported",
-            inspected=("OpenQASM version header only",),
-            established=(f"The explicitly selected input declares OpenQASM {declared_version}.",),
+            status={
+                "supported": "established_with_qualifications",
+                "partial": "partial",
+                "fatal": "invalid",
+            }[file_status],
+            inspected=(
+                "OpenQASM 3 version and lexical structure",
+                "bounded supported declarations and operations",
+                "construct support classifications",
+                "derived-fact exactness",
+                "complete CircuitIR boundary",
+            ),
+            established=established,
             not_established=(
-                "No circuit facts were extracted.",
-                "OpenQASM 3 parsing and evidence extraction are not supported in this package.",
+                "Execution is outside this static evidence path.",
+                "Full-language compliance, conversion, semantic equivalence, correctness, and expected output were not established.",
+                "Hardware suitability, backend ranking, runtime, resources, fidelity, shot count, and statistical sufficiency were not established.",
+                "Observed OpenQASM structure did not establish intent or algorithm identity.",
             ),
-            limitations=(
-                "The input was not passed to the bounded OpenQASM 2 parser.",
-                "No constructs were discarded or represented as a complete circuit.",
-            ),
+            limitations=tuple(sidecar["limitations"]) + tuple(diagnostics),
+            warnings=tuple(diagnostics),
             next_actions=(
-                "Supply a supported OpenQASM 2 artifact.",
-                "Supply explicitly selected Python/Qiskit source or supported counts JSON.",
+                _display_command(str(path), extra=("--out-json", "local-evidence.json")),
+                "Review the bounded diagnostics and select a corrected file if more complete evidence is required.",
+            ),
+            canonical_artifacts=tuple(
+                artifact for artifact in (sidecar, manifestation) if artifact is not None
             ),
         )
     if qasm_format != "openqasm_2":
@@ -504,6 +556,13 @@ def _review_canonical_json(path: Path, position: int, data: Mapping[str, Any]) -
         error = run_summary_error(data)
     elif schema_id in {CIRCUIT_MANIFESTATION_SCHEMA_ID, RESULT_MANIFESTATION_SCHEMA_ID}:
         error = None if artifact_digest_matches(dict(data)) else "artifact_digest_invalid"
+    elif schema_id == OPENQASM3_STATIC_EVIDENCE_SCHEMA_ID:
+        try:
+            validate_openqasm3_static_evidence(data)
+        except ValueError as exc:
+            error = str(exc)
+        else:
+            error = None
     else:
         return _canonical_item(
             position=position,
@@ -677,15 +736,6 @@ def _help_actions(
             "category": "help",
         },
     ]
-    if any(item["input"]["kind"] == "openqasm_3" for item in items):
-        actions.insert(
-            0,
-            {
-                "action": "use_supported_alternative",
-                "instruction": "Supply OpenQASM 2, explicitly selected Python/Qiskit source, or supported counts JSON.",
-                "category": "unsupported_input",
-            },
-        )
     return actions
 
 

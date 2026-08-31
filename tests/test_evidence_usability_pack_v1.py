@@ -115,7 +115,7 @@ def test_prompt_pack_is_explicit_share_safe_and_deterministic() -> None:
             'OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[1];\n',
             {"ready", "warning", "missing_evidence"},
         ),
-        ("OPENQASM 3.0;\nqubit[1] q;\n", {"unsupported", "warning", "missing_evidence"}),
+        ("OPENQASM 3.0;\nqubit[1] q;\n", {"ready", "warning", "missing_evidence"}),
     ],
 )
 def test_readiness_dispositions_are_evidence_grounded(
@@ -175,13 +175,13 @@ def test_malformed_partial_and_unsupported_evidence_remain_bounded(tmp_path: Pat
     report = build_local_evidence_review(paths)
     assert {item["status"] for item in report["artifacts"]} >= {
         "partial",
-        "unsupported",
+        "established_with_qualifications",
     }
     prompt = build_evidence_prompt_pack(paths=paths, report=report)
     checklist = build_run_readiness_checklist(paths=paths, report=report)
     assert prompt["limitations"]
     assert prompt["unsupported_statements"]
-    assert any(row["disposition"] == "unsupported" for row in checklist["checks"])
+    assert any(row["disposition"] == "warning" for row in checklist["checks"])
     assert str(tmp_path) not in canonical_json(prompt)
 
 

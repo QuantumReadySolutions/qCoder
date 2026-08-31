@@ -175,7 +175,7 @@ def test_qasm2_custom_construct_is_partial_and_visible(tmp_path: Path) -> None:
     assert any("mystery" in warning for warning in item["warnings"])
 
 
-def test_qasm3_is_recognized_without_qasm2_parser_or_partial_facts(
+def test_qasm3_uses_bounded_parser_without_qasm2_parser(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     qasm3 = tmp_path / "input.qasm"
@@ -190,13 +190,14 @@ def test_qasm3_is_recognized_without_qasm2_parser_or_partial_facts(
     monkeypatch.setattr("qcoder.engines.review.local_evidence.parse_qasm2_text", forbidden_parser)
     report = build_local_evidence_review([str(qasm3)])
     item = report["artifacts"][0]
-    assert report["status"] == "completed_with_unsupported_or_invalid_input"
+    assert report["status"] == "completed"
     assert item["input"]["kind"] == "openqasm_3"
-    assert item["status"] == "unsupported"
-    assert item["canonical_artifacts"] == []
-    assert "No circuit facts were extracted." in item["not_established"]
-    assert any("not passed" in value for value in item["limitations"])
-    assert any("OpenQASM 2" in value for value in item["supported_next_actions"])
+    assert item["status"] == "established_with_qualifications"
+    assert item["canonical_artifacts"][0]["schema_id"] == ("qcoder.openqasm3_static_evidence.v1")
+    assert item["canonical_artifacts"][0]["file_status"] == "supported"
+    assert item["canonical_artifacts"][0]["circuit_ir"]["complete"] is True
+    assert "Execution is outside this static evidence path." in item["not_established"]
+    assert any("--out-json" in value for value in item["supported_next_actions"])
 
 
 def test_supplied_counts_reuse_canonical_run_summary_and_missing_metadata(
