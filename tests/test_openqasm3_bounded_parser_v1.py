@@ -83,7 +83,7 @@ def test_exact_supported_headers(header: str) -> None:
     ("source", "category"),
     [
         ("qubit q;", "missing_header"),
-        ("openqasm 3.0; qubit q;", "invalid_header"),
+        ("openqasm 3.0; qubit q;", "missing_header"),
         ("OPENQASM; qubit q;", "invalid_header"),
         ("OPENQASM 3.1; qubit q;", "unsupported_openqasm_version"),
         ("OPENQASM 4; qubit q;", "unsupported_openqasm_version"),

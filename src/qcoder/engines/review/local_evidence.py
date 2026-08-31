@@ -355,7 +355,7 @@ def _review_qasm(path: Path, position: int) -> dict[str, Any]:
     ):
         result = parse_openqasm3_bytes(raw, artifact_label=path.name)
         sidecar = result.sidecar
-        validate_openqasm3_static_evidence(sidecar, source_bytes=raw)
+        validate_openqasm3_static_evidence(sidecar, source_bytes=raw, artifact_label=path.name)
         file_status = sidecar["file_status"]
         manifestation = (
             build_openqasm3_circuit_manifestation(

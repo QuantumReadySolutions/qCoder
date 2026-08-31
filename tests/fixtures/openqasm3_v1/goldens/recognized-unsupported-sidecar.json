@@ -480,7 +480,7 @@
     },
     "tokens": {
       "maximum": 40000,
-      "observed": 65,
+      "observed": 55,
       "status": "within_limit"
     },
     "total_classical_width": {

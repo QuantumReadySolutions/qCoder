@@ -119,6 +119,27 @@ LIMIT_KEYS = (
     "individual_classical_width",
     "total_classical_width",
 )
+PARSER_LIMIT_MAXIMA = {
+    "source_bytes": 100_000,
+    "tokens": 40_000,
+    "statements": 12_000,
+    "declarations": 1_000,
+    "operations": 10_000,
+    "nesting_depth": 32,
+    "expression_depth": 32,
+    "custom_gates": 256,
+    "modifier_depth": 8,
+    "broadcast_expansion": 4_096,
+    "recovery_events": 128,
+    "diagnostics": 512,
+    "construct_ledger_entries": 12_000,
+    "individual_quantum_width": 4_096,
+    "total_quantum_width": 4_096,
+    "individual_classical_width": 4_096,
+    "total_classical_width": 4_096,
+}
+if tuple(PARSER_LIMIT_MAXIMA) != LIMIT_KEYS:  # pragma: no cover - import-time contract
+    raise RuntimeError("openqasm3_parser_limit_contract_invalid")
 
 _DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 _VERSION_RE = re.compile(r"^[0-9]+(?:\.[0-9]+)?$")
@@ -217,7 +238,12 @@ def _validate_privacy(value: object, *, path: str = "$") -> None:
         raise OpenQASM3EvidenceError(f"sidecar_absolute_path:{path}")
 
 
-def validate_openqasm3_static_evidence(value: object, *, source_bytes: bytes | None = None) -> str:
+def validate_openqasm3_static_evidence(
+    value: object,
+    *,
+    source_bytes: bytes | None = None,
+    artifact_label: str | None = None,
+) -> str:
     """Validate structure, semantics, and optionally bind evidence to source bytes.
 
     The standalone mode proves only the sidecar's internal consistency.  Supplying
@@ -259,7 +285,11 @@ def validate_openqasm3_static_evidence(value: object, *, source_bytes: bytes | N
         "intent_inferred",
     }
     mapped = _exact_keys(value, keys, "openqasm3_sidecar_shape_invalid")
-    if mapped["schema_id"] != OPENQASM3_STATIC_EVIDENCE_SCHEMA_ID or mapped["schema_version"] != 1:
+    if (
+        mapped["schema_id"] != OPENQASM3_STATIC_EVIDENCE_SCHEMA_ID
+        or type(mapped["schema_version"]) is not int
+        or mapped["schema_version"] != 1
+    ):
         raise OpenQASM3EvidenceError("openqasm3_sidecar_schema_invalid")
     if mapped["parser_identity"] != OPENQASM3_PARSER_ID:
         raise OpenQASM3EvidenceError("openqasm3_parser_identity_invalid")
@@ -306,10 +336,10 @@ def validate_openqasm3_static_evidence(value: object, *, source_bytes: bytes | N
                 not isinstance(item["name"], str)
                 or not item["name"]
                 or item["name"] in names
-                or not isinstance(item["size"], int)
+                or type(item["size"]) is not int
                 or isinstance(item["size"], bool)
                 or item["size"] < 1
-                or not isinstance(item["base"], int)
+                or type(item["base"]) is not int
                 or item["base"] < 0
                 or item["base"] != expected_base
                 or item["support"] not in SUPPORT_STATES
@@ -483,9 +513,9 @@ def validate_openqasm3_static_evidence(value: object, *, source_bytes: bytes | N
         if (
             not isinstance(item["name"], str)
             or item["name"] in custom_names
-            or not isinstance(item["parameter_arity"], int)
+            or type(item["parameter_arity"]) is not int
             or item["parameter_arity"] < 0
-            or not isinstance(item["qubit_arity"], int)
+            or type(item["qubit_arity"]) is not int
             or item["qubit_arity"] < 1
             or item["declaration_construct_id"] not in construct_ids
             or item["support"] not in SUPPORT_STATES
@@ -516,8 +546,8 @@ def validate_openqasm3_static_evidence(value: object, *, source_bytes: bytes | N
             or item["exactness"] not in EXACTNESS_STATES
             or not isinstance(item["quantum_targets"], list)
             or not isinstance(item["classical_targets"], list)
-            or any(not isinstance(index, int) or index < 0 for index in item["quantum_targets"])
-            or any(not isinstance(index, int) or index < 0 for index in item["classical_targets"])
+            or any(type(index) is not int or index < 0 for index in item["quantum_targets"])
+            or any(type(index) is not int or index < 0 for index in item["classical_targets"])
         ):
             raise OpenQASM3EvidenceError("sidecar_measurement_invalid")
         if any(index >= quantum_width for index in item["quantum_targets"]) or any(
@@ -561,6 +591,40 @@ def validate_openqasm3_static_evidence(value: object, *, source_bytes: bytes | N
         ):
             raise OpenQASM3EvidenceError("sidecar_diagnostic_span_invalid")
 
+    construct_order = {
+        row["construct_id"]: index for index, row in enumerate(mapped["construct_ledger"])
+    }
+    malformed_diagnostic_ids = {
+        row["construct_id"]
+        for row in mapped["diagnostics"]
+        if row["category"] == "malformed_syntax" and row["construct_id"] is not None
+    }
+    for annotation in (row for row in mapped["construct_ledger"] if row["family"] == "annotation"):
+        prefix = "The annotation is associated with following "
+        associations = [
+            item[len(prefix) : -1]
+            for item in annotation["established"]
+            if item.startswith(prefix) and item.endswith(".")
+        ]
+        if not associations:
+            if annotation["construct_id"] not in malformed_diagnostic_ids:
+                raise OpenQASM3EvidenceError("sidecar_annotation_relationship_invalid")
+            continue
+        if len(associations) != 1 or associations[0] not in constructs_by_id:
+            raise OpenQASM3EvidenceError("sidecar_annotation_relationship_invalid")
+        target = constructs_by_id[associations[0]]
+        annotation_index = construct_order[annotation["construct_id"]]
+        target_index = construct_order[associations[0]]
+        if (
+            target_index <= annotation_index
+            or target["family"] in {"annotation", "pragma"}
+            or any(
+                row["family"] not in {"annotation"}
+                for row in mapped["construct_ledger"][annotation_index + 1 : target_index]
+            )
+        ):
+            raise OpenQASM3EvidenceError("sidecar_annotation_relationship_invalid")
+
     facts = _exact_keys(
         mapped["derived_facts"],
         {
@@ -589,7 +653,7 @@ def validate_openqasm3_static_evidence(value: object, *, source_bytes: bytes | N
         if (
             not isinstance(edge, list)
             or len(edge) != 2
-            or any(not isinstance(index, int) or index < 0 for index in edge)
+            or any(type(index) is not int or index < 0 for index in edge)
             or edge[0] >= edge[1]
         ):
             raise OpenQASM3EvidenceError("sidecar_interaction_graph_invalid")
@@ -597,10 +661,7 @@ def validate_openqasm3_static_evidence(value: object, *, source_bytes: bytes | N
             raise OpenQASM3EvidenceError("sidecar_interaction_graph_target_out_of_range")
     stats = _fact(facts["gate_statistics"], allow_mapping=True)
     if not isinstance(stats["value"], Mapping) or any(
-        not isinstance(key, str)
-        or not isinstance(count, int)
-        or isinstance(count, bool)
-        or count < 0
+        not isinstance(key, str) or type(count) is not int or count < 0
         for key, count in stats["value"].items()
     ):
         raise OpenQASM3EvidenceError("sidecar_gate_statistics_invalid")
@@ -665,25 +726,17 @@ def validate_openqasm3_static_evidence(value: object, *, source_bytes: bytes | N
     for name, row in mapped["parser_limits"].items():
         limit = _exact_keys(row, {"maximum", "observed", "status"}, "sidecar_limit_invalid")
         if (
-            not isinstance(limit["maximum"], int)
+            type(limit["maximum"]) is not int
             or limit["maximum"] < 1
-            or not isinstance(limit["observed"], int)
+            or type(limit["observed"]) is not int
             or limit["observed"] < 0
             or limit["status"] not in {"within_limit", "exceeded"}
             or (limit["observed"] <= limit["maximum"]) != (limit["status"] == "within_limit")
         ):
             raise OpenQASM3EvidenceError(f"sidecar_limit_invalid:{name}")
-    expected_width_limits = {
-        "individual_quantum_width": 4_096,
-        "total_quantum_width": 4_096,
-        "individual_classical_width": 4_096,
-        "total_classical_width": 4_096,
-        "broadcast_expansion": 4_096,
-        "operations": 10_000,
-    }
     if any(
         mapped["parser_limits"][name]["maximum"] != maximum
-        for name, maximum in expected_width_limits.items()
+        for name, maximum in PARSER_LIMIT_MAXIMA.items()
     ):
         raise OpenQASM3EvidenceError("sidecar_limit_contract_invalid")
     observed_contract = {
@@ -733,10 +786,7 @@ def validate_openqasm3_static_evidence(value: object, *, source_bytes: bytes | N
         if ir["source_format"] != "qasm3":
             raise OpenQASM3EvidenceError("sidecar_circuit_ir_invalid")
         if (
-            any(
-                not isinstance(ir[key], int) or isinstance(ir[key], bool) or ir[key] < 0
-                for key in ("n_qubits", "n_cbits")
-            )
+            any(type(ir[key]) is not int or ir[key] < 0 for key in ("n_qubits", "n_cbits"))
             or not isinstance(ir["qregs"], list)
             or not isinstance(ir["operations"], list)
         ):
@@ -749,9 +799,9 @@ def validate_openqasm3_static_evidence(value: object, *, source_bytes: bytes | N
             if (
                 not isinstance(register["name"], str)
                 or not register["name"]
-                or not isinstance(register["size"], int)
-                or isinstance(register["size"], bool)
+                or type(register["size"]) is not int
                 or register["size"] < 1
+                or type(register["base"]) is not int
                 or register["base"] != expected_base
             ):
                 raise OpenQASM3EvidenceError("sidecar_circuit_ir_register_invalid")
@@ -783,10 +833,7 @@ def validate_openqasm3_static_evidence(value: object, *, source_bytes: bytes | N
                 or not item["name"]
                 or not isinstance(item["qubits"], list)
                 or any(
-                    not isinstance(index, int)
-                    or isinstance(index, bool)
-                    or index < 0
-                    or index >= ir["n_qubits"]
+                    type(index) is not int or index < 0 or index >= ir["n_qubits"]
                     for index in item["qubits"]
                 )
                 or not isinstance(item["params"], list)
@@ -910,86 +957,66 @@ def validate_openqasm3_static_evidence(value: object, *, source_bytes: bytes | N
         raise OpenQASM3EvidenceError("sidecar_file_aggregation_invalid")
     _validate_privacy(mapped)
     if source_bytes is None:
+        if artifact_label is not None:
+            raise OpenQASM3EvidenceError("openqasm3_source_bytes_required")
         return "standalone_structural_internal"
     if not isinstance(source_bytes, bytes):
         raise OpenQASM3EvidenceError("openqasm3_source_bytes_invalid")
+    if not isinstance(artifact_label, str) or not artifact_label:
+        raise OpenQASM3EvidenceError("openqasm3_source_artifact_label_required")
     if hashlib.sha256(source_bytes).hexdigest() != mapped["source_sha256"]:
         raise OpenQASM3EvidenceError("openqasm3_source_digest_mismatch")
     try:
         source_text = source_bytes.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        if not (
-            mapped["file_status"] == "fatal"
-            and mapped["fatal_error"]
-            and mapped["fatal_error"]["category"] == "invalid_encoding"
-        ):
-            raise OpenQASM3EvidenceError("openqasm3_source_encoding_mismatch") from exc
-        return "source_bound"
-    source_lines = source_text.splitlines()
-    if not source_lines:
-        source_lines = [""]
+    except UnicodeDecodeError:
+        source_text = ""
+    source_lines = source_text.splitlines() or [""]
 
-    def validate_source_spans(item: object) -> None:
+    def check_source_spans(item: object) -> None:
         if isinstance(item, Mapping):
             if set(item) == {"start_line", "start_column", "end_line", "end_column"}:
                 start_line = item["start_line"]
                 end_line = item["end_line"]
                 if start_line > len(source_lines) or end_line > len(source_lines):
                     raise OpenQASM3EvidenceError("sidecar_source_span_out_of_bounds")
-                if item["start_column"] > len(source_lines[start_line - 1]) + 1:
-                    raise OpenQASM3EvidenceError("sidecar_source_span_out_of_bounds")
-                if item["end_column"] > len(source_lines[end_line - 1]) + 1:
+                if (
+                    item["start_column"] > len(source_lines[start_line - 1]) + 1
+                    or item["end_column"] > len(source_lines[end_line - 1]) + 1
+                ):
                     raise OpenQASM3EvidenceError("sidecar_source_span_out_of_bounds")
                 return
             for child in item.values():
-                validate_source_spans(child)
+                check_source_spans(child)
         elif isinstance(item, list):
             for child in item:
-                validate_source_spans(child)
+                check_source_spans(child)
 
-    validate_source_spans(mapped)
-    source_lines_with_endings = source_text.splitlines(keepends=True)
-    if not source_lines_with_endings:
-        source_lines_with_endings = [""]
+    check_source_spans(mapped)
+    # Local import avoids a module cycle.  The internal builder performs only
+    # standalone validation; source-bound validation therefore cannot recurse.
+    from .openqasm3_bounded_parser import _build_openqasm3_evidence
 
-    def source_slice(span: Mapping[str, int]) -> str:
-        start_line = span["start_line"] - 1
-        end_line = span["end_line"] - 1
-        if start_line == end_line:
-            return source_lines_with_endings[start_line][
-                span["start_column"] - 1 : span["end_column"] - 1
-            ]
-        parts = [source_lines_with_endings[start_line][span["start_column"] - 1 :]]
-        parts.extend(source_lines_with_endings[start_line + 1 : end_line])
-        parts.append(source_lines_with_endings[end_line][: span["end_column"] - 1])
-        return "".join(parts)
+    reconstructed = _build_openqasm3_evidence(source_bytes, artifact_label=artifact_label)
 
-    modifier_ids = {row["construct_id"] for row in mapped["modifier_chains"]}
-    for construct in mapped["construct_ledger"]:
-        excerpt = source_slice(construct["span"])
-        family = construct["family"]
-        if family == "annotation":
-            marker = "@"
-        elif family == "pragma":
-            marker = "pragma"
-        elif family == "include":
-            marker = "include"
-        elif family == "qubit_declaration":
-            marker = "qubit"
-        elif family == "bit_declaration":
-            marker = "bit"
-        elif family == "standard_gate_collision":
-            marker = "include"
-        else:
-            marker = construct["name"]
-        if marker and marker not in excerpt:
-            raise OpenQASM3EvidenceError("sidecar_source_span_content_mismatch")
-        if (
-            family in {"quantum_operation", "custom_gate_call"}
-            and "@" in excerpt
-            and construct["construct_id"] not in modifier_ids
-        ):
-            raise OpenQASM3EvidenceError("sidecar_source_modifier_binding_mismatch")
+    def collect_spans(item: object, path: str = "$") -> dict[str, object]:
+        result: dict[str, object] = {}
+        if isinstance(item, Mapping):
+            if set(item) == {"start_line", "start_column", "end_line", "end_column"}:
+                result[path] = dict(item)
+            else:
+                for key, child in item.items():
+                    result.update(collect_spans(child, f"{path}.{key}"))
+        elif isinstance(item, list):
+            for index, child in enumerate(item):
+                result.update(collect_spans(child, f"{path}[{index}]"))
+        return result
+
+    if collect_spans(mapped) != collect_spans(reconstructed.sidecar):
+        raise OpenQASM3EvidenceError("sidecar_source_span_content_mismatch")
+    if mapped["modifier_chains"] != reconstructed.sidecar["modifier_chains"]:
+        raise OpenQASM3EvidenceError("sidecar_source_modifier_binding_mismatch")
+    if dict(mapped) != reconstructed.sidecar:
+        raise OpenQASM3EvidenceError("openqasm3_source_semantic_mismatch")
     return "source_bound"
 
 

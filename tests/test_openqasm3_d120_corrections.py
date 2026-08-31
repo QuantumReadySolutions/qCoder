@@ -406,12 +406,19 @@ def test_standalone_and_source_bound_validation_have_distinct_truthful_meanings(
     source = b"OPENQASM 3; qubit q; U(0,0,0) q;"
     sidecar = parse_openqasm3_text(source.decode()).sidecar
     assert validate_openqasm3_static_evidence(sidecar) == "standalone_structural_internal"
-    assert validate_openqasm3_static_evidence(sidecar, source_bytes=source) == "source_bound"
+    assert (
+        validate_openqasm3_static_evidence(
+            sidecar, source_bytes=source, artifact_label="selected.qasm3"
+        )
+        == "source_bound"
+    )
     substituted = deepcopy(sidecar)
     substituted["source_sha256"] = "0" * 64
     assert validate_openqasm3_static_evidence(substituted) == "standalone_structural_internal"
     with pytest.raises(OpenQASM3EvidenceError, match="source_digest_mismatch"):
-        validate_openqasm3_static_evidence(substituted, source_bytes=source)
+        validate_openqasm3_static_evidence(
+            substituted, source_bytes=source, artifact_label="selected.qasm3"
+        )
 
 
 def test_source_bound_validation_rejects_impossible_and_substituted_spans() -> None:
@@ -421,13 +428,17 @@ def test_source_bound_validation_rejects_impossible_and_substituted_spans() -> N
     impossible["quantum_declarations"][0]["span"]["start_line"] = 999
     impossible["quantum_declarations"][0]["span"]["end_line"] = 999
     with pytest.raises(OpenQASM3EvidenceError, match="source_span_out_of_bounds"):
-        validate_openqasm3_static_evidence(impossible, source_bytes=source)
+        validate_openqasm3_static_evidence(
+            impossible, source_bytes=source, artifact_label="selected.qasm3"
+        )
     substituted = deepcopy(sidecar)
     substituted["construct_ledger"][-1]["span"] = deepcopy(
         substituted["construct_ledger"][0]["span"]
     )
     with pytest.raises(OpenQASM3EvidenceError, match="source_span_content_mismatch"):
-        validate_openqasm3_static_evidence(substituted, source_bytes=source)
+        validate_openqasm3_static_evidence(
+            substituted, source_bytes=source, artifact_label="selected.qasm3"
+        )
 
 
 def test_semantic_validator_rejects_d120_fact_target_limit_and_lossy_ir_mutations() -> None:
@@ -484,4 +495,6 @@ def test_source_bound_validation_rejects_removed_modifier_semantics() -> None:
     changed["modifier_chains"] = []
     changed["parser_limits"]["modifier_depth"]["observed"] = 0
     with pytest.raises(OpenQASM3EvidenceError, match="source_modifier_binding_mismatch"):
-        validate_openqasm3_static_evidence(changed, source_bytes=source)
+        validate_openqasm3_static_evidence(
+            changed, source_bytes=source, artifact_label="selected.qasm3"
+        )
