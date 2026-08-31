@@ -192,10 +192,10 @@
       "classification": "recognized_but_unsupported",
       "construct_id": "construct-0010",
       "dependent_fact_effects": [
-        "Every potentially affected structural fact is qualified or withheld."
+        "The directive does not establish quantum-operation semantics."
       ],
       "established": [
-        "The construct family, presence, and source span were identified."
+        "The opaque line-oriented directive and its bounded source span were identified."
       ],
       "family": "pragma",
       "name": "pragma",
@@ -206,7 +206,7 @@
         "start_line": 11
       },
       "unavailable": [
-        "The construct semantics and body effects were not interpreted."
+        "The opaque directive payload was not interpreted or retained."
       ]
     },
     {
@@ -247,7 +247,7 @@
       "value": {}
     },
     "interaction_graph": {
-      "exactness": "partial",
+      "exactness": "not_established",
       "value": []
     },
     "measurement_count": {
@@ -363,7 +363,7 @@
     {
       "category": "unsupported_construct",
       "construct_id": "construct-0010",
-      "message": "The construct is recognized but outside the bounded static subset.",
+      "message": "The line-oriented directive is recognized but not interpreted.",
       "severity": "limitation",
       "span": {
         "end_column": 21,
@@ -438,6 +438,16 @@
       "observed": 3,
       "status": "within_limit"
     },
+    "individual_classical_width": {
+      "maximum": 4096,
+      "observed": 0,
+      "status": "within_limit"
+    },
+    "individual_quantum_width": {
+      "maximum": 4096,
+      "observed": 1,
+      "status": "within_limit"
+    },
     "modifier_depth": {
       "maximum": 8,
       "observed": 0,
@@ -470,7 +480,17 @@
     },
     "tokens": {
       "maximum": 40000,
-      "observed": 68,
+      "observed": 65,
+      "status": "within_limit"
+    },
+    "total_classical_width": {
+      "maximum": 4096,
+      "observed": 0,
+      "status": "within_limit"
+    },
+    "total_quantum_width": {
+      "maximum": 4096,
+      "observed": 1,
       "status": "within_limit"
     }
   },
@@ -598,7 +618,7 @@
       "category": "unsupported_construct",
       "classification": "recognized_but_unsupported",
       "construct_id": "construct-0010",
-      "limitation": "The construct is recognized but outside the bounded static subset.",
+      "limitation": "The line-oriented directive is recognized but not interpreted.",
       "span": {
         "end_column": 21,
         "end_line": 11,

@@ -187,7 +187,7 @@
     },
     "depth": {
       "exactness": "exact",
-      "value": 3
+      "value": 2
     },
     "gate_statistics": {
       "exactness": "exact",
@@ -304,6 +304,16 @@
       "observed": 1,
       "status": "within_limit"
     },
+    "individual_classical_width": {
+      "maximum": 4096,
+      "observed": 2,
+      "status": "within_limit"
+    },
+    "individual_quantum_width": {
+      "maximum": 4096,
+      "observed": 2,
+      "status": "within_limit"
+    },
     "modifier_depth": {
       "maximum": 8,
       "observed": 0,
@@ -337,6 +347,16 @@
     "tokens": {
       "maximum": 40000,
       "observed": 40,
+      "status": "within_limit"
+    },
+    "total_classical_width": {
+      "maximum": 4096,
+      "observed": 2,
+      "status": "within_limit"
+    },
+    "total_quantum_width": {
+      "maximum": 4096,
+      "observed": 2,
       "status": "within_limit"
     }
   },

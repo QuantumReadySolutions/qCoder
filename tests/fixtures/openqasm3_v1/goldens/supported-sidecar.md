@@ -29,7 +29,7 @@
 - classical_width: `2` — `exact`
 - operation_count: `4` — `exact`
 - measurement_count: `2` — `exact`
-- depth: `3` — `exact`
+- depth: `2` — `exact`
 - interaction_graph: `[[0, 1]]` — `exact`
 - gate_statistics: `{"cx": 1, "h": 1, "measure": 2}` — `exact`
 

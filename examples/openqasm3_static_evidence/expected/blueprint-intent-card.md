@@ -14,7 +14,7 @@ Intent state: `absent`
 
 - Bounded static support status: supported. (selected_evidence_only_not_intent)
 - Classical width: 2 (exact static evidence). (selected_evidence_only_not_intent)
-- Depth: 3 (exact static evidence). (selected_evidence_only_not_intent)
+- Depth: 2 (exact static evidence). (selected_evidence_only_not_intent)
 - Measurement count: 2 (exact static evidence). (selected_evidence_only_not_intent)
 - Operation count: 4 (exact static evidence). (selected_evidence_only_not_intent)
 - Quantum width: 2 (exact static evidence). (selected_evidence_only_not_intent)

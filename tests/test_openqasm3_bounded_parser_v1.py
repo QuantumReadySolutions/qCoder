@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import hashlib
 import re
+from copy import deepcopy
 
 import pytest
 
@@ -13,7 +13,6 @@ from qcoder.engines.feature_extraction.openqasm3_bounded_parser import (
     parse_openqasm3_bytes,
     parse_openqasm3_text,
 )
-from qcoder.engines.feature_extraction.parsers import parse_circuit_file
 from qcoder.engines.feature_extraction.openqasm3_static_evidence import (
     LANGUAGE_BUILTINS,
     OPENQASM3_PARSER_ID,
@@ -25,6 +24,7 @@ from qcoder.engines.feature_extraction.openqasm3_static_evidence import (
     render_openqasm3_static_evidence_markdown,
     validate_openqasm3_static_evidence,
 )
+from qcoder.engines.feature_extraction.parsers import parse_circuit_file
 
 
 def _parse(body: str, *, header: str = "OPENQASM 3.0;"):
@@ -247,8 +247,9 @@ def test_custom_gate_formals_prior_calls_and_opaque_depth() -> None:
     )
     assert result.sidecar["file_status"] == "supported"
     assert result.sidecar["custom_gates"][0]["body_call_names"] == ["rx", "cx"]
-    assert result.circuit_ir.operations[-1].name == "pair"
-    assert result.circuit_ir.operations[-1].is_custom is True
+    assert result.circuit_ir is None
+    assert result.sidecar["circuit_ir"] is None
+    assert result.sidecar["derived_facts"]["gate_statistics"]["value"]["pair"] == 1
     assert result.sidecar["derived_facts"]["depth"]["exactness"] == "not_established"
 
 
@@ -283,6 +284,7 @@ def test_supported_modifier_chains(statement: str) -> None:
     result = _parse(f'include "stdgates.inc"; {declarations} {statement}')
     assert result.sidecar["file_status"] == "supported"
     assert result.sidecar["modifier_chains"]
+    assert result.circuit_ir is None
 
 
 @pytest.mark.parametrize("statement", ["foo @ x q;", "inv(2) @ x q;", "ctrl(0) @ x q;"])

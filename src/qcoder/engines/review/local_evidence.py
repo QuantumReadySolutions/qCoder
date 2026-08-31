@@ -7,12 +7,14 @@ network client, or persistent state.
 
 from __future__ import annotations
 
-from copy import deepcopy
+import hashlib
 import json
-from pathlib import Path
 import re
 import shlex
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from copy import deepcopy
+from pathlib import Path
+from typing import Any
 
 from qcoder.algorithm_blueprint import artifact_digest_matches
 from qcoder.context_loop import (
@@ -57,7 +59,6 @@ from qcoder.engines.review.openqasm3_manifestation import (
     build_openqasm3_circuit_manifestation,
 )
 from qcoder.engines.review.qiskit_counts import normalize_qiskit_counts_payload
-
 
 MAX_SELECTED_FILES = 8
 MAX_JSON_BYTES = 1_048_576
@@ -354,7 +355,7 @@ def _review_qasm(path: Path, position: int) -> dict[str, Any]:
     ):
         result = parse_openqasm3_bytes(raw, artifact_label=path.name)
         sidecar = result.sidecar
-        validate_openqasm3_static_evidence(sidecar)
+        validate_openqasm3_static_evidence(sidecar, source_bytes=raw)
         file_status = sidecar["file_status"]
         manifestation = (
             build_openqasm3_circuit_manifestation(
@@ -891,6 +892,40 @@ def _drop_unnecessary_share_safe_identities(value: Any) -> Any:
     return deepcopy(value)
 
 
+def _redact_openqasm3_share_safe_metadata(value: Any, *, include_filenames: bool) -> Any:
+    if isinstance(value, Mapping):
+        result = {
+            str(key): _redact_openqasm3_share_safe_metadata(
+                item, include_filenames=include_filenames
+            )
+            for key, item in value.items()
+        }
+        if not include_filenames and "customer_filename" in result:
+            result["customer_filename"] = "<customer-filename-redacted>"
+        if result.get("schema_id") == OPENQASM3_STATIC_EVIDENCE_SCHEMA_ID:
+            if not include_filenames:
+                result["artifact_label"] = "selected-openqasm3-artifact"
+            include_aliases: dict[str, str] = {}
+            for row in result.get("include_ledger", []):
+                target = str(row.get("target") or "")
+                if target != "stdgates.inc":
+                    alias = (
+                        "unsupported-include-" + hashlib.sha256(target.encode()).hexdigest()[:16]
+                    )
+                    include_aliases[target] = alias
+                    row["target"] = alias
+            for row in result.get("construct_ledger", []):
+                if row.get("family") == "include" and row.get("name") in include_aliases:
+                    row["name"] = include_aliases[str(row["name"])]
+        return result
+    if isinstance(value, list):
+        return [
+            _redact_openqasm3_share_safe_metadata(item, include_filenames=include_filenames)
+            for item in value
+        ]
+    return deepcopy(value)
+
+
 def build_share_safe_local_evidence_review(
     report: Mapping[str, Any],
     paths: Sequence[str],
@@ -904,7 +939,10 @@ def build_share_safe_local_evidence_review(
     if unknown:
         raise LocalEvidenceError(f"unsupported share-safe opt-in categories: {sorted(unknown)}")
     selected = resolve_explicit_files(paths)
-    safe = make_share_safe_payload(deepcopy(dict(report)))
+    share_safe_source = _redact_openqasm3_share_safe_metadata(
+        deepcopy(dict(report)), include_filenames=choices["customer_filenames"]
+    )
+    safe = make_share_safe_payload(share_safe_source)
     safe = _drop_unnecessary_share_safe_identities(safe)
     included: list[dict[str, Any]] = []
     for position, path in enumerate(selected, start=1):

@@ -1,18 +1,12 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
 
 from qcoder.algorithm_blueprint import artifact_digest_matches
-from qcoder.evidence_usability import (
-    build_evidence_prompt_pack,
-    build_evidence_usability_pack,
-    build_run_readiness_checklist,
-    canonical_json,
-)
 from qcoder.engines.feature_extraction.openqasm3_bounded_parser import parse_openqasm3_text
 from qcoder.engines.review.local_evidence import (
     build_local_evidence_review,
@@ -22,7 +16,12 @@ from qcoder.engines.review.local_evidence_markdown import render_local_evidence_
 from qcoder.engines.review.openqasm3_manifestation import (
     build_openqasm3_circuit_manifestation,
 )
-
+from qcoder.evidence_usability import (
+    build_evidence_prompt_pack,
+    build_evidence_usability_pack,
+    build_run_readiness_checklist,
+    canonical_json,
+)
 
 SUPPORTED = """OPENQASM 3.0;
 include "stdgates.inc";
@@ -78,7 +77,7 @@ def test_opaque_custom_gate_call_does_not_feed_complete_manifestation(tmp_path: 
     sidecar = parse_openqasm3_text(source).sidecar
     assert sidecar["file_status"] == "supported"
     assert sidecar["derived_facts"]["depth"]["exactness"] == "not_established"
-    with pytest.raises(ValueError, match="complete_manifestation_facts_required"):
+    with pytest.raises(ValueError, match="complete_circuit_ir_required"):
         build_openqasm3_circuit_manifestation(sidecar)
 
     selected = _write(tmp_path / "custom.qasm3", source)

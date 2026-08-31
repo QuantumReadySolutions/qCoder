@@ -14,7 +14,6 @@ from qcoder.engines.feature_extraction.openqasm3_bounded_parser import (
     parse_openqasm3_text,
 )
 
-
 CORPUS = Path(__file__).parent / "fixtures" / "openqasm3_v1"
 
 
@@ -40,14 +39,17 @@ def test_corpus_inventory_and_expected_file_statuses() -> None:
     assert (CORPUS / "README.md").is_file()
 
 
-def test_supported_corpus_has_only_supported_occurrences_and_complete_ir() -> None:
+def test_supported_corpus_has_only_supported_occurrences_and_lossless_ir_boundary() -> None:
     for path in sorted((CORPUS / "supported").glob("*.qasm3")):
         result = _result(path)
-        assert result.circuit_ir is not None, path.name
         assert all(
             row["classification"] == "supported" for row in result.sidecar["construct_ledger"]
         ), path.name
         assert result.sidecar["derived_facts"]["operation_count"]["exactness"] == "exact"
+        lossy_for_existing_ir = bool(result.sidecar["modifier_chains"]) or any(
+            row["family"] == "custom_gate_call" for row in result.sidecar["construct_ledger"]
+        )
+        assert (result.circuit_ir is None) is lossy_for_existing_ir, path.name
 
 
 def test_partial_and_recognized_corpus_never_masquerades_as_complete() -> None:

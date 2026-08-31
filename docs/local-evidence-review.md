@@ -56,8 +56,10 @@ not qualified by this package and require separate platform-specific proof.
 - **Bounded OpenQASM 3 static evidence (unpublished candidate):** one explicit UTF-8 file using
   `OPENQASM 3;` or `OPENQASM 3.0;` and the documented supported subset. The report carries the
   `qcoder.openqasm3_static_evidence.v1` sidecar, construct classifications, derived-fact exactness,
-  bounded diagnostics, and a complete CircuitIR only when every occurrence is supported. It emits
-  no motif or intent evidence and does not execute or convert the source.
+  bounded diagnostics, and a complete CircuitIR only when every occurrence is supported and the
+  existing CircuitIR represents those semantics losslessly. Modifier-bearing top-level calls and
+  opaque custom-gate calls remain sidecar-only. It emits no motif or intent evidence and does not
+  execute or convert the source.
 - **Supplied counts/run-result JSON:** factual result manifestation and the canonical Run Summary
   v2, including observed shots, bounded dominant outcomes, supplied execution metadata, warnings,
   and missing metadata. qCoder does not execute a simulator, backend, or QPU.

@@ -94,7 +94,7 @@
       }
     },
     "interaction_graph": {
-      "exactness": "partial",
+      "exactness": "not_established",
       "value": []
     },
     "measurement_count": {
@@ -114,7 +114,7 @@
     {
       "category": "malformed_syntax",
       "construct_id": "construct-0002",
-      "message": "The declaration size is invalid.",
+      "message": "The declaration size must be positive.",
       "severity": "error",
       "span": {
         "end_column": 18,
@@ -189,6 +189,16 @@
       "observed": 1,
       "status": "within_limit"
     },
+    "individual_classical_width": {
+      "maximum": 4096,
+      "observed": 0,
+      "status": "within_limit"
+    },
+    "individual_quantum_width": {
+      "maximum": 4096,
+      "observed": 1,
+      "status": "within_limit"
+    },
     "modifier_depth": {
       "maximum": 8,
       "observed": 0,
@@ -222,6 +232,16 @@
     "tokens": {
       "maximum": 40000,
       "observed": 18,
+      "status": "within_limit"
+    },
+    "total_classical_width": {
+      "maximum": 4096,
+      "observed": 0,
+      "status": "within_limit"
+    },
+    "total_quantum_width": {
+      "maximum": 4096,
+      "observed": 1,
       "status": "within_limit"
     }
   },

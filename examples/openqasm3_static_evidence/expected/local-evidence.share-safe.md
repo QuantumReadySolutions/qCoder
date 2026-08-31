@@ -20,7 +20,7 @@ A bounded local qCoder OSS review of only the files explicitly selected on the c
   - Established: Classical width: 2 (exact static evidence).
   - Established: Operation count: 4 (exact static evidence).
   - Established: Measurement count: 2 (exact static evidence).
-  - Established: Depth: 3 (exact static evidence).
+  - Established: Depth: 2 (exact static evidence).
   - Not established: Execution is outside this static evidence path.
   - Not established: Full-language compliance, conversion, semantic equivalence, correctness, and expected output were not established.
   - Not established: Hardware suitability, backend ranking, runtime, resources, fidelity, shot count, and statistical sufficiency were not established.
@@ -35,7 +35,7 @@ A bounded local qCoder OSS review of only the files explicitly selected on the c
   - Classical width: 2 (exact static evidence).
   - Operation count: 4 (exact static evidence).
   - Measurement count: 2 (exact static evidence).
-  - Depth: 3 (exact static evidence).
+  - Depth: 2 (exact static evidence).
   - Execution is outside this static evidence path.
   - Full-language compliance, conversion, semantic equivalence, correctness, and expected output were not established.
   - Hardware suitability, backend ranking, runtime, resources, fidelity, shot count, and statistical sufficiency were not established.
@@ -48,14 +48,14 @@ A bounded local qCoder OSS review of only the files explicitly selected on the c
   - classical_width: `2` — `exact`
   - operation_count: `4` — `exact`
   - measurement_count: `2` — `exact`
-  - depth: `3` — `exact`
+  - depth: `2` — `exact`
   - interaction_graph: `[[0, 1]]` — `exact`
   - gate_statistics: `{'cx': 1, 'h': 1, 'measure': 2}` — `exact`
   - complete CircuitIR: `True`
 - Artifact 1 deterministic metrics:
   - width: `2`
   - classical_width: `2`
-  - depth: `3`
+  - depth: `2`
   - operation_count: `4`
   - gate_count: `2`
   - multi_qubit_gate_count: `1`

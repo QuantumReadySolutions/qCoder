@@ -43,7 +43,7 @@
   "supported_findings": [
     "Bounded static support status: supported.",
     "Classical width: 2 (exact static evidence).",
-    "Depth: 3 (exact static evidence).",
+    "Depth: 2 (exact static evidence).",
     "Measurement count: 2 (exact static evidence).",
     "Operation count: 4 (exact static evidence).",
     "Quantum width: 2 (exact static evidence).",

@@ -31,8 +31,9 @@ can appear only through the existing separate original-QASM share-safe opt-in.
 - parser: `qcoder.openqasm3.bounded_parser.v1`;
 - package-owned standard vocabulary: `qcoder.openqasm3.stdgates_3_0.v1`.
 
-The raw selected source bytes are identified by SHA-256. The customer-visible artifact label is a
-basename, not an absolute local path.
+The raw selected source bytes are identified by SHA-256. A private local artifact may retain its
+explicitly selected basename. Share-safe output removes that basename and arbitrary include text
+unless the existing customer-filename opt-in is selected.
 
 ## Headers and include
 
@@ -85,8 +86,11 @@ produces no complete circuit projection. Parsed prefixes are never represented a
 
 Derived facts use only `exact`, `lower_bound`, `partial`, `not_established`, and `not_applicable`.
 Width, operation and measurement counts, depth, interaction edges, and gate statistics carry their
-own exactness. Partial files never enter a complete-CircuitIR consumer. Custom-gate calls remain
-call-level observations and make expanded primitive depth unavailable.
+own exactness. Partial files never enter a complete-CircuitIR consumer. Modifier-bearing top-level
+calls and opaque custom-gate calls also remain sidecar-only because the existing CircuitIR cannot
+represent their semantics losslessly. Established depth and interaction facts reuse qCoder's
+existing CircuitIR calculations; measurements, resets, and barriers do not add gate depth, and a
+barrier does not create an interaction edge.
 
 ## Recognized but unsupported
 
@@ -106,7 +110,10 @@ Customer-safe diagnostic categories include `missing_header`, `invalid_header`,
 `index_out_of_range`, `unsupported_expression`, `unsupported_modifier`, `unsafe_path`, and
 `invalid_encoding`. Package-owned limits cover tokens, statements, declarations, operations,
 nesting, expressions, custom gates, modifiers, broadcasting, recovery, diagnostics, and ledger
-entries. A limit never truncates evidence and then claims completeness.
+entries. Individual and total quantum width are each limited to 4096; individual and total
+classical width are each limited to 4096; broadcast expansion is limited to 4096; and operation
+production is limited uniformly to 10000. Guards run before proportional allocation or expansion.
+A limit never truncates evidence and then claims completeness.
 
 ## Claim and privacy boundary
 

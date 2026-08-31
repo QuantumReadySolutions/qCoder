@@ -133,13 +133,8 @@
       }
     },
     "interaction_graph": {
-      "exactness": "partial",
-      "value": [
-        [
-          0,
-          1
-        ]
-      ]
+      "exactness": "not_established",
+      "value": []
     },
     "measurement_count": {
       "exactness": "lower_bound",
@@ -245,6 +240,16 @@
       "observed": 2,
       "status": "within_limit"
     },
+    "individual_classical_width": {
+      "maximum": 4096,
+      "observed": 0,
+      "status": "within_limit"
+    },
+    "individual_quantum_width": {
+      "maximum": 4096,
+      "observed": 2,
+      "status": "within_limit"
+    },
     "modifier_depth": {
       "maximum": 8,
       "observed": 0,
@@ -278,6 +283,16 @@
     "tokens": {
       "maximum": 40000,
       "observed": 50,
+      "status": "within_limit"
+    },
+    "total_classical_width": {
+      "maximum": 4096,
+      "observed": 0,
+      "status": "within_limit"
+    },
+    "total_quantum_width": {
+      "maximum": 4096,
+      "observed": 2,
       "status": "within_limit"
     }
   },

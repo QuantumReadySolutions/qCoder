@@ -29,7 +29,7 @@
 - operation_count: `2` — `lower_bound`
 - measurement_count: `0` — `lower_bound`
 - depth: `null` — `not_established`
-- interaction_graph: `[[0, 1]]` — `partial`
+- interaction_graph: `[]` — `not_established`
 - gate_statistics: `{"cx": 1, "h": 1}` — `partial`
 
 ## Limitations

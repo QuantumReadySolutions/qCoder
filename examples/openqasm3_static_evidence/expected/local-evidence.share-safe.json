@@ -5,7 +5,7 @@
     {
       "canonical_artifacts": [
         {
-          "artifact_label": "bell.qasm3",
+          "artifact_label": "selected-openqasm3-artifact",
           "circuit_ir": {
             "complete": true,
             "n_cbits": 2,
@@ -193,7 +193,7 @@
             },
             "depth": {
               "exactness": "exact",
-              "value": 3
+              "value": 2
             },
             "gate_statistics": {
               "exactness": "exact",
@@ -310,6 +310,16 @@
               "observed": 1,
               "status": "within_limit"
             },
+            "individual_classical_width": {
+              "maximum": 4096,
+              "observed": 2,
+              "status": "within_limit"
+            },
+            "individual_quantum_width": {
+              "maximum": 4096,
+              "observed": 2,
+              "status": "within_limit"
+            },
             "modifier_depth": {
               "maximum": 8,
               "observed": 0,
@@ -343,6 +353,16 @@
             "tokens": {
               "maximum": 40000,
               "observed": 40,
+              "status": "within_limit"
+            },
+            "total_classical_width": {
+              "maximum": 4096,
+              "observed": 2,
+              "status": "within_limit"
+            },
+            "total_quantum_width": {
+              "maximum": 4096,
+              "observed": 2,
               "status": "within_limit"
             }
           },
@@ -457,8 +477,8 @@
           },
           "structural_metrics": {
             "classical_width": 2,
-            "depth": 3,
-            "entangling_depth": 3,
+            "depth": 2,
+            "entangling_depth": 1,
             "entangling_operation_count": 1,
             "gate_count": 2,
             "measurement_count": 2,
@@ -484,7 +504,7 @@
         "Classical width: 2 (exact static evidence).",
         "Operation count: 4 (exact static evidence).",
         "Measurement count: 2 (exact static evidence).",
-        "Depth: 3 (exact static evidence)."
+        "Depth: 2 (exact static evidence)."
       ],
       "input": {
         "customer_filename": "<redacted-local-path>",

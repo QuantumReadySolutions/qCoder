@@ -8,12 +8,14 @@ one explicitly selected byte sequence.
 from __future__ import annotations
 
 import ast
-from collections import Counter
-from dataclasses import dataclass
-from fractions import Fraction
 import hashlib
 import re
-from typing import Any, Iterable, Sequence
+from collections import Counter
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, replace
+from decimal import Decimal, InvalidOperation
+from fractions import Fraction
+from typing import Any
 
 from .ir import CircuitIR, Operation, QRegDecl
 from .openqasm3_static_evidence import (
@@ -25,7 +27,8 @@ from .openqasm3_static_evidence import (
     STANDARD_GATES,
     validate_openqasm3_static_evidence,
 )
-
+from .reps.depth import compute_depth_stats
+from .reps.interaction_graph import build_interaction_graph
 
 MAX_SOURCE_BYTES = 100_000
 MAX_TOKENS = 40_000
@@ -40,6 +43,13 @@ MAX_BROADCAST_EXPANSION = 4_096
 MAX_RECOVERY_EVENTS = 128
 MAX_DIAGNOSTICS = 512
 MAX_LEDGER_ENTRIES = 12_000
+MAX_INDIVIDUAL_QUANTUM_WIDTH = 4_096
+MAX_TOTAL_QUANTUM_WIDTH = 4_096
+MAX_INDIVIDUAL_CLASSICAL_WIDTH = 4_096
+MAX_TOTAL_CLASSICAL_WIDTH = 4_096
+MAX_EXPRESSION_WORK = 256
+MAX_NUMERIC_LITERAL_CHARACTERS = 256
+MAX_EXACT_NUMERIC_BITS = 16_384
 
 PARSER_LIMITS = {
     "source_bytes": MAX_SOURCE_BYTES,
@@ -55,6 +65,10 @@ PARSER_LIMITS = {
     "recovery_events": MAX_RECOVERY_EVENTS,
     "diagnostics": MAX_DIAGNOSTICS,
     "construct_ledger_entries": MAX_LEDGER_ENTRIES,
+    "individual_quantum_width": MAX_INDIVIDUAL_QUANTUM_WIDTH,
+    "total_quantum_width": MAX_TOTAL_QUANTUM_WIDTH,
+    "individual_classical_width": MAX_INDIVIDUAL_CLASSICAL_WIDTH,
+    "total_classical_width": MAX_TOTAL_CLASSICAL_WIDTH,
 }
 
 _IDENTIFIER_RE = re.compile(r"(?:[A-Za-z_][A-Za-z0-9_]*|[πτℇ])")
@@ -107,6 +121,23 @@ _RECOGNIZED_UNSUPPORTED = {
 }
 _BLOCK_FAMILIES = {"if", "else", "for", "while", "switch", "def", "box", "cal", "defcal"}
 _EXPRESSION_NAMES = {"pi", "tau", "euler", "π", "τ", "ℇ"}
+_RESERVED_WORDS = frozenset(
+    {
+        "OPENQASM",
+        "include",
+        "qubit",
+        "bit",
+        "gate",
+        "measure",
+        "reset",
+        "barrier",
+        "inv",
+        "ctrl",
+        "negctrl",
+        "pow",
+        *_RECOGNIZED_UNSUPPORTED,
+    }
+)
 
 
 class OpenQASM3ParseError(ValueError):
@@ -144,6 +175,8 @@ class _Expression:
     canonical: str
     integer_value: int | None
     supported: bool
+    syntax_valid: bool
+    category: str
 
 
 def _advance_position(value: str, line: int, column: int) -> tuple[int, int]:
@@ -178,6 +211,24 @@ def _tokenize(text: str) -> tuple[list[Token], int]:
                 end = length
             line, column = _advance_position(text[position:end], line, column)
             position = end
+            continue
+        line_start = text.rfind("\n", 0, position) + 1
+        at_physical_line_start = not text[line_start:position].strip()
+        pragma_match = re.match(r"pragma\b", text[position:]) if at_physical_line_start else None
+        if pragma_match is not None or (at_physical_line_start and character == "@"):
+            end = text.find("\n", position)
+            if end < 0:
+                end = length
+            value = "pragma" if pragma_match is not None else "@"
+            kind = "pragma_directive" if pragma_match is not None else "annotation_directive"
+            start_line, start_column = line, column
+            directive = text[position:end]
+            end_line, end_column = _advance_position(directive, line, column)
+            tokens.append(Token(kind, value, start_line, start_column, end_line, end_column))
+            line, column = end_line, end_column
+            position = end
+            if len(tokens) > MAX_TOKENS:
+                raise OpenQASM3ParseError("token_limit_exceeded")
             continue
         if text.startswith("/*", position):
             end = text.find("*/", position + 2)
@@ -236,6 +287,13 @@ def _tokenize(text: str) -> tuple[list[Token], int]:
                 maximum_nesting = max(maximum_nesting, nesting)
             elif character in ")]}" and nesting:
                 nesting -= 1
+        elif character.isprintable() and character not in "\r\n":
+            # Unknown punctuation remains a bounded token.  It cannot become a
+            # supported construct, but opaque calibration/directive syntax must
+            # not crash lexical scanning or absorb a later statement.
+            position += 1
+            column += 1
+            tokens.append(Token("opaque_symbol", character, start_line, start_column, line, column))
         else:
             raise OpenQASM3ParseError("unrecognized_character")
         if len(tokens) > MAX_TOKENS:
@@ -273,18 +331,25 @@ def _split_top_level(tokens: Sequence[Token], separator: str = ",") -> list[list
     return rows
 
 
-def _canonical_expression(node: ast.AST) -> str:
+def _numeric_source(node: ast.AST, source: str) -> str:
+    segment = ast.get_source_segment(source, node)
+    if not segment:
+        raise OpenQASM3ParseError("unsupported_expression")
+    return segment.replace("_", "")
+
+
+def _canonical_expression(node: ast.AST, source: str) -> str:
     if (
         isinstance(node, ast.Constant)
         and isinstance(node.value, (int, float))
         and not isinstance(node.value, bool)
     ):
-        return repr(node.value)
+        return _numeric_source(node, source)
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
         operator = "+" if isinstance(node.op, ast.UAdd) else "-"
-        return f"({operator}{_canonical_expression(node.operand)})"
+        return f"({operator}{_canonical_expression(node.operand, source)})"
     if isinstance(node, ast.BinOp) and isinstance(
         node.op, (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow)
     ):
@@ -295,7 +360,10 @@ def _canonical_expression(node: ast.AST) -> str:
             ast.Div: "/",
             ast.Pow: "**",
         }[type(node.op)]
-        return f"({_canonical_expression(node.left)}{operator}{_canonical_expression(node.right)})"
+        return (
+            f"({_canonical_expression(node.left, source)}{operator}"
+            f"{_canonical_expression(node.right, source)})"
+        )
     raise OpenQASM3ParseError("unsupported_expression")
 
 
@@ -304,63 +372,92 @@ def _expression_depth(node: ast.AST) -> int:
     return 1 + (max((_expression_depth(child) for child in children), default=0))
 
 
-def _fraction_value(node: ast.AST, allowed_names: set[str]) -> Fraction | None:
+def _bounded_fraction(value: Fraction) -> Fraction:
+    if (
+        value.numerator.bit_length() > MAX_EXACT_NUMERIC_BITS
+        or value.denominator.bit_length() > MAX_EXACT_NUMERIC_BITS
+    ):
+        raise OpenQASM3ParseError("unsupported_expression")
+    return value
+
+
+def _fraction_value(node: ast.AST, allowed_names: set[str], source: str) -> Fraction | None:
     if (
         isinstance(node, ast.Constant)
         and isinstance(node.value, int)
         and not isinstance(node.value, bool)
     ):
-        return Fraction(node.value)
+        return _bounded_fraction(Fraction(node.value))
+    if isinstance(node, ast.Constant) and isinstance(node.value, float):
+        literal = _numeric_source(node, source)
+        if len(literal) > MAX_NUMERIC_LITERAL_CHARACTERS:
+            raise OpenQASM3ParseError("unsupported_expression")
+        exponent_match = re.search(r"[eE]([+-]?\d+)$", literal)
+        if exponent_match is not None and abs(int(exponent_match.group(1))) > 4_096:
+            raise OpenQASM3ParseError("unsupported_expression")
+        try:
+            decimal = Decimal(literal)
+        except InvalidOperation as exc:
+            raise OpenQASM3ParseError("unsupported_expression") from exc
+        if not decimal.is_finite():
+            raise OpenQASM3ParseError("unsupported_expression")
+        return _bounded_fraction(Fraction(decimal))
     if isinstance(node, ast.Name) and node.id in allowed_names:
         return None
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
-        value = _fraction_value(node.operand, allowed_names)
+        value = _fraction_value(node.operand, allowed_names, source)
         if value is None:
             return None
         return value if isinstance(node.op, ast.UAdd) else -value
     if isinstance(node, ast.BinOp):
-        left = _fraction_value(node.left, allowed_names)
-        right = _fraction_value(node.right, allowed_names)
+        left = _fraction_value(node.left, allowed_names, source)
+        right = _fraction_value(node.right, allowed_names, source)
         if left is None or right is None:
             return None
         if isinstance(node.op, ast.Add):
-            return left + right
+            return _bounded_fraction(left + right)
         if isinstance(node.op, ast.Sub):
-            return left - right
+            return _bounded_fraction(left - right)
         if isinstance(node.op, ast.Mult):
-            return left * right
+            return _bounded_fraction(left * right)
         if isinstance(node.op, ast.Div):
             if right == 0:
                 raise OpenQASM3ParseError("division_by_zero")
-            return left / right
+            return _bounded_fraction(left / right)
         if isinstance(node.op, ast.Pow):
             if right.denominator != 1 or abs(right.numerator) > 1024:
                 raise OpenQASM3ParseError("unsupported_expression")
             if left == 0 and right < 0:
                 raise OpenQASM3ParseError("division_by_zero")
-            return left**right.numerator
+            return _bounded_fraction(left**right.numerator)
     return None
 
 
 def _parse_expression(tokens: Sequence[Token], *, formal_names: Iterable[str] = ()) -> _Expression:
     if not tokens:
-        return _Expression("", None, False)
+        return _Expression("", None, False, False, "unsupported_expression")
+    if len(tokens) > MAX_EXPRESSION_WORK:
+        return _Expression("", None, False, True, "parser_limit_exceeded")
     source = "".join(token.value for token in tokens)
     source = source.replace("π", "pi").replace("τ", "tau").replace("ℇ", "euler")
     allowed_names = set(formal_names) | _EXPRESSION_NAMES
     try:
         tree = ast.parse(source, mode="eval")
-    except (SyntaxError, ValueError):
-        return _Expression("", None, False)
-    if _expression_depth(tree) > MAX_EXPRESSION_DEPTH:
-        return _Expression("", None, False)
-    for node in ast.walk(tree):
+    except (RecursionError, SyntaxError, ValueError):
+        return _Expression("", None, False, False, "unsupported_expression")
+    try:
+        if _expression_depth(tree) > MAX_EXPRESSION_DEPTH:
+            return _Expression("", None, False, True, "parser_limit_exceeded")
+        nodes = list(ast.walk(tree))
+    except RecursionError:
+        return _Expression("", None, False, True, "parser_limit_exceeded")
+    for node in nodes:
         if isinstance(node, ast.Name) and node.id not in allowed_names:
-            return _Expression("", None, False)
+            return _Expression(source, None, False, True, "unsupported_expression")
         if isinstance(node, ast.Constant) and (
             not isinstance(node.value, (int, float)) or isinstance(node.value, bool)
         ):
-            return _Expression("", None, False)
+            return _Expression(source, None, False, True, "unsupported_expression")
         if isinstance(
             node,
             (
@@ -380,14 +477,14 @@ def _parse_expression(tokens: Sequence[Token], *, formal_names: Iterable[str] = 
             ),
         ):
             continue
-        return _Expression("", None, False)
+        return _Expression(source, None, False, True, "unsupported_expression")
     try:
-        canonical = _canonical_expression(tree.body)
-        value = _fraction_value(tree.body, allowed_names)
-    except OpenQASM3ParseError:
-        return _Expression("", None, False)
+        canonical = _canonical_expression(tree.body, source)
+        value = _fraction_value(tree.body, allowed_names, source)
+    except (OpenQASM3ParseError, RecursionError):
+        return _Expression(source, None, False, True, "unsupported_expression")
     integer_value = int(value) if value is not None and value.denominator == 1 else None
-    return _Expression(canonical, integer_value, True)
+    return _Expression(canonical, integer_value, True, True, "supported")
 
 
 def _parse_integer(token: Token) -> int | None:
@@ -427,6 +524,7 @@ class _Parser:
         self.maximum_broadcast = 0
         self.fatal_error: dict[str, Any] | None = None
         self.limit_observed_overrides: dict[str, int] = {}
+        self.pending_annotation_ids: list[str] = []
 
     def _token_span(self) -> dict[str, int]:
         if self.tokens:
@@ -485,6 +583,15 @@ class _Parser:
             "dependent_fact_effects": list(effects),
         }
         self.constructs.append(row)
+        if family != "annotation" and self.pending_annotation_ids:
+            for annotation_id in self.pending_annotation_ids:
+                annotation = next(
+                    item for item in self.constructs if item["construct_id"] == annotation_id
+                )
+                annotation["established"].append(
+                    f"The annotation is associated with following {construct_id}."
+                )
+            self.pending_annotation_ids.clear()
         if len(self.constructs) > MAX_LEDGER_ENTRIES:
             self.limit_observed_overrides["construct_ledger_entries"] = len(self.constructs)
             self._fatal("parser_limit_exceeded", "The construct-ledger limit was exceeded.", tokens)
@@ -566,15 +673,43 @@ class _Parser:
 
     def _consume_block(self) -> list[Token] | None:
         start = self.position
-        brace = next(
-            (index for index in range(start, len(self.tokens)) if self.tokens[index].value == "{"),
-            None,
-        )
-        semicolon = next(
-            (index for index in range(start, len(self.tokens)) if self.tokens[index].value == ";"),
-            None,
-        )
-        if brace is None or (semicolon is not None and semicolon < brace):
+        brace: int | None = None
+        paren = 0
+        bracket = 0
+        index = start
+        while index < len(self.tokens):
+            token = self.tokens[index]
+            if token.value == "(":
+                paren += 1
+            elif token.value == ")":
+                paren -= 1
+            elif token.value == "[":
+                bracket += 1
+            elif token.value == "]":
+                bracket -= 1
+            elif token.value == ";" and paren == 0 and bracket == 0:
+                break
+            elif token.value == "{" and paren == 0 and bracket == 0:
+                depth = 1
+                close = index + 1
+                while close < len(self.tokens) and depth:
+                    if self.tokens[close].value == "{":
+                        depth += 1
+                    elif self.tokens[close].value == "}":
+                        depth -= 1
+                    close += 1
+                if depth:
+                    return None
+                # In a for header, a top-level set literal is followed by the
+                # actual body brace.  Treat the first balanced brace pair as a
+                # delimiter, not as the control-flow body.
+                if close < len(self.tokens) and self.tokens[close].value == "{":
+                    index = close
+                    continue
+                brace = index
+                break
+            index += 1
+        if brace is None:
             return self._consume_statement()
         depth = 0
         for index in range(brace, len(self.tokens)):
@@ -617,6 +752,7 @@ class _Parser:
                 self.tokens[:3],
             )
             return
+        self.declared_version = "3.0" if version in {"3", "3.0"} else version
         if version not in {"3", "3.0"}:
             self._fatal(
                 "unsupported_openqasm_version",
@@ -624,12 +760,11 @@ class _Parser:
                 self.tokens[:3],
             )
             return
-        self.declared_version = "3.0"
         self.position = 3
         self.statement_count = 1
         for token in self.tokens[3:]:
-            if token.value.casefold() == "openqasm":
-                category = "invalid_header" if token.value != "OPENQASM" else "malformed_syntax"
+            if token.value == "OPENQASM":
+                category = "malformed_syntax"
                 self._fatal(
                     category,
                     "A duplicate or misplaced OpenQASM declaration is not accepted.",
@@ -650,21 +785,58 @@ class _Parser:
         right = [] if equals is None else core[equals + 1 :]
         size = 1
         name_index = 1
-        if len(left) >= 5 and left[1].value == "[" and left[3].value == "]":
-            parsed_size = _parse_integer(left[2])
-            if parsed_size is None or parsed_size <= 0:
+        if len(left) >= 5 and left[1].value == "[":
+            close = next((i for i in range(2, len(left)) if left[i].value == "]"), None)
+            if close is None:
                 self._recover_malformed(
                     tokens, f"{kind}_declaration", "The declaration size is invalid."
                 )
                 return
-            size = parsed_size
-            name_index = 4
+            size_expression = _parse_expression(left[2:close])
+            if not size_expression.syntax_valid:
+                self._recover_malformed(
+                    tokens, f"{kind}_declaration", "The declaration size syntax is invalid."
+                )
+                return
+            if size_expression.supported and (
+                size_expression.integer_value is not None and size_expression.integer_value <= 0
+            ):
+                self._recover_malformed(
+                    tokens, f"{kind}_declaration", "The declaration size must be positive."
+                )
+                return
+            if not size_expression.supported or size_expression.integer_value is None:
+                self._add_construct(
+                    family=f"{kind}_declaration",
+                    name="unresolved",
+                    classification="partially_supported",
+                    tokens=tokens,
+                    established=(
+                        "The declaration family and size-expression boundary were identified.",
+                    ),
+                    unavailable=("A safe positive static register width was not established.",),
+                    effects=("Declaration-derived width and dependent targets are not complete.",),
+                    category=(
+                        size_expression.category
+                        if not size_expression.supported
+                        else "unsupported_expression"
+                    ),
+                    message="The declaration size is not a bounded exact positive integer.",
+                )
+                return
+            size = size_expression.integer_value
+            name_index = close + 1
         if len(left) != name_index + 1 or left[name_index].kind != "identifier":
             self._recover_malformed(
                 tokens, f"{kind}_declaration", "The declaration shape is invalid."
             )
             return
         name = left[name_index].value
+        if name in _RESERVED_WORDS:
+            self._recover_malformed(
+                tokens, f"{kind}_declaration", "A reserved word cannot name a register."
+            )
+            return
         if name in self.quantum or name in self.classical or name in self.custom_gates:
             row = self._add_construct(
                 family=f"{kind}_declaration",
@@ -684,9 +856,27 @@ class _Parser:
             self.limit_observed_overrides["declarations"] = total_declarations + 1
             self._fatal("parser_limit_exceeded", "The declaration limit was exceeded.", tokens)
             return
-        target = self.quantum if kind == "qubit" else self.classical
+        individual_maximum = (
+            MAX_INDIVIDUAL_QUANTUM_WIDTH if kind == "qubit" else MAX_INDIVIDUAL_CLASSICAL_WIDTH
+        )
+        total_maximum = MAX_TOTAL_QUANTUM_WIDTH if kind == "qubit" else MAX_TOTAL_CLASSICAL_WIDTH
         rows = self.quantum_declarations if kind == "qubit" else self.classical_declarations
-        base = sum(row["size"] for row in rows)
+        current_total = sum(row["size"] for row in rows)
+        if size > individual_maximum or current_total + size > total_maximum:
+            individual_key = (
+                "individual_quantum_width" if kind == "qubit" else "individual_classical_width"
+            )
+            total_key = "total_quantum_width" if kind == "qubit" else "total_classical_width"
+            if size > individual_maximum:
+                self.limit_observed_overrides[individual_key] = size
+            if current_total + size > total_maximum:
+                self.limit_observed_overrides[total_key] = current_total + size
+            self._fatal(
+                "parser_limit_exceeded", "A bounded register-width ceiling was exceeded.", tokens
+            )
+            return
+        target = self.quantum if kind == "qubit" else self.classical
+        base = current_total
         target[name] = (size, base)
         row = self._add_construct(
             family=f"{kind}_declaration",
@@ -765,14 +955,29 @@ class _Parser:
         size, base = registers[name]
         if len(tokens) == 1:
             return list(range(base, base + size)), None
-        if len(tokens) == 4 and tokens[1].value == "[" and tokens[3].value == "]":
-            index = _parse_integer(tokens[2])
+        if len(tokens) >= 4 and tokens[1].value == "[" and tokens[-1].value == "]":
+            expression = _parse_expression(tokens[2:-1])
+            if not expression.syntax_valid:
+                return [], "invalid_register_reference"
+            index = expression.integer_value if expression.supported else None
             if index is None:
                 return [], "unsupported_construct"
             if index < 0 or index >= size:
                 return [], "index_out_of_range"
             return [base + index], None
         return [], "unsupported_construct"
+
+    def _append_operations(self, operations: Sequence[Operation], tokens: Sequence[Token]) -> bool:
+        projected = len(self.operations) + len(operations)
+        if projected > MAX_OPERATIONS:
+            self.limit_observed_overrides["operations"] = projected
+            self._fatal("parser_limit_exceeded", "The operation limit was exceeded.", tokens)
+            return False
+        self.operations.extend(
+            replace(operation, op_index=len(self.operations) + offset)
+            for offset, operation in enumerate(operations)
+        )
+        return True
 
     def _measurement(
         self,
@@ -790,9 +995,14 @@ class _Parser:
             if not expression or expression[0].value != "measure":
                 return
             source_tokens = expression[1:]
+            if not destination:
+                self._recover_malformed(
+                    tokens, "measurement", "The measurement assignment destination is missing."
+                )
+                return
         elif form == "arrow":
             arrow = next((i for i, token in enumerate(expression) if token.value == "->"), -1)
-            if arrow < 1:
+            if arrow < 1 or arrow == len(expression) - 1:
                 self._recover_malformed(
                     tokens, "measurement", "The measurement arrow form is malformed."
                 )
@@ -801,11 +1011,19 @@ class _Parser:
             destination = expression[arrow + 1 :]
         else:
             source_tokens = expression[1:]
+        if not source_tokens:
+            self._recover_malformed(tokens, "measurement", "The measurement source is missing.")
+            return
         qtargets, qerror = self._resolve_reference(source_tokens)
         ctargets: list[int] = []
         cerror = None
         if destination:
             ctargets, cerror = self._resolve_reference(destination, classical=True)
+        if qerror == "invalid_register_reference" or cerror == "invalid_register_reference":
+            self._recover_malformed(
+                tokens, "measurement", "The measurement register reference is malformed."
+            )
+            return
         valid = (
             qerror is None
             and cerror is None
@@ -861,17 +1079,20 @@ class _Parser:
             }
         )
         if valid:
-            for offset, qubit in enumerate(qtargets):
-                self.operations.append(
+            self._append_operations(
+                [
                     Operation(
                         name="measure",
                         qubits=(qubit,),
                         params=(),
                         line_index=tokens[0].line - 1,
-                        op_index=len(self.operations),
+                        op_index=0,
                         is_measure=True,
                     )
-                )
+                    for qubit in qtargets
+                ],
+                tokens,
+            )
 
     def _parse_modifiers(
         self, tokens: Sequence[Token], formal_parameters: set[str]
@@ -901,10 +1122,7 @@ class _Parser:
                 else None
             )
             support = "supported"
-            if name not in {"inv", "ctrl", "negctrl", "pow"}:
-                support = "recognized_but_unsupported"
-                valid = False
-            elif name == "inv" and argument_tokens:
+            if name not in {"inv", "ctrl", "negctrl", "pow"} or name == "inv" and argument_tokens:
                 support = "recognized_but_unsupported"
                 valid = False
             elif name in {"ctrl", "negctrl"}:
@@ -1018,7 +1236,9 @@ class _Parser:
             limitation = "The modifier-depth limit was exceeded."
         elif any(not expression.supported for expression in parameters):
             classification = "partially_supported"
-            category = "unsupported_expression"
+            category = next(
+                expression.category for expression in parameters if not expression.supported
+            )
             limitation = "At least one parameter expression is outside the bounded subset."
         elif len(parameters) != signature[0] or len(operands) != signature[1] + controls:
             classification = "partially_supported"
@@ -1062,12 +1282,22 @@ class _Parser:
                 limitation = "The broadcast-expansion limit was exceeded."
             else:
                 self.maximum_broadcast = max(self.maximum_broadcast, expansion)
-                expanded_targets = [
-                    tuple(
-                        indexes[0] if len(indexes) == 1 else indexes[offset] for indexes in resolved
+                if emit_operation and len(self.operations) + expansion > MAX_OPERATIONS:
+                    self.limit_observed_overrides["operations"] = len(self.operations) + expansion
+                    self._fatal(
+                        "parser_limit_exceeded", "The operation limit was exceeded.", tokens
                     )
-                    for offset in range(expansion)
-                ]
+                    classification = "partially_supported"
+                    category = "parser_limit_exceeded"
+                    limitation = "The operation limit was exceeded before expansion."
+                else:
+                    expanded_targets = [
+                        tuple(
+                            indexes[0] if len(indexes) == 1 else indexes[offset]
+                            for indexes in resolved
+                        )
+                        for offset in range(expansion)
+                    ]
         row = self._add_construct(
             family="custom_gate_call" if custom else "quantum_operation",
             name=name,
@@ -1092,23 +1322,20 @@ class _Parser:
                 {"construct_id": row["construct_id"], "modifiers": modifiers}
             )
         if classification == "supported" and emit_operation and formal_qubits is None:
-            if len(self.operations) + len(expanded_targets) > MAX_OPERATIONS:
-                self.limit_observed_overrides["operations"] = len(self.operations) + len(
-                    expanded_targets
-                )
-                self._fatal("parser_limit_exceeded", "The operation limit was exceeded.", tokens)
-            else:
-                for targets in expanded_targets:
-                    self.operations.append(
-                        Operation(
-                            name=name,
-                            qubits=targets,
-                            params=tuple(expression.canonical for expression in parameters),
-                            line_index=tokens[0].line - 1,
-                            op_index=len(self.operations),
-                            is_custom=custom,
-                        )
+            self._append_operations(
+                [
+                    Operation(
+                        name=name,
+                        qubits=targets,
+                        params=tuple(expression.canonical for expression in parameters),
+                        line_index=tokens[0].line - 1,
+                        op_index=0,
+                        is_custom=custom,
                     )
+                    for targets in expanded_targets
+                ],
+                tokens,
+            )
         return classification, name
 
     def _custom_gate(self, tokens: Sequence[Token]) -> None:
@@ -1130,12 +1357,17 @@ class _Parser:
             )
             return
         name = header[1].value
+        if name in _RESERVED_WORDS:
+            self._recover_malformed(
+                tokens, "custom_gate_declaration", "A reserved word cannot name a custom gate."
+            )
+            return
         if (
             name in self.quantum
             or name in self.classical
             or name in self.custom_gates
             or name in LANGUAGE_BUILTINS
-            or name in STANDARD_GATES
+            or (self.standard_gates_active and name in STANDARD_GATES)
         ):
             self._recover_malformed(
                 tokens, "custom_gate_declaration", "The custom-gate name is duplicate or reserved."
@@ -1176,6 +1408,8 @@ class _Parser:
             len(set(formal_parameters)) != len(formal_parameters)
             or len(set(formal_qubits)) != len(formal_qubits)
             or set(formal_parameters) & set(formal_qubits)
+            or any(identifier in _RESERVED_WORDS for identifier in formal_parameters)
+            or any(identifier in _RESERVED_WORDS for identifier in formal_qubits)
         ):
             self._recover_malformed(
                 tokens, "custom_gate_declaration", "Custom-gate formal identifiers must be unique."
@@ -1288,6 +1522,13 @@ class _Parser:
     def _simple_operation(self, tokens: Sequence[Token], family: str) -> None:
         core = list(tokens[1:-1])
         groups = _split_top_level(core)
+        if family == "reset" and len(groups) != 1:
+            self._recover_malformed(
+                tokens,
+                "reset",
+                "The bounded reset grammar accepts exactly one register reference.",
+            )
+            return
         resolved: list[int] = []
         error = None
         for group in groups:
@@ -1321,18 +1562,21 @@ class _Parser:
             target_groups = (
                 [(qubit,) for qubit in resolved] if family == "reset" else [tuple(resolved)]
             )
-            for target_group in target_groups:
-                self.operations.append(
+            self._append_operations(
+                [
                     Operation(
                         name=tokens[0].value,
                         qubits=target_group,
                         params=(),
                         line_index=tokens[0].line - 1,
-                        op_index=len(self.operations),
+                        op_index=0,
                         is_barrier=family == "barrier",
                         is_reset=family == "reset",
                     )
-                )
+                    for target_group in target_groups
+                ],
+                tokens,
+            )
         del row
 
     def _unsupported(self, tokens: Sequence[Token], family: str) -> None:
@@ -1347,6 +1591,24 @@ class _Parser:
             category="unsupported_construct",
             message="The construct is recognized but outside the bounded static subset.",
         )
+
+    def _line_directive(self, token: Token) -> None:
+        family = "pragma" if token.kind == "pragma_directive" else "annotation"
+        row = self._add_construct(
+            family=family,
+            name=token.value,
+            classification="recognized_but_unsupported",
+            tokens=[token],
+            established=(
+                "The opaque line-oriented directive and its bounded source span were identified.",
+            ),
+            unavailable=("The opaque directive payload was not interpreted or retained.",),
+            effects=("The directive does not establish quantum-operation semantics.",),
+            category="unsupported_construct",
+            message="The line-oriented directive is recognized but not interpreted.",
+        )
+        if family == "annotation":
+            self.pending_annotation_ids.append(row["construct_id"])
 
     def _parse_statement(self, tokens: Sequence[Token]) -> None:
         if not tokens:
@@ -1383,6 +1645,22 @@ class _Parser:
             )
             if supported:
                 self.standard_gates_active = True
+                collisions = sorted(set(self.custom_gates) & set(STANDARD_GATES))
+                for collision in collisions:
+                    self._add_construct(
+                        family="standard_gate_collision",
+                        name=collision,
+                        classification="malformed",
+                        tokens=tokens,
+                        established=(
+                            "The prior custom name and newly active standard-gate name collision were identified.",
+                        ),
+                        unavailable=("An unambiguous gate binding was not established.",),
+                        effects=(
+                            "Calls using the colliding name cannot establish complete evidence.",
+                        ),
+                        message="A prior custom-gate name collides with the active standard vocabulary.",
+                    )
             return
         if first in {"qubit", "bit"}:
             self._declaration(tokens, kind=first)
@@ -1417,6 +1695,17 @@ class _Parser:
         if any(token.value in {"=", "++"} for token in tokens):
             self._unsupported(tokens, "general_assignment_or_concatenation")
             return
+        if (
+            len(tokens) >= 4
+            and tokens[0].kind == "identifier"
+            and tokens[1].value == "("
+            and tokens[-2].value == ")"
+            and tokens[0].value not in LANGUAGE_BUILTINS
+            and tokens[0].value not in self.custom_gates
+            and not (self.standard_gates_active and tokens[0].value in STANDARD_GATES)
+        ):
+            self._unsupported(tokens, "classical_expression")
+            return
         self._gate_call(tokens)
 
     def parse(self) -> OpenQASM3ParseResult:
@@ -1446,7 +1735,16 @@ class _Parser:
         self._parse_header()
         while self.fatal_error is None and self.position < len(self.tokens):
             token = self.tokens[self.position]
-            if token.value == "gate":
+            if token.kind in {"pragma_directive", "annotation_directive"}:
+                self.position += 1
+                self.statement_count += 1
+                if self.statement_count > MAX_STATEMENTS:
+                    self._fatal(
+                        "parser_limit_exceeded", "The statement limit was exceeded.", [token]
+                    )
+                    break
+                self._line_directive(token)
+            elif token.value == "gate":
                 statement = self._consume_block()
                 if statement is None:
                     self._fatal(
@@ -1477,7 +1775,7 @@ class _Parser:
                 self._parse_statement(statement)
         return self._result()
 
-    def _derived(self, file_status: str) -> dict[str, Any]:
+    def _derived(self, file_status: str, ir: CircuitIR | None) -> dict[str, Any]:
         fatal = file_status == "fatal"
         partial = file_status == "partial"
         quantum_width = sum(row["size"] for row in self.quantum_declarations)
@@ -1490,7 +1788,6 @@ class _Parser:
             not in {"include", "input_declaration", "output_declaration", "pragma", "annotation"}
             for row in self.constructs
         )
-        custom_calls = any(operation.is_custom for operation in self.operations)
         count_exactness = (
             "not_established" if fatal else "lower_bound" if uncertain_execution else "exact"
         )
@@ -1508,27 +1805,8 @@ class _Parser:
             for row in self.constructs
         )
         width_exactness = "not_established" if fatal else "partial" if width_uncertain else "exact"
-        depth_value: int | None = None
-        if not fatal and not partial and not custom_calls:
-            frontier = [0] * quantum_width
-            depth_value = 0
-            for operation in self.operations:
-                if not operation.qubits:
-                    continue
-                level = max((frontier[index] for index in operation.qubits), default=0) + 1
-                for index in operation.qubits:
-                    frontier[index] = level
-                depth_value = max(depth_value, level)
-        edges = sorted(
-            {
-                (min(left, right), max(left, right))
-                for operation in self.operations
-                if not operation.is_custom
-                for offset, left in enumerate(operation.qubits)
-                for right in operation.qubits[offset + 1 :]
-                if left != right
-            }
-        )
+        depth_value = compute_depth_stats(ir).real_depth if ir is not None else None
+        edges = sorted(build_interaction_graph(ir).edges) if ir is not None else []
         counts = dict(sorted(Counter(operation.name for operation in self.operations).items()))
         return {
             "quantum_width": {
@@ -1554,9 +1832,9 @@ class _Parser:
             "interaction_graph": {
                 "value": [] if fatal else [list(edge) for edge in edges],
                 "exactness": "not_established"
-                if fatal
+                if fatal or ir is None
                 else "partial"
-                if partial or custom_calls
+                if partial
                 else "exact",
             },
             "gate_statistics": {
@@ -1582,6 +1860,14 @@ class _Parser:
             "recovery_events": len(self.recoveries),
             "diagnostics": len(self.diagnostics),
             "construct_ledger_entries": len(self.constructs),
+            "individual_quantum_width": max(
+                (row["size"] for row in self.quantum_declarations), default=0
+            ),
+            "total_quantum_width": sum(row["size"] for row in self.quantum_declarations),
+            "individual_classical_width": max(
+                (row["size"] for row in self.classical_declarations), default=0
+            ),
+            "total_classical_width": sum(row["size"] for row in self.classical_declarations),
         }
         observed.update(self.limit_observed_overrides)
         return {
@@ -1594,7 +1880,11 @@ class _Parser:
         }
 
     def _ir(self, file_status: str) -> CircuitIR | None:
-        if file_status != "supported":
+        if (
+            file_status != "supported"
+            or self.modifier_chains
+            or any(operation.is_custom for operation in self.operations)
+        ):
             return None
         return CircuitIR(
             n_qubits=sum(row["size"] for row in self.quantum_declarations),
@@ -1672,7 +1962,7 @@ class _Parser:
             "custom_gates": self.custom_gate_rows,
             "measurements": self.measurements,
             "diagnostics": self.diagnostics,
-            "derived_facts": self._derived(file_status),
+            "derived_facts": self._derived(file_status, ir),
             "parser_limits": self._limit_rows(),
             "circuit_ir": self._ir_projection(ir),
             "limitations": limitations,
@@ -1684,7 +1974,7 @@ class _Parser:
             "motif_evidence_emitted": False,
             "intent_inferred": False,
         }
-        validate_openqasm3_static_evidence(sidecar)
+        validate_openqasm3_static_evidence(sidecar, source_bytes=self.raw)
         return OpenQASM3ParseResult(sidecar=sidecar, circuit_ir=ir)
 
 

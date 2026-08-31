@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from collections import Counter
-from copy import deepcopy
 import re
-from typing import Any, Mapping
+from collections import Counter
+from collections.abc import Mapping
+from copy import deepcopy
+from typing import Any
 
 from qcoder.algorithm_blueprint import with_artifact_digest
 from qcoder.context_loop import (
@@ -13,11 +14,15 @@ from qcoder.context_loop import (
     CIRCUIT_MANIFESTATION_SCHEMA_ID,
     build_stage_identity,
 )
+from qcoder.engines.feature_extraction.ir import CircuitIR, Operation, QRegDecl
 from qcoder.engines.feature_extraction.openqasm3_static_evidence import (
     OPENQASM3_STATIC_EVIDENCE_SCHEMA_ID,
     validate_openqasm3_static_evidence,
 )
-
+from qcoder.engines.feature_extraction.reps.depth import compute_depth_stats
+from qcoder.engines.feature_extraction.reps.entangling_layers import (
+    compute_entangling_layer_stats,
+)
 
 _SAFE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _PARAMETER_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -54,6 +59,31 @@ def build_openqasm3_circuit_manifestation(
     if sidecar["derived_facts"]["depth"]["exactness"] != "exact":
         raise ValueError("openqasm3_complete_manifestation_facts_required")
     operations = projection["operations"]
+    ir = CircuitIR(
+        n_qubits=projection["n_qubits"],
+        n_cbits=projection["n_cbits"],
+        operations=tuple(
+            Operation(
+                name=operation["name"],
+                qubits=tuple(operation["qubits"]),
+                params=tuple(operation["params"]),
+                line_index=0,
+                op_index=index,
+                is_measure=operation["is_measure"],
+                is_barrier=operation["is_barrier"],
+                is_reset=operation["is_reset"],
+                is_custom=operation["is_custom"],
+            )
+            for index, operation in enumerate(operations)
+        ),
+        qasm_format="qasm3",
+        qregs=tuple(
+            QRegDecl(name=row["name"], size=row["size"], base=row["base"])
+            for row in projection["qregs"]
+        ),
+    )
+    depth_stats = compute_depth_stats(ir)
+    entangling_stats = compute_entangling_layer_stats(ir)
     counts = Counter(str(operation["name"]) for operation in operations)
     ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
     inventory = [
@@ -90,6 +120,7 @@ def build_openqasm3_circuit_manifestation(
             "classical_bit_index": classical,
         }
         for measurement in sidecar["measurements"]
+        if measurement["classical_targets"]
         for qubit, classical in zip(
             measurement["quantum_targets"], measurement["classical_targets"], strict=True
         )
@@ -131,10 +162,10 @@ def build_openqasm3_circuit_manifestation(
             "gate_count": len(gate_operations),
             "operation_count": facts["operation_count"]["value"],
             "depth": depth,
-            "sequential_gate_count": len(gate_operations),
+            "sequential_gate_count": depth_stats.estimated_depth,
             "multi_qubit_gate_count": len(multi_qubit_operations),
             "entangling_operation_count": len(multi_qubit_operations),
-            "entangling_depth": depth if multi_qubit_operations and depth is not None else 0,
+            "entangling_depth": entangling_stats.entangling_depth,
             "measurement_count": facts["measurement_count"]["value"],
         },
         "entangling_operation_structure_observed": bool(multi_qubit_operations),
