@@ -3,13 +3,12 @@ from __future__ import annotations
 
 import argparse
 from copy import deepcopy
-from hashlib import sha256
 from importlib.resources import files
 import json
+from pathlib import Path
 import statistics
 import tempfile
 import time
-from pathlib import Path
 from typing import Any
 
 from qcoder.current_loop_binding_mcp import handle_binding_jsonrpc_message
@@ -21,46 +20,49 @@ EXACT_REQUEST = (
     "Before generating the code, help me review how you interpret my request and the important "
     "implementation choices."
 )
+OUTSIDE_OLD_VOCABULARY = (
+    "Use qCoder before coding, show me your understanding and the key choices, then make the "
+    "program after I agree.",
+    "Use qCoder to lay out your reading and the important tradeoffs first; once I approve, "
+    "produce the program.",
+    "Use qCoder to tell me what you think I am asking for and how you would build it. Wait for "
+    "my approval before creating it.",
+)
 
 
 def _load(name: str) -> dict[str, Any]:
     return json.loads(files("qcoder").joinpath("model_packs", name).read_text(encoding="utf-8"))
 
 
-def _set_item(proposal: dict[str, Any], group: int, item_id: str, value: str) -> None:
-    next(item for item in proposal["review_groups"][group]["items"] if item["item_id"] == item_id)[
-        "value"
-    ] = value
-
-
 def _proposal(request: str, algorithm: str = "Bell") -> dict[str, Any]:
     proposal = _load("wi0440_bell_review_before_generation_v1.json")
-    proposal["exact_request_utf8_sha256"] = sha256(request.encode("utf-8")).hexdigest()
+    proposal["customer_constraints"] = ["qCoder"]
     if algorithm == "Bell":
         return proposal
     profile = _load("wi0440_review_before_generation_class_matrix_v1.json")["profiles"][algorithm]
     proposal["recommended_interpretation"] = profile["recommended_interpretation"]
-    for item_id in (
-        "intended_artifact",
-        "quantum_scope",
-        "classical_scope",
-        "measurement_basis",
-    ):
-        _set_item(proposal, 0, item_id, profile[item_id])
-    for item_id in ("construction", "measurement_mapping", "output_structure"):
-        _set_item(proposal, 1, item_id, profile[item_id])
+    proposal["implementation_recommendations"] = [
+        "Use Qiskit QuantumCircuit.",
+        profile["quantum_scope"],
+        profile["construction"],
+        profile["measurement_mapping"],
+        profile["output_structure"],
+    ]
+    proposal["output_artifact"] = profile["intended_artifact"]
     for index, key in ((1, "construction"), (2, "measurement_mapping"), (3, "output_structure")):
-        proposal["material_choices"][index]["recommended_value"] = profile[key]
+        proposal["material_choices"][index]["recommendation"] = profile[key]
     return proposal
 
 
 def _binding_payload(
     workspace: Path,
-    request: str,
+    request: str | None,
     proposal: dict[str, Any] | None = None,
     **arguments: object,
 ) -> dict[str, Any]:
-    call_arguments: dict[str, object] = {"request_text": request, **arguments}
+    call_arguments: dict[str, object] = dict(arguments)
+    if request is not None:
+        call_arguments["request_text"] = request
     if proposal is not None:
         call_arguments["connected_assistant_proposal"] = proposal
     response = handle_binding_jsonrpc_message(
@@ -68,10 +70,7 @@ def _binding_payload(
             "jsonrpc": "2.0",
             "id": 1,
             "method": "tools/call",
-            "params": {
-                "name": "begin_current_loop",
-                "arguments": call_arguments,
-            },
+            "params": {"name": "begin_current_loop", "arguments": call_arguments},
         },
         workspace_root=workspace,
     )
@@ -82,7 +81,7 @@ def _binding_payload(
 
 def _binding_call(
     workspace: Path,
-    request: str,
+    request: str | None,
     proposal: dict[str, Any] | None = None,
     **arguments: object,
 ) -> dict[str, Any]:
@@ -108,7 +107,7 @@ def _summary(values: list[float]) -> dict[str, float]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run deterministic local WI-0440 timing acceptance without a client or network."
+        description="Run deterministic local WI-0440 timing acceptance without client or network."
     )
     parser.add_argument("--repetitions", type=int, default=10)
     args = parser.parse_args()
@@ -122,26 +121,21 @@ def main() -> int:
         for case in matrix["cases"]
         if case["variant"] != "material_blocker"
     )
-    cases.extend(
-        [
-            (
-                "Use qCoder to review my Bell Qiskit implementation choices before creating source.",
-                "Bell",
-            ),
-            (
-                "Create a Bell Qiskit program after qCoder checks the choices with me.",
-                "Bell",
-            ),
-        ]
-    )
-    transaction: list[float] = []
+    cases.extend((request, "Bell") for request in OUTSIDE_OLD_VOCABULARY)
+    initial: list[float] = []
+    confirmation: list[float] = []
     rendering: list[float] = []
     combined: list[float] = []
-    revisions: set[str] = set()
+    transition: list[float] = []
+    tokens: set[str] = set()
     scenario_counts = {
         "review_first_value": 0,
         "duplicate_call": 0,
-        "stale_revision": 0,
+        "generic_proposal_rejection": 0,
+        "unsafe_content_rejection": 0,
+        "confirmation_without_replay": 0,
+        "duplicate_confirmation": 0,
+        "stale_token": 0,
         "source_modification": 0,
         "direct_generation_control": 0,
     }
@@ -155,65 +149,114 @@ def main() -> int:
             with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-acceptance-") as directory:
                 started = time.monotonic()
                 payload = _binding_call(Path(directory), request, deepcopy(proposal))
-                transaction_elapsed = time.monotonic() - started
-            transaction.append(transaction_elapsed)
+                initial_elapsed = time.monotonic() - started
+            initial.append(initial_elapsed)
             rendering.append(rendering_elapsed)
-            combined.append(transaction_elapsed + rendering_elapsed)
-            revisions.add(payload["review_before_generation"]["review_revision"])
+            combined.append(initial_elapsed + rendering_elapsed)
+            tokens.add(payload["prior_result_token"])
             scenario_counts["review_first_value"] += 1
 
-        duplicate_proposal = _proposal(EXACT_REQUEST)
+        proposal = _proposal(EXACT_REQUEST)
         with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-duplicate-") as directory:
             workspace = Path(directory)
-            first = _binding_call(workspace, EXACT_REQUEST, deepcopy(duplicate_proposal))
+            first = _binding_call(workspace, EXACT_REQUEST, deepcopy(proposal))
             started = time.monotonic()
-            duplicate = _binding_call(workspace, EXACT_REQUEST, deepcopy(duplicate_proposal))
+            duplicate = _binding_call(workspace, EXACT_REQUEST, deepcopy(proposal))
             duplicate_elapsed = time.monotonic() - started
         if duplicate.get("category") != "review_before_generation_duplicate":
             raise RuntimeError("duplicate_call_not_idempotent")
-        transaction.append(duplicate_elapsed)
+        initial.append(duplicate_elapsed)
         rendering.append(0.0)
         combined.append(duplicate_elapsed)
-        revisions.add(first["review_before_generation"]["review_revision"])
         scenario_counts["duplicate_call"] += 1
+
+        generic = _proposal(EXACT_REQUEST)
+        generic["implementation_recommendations"] = ["A concrete option will be used."]
+        with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-generic-") as directory:
+            started = time.monotonic()
+            rejected = _binding_payload(Path(directory), EXACT_REQUEST, generic)
+            generic_elapsed = time.monotonic() - started
+        if rejected.get("ok") or rejected.get("category") != "review_proposal_not_substantive":
+            raise RuntimeError("generic_proposal_not_rejected")
+        initial.append(generic_elapsed)
+        rendering.append(0.0)
+        combined.append(generic_elapsed)
+        scenario_counts["generic_proposal_rejection"] += 1
+
+        unsafe = _proposal(EXACT_REQUEST)
+        unsafe["implementation_recommendations"] = ["QuantumCircuit(2, 2)"]
+        with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-unsafe-") as directory:
+            started = time.monotonic()
+            rejected = _binding_payload(Path(directory), EXACT_REQUEST, unsafe)
+            unsafe_elapsed = time.monotonic() - started
+        if (
+            rejected.get("ok")
+            or rejected.get("category") != "review_proposal_source_or_qasm_rejected"
+        ):
+            raise RuntimeError("unsafe_content_not_rejected")
+        initial.append(unsafe_elapsed)
+        rendering.append(0.0)
+        combined.append(unsafe_elapsed)
+        scenario_counts["unsafe_content_rejection"] += 1
+
+        with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-confirm-") as directory:
+            workspace = Path(directory)
+            first = _binding_call(workspace, EXACT_REQUEST, deepcopy(proposal))
+            token = first["prior_result_token"]
+            started = time.monotonic()
+            confirmed = _binding_call(
+                workspace,
+                None,
+                review_action="Use recommended choices",
+                prior_result_token=token,
+            )
+            confirmed_elapsed = time.monotonic() - started
+            started = time.monotonic()
+            duplicate_confirmation = _binding_call(
+                workspace,
+                None,
+                review_action="Use recommended choices",
+                prior_result_token=token,
+            )
+            duplicate_confirmation_elapsed = time.monotonic() - started
+        if confirmed.get("category") != "review_confirmation_generation_ready":
+            raise RuntimeError("confirmation_not_generation_ready")
+        if duplicate_confirmation.get("category") != "review_confirmation_duplicate":
+            raise RuntimeError("duplicate_confirmation_not_idempotent")
+        confirmation.append(confirmed_elapsed)
+        transition.append(confirmed_elapsed)
+        confirmation.append(duplicate_confirmation_elapsed)
+        transition.append(duplicate_confirmation_elapsed)
+        scenario_counts["confirmation_without_replay"] += 1
+        scenario_counts["duplicate_confirmation"] += 1
 
         with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-stale-") as directory:
             workspace = Path(directory)
-            _binding_call(workspace, EXACT_REQUEST, deepcopy(duplicate_proposal))
+            _binding_call(workspace, EXACT_REQUEST, deepcopy(proposal))
             started = time.monotonic()
             stale = _binding_payload(
                 workspace,
-                EXACT_REQUEST,
-                deepcopy(duplicate_proposal),
+                None,
                 review_action="Use recommended choices",
-                displayed_review_revision="review-revision-" + "0" * 64,
+                prior_result_token="review-result-" + "0" * 64,
             )
             stale_elapsed = time.monotonic() - started
-        if stale.get("category") != "review_confirmation_stale_revision" or stale.get("ok"):
-            raise RuntimeError("stale_revision_not_rejected")
-        transaction.append(stale_elapsed)
-        rendering.append(0.0)
-        combined.append(stale_elapsed)
-        scenario_counts["stale_revision"] += 1
+        if stale.get("category") != "review_confirmation_stale_token" or stale.get("ok"):
+            raise RuntimeError("stale_token_not_rejected")
+        confirmation.append(stale_elapsed)
+        transition.append(stale_elapsed)
+        scenario_counts["stale_token"] += 1
 
         modification_request = (
-            "Use qCoder to review proposed Qiskit implementation changes to selected.py before "
-            "modifying the source."
+            "Use qCoder to review proposed Qiskit changes to selected.py before modifying source."
         )
         modification_proposal = _proposal(modification_request)
-        modification_proposal["semantic_axes"].update(
-            {
-                "ultimate_outcome": "source_modification",
-                "immediate_interaction": "review_proposed_changes",
-                "temporal_order": "review_then_confirm_before_modification",
-                "review_object": "proposed_changes",
-            }
-        )
+        modification_proposal["transaction_kind"] = "review_before_source_modification"
         with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-modification-") as directory:
             workspace = Path(directory)
             (workspace / "selected.py").write_text("ORIGINAL\n", encoding="utf-8")
             started = time.monotonic()
-            modification = _binding_call(
+            _binding_call(
                 workspace,
                 modification_request,
                 modification_proposal,
@@ -222,10 +265,9 @@ def main() -> int:
             modification_elapsed = time.monotonic() - started
             if (workspace / "selected.py").read_text(encoding="utf-8") != "ORIGINAL\n":
                 raise RuntimeError("source_modified_before_confirmation")
-        transaction.append(modification_elapsed)
+        initial.append(modification_elapsed)
         rendering.append(0.0)
         combined.append(modification_elapsed)
-        revisions.add(modification["review_before_generation"]["review_revision"])
         scenario_counts["source_modification"] += 1
 
         direct_request = "Use qCoder to create a small Qiskit program in direct.py now."
@@ -242,34 +284,37 @@ def main() -> int:
                 raise RuntimeError("direct_generation_control_created_source")
         if direct.get("review_before_generation") is not None:
             raise RuntimeError("direct_generation_control_received_review_ceremony")
-        transaction.append(direct_elapsed)
+        initial.append(direct_elapsed)
         rendering.append(0.0)
         combined.append(direct_elapsed)
         scenario_counts["direct_generation_control"] += 1
 
-    transaction_summary = _summary(transaction)
+    initial_summary = _summary(initial)
+    confirmation_summary = _summary(confirmation)
     rendering_summary = _summary(rendering)
     combined_summary = _summary(combined)
-    within_budget = (
+    transition_summary = _summary(transition)
+    first_budget = (
         combined_summary["median_seconds"] <= 10
         and combined_summary["p95_seconds"] <= 20
         and combined_summary["maximum_seconds"] <= 30
     )
     result = {
-        "schema_id": "qcoder.wi0440.local_timing_acceptance.v1",
-        "population_cases": len(cases) + 4,
+        "schema_id": "qcoder.wi0440.local_timing_acceptance.v2",
+        "population_cases": len(cases) + 8,
         "repetitions": args.repetitions,
-        "samples": len(combined),
-        "unique_request_bound_revisions": len(revisions),
+        "samples": len(initial) + len(confirmation),
+        "unique_prior_result_tokens": len(tokens),
         "scenario_counts": scenario_counts,
         "connected_assistant_model": "not_measured_fixture_driven_automation",
-        "qcoder_local_transaction": transaction_summary,
+        "qcoder_local_initial_transaction": initial_summary,
+        "qcoder_local_confirmation_transaction": confirmation_summary,
+        "protected_service_calls": 0,
         "protected_service_seconds": 0,
         "projection_and_rendering": rendering_summary,
-        "combined_deterministic_qcoder_operation": combined_summary,
-        "first_useful_interpretation": combined_summary,
-        "first_material_decision": combined_summary,
-        "first_useful_interpretation_budget_pass": within_budget,
+        "combined_local_first_value": combined_summary,
+        "generation_ready_transition": transition_summary,
+        "first_useful_interpretation_budget_pass": first_budget,
         "first_material_decision_budget_pass": (
             combined_summary["median_seconds"] <= 15
             and combined_summary["p95_seconds"] <= 30
@@ -280,12 +325,8 @@ def main() -> int:
     print(json.dumps(result, indent=2, sort_keys=True))
     return (
         0
-        if all(
-            (
-                result["first_useful_interpretation_budget_pass"],
-                result["first_material_decision_budget_pass"],
-            )
-        )
+        if result["first_useful_interpretation_budget_pass"]
+        and result["first_material_decision_budget_pass"]
         else 1
     )
 

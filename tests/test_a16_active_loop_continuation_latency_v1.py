@@ -159,7 +159,7 @@ def test_qasm_continuation_completes_without_rebootstrap_or_results(tmp_path: Pa
 def test_continuation_binding_is_direct_quiet_and_keeps_two_private_tools(
     tmp_path: Path,
 ) -> None:
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v49"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v50"
     assert len(EXPECTED_TOOLS) == 12
     descriptors = binding_tool_descriptors()
     assert [row["name"] for row in descriptors] == [

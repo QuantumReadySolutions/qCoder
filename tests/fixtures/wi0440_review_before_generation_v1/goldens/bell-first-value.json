@@ -1,7 +1,7 @@
 {
   "blocking_clarification": null,
   "confirmable": true,
-  "confirmation_state": "awaiting_exact_review_confirmation",
+  "confirmation_state": "awaiting_customer_confirmation",
   "customer_actions": [
     "Use recommended choices",
     "Review or change choices"
@@ -9,129 +9,122 @@
   "deferred_choices": [
     {
       "attribution": "connected_assistant_recommendation",
-      "choice_id": "backend",
-      "deferred_value": "Deferred until execution is separately requested.",
-      "label": "Backend"
+      "deferred_value": "Backend remains deferred until execution is separately requested.",
+      "label": "Deferred choice 1"
     },
     {
       "attribution": "connected_assistant_recommendation",
-      "choice_id": "shots",
-      "deferred_value": "Deferred until execution is separately requested.",
-      "label": "Shots"
+      "deferred_value": "Shots remain deferred until execution is separately requested.",
+      "label": "Deferred choice 2"
     },
     {
       "attribution": "connected_assistant_recommendation",
-      "choice_id": "seed",
-      "deferred_value": "Deferred until execution is separately requested.",
-      "label": "Seed"
+      "deferred_value": "Seed remains deferred until execution is separately requested.",
+      "label": "Deferred choice 3"
     },
     {
       "attribution": "connected_assistant_recommendation",
-      "choice_id": "result_handling",
-      "deferred_value": "Deferred until execution is separately requested.",
-      "label": "Result handling"
+      "deferred_value": "Result handling remains deferred until execution is separately requested.",
+      "label": "Deferred choice 4"
     }
   ],
-  "exact_request_utf8_sha256": "36e3eee7860487a79680577ee20328d0112b43ffcdd7363c4667dd7cba265e33",
-  "execution_authority": "not_requested",
   "execution_performed": false,
+  "execution_permitted": false,
   "file_mutation_performed": false,
-  "generation_authority": "held_for_exact_review_confirmation",
   "initial_decision_group_count": 3,
   "initial_decision_group_maximum": 3,
   "initial_decision_groups": [
     {
-      "group_id": "goal_and_scope",
       "items": [
         {
-          "attribution": "customer_explicit_constraint",
-          "item_id": "intended_artifact",
-          "label": "Intended artifact",
-          "value": "A minimal Bell-state preparation and measurement example in Python"
-        },
-        {
-          "attribution": "customer_explicit_constraint",
-          "item_id": "quantum_scope",
-          "label": "Quantum scope",
-          "value": "Two qubits preparing the Φ+ state"
-        },
-        {
           "attribution": "connected_assistant_recommendation",
-          "item_id": "classical_scope",
-          "label": "Classical scope",
-          "value": "Two matching classical bits"
+          "label": "Recommended interpretation",
+          "value": "Create a minimal two-qubit Qiskit program that prepares |Φ+> = (|00> + |11>)/sqrt(2), measures both qubits in the computational basis, and produces readable Python only after the customer confirms the plan."
         },
         {
           "attribution": "customer_explicit_constraint",
-          "item_id": "measurement_basis",
-          "label": "Measurement basis",
-          "value": "Computational-basis measurement"
+          "label": "Customer constraint",
+          "value": "Qiskit program"
+        },
+        {
+          "attribution": "customer_explicit_constraint",
+          "label": "Customer constraint",
+          "value": "prepares and measures a Φ+ Bell state"
+        },
+        {
+          "attribution": "customer_explicit_constraint",
+          "label": "Customer constraint",
+          "value": "Before generating the code"
         }
       ],
       "label": "Goal and scope"
     },
     {
-      "group_id": "implementation",
       "items": [
         {
-          "attribution": "customer_explicit_constraint",
-          "item_id": "framework",
-          "label": "Framework",
-          "value": "Qiskit"
+          "attribution": "connected_assistant_recommendation",
+          "label": "Implementation recommendation 1",
+          "value": "Use Qiskit QuantumCircuit."
         },
         {
           "attribution": "connected_assistant_recommendation",
-          "item_id": "construction",
-          "label": "Construction",
-          "value": "QuantumCircuit with H on q0 followed by CX from q0 to q1"
+          "label": "Implementation recommendation 2",
+          "value": "Use two qubits and two classical bits."
         },
         {
           "attribution": "connected_assistant_recommendation",
-          "item_id": "measurement_mapping",
-          "label": "Measurement mapping",
-          "value": "Measure q0 to c0 and q1 to c1"
+          "label": "Implementation recommendation 3",
+          "value": "Apply H to q0."
         },
         {
           "attribution": "connected_assistant_recommendation",
-          "item_id": "output_structure",
-          "label": "Output structure",
-          "value": "Direct readable Python"
+          "label": "Implementation recommendation 4",
+          "value": "Apply CX from q0 to q1."
+        },
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Implementation recommendation 5",
+          "value": "Measure q0 to c0 and q1 to c1."
+        },
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Implementation recommendation 6",
+          "value": "Produce direct readable Python."
         },
         {
           "attribution": "qcoder_deterministic_boundary",
-          "item_id": "dependency_version",
           "label": "Dependency version",
-          "value": "No dependency version is selected silently"
+          "value": "No dependency version was selected silently."
         },
         {
           "attribution": "qcoder_deterministic_boundary",
-          "item_id": "execution_environment",
           "label": "Execution environment",
-          "value": "No execution environment is selected silently"
+          "value": "No execution environment was selected silently."
         }
       ],
       "label": "Implementation"
     },
     {
-      "group_id": "output_and_authority",
       "items": [
         {
           "attribution": "connected_assistant_recommendation",
-          "item_id": "artifact_after_confirmation",
-          "label": "Artifact after confirmation",
-          "value": "Python source only after the displayed revision is confirmed"
+          "label": "Output artifact",
+          "value": "Readable Python source after confirmation"
         },
         {
           "attribution": "qcoder_deterministic_boundary",
-          "item_id": "generation_authority",
           "label": "Generation authority",
-          "value": "Held for exact confirmation of this displayed revision"
+          "value": "Python source is produced only after the stored displayed review is confirmed."
         },
         {
           "attribution": "qcoder_deterministic_boundary",
-          "item_id": "execution_authority",
           "label": "Execution authority",
-          "value": "Not requested; any execution requires separate authorization"
+          "value": "Execution was not requested and is not authorized."
+        },
+        {
+          "attribution": "qcoder_deterministic_boundary",
+          "label": "Authority separation",
+          "value": "Confirmation of source generation does not authorize execution."
         }
       ],
       "label": "Output and authority"
@@ -139,43 +132,36 @@
   ],
   "limitations_nonclaims": [
     {
-      "attribution": "qcoder_deterministic_boundary",
-      "item_id": "no_entanglement_proof",
+      "attribution": "connected_assistant_recommendation",
       "value": "The example is not presented as proof of entanglement."
     },
     {
-      "attribution": "qcoder_deterministic_boundary",
-      "item_id": "no_correctness_claim",
+      "attribution": "connected_assistant_recommendation",
       "value": "The review does not claim algorithm correctness."
     },
     {
-      "attribution": "qcoder_deterministic_boundary",
-      "item_id": "no_hardware_claim",
+      "attribution": "connected_assistant_recommendation",
       "value": "The review makes no hardware-performance claim."
     }
   ],
   "material_choices": [
     {
       "attribution": "connected_assistant_recommendation",
-      "choice_id": "framework",
       "label": "Framework",
       "recommended_value": "Qiskit"
     },
     {
       "attribution": "connected_assistant_recommendation",
-      "choice_id": "construction",
       "label": "Construction",
       "recommended_value": "QuantumCircuit with H on q0 followed by CX from q0 to q1"
     },
     {
       "attribution": "connected_assistant_recommendation",
-      "choice_id": "measurement_mapping",
       "label": "Measurement mapping",
       "recommended_value": "Measure q0 to c0 and q1 to c1"
     },
     {
       "attribution": "connected_assistant_recommendation",
-      "choice_id": "representation",
       "label": "Representation",
       "recommended_value": "Direct readable Python"
     }
@@ -186,17 +172,5 @@
   "qcoder_authored_recommendation": false,
   "recommended_interpretation": "Create a minimal two-qubit Qiskit program that prepares |Φ+> = (|00> + |11>)/sqrt(2), measures both qubits in the computational basis, and produces readable Python only after the customer confirms the plan.",
   "retention": "current_loop_only_process_and_discard",
-  "review_revision": "review-revision-813384004d452d2074377eeb78513c841a382ab813725622a0eb9bc6c1a24d1d",
-  "schema_id": "qcoder.current_loop.review_before_generation_first_value.v1",
-  "schema_version": 1,
-  "semantic_axes": {
-    "execution_authority": "not_requested",
-    "generation_authority": "held_for_exact_review_confirmation",
-    "immediate_interaction": "review_proposed_intent_and_implementation",
-    "review_object": "proposed_intent_and_implementation",
-    "temporal_order": "review_then_confirm_before_generation",
-    "ultimate_outcome": "source_generation"
-  },
-  "semantics_digest": "665d0f8fafe647cfd0d4b97ead9ee4249d50293965981a0fae898db17c4b4a5f",
   "source_or_qasm_included": false
 }

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from hashlib import sha256
 import json
 import os
 from pathlib import Path
@@ -26,7 +25,6 @@ from qcoder.current_loop_request_semantics import classify_current_request
 from qcoder.d079_workflows import classify_binding_default_route
 from qcoder.review_before_generation import (
     CUSTOMER_ACTIONS,
-    FIRST_VALUE_SCHEMA_ID,
     PROPOSAL_SCHEMA_ID,
     ReviewBeforeGenerationError,
     build_first_value,
@@ -62,13 +60,6 @@ def class_matrix() -> dict[str, object]:
     return json.loads(MATRIX_FIXTURE.read_text(encoding="utf-8"))
 
 
-def _set_group_item(proposal: dict[str, object], group: int, item_id: str, value: str) -> None:
-    item = next(
-        item for item in proposal["review_groups"][group]["items"] if item["item_id"] == item_id
-    )
-    item["value"] = value
-
-
 def proposal_for(
     request: str,
     *,
@@ -76,31 +67,34 @@ def proposal_for(
     construction: str | None = None,
 ) -> dict[str, object]:
     proposal = bell_proposal()
-    proposal["exact_request_utf8_sha256"] = sha256(request.encode("utf-8")).hexdigest()
+    proposal["customer_constraints"] = ["qCoder"]
     if algorithm != "Bell":
         profile = class_matrix()["profiles"][algorithm]
         concrete = construction or profile["construction"]
         proposal["recommended_interpretation"] = profile["recommended_interpretation"]
-        _set_group_item(proposal, 0, "intended_artifact", profile["intended_artifact"])
-        _set_group_item(proposal, 0, "quantum_scope", profile["quantum_scope"])
-        _set_group_item(proposal, 0, "classical_scope", profile["classical_scope"])
-        _set_group_item(proposal, 0, "measurement_basis", profile["measurement_basis"])
-        _set_group_item(proposal, 1, "construction", concrete)
-        _set_group_item(proposal, 1, "measurement_mapping", profile["measurement_mapping"])
-        _set_group_item(proposal, 1, "output_structure", profile["output_structure"])
-        proposal["material_choices"][1]["recommended_value"] = concrete
-        proposal["material_choices"][2]["recommended_value"] = profile["measurement_mapping"]
-        proposal["material_choices"][3]["recommended_value"] = profile["output_structure"]
+        proposal["implementation_recommendations"] = [
+            "Use Qiskit QuantumCircuit.",
+            profile["quantum_scope"],
+            concrete,
+            profile["measurement_mapping"],
+            profile["output_structure"],
+        ]
+        proposal["output_artifact"] = profile["intended_artifact"]
+        proposal["material_choices"][1]["recommendation"] = concrete
+        proposal["material_choices"][2]["recommendation"] = profile["measurement_mapping"]
+        proposal["material_choices"][3]["recommendation"] = profile["output_structure"]
     return proposal
 
 
 def binding_call(
     workspace: Path,
-    request: str,
+    request: str | None,
     proposal: dict[str, object] | None = None,
     **arguments: object,
 ) -> dict[str, object]:
-    call_arguments: dict[str, object] = {"request_text": request, **arguments}
+    call_arguments: dict[str, object] = dict(arguments)
+    if request is not None:
+        call_arguments["request_text"] = request
     if proposal is not None:
         call_arguments["connected_assistant_proposal"] = proposal
     response = handle_binding_jsonrpc_message(
@@ -149,7 +143,8 @@ def test_first_value_is_deterministic_display_ready_and_source_free() -> None:
     assert first == second
     assert canonical_json(first) == canonical_json(second)
     assert render_first_value_markdown(first) == render_first_value_markdown(second)
-    assert first["schema_id"] == FIRST_VALUE_SCHEMA_ID
+    assert "schema_id" not in first
+    assert "review_revision" not in first
     assert first["customer_actions"] == list(CUSTOMER_ACTIONS)
     assert first["initial_decision_group_count"] == 3
     assert first["confirmable"] is True
@@ -171,7 +166,7 @@ def test_same_request_and_proposal_have_stable_revision() -> None:
 )
 def test_empty_and_generic_values_are_rejected(replacement: str) -> None:
     proposal = bell_proposal()
-    proposal["review_groups"][1]["items"][0]["value"] = replacement
+    proposal["implementation_recommendations"][0] = replacement
     with pytest.raises(ReviewBeforeGenerationError):
         validate_connected_assistant_proposal(EXACT_BELL_REQUEST, proposal)
 
@@ -203,26 +198,21 @@ def test_private_or_raw_fields_are_rejected(field: str, value: object) -> None:
 )
 def test_private_values_are_rejected(value: str) -> None:
     proposal = bell_proposal()
-    proposal["review_groups"][0]["items"][0]["value"] = value
+    proposal["recommended_interpretation"] = value
     with pytest.raises(ReviewBeforeGenerationError, match="private_material"):
         validate_connected_assistant_proposal(EXACT_BELL_REQUEST, proposal)
 
 
-def test_wrong_exact_request_digest_is_rejected() -> None:
-    with pytest.raises(ReviewBeforeGenerationError, match="request_digest_mismatch"):
-        validate_connected_assistant_proposal(EXACT_BELL_REQUEST + " ", bell_proposal())
+def test_caller_supplied_request_digest_is_rejected() -> None:
+    proposal = bell_proposal()
+    proposal["exact_request_utf8_sha256"] = "0" * 64
+    with pytest.raises(ReviewBeforeGenerationError, match="schema_invalid"):
+        validate_connected_assistant_proposal(EXACT_BELL_REQUEST, proposal)
 
 
 def test_source_modification_requires_an_explicit_selected_artifact() -> None:
     proposal = bell_proposal()
-    proposal["semantic_axes"].update(
-        {
-            "ultimate_outcome": "source_modification",
-            "immediate_interaction": "review_proposed_changes",
-            "temporal_order": "review_then_confirm_before_modification",
-            "review_object": "proposed_changes",
-        }
-    )
+    proposal["transaction_kind"] = "review_before_source_modification"
     with pytest.raises(ReviewBeforeGenerationError, match="selection_required"):
         validate_connected_assistant_proposal(EXACT_BELL_REQUEST, proposal)
 
@@ -272,81 +262,69 @@ def test_duplicate_first_call_is_same_review_without_reactivation(tmp_path: Path
 
 def test_exact_revision_confirmation_and_duplicate_are_idempotent(tmp_path: Path) -> None:
     first = binding_call(tmp_path, EXACT_BELL_REQUEST, bell_proposal())
-    revision = first["review_before_generation"]["review_revision"]
+    token = first["prior_result_token"]
     confirmation = binding_call(
         tmp_path,
-        EXACT_BELL_REQUEST,
-        bell_proposal(),
+        None,
         review_action="Use recommended choices",
-        displayed_review_revision=revision,
+        prior_result_token=token,
     )
-    assert confirmation["category"] == "review_confirmation_recorded"
-    assert confirmation["confirmed_review_revision"] == revision
-    assert confirmation["generation_authority"] == "confirmed_for_exact_displayed_revision"
+    assert confirmation["category"] == "review_confirmation_generation_ready"
+    assert confirmation["generation_authority"] == "confirmed_for_stored_displayed_review"
     assert confirmation["execution_authority"] == "not_requested"
     assert confirmation["source_or_qasm_created"] is False
     duplicate = binding_call(
         tmp_path,
-        EXACT_BELL_REQUEST,
-        bell_proposal(),
+        None,
         review_action="Use recommended choices",
-        displayed_review_revision=revision,
+        prior_result_token=token,
     )
     assert duplicate["category"] == "review_confirmation_duplicate"
     assert duplicate["state_mutated"] is False
     assert duplicate["duplicate_confirmation_idempotent"] is True
 
 
-def test_wrong_and_stale_revisions_do_not_mutate_state(tmp_path: Path) -> None:
+def test_wrong_and_stale_tokens_do_not_mutate_state(tmp_path: Path) -> None:
     first = binding_call(tmp_path, EXACT_BELL_REQUEST, bell_proposal())
     state_before = CurrentLoopCoordinator(workspace_root=tmp_path).store.read()
     rejected = binding_call(
         tmp_path,
-        EXACT_BELL_REQUEST,
-        bell_proposal(),
+        None,
         review_action="Use recommended choices",
-        displayed_review_revision="review-revision-" + "0" * 64,
+        prior_result_token="review-result-" + "0" * 64,
     )
     assert rejected["ok"] is False
-    assert rejected["category"] == "review_confirmation_stale_revision"
+    assert rejected["category"] == "review_confirmation_stale_token"
     assert rejected["state_mutated"] is False
     assert CurrentLoopCoordinator(workspace_root=tmp_path).store.read() == state_before
-    assert first["review_before_generation"]["review_revision"] != ("review-revision-" + "0" * 64)
+    assert first["prior_result_token"] != ("review-result-" + "0" * 64)
 
 
 def test_changed_material_choice_creates_new_revision(tmp_path: Path) -> None:
     first = binding_call(tmp_path, EXACT_BELL_REQUEST, bell_proposal())
     changed = bell_proposal()
-    changed["review_groups"][1]["items"][3]["value"] = (
+    changed["implementation_recommendations"][5] = (
         "Direct readable Python with explicit register names"
     )
-    changed["material_choices"][3]["recommended_value"] = (
+    changed["material_choices"][3]["recommendation"] = (
         "Direct readable Python with explicit register names"
     )
     revised = binding_call(
         tmp_path,
         EXACT_BELL_REQUEST,
         changed,
-        review_action="Review or change choices",
-        displayed_review_revision=first["review_before_generation"]["review_revision"],
+        prior_result_token=first["prior_result_token"],
     )
     assert revised["category"] == "review_before_generation_revised"
-    assert (
-        revised["prior_revision_invalidated"]
-        == (first["review_before_generation"]["review_revision"])
-    )
-    assert (
-        revised["review_before_generation"]["review_revision"]
-        != (first["review_before_generation"]["review_revision"])
-    )
+    assert revised["prior_result_token_invalidated"] is True
+    assert revised["prior_result_token"] != first["prior_result_token"]
     stale = binding_call(
         tmp_path,
-        EXACT_BELL_REQUEST,
-        changed,
+        None,
         review_action="Use recommended choices",
-        displayed_review_revision=first["review_before_generation"]["review_revision"],
+        prior_result_token=first["prior_result_token"],
     )
-    assert stale["category"] == "review_confirmation_stale_revision"
+    assert stale["category"] == "review_confirmation_stale_token"
     assert stale["state_mutated"] is False
 
 
@@ -422,7 +400,7 @@ def test_non_bell_proposals_are_concrete_without_correctness_or_execution_claims
         for term in ("circuit", "oracle", "diffusion", "ansatz", "correction")
     )
     assert first["confirmable"] is True
-    assert first["execution_performed"] is False
+    assert first["execution_permitted"] is False
     assert first["source_or_qasm_included"] is False
     assert any("correctness" in item["value"] for item in first["limitations_nonclaims"])
 
@@ -432,13 +410,10 @@ def test_non_bell_connected_assistant_class_matrix(case: dict[str, object]) -> N
     proposal = proposal_for(str(case["request"]), algorithm=str(case["algorithm"]))
     proposal["blocking_clarification"] = case.get("blocking_clarification")
     first = build_first_value(str(case["request"]), proposal)
-    assert first["semantic_axes"]["immediate_interaction"] == (
-        "review_proposed_intent_and_implementation"
-    )
     assert first["source_or_qasm_included"] is False
     assert first["execution_performed"] is False
     assert first["qcoder_authored_recommendation"] is False
-    assert first["review_revision"].startswith("review-revision-")
+    assert "review_revision" not in first
     if case["variant"] == "material_blocker":
         assert first["confirmable"] is False
         assert first["customer_actions"] == []
@@ -471,14 +446,7 @@ def test_source_modification_preserves_explicit_selected_identity_without_mutati
         "modifying the source."
     )
     proposal = proposal_for(request)
-    proposal["semantic_axes"].update(
-        {
-            "ultimate_outcome": "source_modification",
-            "immediate_interaction": "review_proposed_changes",
-            "temporal_order": "review_then_confirm_before_modification",
-            "review_object": "proposed_changes",
-        }
-    )
+    proposal["transaction_kind"] = "review_before_source_modification"
     result = binding_call(
         tmp_path,
         request,
@@ -501,14 +469,7 @@ def test_source_modification_without_selection_returns_specific_clarification(
         "Use qCoder to review proposed Qiskit implementation changes before modifying the source."
     )
     proposal = proposal_for(request)
-    proposal["semantic_axes"].update(
-        {
-            "ultimate_outcome": "source_modification",
-            "immediate_interaction": "review_proposed_changes",
-            "temporal_order": "review_then_confirm_before_modification",
-            "review_object": "proposed_changes",
-        }
-    )
+    proposal["transaction_kind"] = "review_before_source_modification"
     result = binding_call(tmp_path, request, proposal)
     assert result["ok"] is False
     assert result["category"] == "review_source_modification_selection_required"
@@ -572,9 +533,7 @@ def test_explicit_no_execution_cannot_be_broadened() -> None:
         "Use qCoder to review a Qiskit Bell program before generating source; do not execute it."
     )
     proposal = proposal_for(request)
-    proposal["semantic_axes"]["execution_authority"] = (
-        "explicitly_requested_requires_separate_authority"
-    )
+    proposal["execution_request"] = "held_for_separate_authorization"
     with pytest.raises(ReviewBeforeGenerationError, match="execution_authority_broadened"):
         validate_connected_assistant_proposal(request, proposal)
 
@@ -585,12 +544,12 @@ def test_mixed_generation_and_execution_keeps_authorities_separate() -> None:
         "separate authorization."
     )
     proposal = proposal_for(request)
-    proposal["semantic_axes"]["execution_authority"] = (
+    proposal["execution_request"] = "held_for_separate_authorization"
+    first = build_review_before_generation_semantics(request, proposal)
+    assert first["semantic_axes"]["generation_authority"] == ("held_for_exact_review_confirmation")
+    assert first["semantic_axes"]["execution_authority"] == (
         "explicitly_requested_requires_separate_authority"
     )
-    first = build_first_value(request, proposal)
-    assert first["generation_authority"] == "held_for_exact_review_confirmation"
-    assert first["execution_authority"] == "explicitly_requested_requires_separate_authority"
     assert first["execution_performed"] is False
 
 
@@ -603,19 +562,15 @@ def test_contradictory_generation_order_returns_one_specific_clarification() -> 
         validate_connected_assistant_proposal(request, proposal_for(request))
     assert caught.value.category == "review_request_authority_contradiction"
     assert caught.value.clarification == (
-        "Should source be produced now, or only after you confirm the proposed choices?"
+        "Should source be produced now, or only after you confirm the choices?"
     )
 
 
 def test_missing_bell_recommendation_is_rejected_not_authored_by_qcoder() -> None:
     proposal = bell_proposal()
-    proposal["review_groups"][1]["items"] = [
-        item
-        for item in proposal["review_groups"][1]["items"]
-        if item["item_id"] in {"dependency_version", "execution_environment"}
-    ]
+    proposal["implementation_recommendations"] = []
     proposal["material_choices"] = []
-    with pytest.raises(ReviewBeforeGenerationError, match="implementation_not_consequential"):
+    with pytest.raises(ReviewBeforeGenerationError, match="implementation_required"):
         validate_connected_assistant_proposal(EXACT_BELL_REQUEST, proposal)
 
 
@@ -623,14 +578,13 @@ def test_review_change_action_exposes_only_ordinary_material_choices(tmp_path: P
     first = binding_call(tmp_path, EXACT_BELL_REQUEST, bell_proposal())
     result = binding_call(
         tmp_path,
-        EXACT_BELL_REQUEST,
-        bell_proposal(),
+        None,
         review_action="Review or change choices",
-        displayed_review_revision=first["review_before_generation"]["review_revision"],
+        prior_result_token=first["prior_result_token"],
     )
-    assert result["category"] == "review_choices_unchanged"
-    assert result["internal_field_ids_exposed"] is False
-    assert {frozenset(item) for item in result["material_choice_fields"]} == {
+    assert result["category"] == "review_material_choices_ready"
+    assert result["internal_identifiers_exposed"] is False
+    assert {frozenset(item) for item in result["material_choices"]} == {
         frozenset({"label", "current_value"})
     }
     serialized = json.dumps(result, sort_keys=True)
@@ -642,8 +596,8 @@ def test_binding_descriptor_is_additive_and_inventory_remains_exact_12_plus_2() 
     descriptor = build_client_binding_descriptor(coordinator_prefix=["qcoder"])[
         "client_binding_contract"
     ]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v49"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 48
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v50"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 49
     assert descriptor["review_before_generation_contract"]["new_public_tool"] is False
     assert descriptor["review_before_generation_contract"]["new_private_operation"] is False
     assert len(EXPECTED_TOOLS) == 12
@@ -693,13 +647,17 @@ def test_local_timing_acceptance_population_passes_without_network() -> None:
         text=True,
     )
     result = json.loads(completed.stdout)
-    assert result["population_cases"] == 23
-    assert result["samples"] == 23
+    assert result["population_cases"] == 28
+    assert result["samples"] == 28
     assert result["scenario_counts"] == {
-        "review_first_value": 19,
+        "review_first_value": 20,
+        "confirmation_without_replay": 1,
         "duplicate_call": 1,
-        "stale_revision": 1,
+        "duplicate_confirmation": 1,
+        "generic_proposal_rejection": 1,
         "source_modification": 1,
+        "stale_token": 1,
+        "unsafe_content_rejection": 1,
         "direct_generation_control": 1,
     }
     assert result["connected_assistant_model"] == "not_measured_fixture_driven_automation"

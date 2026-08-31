@@ -84,7 +84,7 @@
     {
       "algorithm": "Grover",
       "case_id": "grover_reordered",
-      "request": "Create Grover Qiskit source after qCoder checks the oracle and diffusion plan with me.",
+      "request": "Use qCoder to check the oracle and diffusion plan with me, then create Grover Qiskit source after confirmation.",
       "variant": "reordered"
     },
     {
@@ -115,7 +115,7 @@
     {
       "algorithm": "Teleportation",
       "case_id": "teleportation_reordered",
-      "request": "Write Qiskit teleportation source after qCoder reviews the measurement and correction plan.",
+      "request": "Use qCoder to review the measurement and correction plan, then write Qiskit teleportation source after confirmation.",
       "variant": "reordered"
     },
     {
@@ -146,7 +146,7 @@
     {
       "algorithm": "QAOA",
       "case_id": "qaoa_reordered",
-      "request": "Create a QAOA Qiskit program after qCoder reviews the circuit-structure choices.",
+      "request": "Use qCoder to review the circuit-structure choices, then create a QAOA Qiskit program after confirmation.",
       "variant": "reordered"
     },
     {

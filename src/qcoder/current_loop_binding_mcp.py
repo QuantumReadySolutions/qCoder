@@ -43,8 +43,8 @@ from qcoder.review_before_generation import (
     proposal_input_schema as review_before_generation_proposal_input_schema,
 )
 
-BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v13"
-BINDING_MCP_SCHEMA_VERSION = 13
+BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v14"
+BINDING_MCP_SCHEMA_VERSION = 14
 BINDING_MCP_SERVER_NAME = "qcoder-current-loop"
 BEGIN_CURRENT_LOOP_TOOL_NAME = "begin_current_loop"
 COMPLETE_CURRENT_STEP_TOOL_NAME = "complete_current_step"
@@ -75,6 +75,13 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "customer-facing preface. Begin qCoder's bounded Current Loop, or interpret the "
                 "exact next instruction against an already complete-resumable loop. "
                 "Supply request_text exactly once as the complete unmodified customer message. "
+                "For review before source generation or modification, make the initial call with "
+                "that exact request and one concrete connected_assistant_proposal. Do not compute "
+                "a hash, invent group identifiers or labels, include source or QASM, or provide "
+                "qCoder authority text. Customer constraints must be exact request excerpts. "
+                "qCoder supplies structure, attribution, authority, revision, and actions. Later "
+                "confirm with only review_action and the opaque prior_result_token; do not replay "
+                "the proposal. Execution authority remains separate. "
                 "For an artifact-producing request, also supply one exact workspace-relative "
                 "intended_artifact_paths entry for every requested role on a fresh loop. For an "
                 "active-loop replacement, omit the path: qCoder binds the current registered "
@@ -144,17 +151,42 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                         "type": "string",
                         "enum": list(REVIEW_BEFORE_GENERATION_ACTIONS),
                         "description": (
-                            "An exact customer action against displayed_review_revision. Omit on "
-                            "the first review call."
+                            "Exact action for a stored review. Supply only with prior_result_token; "
+                            "do not replay the request digest, proposal, revision, or hidden fields."
                         ),
                     },
-                    "displayed_review_revision": {
+                    "prior_result_token": {
                         "type": "string",
-                        "pattern": "^review-revision-[0-9a-f]{64}$",
-                        "description": "Exact revision displayed to the customer.",
+                        "pattern": "^review-result-[0-9a-f]{64}$",
+                        "description": (
+                            "Opaque token returned by the prior review result. It is internal "
+                            "transport, not customer-visible content."
+                        ),
                     },
                 },
-                "required": ["request_text"],
+                "oneOf": [
+                    {
+                        "title": "Ordinary existing begin call",
+                        "required": ["request_text"],
+                        "not": {
+                            "anyOf": [
+                                {"required": ["connected_assistant_proposal"]},
+                                {"required": ["review_action"]},
+                                {"required": ["prior_result_token"]},
+                            ]
+                        },
+                    },
+                    {
+                        "title": "Initial or revised review-before-generation call",
+                        "required": ["request_text", "connected_assistant_proposal"],
+                        "not": {"required": ["review_action"]},
+                    },
+                    {
+                        "title": "Stored-review action call",
+                        "required": ["review_action", "prior_result_token"],
+                        "not": {"required": ["connected_assistant_proposal"]},
+                    },
+                ],
                 "additionalProperties": False,
             },
             "x-qcoder-binding-owned-internal-operation": True,
@@ -183,6 +215,11 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
             "x-qcoder-review-before-generation": {
                 "contract": review_before_generation_contract_snapshot(),
                 "first_call_arguments": ["request_text", "connected_assistant_proposal"],
+                "confirmation_call_arguments": ["review_action", "prior_result_token"],
+                "proposal_replay_on_confirmation": False,
+                "caller_supplies_request_digest": False,
+                "caller_supplies_group_ids_or_labels": False,
+                "qcoder_supplies_authority_and_attribution": True,
                 "one_operation_before_useful_review": True,
                 "protected_service_called": False,
                 "source_before_confirmation": False,
@@ -482,19 +519,15 @@ def handle_binding_jsonrpc_message(
         )
         return _result(message_id, _tool_result(payload))
 
-    if (
-        not isinstance(arguments, Mapping)
-        or set(arguments).difference(
-            {
-                "request_text",
-                "intended_artifact_paths",
-                "selected_artifact_paths",
-                "connected_assistant_proposal",
-                "review_action",
-                "displayed_review_revision",
-            }
-        )
-        or "request_text" not in arguments
+    if not isinstance(arguments, Mapping) or set(arguments).difference(
+        {
+            "request_text",
+            "intended_artifact_paths",
+            "selected_artifact_paths",
+            "connected_assistant_proposal",
+            "review_action",
+            "prior_result_token",
+        }
     ):
         return _result(
             message_id,
@@ -520,8 +553,31 @@ def handle_binding_jsonrpc_message(
                 }
             ),
         )
+    review_action = arguments.get("review_action")
+    prior_result_token = arguments.get("prior_result_token")
+    connected_assistant_proposal = arguments.get("connected_assistant_proposal")
+    is_review_action = review_action is not None
+    if is_review_action and (
+        review_action not in REVIEW_BEFORE_GENERATION_ACTIONS
+        or not isinstance(prior_result_token, str)
+        or re.fullmatch(r"review-result-[0-9a-f]{64}", prior_result_token) is None
+        or connected_assistant_proposal is not None
+    ):
+        return _result(
+            message_id,
+            _tool_result(
+                {
+                    "schema_id": "qcoder.current_loop.review_before_generation_rejection.v2",
+                    "schema_version": 2,
+                    "ok": False,
+                    "category": "review_action_and_prior_result_token_required",
+                    "state_mutated": False,
+                    "proposal_replay_required": False,
+                }
+            ),
+        )
     request_text = arguments.get("request_text")
-    if (
+    if not is_review_action and (
         not isinstance(request_text, str)
         or not request_text
         or len(request_text.encode("utf-8")) > MAX_REQUEST_BYTES
@@ -599,6 +655,41 @@ def handle_binding_jsonrpc_message(
                 ),
             )
         continuation = current_status == "complete_resumable"
+    if is_review_action:
+        try:
+            payload = coordinator.review_before_generation_transaction(
+                exact_request=(str(request_text) if isinstance(request_text, str) else None),
+                review_action=str(review_action),
+                prior_result_token=str(prior_result_token),
+            )
+        except ReviewBeforeGenerationError as exc:
+            return _result(
+                message_id,
+                _tool_result(
+                    {
+                        "schema_id": "qcoder.current_loop.review_before_generation_rejection.v2",
+                        "schema_version": 2,
+                        "ok": False,
+                        "category": exc.category,
+                        "state_mutated": False,
+                        "source_or_qasm_created": False,
+                        "file_mutation_performed": False,
+                        "execution_performed": False,
+                        "protected_service_called": False,
+                        "proposal_replay_required": False,
+                    }
+                ),
+            )
+        payload.setdefault("details", {}).update(
+            {
+                "structured_confirmation_transport": "project_local_binding_mcp",
+                "prior_result_token_received_once": True,
+                "connected_assistant_proposal_replayed": False,
+                "request_digest_received": False,
+                "protected_service_called": False,
+            }
+        )
+        return _result(message_id, _tool_result(payload))
     selected_paths_value = arguments.get("selected_artifact_paths")
     if selected_paths_value is not None and (
         not isinstance(selected_paths_value, list)
@@ -621,44 +712,7 @@ def handle_binding_jsonrpc_message(
             ),
         )
     selected_paths = list(selected_paths_value or [])
-    connected_assistant_proposal = arguments.get("connected_assistant_proposal")
-    review_action = arguments.get("review_action")
-    displayed_review_revision = arguments.get("displayed_review_revision")
-    if connected_assistant_proposal is None and (
-        review_action is not None or displayed_review_revision is not None
-    ):
-        return _result(
-            message_id,
-            _tool_result(
-                {
-                    "schema_id": "qcoder.current_loop.review_before_generation_rejection.v1",
-                    "schema_version": 1,
-                    "ok": False,
-                    "category": "review_connected_assistant_proposal_required",
-                    "state_mutated": False,
-                    "source_or_qasm_created": False,
-                    "file_mutation_performed": False,
-                    "execution_performed": False,
-                }
-            ),
-        )
     if connected_assistant_proposal is not None:
-        if arguments.get("intended_artifact_paths") is not None:
-            return _result(
-                message_id,
-                _tool_result(
-                    {
-                        "schema_id": ("qcoder.current_loop.review_before_generation_rejection.v1"),
-                        "schema_version": 1,
-                        "ok": False,
-                        "category": "review_before_generation_has_no_intended_output_path",
-                        "state_mutated": False,
-                        "source_or_qasm_created": False,
-                        "file_mutation_performed": False,
-                        "execution_performed": False,
-                    }
-                ),
-            )
         try:
             normalized_selected = (
                 normalize_selected_artifact_paths(
@@ -678,15 +732,39 @@ def handle_binding_jsonrpc_message(
                 for identity in selected_identities
             ):
                 raise ArtifactTargetError("review_selected_path_not_named_by_customer")
+            intended_value = arguments.get("intended_artifact_paths")
+            if intended_value is not None and not isinstance(intended_value, Mapping):
+                raise ArtifactTargetError("exact_intended_artifact_targets_required")
+            intended_input = dict(intended_value or {})
+            if set(intended_input) - {"source"}:
+                raise ArtifactTargetError("review_source_target_only")
+            if selected_identities and not intended_input:
+                intended_input = {"source": selected_identities[0]}
+            if not intended_input and re.search(
+                r"\b(?:workspace\s+)?file\b|(?<![\w./-])[\w.-]+\.py(?![\w./-])",
+                str(request_text),
+                re.IGNORECASE,
+            ):
+                raise ArtifactTargetError("review_source_target_required")
+            normalized_targets = normalize_intended_artifact_targets(
+                intended_input or None,
+                workspace_root=coordinator.workspace_root,
+                required_roles=("source",) if intended_input else (),
+            )
+            if any(
+                not _request_explicitly_selects_target(
+                    str(request_text), str(item["workspace_relative_path"])
+                )
+                for item in normalized_targets.values()
+            ):
+                raise ArtifactTargetError("review_source_target_not_named_by_customer")
             payload = coordinator.review_before_generation_transaction(
-                exact_request=request_text,
+                exact_request=str(request_text),
                 connected_assistant_proposal=connected_assistant_proposal,
                 selected_artifact_identities=selected_identities,
-                review_action=(str(review_action) if review_action is not None else None),
-                displayed_review_revision=(
-                    str(displayed_review_revision)
-                    if displayed_review_revision is not None
-                    else None
+                intended_artifact_targets=normalized_targets,
+                prior_result_token=(
+                    str(prior_result_token) if prior_result_token is not None else None
                 ),
             )
         except (ArtifactTargetError, ReviewBeforeGenerationError) as exc:
@@ -694,8 +772,8 @@ def handle_binding_jsonrpc_message(
                 message_id,
                 _tool_result(
                     {
-                        "schema_id": ("qcoder.current_loop.review_before_generation_rejection.v1"),
-                        "schema_version": 1,
+                        "schema_id": ("qcoder.current_loop.review_before_generation_rejection.v2"),
+                        "schema_version": 2,
                         "ok": False,
                         "category": str(getattr(exc, "category", exc)),
                         **(
@@ -719,6 +797,7 @@ def handle_binding_jsonrpc_message(
                 "structured_activation_transport": "project_local_binding_mcp",
                 "request_text_argument_received_once": True,
                 "connected_assistant_proposal_received_once": True,
+                "request_digest_received": False,
                 "shell_or_cli_transport_used": False,
                 "stdin_transport_used": False,
                 "public_context_bridge_tool": False,

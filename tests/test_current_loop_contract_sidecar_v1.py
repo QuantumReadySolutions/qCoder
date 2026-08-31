@@ -126,7 +126,7 @@ def test_binding_v10_delivers_sidecar_run_summary_and_evidence_domains(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     assert descriptor["contract_id"] == CLIENT_BINDING_CONTRACT_ID
-    assert descriptor["contract_id"].endswith(".v49")
+    assert descriptor["contract_id"].endswith(".v50")
     assert descriptor["contract_sidecar"]["schema_id"] == SIDECAR_SCHEMA_ID
     assert descriptor["run_summary_contract"]["schema_id"] == ("qcoder.current_loop.run_summary.v2")
     assert descriptor["evidence_view_contract"]["schema_id"] == (

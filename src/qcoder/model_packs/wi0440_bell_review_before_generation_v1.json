@@ -1,184 +1,51 @@
 {
   "blocking_clarification": null,
-  "deferred_choices": [
-    {
-      "attribution": "connected_assistant_recommendation",
-      "choice_id": "backend",
-      "deferred_value": "Deferred until execution is separately requested.",
-      "label": "Backend"
-    },
-    {
-      "attribution": "connected_assistant_recommendation",
-      "choice_id": "shots",
-      "deferred_value": "Deferred until execution is separately requested.",
-      "label": "Shots"
-    },
-    {
-      "attribution": "connected_assistant_recommendation",
-      "choice_id": "seed",
-      "deferred_value": "Deferred until execution is separately requested.",
-      "label": "Seed"
-    },
-    {
-      "attribution": "connected_assistant_recommendation",
-      "choice_id": "result_handling",
-      "deferred_value": "Deferred until execution is separately requested.",
-      "label": "Result handling"
-    }
+  "customer_constraints": [
+    "Qiskit program",
+    "prepares and measures a Φ+ Bell state",
+    "Before generating the code"
   ],
-  "exact_request_utf8_sha256": "36e3eee7860487a79680577ee20328d0112b43ffcdd7363c4667dd7cba265e33",
+  "deferred_choices": [
+    "Backend remains deferred until execution is separately requested.",
+    "Shots remain deferred until execution is separately requested.",
+    "Seed remains deferred until execution is separately requested.",
+    "Result handling remains deferred until execution is separately requested."
+  ],
+  "execution_request": "not_requested",
+  "implementation_recommendations": [
+    "Use Qiskit QuantumCircuit.",
+    "Use two qubits and two classical bits.",
+    "Apply H to q0.",
+    "Apply CX from q0 to q1.",
+    "Measure q0 to c0 and q1 to c1.",
+    "Produce direct readable Python."
+  ],
   "limitations_nonclaims": [
-    {
-      "attribution": "qcoder_deterministic_boundary",
-      "item_id": "no_entanglement_proof",
-      "value": "The example is not presented as proof of entanglement."
-    },
-    {
-      "attribution": "qcoder_deterministic_boundary",
-      "item_id": "no_correctness_claim",
-      "value": "The review does not claim algorithm correctness."
-    },
-    {
-      "attribution": "qcoder_deterministic_boundary",
-      "item_id": "no_hardware_claim",
-      "value": "The review makes no hardware-performance claim."
-    }
+    "The example is not presented as proof of entanglement.",
+    "The review does not claim algorithm correctness.",
+    "The review makes no hardware-performance claim."
   ],
   "material_choices": [
     {
-      "attribution": "connected_assistant_recommendation",
-      "choice_id": "framework",
-      "label": "Framework",
-      "recommended_value": "Qiskit"
+      "choice": "Framework",
+      "recommendation": "Qiskit"
     },
     {
-      "attribution": "connected_assistant_recommendation",
-      "choice_id": "construction",
-      "label": "Construction",
-      "recommended_value": "QuantumCircuit with H on q0 followed by CX from q0 to q1"
+      "choice": "Construction",
+      "recommendation": "QuantumCircuit with H on q0 followed by CX from q0 to q1"
     },
     {
-      "attribution": "connected_assistant_recommendation",
-      "choice_id": "measurement_mapping",
-      "label": "Measurement mapping",
-      "recommended_value": "Measure q0 to c0 and q1 to c1"
+      "choice": "Measurement mapping",
+      "recommendation": "Measure q0 to c0 and q1 to c1"
     },
     {
-      "attribution": "connected_assistant_recommendation",
-      "choice_id": "representation",
-      "label": "Representation",
-      "recommended_value": "Direct readable Python"
+      "choice": "Representation",
+      "recommendation": "Direct readable Python"
     }
   ],
-  "proposal_attribution": "connected_assistant",
+  "output_artifact": "Readable Python source after confirmation",
   "recommended_interpretation": "Create a minimal two-qubit Qiskit program that prepares |Φ+> = (|00> + |11>)/sqrt(2), measures both qubits in the computational basis, and produces readable Python only after the customer confirms the plan.",
-  "retention": "process_and_discard",
-  "review_groups": [
-    {
-      "group_id": "goal_and_scope",
-      "items": [
-        {
-          "attribution": "customer_explicit_constraint",
-          "item_id": "intended_artifact",
-          "label": "Intended artifact",
-          "value": "A minimal Bell-state preparation and measurement example in Python"
-        },
-        {
-          "attribution": "customer_explicit_constraint",
-          "item_id": "quantum_scope",
-          "label": "Quantum scope",
-          "value": "Two qubits preparing the Φ+ state"
-        },
-        {
-          "attribution": "connected_assistant_recommendation",
-          "item_id": "classical_scope",
-          "label": "Classical scope",
-          "value": "Two matching classical bits"
-        },
-        {
-          "attribution": "customer_explicit_constraint",
-          "item_id": "measurement_basis",
-          "label": "Measurement basis",
-          "value": "Computational-basis measurement"
-        }
-      ],
-      "label": "Goal and scope"
-    },
-    {
-      "group_id": "implementation",
-      "items": [
-        {
-          "attribution": "customer_explicit_constraint",
-          "item_id": "framework",
-          "label": "Framework",
-          "value": "Qiskit"
-        },
-        {
-          "attribution": "connected_assistant_recommendation",
-          "item_id": "construction",
-          "label": "Construction",
-          "value": "QuantumCircuit with H on q0 followed by CX from q0 to q1"
-        },
-        {
-          "attribution": "connected_assistant_recommendation",
-          "item_id": "measurement_mapping",
-          "label": "Measurement mapping",
-          "value": "Measure q0 to c0 and q1 to c1"
-        },
-        {
-          "attribution": "connected_assistant_recommendation",
-          "item_id": "output_structure",
-          "label": "Output structure",
-          "value": "Direct readable Python"
-        },
-        {
-          "attribution": "qcoder_deterministic_boundary",
-          "item_id": "dependency_version",
-          "label": "Dependency version",
-          "value": "No dependency version is selected silently"
-        },
-        {
-          "attribution": "qcoder_deterministic_boundary",
-          "item_id": "execution_environment",
-          "label": "Execution environment",
-          "value": "No execution environment is selected silently"
-        }
-      ],
-      "label": "Implementation"
-    },
-    {
-      "group_id": "output_and_authority",
-      "items": [
-        {
-          "attribution": "connected_assistant_recommendation",
-          "item_id": "artifact_after_confirmation",
-          "label": "Artifact after confirmation",
-          "value": "Python source only after the displayed revision is confirmed"
-        },
-        {
-          "attribution": "qcoder_deterministic_boundary",
-          "item_id": "generation_authority",
-          "label": "Generation authority",
-          "value": "Held for exact confirmation of this displayed revision"
-        },
-        {
-          "attribution": "qcoder_deterministic_boundary",
-          "item_id": "execution_authority",
-          "label": "Execution authority",
-          "value": "Not requested; any execution requires separate authorization"
-        }
-      ],
-      "label": "Output and authority"
-    }
-  ],
-  "schema_id": "qcoder.connected_assistant.review_before_generation_proposal.v1",
-  "schema_version": 1,
-  "semantic_axes": {
-    "execution_authority": "not_requested",
-    "generation_authority": "held_for_exact_review_confirmation",
-    "immediate_interaction": "review_proposed_intent_and_implementation",
-    "review_object": "proposed_intent_and_implementation",
-    "temporal_order": "review_then_confirm_before_generation",
-    "ultimate_outcome": "source_generation"
-  }
+  "schema_id": "qcoder.connected_assistant.review_before_generation_proposal.v2",
+  "schema_version": 2,
+  "transaction_kind": "review_before_source_generation"
 }
