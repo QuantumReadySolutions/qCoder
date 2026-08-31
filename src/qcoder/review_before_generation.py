@@ -641,6 +641,140 @@ def contract_snapshot() -> dict[str, Any]:
     }
 
 
+def proposal_input_schema() -> dict[str, Any]:
+    """Return the strict additive input schema carried by begin_current_loop."""
+
+    item = {
+        "type": "object",
+        "properties": {
+            "item_id": {"type": "string", "minLength": 1, "maxLength": 80},
+            "label": {"type": "string", "minLength": 1, "maxLength": 160},
+            "value": {"type": "string", "minLength": 1, "maxLength": 2000},
+            "attribution": {"type": "string", "enum": list(ITEM_ATTRIBUTIONS)},
+        },
+        "required": ["item_id", "label", "value", "attribution"],
+        "additionalProperties": False,
+    }
+    choice = {
+        "type": "object",
+        "properties": {
+            "choice_id": {"type": "string", "minLength": 1, "maxLength": 80},
+            "label": {"type": "string", "minLength": 1, "maxLength": 160},
+            "recommended_value": {"type": "string", "minLength": 1, "maxLength": 2000},
+            "attribution": {"type": "string", "enum": list(ITEM_ATTRIBUTIONS)},
+        },
+        "required": ["choice_id", "label", "recommended_value", "attribution"],
+        "additionalProperties": False,
+    }
+    deferred = deepcopy(choice)
+    deferred["properties"]["deferred_value"] = deferred["properties"].pop("recommended_value")
+    deferred["required"] = ["choice_id", "label", "deferred_value", "attribution"]
+    limitation = {
+        "type": "object",
+        "properties": {
+            "item_id": {"type": "string", "minLength": 1, "maxLength": 80},
+            "value": {"type": "string", "minLength": 1, "maxLength": 2000},
+            "attribution": {"type": "string", "enum": list(ITEM_ATTRIBUTIONS)},
+        },
+        "required": ["item_id", "value", "attribution"],
+        "additionalProperties": False,
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "schema_id": {"const": PROPOSAL_SCHEMA_ID},
+            "schema_version": {"const": 1},
+            "proposal_attribution": {"const": PROPOSAL_ATTRIBUTION},
+            "exact_request_utf8_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$",
+            },
+            "semantic_axes": {
+                "type": "object",
+                "properties": {
+                    "ultimate_outcome": {"type": "string", "enum": list(ULTIMATE_OUTCOMES)},
+                    "immediate_interaction": {
+                        "type": "string",
+                        "enum": list(IMMEDIATE_INTERACTIONS),
+                    },
+                    "temporal_order": {"type": "string", "enum": list(TEMPORAL_ORDERS)},
+                    "review_object": {"type": "string", "enum": list(REVIEW_OBJECTS)},
+                    "generation_authority": {
+                        "type": "string",
+                        "enum": list(GENERATION_AUTHORITIES),
+                    },
+                    "execution_authority": {
+                        "type": "string",
+                        "enum": list(EXECUTION_AUTHORITIES),
+                    },
+                },
+                "required": [
+                    "ultimate_outcome",
+                    "immediate_interaction",
+                    "temporal_order",
+                    "review_object",
+                    "generation_authority",
+                    "execution_authority",
+                ],
+                "additionalProperties": False,
+            },
+            "recommended_interpretation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4000,
+            },
+            "review_groups": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "group_id": {"type": "string"},
+                        "label": {"type": "string"},
+                        "items": {"type": "array", "minItems": 1, "maxItems": 24, "items": item},
+                    },
+                    "required": ["group_id", "label", "items"],
+                    "additionalProperties": False,
+                },
+            },
+            "material_choices": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 32,
+                "items": choice,
+            },
+            "deferred_choices": {"type": "array", "maxItems": 32, "items": deferred},
+            "limitations_nonclaims": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 32,
+                "items": limitation,
+            },
+            "blocking_clarification": {
+                "type": ["string", "null"],
+                "maxLength": 600,
+            },
+            "retention": {"const": "process_and_discard"},
+        },
+        "required": [
+            "schema_id",
+            "schema_version",
+            "proposal_attribution",
+            "exact_request_utf8_sha256",
+            "semantic_axes",
+            "recommended_interpretation",
+            "review_groups",
+            "material_choices",
+            "deferred_choices",
+            "limitations_nonclaims",
+            "blocking_clarification",
+            "retention",
+        ],
+        "additionalProperties": False,
+    }
+
+
 __all__ = [
     "CONTRACT_SCHEMA_ID",
     "CUSTOMER_ACTIONS",
@@ -653,6 +787,7 @@ __all__ = [
     "build_review_before_generation_semantics",
     "canonical_json",
     "contract_snapshot",
+    "proposal_input_schema",
     "render_first_value_markdown",
     "review_revision",
     "validate_connected_assistant_proposal",

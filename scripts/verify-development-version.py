@@ -13,10 +13,10 @@ except ModuleNotFoundError:  # pragma: no cover
 
 
 EXPECTED_SCHEMA = "qcoder.private_development_version.v1"
-EXPECTED_VERSION = "0.6.0a24.post0.dev2+openqasm3.local.evidence.v1"
-EXPECTED_PREDECESSOR = "0.6.0a24.post0.dev1+deterministic.evidence.usability.pack.v1"
+EXPECTED_VERSION = "0.6.0a24.post0.dev3+review.before.generation.v1"
+EXPECTED_PREDECESSOR = "0.6.0a24.post0.dev2+openqasm3.local.evidence.v1"
 EXPECTED_BASIS = "0.6.0a24"
-EXPECTED_WORK_IDENTITY = "QCODER_OSS_OPENQASM3_AND_LOCAL_EVIDENCE_HARDENING_MARATHON_V1"
+EXPECTED_WORK_IDENTITY = "WI0440_REVIEW_BEFORE_GENERATION_CONVERGENT_FIRST_VALUE_V1"
 
 
 def verify(root: Path) -> dict[str, object]:

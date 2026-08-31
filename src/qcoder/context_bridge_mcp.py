@@ -158,6 +158,9 @@ from qcoder.development_evidence import (
     RELATIONSHIP_DECLARATION_STATES,
 )
 from qcoder.d079_workflows import d079_orchestration_contract_snapshot
+from qcoder.review_before_generation import (
+    contract_snapshot as review_before_generation_contract_snapshot,
+)
 
 DEFAULT_BASE_URL = "https://preview-api.qcoder.ai"
 ROUTE_PATH = "/v0/internal/hosted-mcp/context"
@@ -185,8 +188,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 47
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v48"
+CLIENT_BINDING_SCHEMA_VERSION = 48
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v49"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -664,6 +667,7 @@ def build_client_binding_descriptor(
             "local_credential_profile_contract": credential_profile_contract_snapshot(),
             "customer_managed_connection_contract": _customer_managed_connection_contract(),
             "blueprint_first_value_dialogue_contract": first_value_dialogue_contract_snapshot(),
+            "review_before_generation_contract": review_before_generation_contract_snapshot(),
             "current_request_semantics_contract": semantics_contract_snapshot(),
             "artifact_target_contract": target_contract_snapshot(),
             "bounded_control_input_contract": bounded_control_contract_snapshot(),
@@ -1071,6 +1075,16 @@ begin_current_loop structured operation. Route Algorithm Blueprint / Generation 
 through the D-079 binding-owned workflow. Only unrelated bounded single capabilities fall through
 to an applicable MCP tool. Never silently activate or replace local orchestration with raw MCP
 choreography.
+
+REVIEW BEFORE GENERATION
+When the customer explicitly asks to review an interpretation or proposed implementation before
+source generation or source modification, call begin_current_loop once with the exact unchanged
+customer request and one separately attributed connected_assistant_proposal. The connected
+assistant supplies every substantive recommendation. qCoder validates exact request binding,
+authority, privacy, substantiveness, and revision integrity, then returns one display-ready review.
+Display its three groups and exact customer actions without adding another qCoder operation. Do not
+generate or modify source until the customer confirms the displayed revision. Confirmation of a
+generation plan never grants execution authority.
 
 ACTIVE-BUILD STRUCTURED ACTIVATION
 Call the project-local qcoder-current-loop begin_current_loop operation once with request_text set

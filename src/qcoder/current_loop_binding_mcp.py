@@ -36,9 +36,15 @@ from qcoder.current_step_contract import (
     derive_current_step_contract,
     quiet_customer_visibility_contract,
 )
+from qcoder.review_before_generation import (
+    CUSTOMER_ACTIONS as REVIEW_BEFORE_GENERATION_ACTIONS,
+    ReviewBeforeGenerationError,
+    contract_snapshot as review_before_generation_contract_snapshot,
+    proposal_input_schema as review_before_generation_proposal_input_schema,
+)
 
-BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v12"
-BINDING_MCP_SCHEMA_VERSION = 12
+BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v13"
+BINDING_MCP_SCHEMA_VERSION = 13
 BINDING_MCP_SERVER_NAME = "qcoder-current-loop"
 BEGIN_CURRENT_LOOP_TOOL_NAME = "begin_current_loop"
 COMPLETE_CURRENT_STEP_TOOL_NAME = "complete_current_step"
@@ -125,6 +131,28 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                             "pre-existing exact source satisfaction. Never discover paths."
                         ),
                     },
+                    "connected_assistant_proposal": {
+                        **review_before_generation_proposal_input_schema(),
+                        "description": (
+                            "Optional separately attributed, exact-request-bound semantic and "
+                            "implementation proposal for review before generation. The connected "
+                            "assistant supplies all substantive recommendations; qCoder validates "
+                            "and projects them deterministically."
+                        ),
+                    },
+                    "review_action": {
+                        "type": "string",
+                        "enum": list(REVIEW_BEFORE_GENERATION_ACTIONS),
+                        "description": (
+                            "An exact customer action against displayed_review_revision. Omit on "
+                            "the first review call."
+                        ),
+                    },
+                    "displayed_review_revision": {
+                        "type": "string",
+                        "pattern": "^review-revision-[0-9a-f]{64}$",
+                        "description": "Exact revision displayed to the customer.",
+                    },
                 },
                 "required": ["request_text"],
                 "additionalProperties": False,
@@ -151,6 +179,14 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "native_write_required": False,
                 "completion_arguments": {},
                 "artifact_disposition_derived_by_qcoder": "pre_existing_exact_artifact",
+            },
+            "x-qcoder-review-before-generation": {
+                "contract": review_before_generation_contract_snapshot(),
+                "first_call_arguments": ["request_text", "connected_assistant_proposal"],
+                "one_operation_before_useful_review": True,
+                "protected_service_called": False,
+                "source_before_confirmation": False,
+                "qcoder_authors_recommendations": False,
             },
             "x-qcoder-active-loop-continuation": {
                 "request_text": "<exact next customer message>",
@@ -449,7 +485,14 @@ def handle_binding_jsonrpc_message(
     if (
         not isinstance(arguments, Mapping)
         or set(arguments).difference(
-            {"request_text", "intended_artifact_paths", "selected_artifact_paths"}
+            {
+                "request_text",
+                "intended_artifact_paths",
+                "selected_artifact_paths",
+                "connected_assistant_proposal",
+                "review_action",
+                "displayed_review_revision",
+            }
         )
         or "request_text" not in arguments
     ):
@@ -467,6 +510,9 @@ def handle_binding_jsonrpc_message(
                         ),
                         "selected_artifact_paths": (
                             "bounded exact customer-named workspace-relative path list"
+                        ),
+                        "connected_assistant_proposal": (
+                            "optional exact-request-bound connected-assistant proposal"
                         ),
                     },
                     "state_mutated": False,
@@ -575,6 +621,112 @@ def handle_binding_jsonrpc_message(
             ),
         )
     selected_paths = list(selected_paths_value or [])
+    connected_assistant_proposal = arguments.get("connected_assistant_proposal")
+    review_action = arguments.get("review_action")
+    displayed_review_revision = arguments.get("displayed_review_revision")
+    if connected_assistant_proposal is None and (
+        review_action is not None or displayed_review_revision is not None
+    ):
+        return _result(
+            message_id,
+            _tool_result(
+                {
+                    "schema_id": "qcoder.current_loop.review_before_generation_rejection.v1",
+                    "schema_version": 1,
+                    "ok": False,
+                    "category": "review_connected_assistant_proposal_required",
+                    "state_mutated": False,
+                    "source_or_qasm_created": False,
+                    "file_mutation_performed": False,
+                    "execution_performed": False,
+                }
+            ),
+        )
+    if connected_assistant_proposal is not None:
+        if arguments.get("intended_artifact_paths") is not None:
+            return _result(
+                message_id,
+                _tool_result(
+                    {
+                        "schema_id": ("qcoder.current_loop.review_before_generation_rejection.v1"),
+                        "schema_version": 1,
+                        "ok": False,
+                        "category": "review_before_generation_has_no_intended_output_path",
+                        "state_mutated": False,
+                        "source_or_qasm_created": False,
+                        "file_mutation_performed": False,
+                        "execution_performed": False,
+                    }
+                ),
+            )
+        try:
+            normalized_selected = (
+                normalize_selected_artifact_paths(
+                    selected_paths,
+                    workspace_root=coordinator.workspace_root,
+                    minimum_count=1,
+                    maximum_count=2,
+                )
+                if selected_paths
+                else []
+            )
+            selected_identities = [
+                str(item["workspace_relative_path"]) for item in normalized_selected
+            ]
+            if any(
+                not _request_explicitly_selects_target(request_text, identity)
+                for identity in selected_identities
+            ):
+                raise ArtifactTargetError("review_selected_path_not_named_by_customer")
+            payload = coordinator.review_before_generation_transaction(
+                exact_request=request_text,
+                connected_assistant_proposal=connected_assistant_proposal,
+                selected_artifact_identities=selected_identities,
+                review_action=(str(review_action) if review_action is not None else None),
+                displayed_review_revision=(
+                    str(displayed_review_revision)
+                    if displayed_review_revision is not None
+                    else None
+                ),
+            )
+        except (ArtifactTargetError, ReviewBeforeGenerationError) as exc:
+            return _result(
+                message_id,
+                _tool_result(
+                    {
+                        "schema_id": ("qcoder.current_loop.review_before_generation_rejection.v1"),
+                        "schema_version": 1,
+                        "ok": False,
+                        "category": str(getattr(exc, "category", exc)),
+                        **(
+                            {"customer_clarification": exc.clarification}
+                            if isinstance(exc, ReviewBeforeGenerationError) and exc.clarification
+                            else {}
+                        ),
+                        "state_mutated": False,
+                        "source_or_qasm_created": False,
+                        "file_mutation_performed": False,
+                        "execution_performed": False,
+                        "protected_service_called": False,
+                        "raw_request_echoed": False,
+                        "raw_proposal_echoed": False,
+                        "workspace_discovery_performed": False,
+                    }
+                ),
+            )
+        payload.setdefault("details", {}).update(
+            {
+                "structured_activation_transport": "project_local_binding_mcp",
+                "request_text_argument_received_once": True,
+                "connected_assistant_proposal_received_once": True,
+                "shell_or_cli_transport_used": False,
+                "stdin_transport_used": False,
+                "public_context_bridge_tool": False,
+                "workspace_discovery_performed": False,
+                "protected_service_called": False,
+            }
+        )
+        return _result(message_id, _tool_result(payload))
     semantics = classify_current_request(
         request_text,
         active_loop=continuation,
