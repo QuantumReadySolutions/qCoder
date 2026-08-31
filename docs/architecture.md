@@ -22,6 +22,9 @@ The public `qcoder` package on `main` ships:
 - `qcoder review usability-pack` — an unpublished deterministic projection of explicitly selected
   local evidence into share-safe prompt, readiness, and intent views; it adds no evidence or intent
   authority, execution, discovery, model, network, or persistence.
+- The same explicit-file review paths accept the unpublished bounded OpenQASM 3 static-evidence
+  sidecar. Complete subset inputs may adapt to the existing circuit-manifestation schema; partial
+  inputs remain sidecar evidence and never masquerade as complete `CircuitIR`.
 - `qcoder explorer status`, `qcoder explorer demo`, and `qcoder explorer evidence` — primary Explorer Beta commands for account-backed status, built-in evidence, and derived-context custom evidence checks. `qcoder student ...` remains a compatibility alias during beta.
 - `qcoder pro` — archived pilot/client-contract plumbing only. Pro is not launched and is not a current public product path.
 
@@ -31,9 +34,11 @@ qCoder OSS commands are local/offline after package installation: no LLM calls, 
 
 The local-evidence review accepts explicit files only. It rejects directories, performs no glob or
 recursive discovery, does not inspect hidden files or follow imports, and creates no background
-state. It composes Development Evidence v0, bounded OpenQASM 2/CircuitIR facts, factual Run Summary
-v2, and Help v2. OpenQASM 3 is recognized as unsupported and is not sent through the OpenQASM 2
-parser. Active-loop registry semantics remain with Current Loop and are not projected into OSS.
+state. It composes Development Evidence v0, bounded OpenQASM 2/CircuitIR facts, the unpublished
+bounded OpenQASM 3 sidecar, factual Run Summary v2, and Help v2. OpenQASM 2 retains its established
+parser. OpenQASM 3 is routed to a separate standard-library-only bounded parser; partial evidence
+cannot enter complete-CircuitIR consumers. Active-loop registry semantics remain with Current Loop
+and are not projected into OSS.
 
 Portable JSON and Markdown artifacts are intended for humans, chat LLMs, and coding tools to consume in user-managed workflows. Ordinary local reports can include customer filenames and paths and are for local inspection; use the applicable share-safe output before sharing. Local OSS artifacts remain independent of hosted integrations. For eligible Explorer users, the separately documented Context Bridge adapter carries bounded current-session Evidence Review tools into Cursor, Claude Code, and Codex. ChatGPT remains a manual share-safe Prompt Context handoff rather than a connected Context Bridge client.
 

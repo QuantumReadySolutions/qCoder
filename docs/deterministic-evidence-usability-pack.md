@@ -24,9 +24,11 @@ explicit or confirmed intent artifact exists; the intent view then says that int
 
 Inputs are only the files named on the command line. Directories, globs, hidden-file discovery,
 neighboring files, imports, repositories, models, clients, credentials, services, and network
-resources are not consulted. Python is parsed statically and OpenQASM 2 is inspected without
-executing source or circuits. Output carries content digests and artifact kinds instead of local
-absolute paths.
+resources are not consulted. Python, OpenQASM 2, and the documented bounded OpenQASM 3.0 subset are
+inspected statically without executing source or circuits. Partial OpenQASM 3 facts retain their
+exactness qualification: affected readiness checks cannot be `ready`, supported findings include
+only exact established facts, and unsupported regions remain limitations or unsupported
+statements. Output carries content digests and artifact kinds instead of local absolute paths.
 
 The readiness dispositions are `ready`, `warning`, `missing_evidence`, `unsupported`, and
 `not_applicable`. They report only facts supported by current local evidence rules. They do not

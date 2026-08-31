@@ -201,9 +201,11 @@ qcoder review local-evidence examples/circuits/bell.qasm --local-help
 
 The report presents review scope, provenance, bounded QASM and circuit facts, Python-only motif
 evidence, the canonical factual Run Summary when supplied results are present, limitations,
-unsupported states, share-safe choices, and exact next actions. OpenQASM 2 evidence extraction is
-bounded. OpenQASM 3 is recognized but evidence extraction is not supported; it is never passed to
-the OpenQASM 2 parser or reported as a complete circuit.
+unsupported states, share-safe choices, and exact next actions. OpenQASM 2 behavior remains
+unchanged. This private development candidate also extracts bounded static evidence from the
+explicitly supported OpenQASM 3.0 subset of one explicitly selected file. Unsupported constructs
+remain visible and qualify or withhold dependent facts; partial evidence is never reported as a
+complete circuit. qCoder does not execute the source or circuit.
 
 No qCoder account, no qCoder token, no Explorer service, and no MCP connection are required. The
 local report does not establish IDE/client qualification. It creates no project memory or hidden
@@ -253,6 +255,26 @@ qcoder review usability-pack \
 This surface is part of the private unpublished development candidate, not public qCoder 0.6.0a24.
 See [`docs/deterministic-evidence-usability-pack.md`](docs/deterministic-evidence-usability-pack.md)
 and the checked Bell replay for boundaries and expected output.
+
+### Bounded OpenQASM 3 static evidence (unpublished development candidate)
+
+Use the existing explicit-file review surfaces; no new top-level command is added:
+
+```bash
+qcoder review local-evidence examples/openqasm3_static_evidence/bell.qasm3
+qcoder review usability-pack \
+  examples/openqasm3_static_evidence/bell.qasm3 \
+  --out-dir openqasm3-evidence-output
+```
+
+The one additive sidecar is `qcoder.openqasm3_static_evidence.v1`, produced by
+`qcoder.openqasm3.bounded_parser.v1` with package-owned
+`qcoder.openqasm3.stdgates_3_0.v1`. It accepts `OPENQASM 3;` and `OPENQASM 3.0;`, the exact
+`stdgates.inc` include, and the documented bounded static subset. It does not open include files,
+scan a repository, execute or convert source, infer intent or motifs, contact a model or service,
+or claim full OpenQASM 3 support. See
+[`docs/openqasm3-static-evidence.md`](docs/openqasm3-static-evidence.md) for the exact subset,
+partiality rules, diagnostics, and checked examples.
 
 ### Explorer Evidence Review
 

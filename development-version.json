@@ -1,6 +1,6 @@
 {
-  "basis_commit": "c00037a86352de3ccca40edc118acadb199fae5d",
-  "basis_tree": "f660574ae6fc4636450ca900a76873b2c03befaa",
+  "basis_commit": "698168155050e3e3a60e85a8ee98766e467cb60e",
+  "basis_tree": "9f8985b9e8158a1aca49e6e0251c4dd76225bcfd",
   "basis_version": "0.6.0a24",
   "binding": "qcoder.connected_assistant.client_binding.v48",
   "binding_schema": 47,
@@ -9,6 +9,6 @@
   "public_release_record_preserved_in": "release-version.json",
   "public_successor_selected": false,
   "schema_id": "qcoder.private_development_version.v1",
-  "version": "0.6.0a24.post0.dev1+deterministic.evidence.usability.pack.v1",
-  "work_identity": "QCODER_DETERMINISTIC_EVIDENCE_USABILITY_PACK_V1"
+  "version": "0.6.0a24.post0.dev2+openqasm3.local.evidence.v1",
+  "work_identity": "QCODER_OSS_OPENQASM3_AND_LOCAL_EVIDENCE_HARDENING_MARATHON_V1"
 }

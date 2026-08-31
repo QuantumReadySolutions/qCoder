@@ -13,9 +13,10 @@ except ModuleNotFoundError:  # pragma: no cover
 
 
 EXPECTED_SCHEMA = "qcoder.private_development_version.v1"
-EXPECTED_VERSION = "0.6.0a24.post0.dev1+deterministic.evidence.usability.pack.v1"
+EXPECTED_VERSION = "0.6.0a24.post0.dev2+openqasm3.local.evidence.v1"
+EXPECTED_PREDECESSOR = "0.6.0a24.post0.dev1+deterministic.evidence.usability.pack.v1"
 EXPECTED_BASIS = "0.6.0a24"
-EXPECTED_WORK_IDENTITY = "QCODER_DETERMINISTIC_EVIDENCE_USABILITY_PACK_V1"
+EXPECTED_WORK_IDENTITY = "QCODER_OSS_OPENQASM3_AND_LOCAL_EVIDENCE_HARDENING_MARATHON_V1"
 
 
 def verify(root: Path) -> dict[str, object]:
@@ -61,8 +62,9 @@ def verify(root: Path) -> dict[str, object]:
     if development.get("public_successor_selected") is not False:
         raise ValueError("development_public_successor_must_remain_unselected")
     candidate = Version(EXPECTED_VERSION)
+    predecessor = Version(EXPECTED_PREDECESSOR)
     basis = Version(EXPECTED_BASIS)
-    if candidate <= basis or not candidate.is_devrelease:
+    if candidate <= basis or candidate <= predecessor or not candidate.is_devrelease:
         raise ValueError("development_version_pep440_ordering_invalid")
     if candidate.release != basis.release or candidate.pre != basis.pre:
         raise ValueError("development_public_successor_selected")
@@ -73,6 +75,7 @@ def verify(root: Path) -> dict[str, object]:
         "public_release_record_unchanged": True,
         "publication_permitted": False,
         "pep440_ordering_after_basis": True,
+        "pep440_ordering_after_private_predecessor": True,
         "development_release": True,
         "public_successor_selected": False,
     }

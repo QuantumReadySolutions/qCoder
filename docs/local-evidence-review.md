@@ -53,6 +53,11 @@ not qualified by this package and require separate platform-specific proof.
 - **OpenQASM 2:** bounded parser and CircuitIR/circuit-manifestation facts, including registers,
   operations, measurements, width, depth, and visible custom/unknown-construct qualifications.
   QASM does not produce motif evidence.
+- **Bounded OpenQASM 3 static evidence (unpublished candidate):** one explicit UTF-8 file using
+  `OPENQASM 3;` or `OPENQASM 3.0;` and the documented supported subset. The report carries the
+  `qcoder.openqasm3_static_evidence.v1` sidecar, construct classifications, derived-fact exactness,
+  bounded diagnostics, and a complete CircuitIR only when every occurrence is supported. It emits
+  no motif or intent evidence and does not execute or convert the source.
 - **Supplied counts/run-result JSON:** factual result manifestation and the canonical Run Summary
   v2, including observed shots, bounded dominant outcomes, supplied execution metadata, warnings,
   and missing metadata. qCoder does not execute a simulator, backend, or QPU.
@@ -65,10 +70,12 @@ a concise customer-facing message or visible unsupported state, not a Python tra
 
 ### OpenQASM 3 boundary
 
-OpenQASM 3 evidence extraction is not supported in qCoder 0.6.0a9. A declared OpenQASM 3 header is
-recognized, but the input is not passed through the OpenQASM 2 parser and no partial circuit facts
-are presented as complete. The report directs the customer to supply supported OpenQASM 2,
-explicitly selected Python/Qiskit source, or supported counts JSON. No OpenQASM 3 parser is added.
+This private unpublished candidate extracts only the bounded static subset documented in
+[`openqasm3-static-evidence.md`](openqasm3-static-evidence.md). It does not claim full language
+support, execution, conversion, dynamic-circuit support, semantic equivalence, correctness,
+expected output, hardware suitability, runtime, resources, fidelity, shots, or statistical
+sufficiency. Recognized unsupported and unrecognized occurrences are ledgered; recoverable
+malformed occurrences are never repaired; fatal boundary uncertainty yields no complete circuit.
 
 ## Understand the report
 
