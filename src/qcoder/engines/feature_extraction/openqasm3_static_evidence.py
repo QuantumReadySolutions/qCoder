@@ -328,7 +328,7 @@ def validate_openqasm3_static_evidence(value: object) -> None:
         )
         if (
             not isinstance(item["construct_id"], str)
-            or not re.fullmatch(r"construct-[0-9]{4}", item["construct_id"])
+            or not re.fullmatch(r"construct-[0-9]{4,5}", item["construct_id"])
             or item["construct_id"] in construct_ids
             or not isinstance(item["family"], str)
             or not item["family"]

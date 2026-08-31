@@ -1,0 +1,12 @@
+OPENQASM 3.0;
+qubit q;
+delay[10] q;
+box { U(0, 0, 0) q; }
+duration duration_value;
+stretch stretch_value;
+durationof({ U(0, 0, 0) q; });
+defcalgrammar "openpulse";
+cal { play; }
+defcal x q { play; }
+pragma vendor value;
+nop;

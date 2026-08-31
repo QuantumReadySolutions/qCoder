@@ -28,8 +28,8 @@ from .openqasm3_static_evidence import (
 
 
 MAX_SOURCE_BYTES = 100_000
-MAX_TOKENS = 20_000
-MAX_STATEMENTS = 4_000
+MAX_TOKENS = 40_000
+MAX_STATEMENTS = 12_000
 MAX_DECLARATIONS = 1_000
 MAX_OPERATIONS = 10_000
 MAX_NESTING_DEPTH = 32
@@ -39,7 +39,7 @@ MAX_MODIFIER_DEPTH = 8
 MAX_BROADCAST_EXPANSION = 4_096
 MAX_RECOVERY_EVENTS = 128
 MAX_DIAGNOSTICS = 512
-MAX_LEDGER_ENTRIES = 4_096
+MAX_LEDGER_ENTRIES = 12_000
 
 PARSER_LIMITS = {
     "source_bytes": MAX_SOURCE_BYTES,
@@ -533,6 +533,7 @@ class _Parser:
         start = self.position
         paren = 0
         bracket = 0
+        brace = 0
         while self.position < len(self.tokens):
             token = self.tokens[self.position]
             if token.value == "(":
@@ -543,10 +544,14 @@ class _Parser:
                 bracket += 1
             elif token.value == "]":
                 bracket -= 1
-            elif token.value in {"{", "}"} and paren == 0 and bracket == 0:
-                return None
+            elif token.value == "{":
+                brace += 1
+            elif token.value == "}":
+                if brace == 0:
+                    return None
+                brace -= 1
             self.position += 1
-            if token.value == ";" and paren == 0 and bracket == 0:
+            if token.value == ";" and paren == 0 and bracket == 0 and brace == 0:
                 self.statement_count += 1
                 if self.statement_count > MAX_STATEMENTS:
                     self._fatal(
@@ -1026,7 +1031,11 @@ class _Parser:
                     break
                 resolved.append(indexes)
             if reference_error:
-                classification = "partially_supported"
+                classification = (
+                    "recognized_but_unsupported"
+                    if reference_error == "unsupported_construct"
+                    else "partially_supported"
+                )
                 category = reference_error
                 limitation = "At least one operation target is not statically resolvable."
         expansion = 1
@@ -1204,7 +1213,12 @@ class _Parser:
             gate.support = "recognized_but_unsupported"
         for statement in body_statements:
             first = statement[0].value if statement else ""
-            if first in _RECOGNIZED_UNSUPPORTED or first in {"measure", "reset", "barrier"}:
+            if first in _RECOGNIZED_UNSUPPORTED or first in {
+                "include",
+                "measure",
+                "reset",
+                "barrier",
+            }:
                 self._add_construct(
                     family="custom_gate_body_unsupported",
                     name=first,
@@ -1273,10 +1287,17 @@ class _Parser:
                 break
             resolved.extend(indexes)
         valid = bool(groups) and error is None
+        classification = (
+            "supported"
+            if valid
+            else "recognized_but_unsupported"
+            if error == "unsupported_construct"
+            else "partially_supported"
+        )
         row = self._add_construct(
             family=family,
             name=tokens[0].value,
-            classification="supported" if valid else "partially_supported",
+            classification=classification,
             tokens=tokens,
             established=("The operation family and explicit target forms were identified.",),
             unavailable=()

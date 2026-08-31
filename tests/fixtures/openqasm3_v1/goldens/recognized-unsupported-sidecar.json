@@ -1,0 +1,622 @@
+{
+  "artifact_label": "timing_calibration_extensions.qasm3",
+  "circuit_ir": null,
+  "classical_declarations": [],
+  "construct_ledger": [
+    {
+      "classification": "supported",
+      "construct_id": "construct-0001",
+      "dependent_fact_effects": [],
+      "established": [
+        "A qubit declaration with static size 1 was established."
+      ],
+      "family": "qubit_declaration",
+      "name": "q",
+      "span": {
+        "end_column": 9,
+        "end_line": 2,
+        "start_column": 1,
+        "start_line": 2
+      },
+      "unavailable": []
+    },
+    {
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0002",
+      "dependent_fact_effects": [
+        "Every potentially affected structural fact is qualified or withheld."
+      ],
+      "established": [
+        "The construct family, presence, and source span were identified."
+      ],
+      "family": "timing_delay",
+      "name": "delay",
+      "span": {
+        "end_column": 13,
+        "end_line": 3,
+        "start_column": 1,
+        "start_line": 3
+      },
+      "unavailable": [
+        "The construct semantics and body effects were not interpreted."
+      ]
+    },
+    {
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0003",
+      "dependent_fact_effects": [
+        "Every potentially affected structural fact is qualified or withheld."
+      ],
+      "established": [
+        "The construct family, presence, and source span were identified."
+      ],
+      "family": "timing_box",
+      "name": "box",
+      "span": {
+        "end_column": 22,
+        "end_line": 4,
+        "start_column": 1,
+        "start_line": 4
+      },
+      "unavailable": [
+        "The construct semantics and body effects were not interpreted."
+      ]
+    },
+    {
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0004",
+      "dependent_fact_effects": [
+        "Every potentially affected structural fact is qualified or withheld."
+      ],
+      "established": [
+        "The construct family, presence, and source span were identified."
+      ],
+      "family": "duration",
+      "name": "duration",
+      "span": {
+        "end_column": 25,
+        "end_line": 5,
+        "start_column": 1,
+        "start_line": 5
+      },
+      "unavailable": [
+        "The construct semantics and body effects were not interpreted."
+      ]
+    },
+    {
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0005",
+      "dependent_fact_effects": [
+        "Every potentially affected structural fact is qualified or withheld."
+      ],
+      "established": [
+        "The construct family, presence, and source span were identified."
+      ],
+      "family": "stretch",
+      "name": "stretch",
+      "span": {
+        "end_column": 23,
+        "end_line": 6,
+        "start_column": 1,
+        "start_line": 6
+      },
+      "unavailable": [
+        "The construct semantics and body effects were not interpreted."
+      ]
+    },
+    {
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0006",
+      "dependent_fact_effects": [
+        "Every potentially affected structural fact is qualified or withheld."
+      ],
+      "established": [
+        "The construct family, presence, and source span were identified."
+      ],
+      "family": "durationof",
+      "name": "durationof",
+      "span": {
+        "end_column": 31,
+        "end_line": 7,
+        "start_column": 1,
+        "start_line": 7
+      },
+      "unavailable": [
+        "The construct semantics and body effects were not interpreted."
+      ]
+    },
+    {
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0007",
+      "dependent_fact_effects": [
+        "Every potentially affected structural fact is qualified or withheld."
+      ],
+      "established": [
+        "The construct family, presence, and source span were identified."
+      ],
+      "family": "calibration_grammar",
+      "name": "defcalgrammar",
+      "span": {
+        "end_column": 27,
+        "end_line": 8,
+        "start_column": 1,
+        "start_line": 8
+      },
+      "unavailable": [
+        "The construct semantics and body effects were not interpreted."
+      ]
+    },
+    {
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0008",
+      "dependent_fact_effects": [
+        "Every potentially affected structural fact is qualified or withheld."
+      ],
+      "established": [
+        "The construct family, presence, and source span were identified."
+      ],
+      "family": "calibration",
+      "name": "cal",
+      "span": {
+        "end_column": 14,
+        "end_line": 9,
+        "start_column": 1,
+        "start_line": 9
+      },
+      "unavailable": [
+        "The construct semantics and body effects were not interpreted."
+      ]
+    },
+    {
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0009",
+      "dependent_fact_effects": [
+        "Every potentially affected structural fact is qualified or withheld."
+      ],
+      "established": [
+        "The construct family, presence, and source span were identified."
+      ],
+      "family": "calibration",
+      "name": "defcal",
+      "span": {
+        "end_column": 21,
+        "end_line": 10,
+        "start_column": 1,
+        "start_line": 10
+      },
+      "unavailable": [
+        "The construct semantics and body effects were not interpreted."
+      ]
+    },
+    {
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0010",
+      "dependent_fact_effects": [
+        "Every potentially affected structural fact is qualified or withheld."
+      ],
+      "established": [
+        "The construct family, presence, and source span were identified."
+      ],
+      "family": "pragma",
+      "name": "pragma",
+      "span": {
+        "end_column": 21,
+        "end_line": 11,
+        "start_column": 1,
+        "start_line": 11
+      },
+      "unavailable": [
+        "The construct semantics and body effects were not interpreted."
+      ]
+    },
+    {
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0011",
+      "dependent_fact_effects": [
+        "Every potentially affected structural fact is qualified or withheld."
+      ],
+      "established": [
+        "The construct family, presence, and source span were identified."
+      ],
+      "family": "later_version_construct",
+      "name": "nop",
+      "span": {
+        "end_column": 5,
+        "end_line": 12,
+        "start_column": 1,
+        "start_line": 12
+      },
+      "unavailable": [
+        "The construct semantics and body effects were not interpreted."
+      ]
+    }
+  ],
+  "custom_gates": [],
+  "declared_language_version": "3.0",
+  "derived_facts": {
+    "classical_width": {
+      "exactness": "exact",
+      "value": 0
+    },
+    "depth": {
+      "exactness": "not_established",
+      "value": null
+    },
+    "gate_statistics": {
+      "exactness": "partial",
+      "value": {}
+    },
+    "interaction_graph": {
+      "exactness": "partial",
+      "value": []
+    },
+    "measurement_count": {
+      "exactness": "lower_bound",
+      "value": 0
+    },
+    "operation_count": {
+      "exactness": "lower_bound",
+      "value": 0
+    },
+    "quantum_width": {
+      "exactness": "exact",
+      "value": 1
+    }
+  },
+  "diagnostics": [
+    {
+      "category": "unsupported_construct",
+      "construct_id": "construct-0002",
+      "message": "The construct is recognized but outside the bounded static subset.",
+      "severity": "limitation",
+      "span": {
+        "end_column": 13,
+        "end_line": 3,
+        "start_column": 1,
+        "start_line": 3
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "construct_id": "construct-0003",
+      "message": "The construct is recognized but outside the bounded static subset.",
+      "severity": "limitation",
+      "span": {
+        "end_column": 22,
+        "end_line": 4,
+        "start_column": 1,
+        "start_line": 4
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "construct_id": "construct-0004",
+      "message": "The construct is recognized but outside the bounded static subset.",
+      "severity": "limitation",
+      "span": {
+        "end_column": 25,
+        "end_line": 5,
+        "start_column": 1,
+        "start_line": 5
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "construct_id": "construct-0005",
+      "message": "The construct is recognized but outside the bounded static subset.",
+      "severity": "limitation",
+      "span": {
+        "end_column": 23,
+        "end_line": 6,
+        "start_column": 1,
+        "start_line": 6
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "construct_id": "construct-0006",
+      "message": "The construct is recognized but outside the bounded static subset.",
+      "severity": "limitation",
+      "span": {
+        "end_column": 31,
+        "end_line": 7,
+        "start_column": 1,
+        "start_line": 7
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "construct_id": "construct-0007",
+      "message": "The construct is recognized but outside the bounded static subset.",
+      "severity": "limitation",
+      "span": {
+        "end_column": 27,
+        "end_line": 8,
+        "start_column": 1,
+        "start_line": 8
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "construct_id": "construct-0008",
+      "message": "The construct is recognized but outside the bounded static subset.",
+      "severity": "limitation",
+      "span": {
+        "end_column": 14,
+        "end_line": 9,
+        "start_column": 1,
+        "start_line": 9
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "construct_id": "construct-0009",
+      "message": "The construct is recognized but outside the bounded static subset.",
+      "severity": "limitation",
+      "span": {
+        "end_column": 21,
+        "end_line": 10,
+        "start_column": 1,
+        "start_line": 10
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "construct_id": "construct-0010",
+      "message": "The construct is recognized but outside the bounded static subset.",
+      "severity": "limitation",
+      "span": {
+        "end_column": 21,
+        "end_line": 11,
+        "start_column": 1,
+        "start_line": 11
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "construct_id": "construct-0011",
+      "message": "The construct is recognized but outside the bounded static subset.",
+      "severity": "limitation",
+      "span": {
+        "end_column": 5,
+        "end_line": 12,
+        "start_column": 1,
+        "start_line": 12
+      }
+    }
+  ],
+  "fatal_error": null,
+  "file_status": "partial",
+  "include_ledger": [],
+  "intent_inferred": false,
+  "limitations": [
+    "Only the D-118 bounded static OpenQASM 3.0 subset is interpreted.",
+    "Unsupported, unrecognized, and recovered-malformed regions qualify or withhold dependent facts.",
+    "Custom-gate bodies are preserved structurally and are not recursively expanded.",
+    "The selected file is partial evidence and is not a complete CircuitIR projection."
+  ],
+  "measurements": [],
+  "modifier_chains": [],
+  "motif_evidence_emitted": false,
+  "network_accessed": false,
+  "non_claims": [
+    "No source or circuit was executed.",
+    "This is not full OpenQASM 3 language support or a language-compliance claim.",
+    "No conversion, semantic equivalence, algorithm correctness, or expected output was established.",
+    "No hardware compatibility, backend suitability, runtime, resource, fidelity, shot-count, or statistical-sufficiency conclusion was established.",
+    "Observed OpenQASM structure does not establish user intent, author intent, or algorithm identity."
+  ],
+  "parser_identity": "qcoder.openqasm3.bounded_parser.v1",
+  "parser_limits": {
+    "broadcast_expansion": {
+      "maximum": 4096,
+      "observed": 0,
+      "status": "within_limit"
+    },
+    "construct_ledger_entries": {
+      "maximum": 12000,
+      "observed": 11,
+      "status": "within_limit"
+    },
+    "custom_gates": {
+      "maximum": 256,
+      "observed": 0,
+      "status": "within_limit"
+    },
+    "declarations": {
+      "maximum": 1000,
+      "observed": 1,
+      "status": "within_limit"
+    },
+    "diagnostics": {
+      "maximum": 512,
+      "observed": 10,
+      "status": "within_limit"
+    },
+    "expression_depth": {
+      "maximum": 32,
+      "observed": 3,
+      "status": "within_limit"
+    },
+    "modifier_depth": {
+      "maximum": 8,
+      "observed": 0,
+      "status": "within_limit"
+    },
+    "nesting_depth": {
+      "maximum": 32,
+      "observed": 3,
+      "status": "within_limit"
+    },
+    "operations": {
+      "maximum": 10000,
+      "observed": 0,
+      "status": "within_limit"
+    },
+    "recovery_events": {
+      "maximum": 128,
+      "observed": 0,
+      "status": "within_limit"
+    },
+    "source_bytes": {
+      "maximum": 100000,
+      "observed": 225,
+      "status": "within_limit"
+    },
+    "statements": {
+      "maximum": 12000,
+      "observed": 12,
+      "status": "within_limit"
+    },
+    "tokens": {
+      "maximum": 40000,
+      "observed": 68,
+      "status": "within_limit"
+    }
+  },
+  "quantum_declarations": [
+    {
+      "base": 0,
+      "name": "q",
+      "size": 1,
+      "span": {
+        "end_column": 9,
+        "end_line": 2,
+        "start_column": 1,
+        "start_line": 2
+      },
+      "support": "supported"
+    }
+  ],
+  "raw_source_included": false,
+  "recovery_ledger": [],
+  "repository_scanned": false,
+  "schema_id": "qcoder.openqasm3_static_evidence.v1",
+  "schema_version": 1,
+  "selection_provenance": "explicit_file_argument",
+  "source_or_circuit_executed": false,
+  "source_sha256": "407101c45adf37e0999f6258cf1d28a7c9e2ec2bdcb286ca11fc6b65acd953b0",
+  "standard_gate_vocabulary_identity": "qcoder.openqasm3.stdgates_3_0.v1",
+  "unsupported_region_ledger": [
+    {
+      "category": "unsupported_construct",
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0002",
+      "limitation": "The construct is recognized but outside the bounded static subset.",
+      "span": {
+        "end_column": 13,
+        "end_line": 3,
+        "start_column": 1,
+        "start_line": 3
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0003",
+      "limitation": "The construct is recognized but outside the bounded static subset.",
+      "span": {
+        "end_column": 22,
+        "end_line": 4,
+        "start_column": 1,
+        "start_line": 4
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0004",
+      "limitation": "The construct is recognized but outside the bounded static subset.",
+      "span": {
+        "end_column": 25,
+        "end_line": 5,
+        "start_column": 1,
+        "start_line": 5
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0005",
+      "limitation": "The construct is recognized but outside the bounded static subset.",
+      "span": {
+        "end_column": 23,
+        "end_line": 6,
+        "start_column": 1,
+        "start_line": 6
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0006",
+      "limitation": "The construct is recognized but outside the bounded static subset.",
+      "span": {
+        "end_column": 31,
+        "end_line": 7,
+        "start_column": 1,
+        "start_line": 7
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0007",
+      "limitation": "The construct is recognized but outside the bounded static subset.",
+      "span": {
+        "end_column": 27,
+        "end_line": 8,
+        "start_column": 1,
+        "start_line": 8
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0008",
+      "limitation": "The construct is recognized but outside the bounded static subset.",
+      "span": {
+        "end_column": 14,
+        "end_line": 9,
+        "start_column": 1,
+        "start_line": 9
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0009",
+      "limitation": "The construct is recognized but outside the bounded static subset.",
+      "span": {
+        "end_column": 21,
+        "end_line": 10,
+        "start_column": 1,
+        "start_line": 10
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0010",
+      "limitation": "The construct is recognized but outside the bounded static subset.",
+      "span": {
+        "end_column": 21,
+        "end_line": 11,
+        "start_column": 1,
+        "start_line": 11
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0011",
+      "limitation": "The construct is recognized but outside the bounded static subset.",
+      "span": {
+        "end_column": 5,
+        "end_line": 12,
+        "start_column": 1,
+        "start_line": 12
+      }
+    }
+  ]
+}

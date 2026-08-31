@@ -1,0 +1,12 @@
+OPENQASM 3.0;
+qubit q;
+if (flag) { U(0, 0, 0) q; } else { reset q; }
+for int i in [0:2] { U(0, 0, 0) q; }
+while (flag) { break; }
+switch (choice) { case 0 { continue; } }
+def helper() { return; }
+extern external_helper();
+break;
+continue;
+return;
+end;

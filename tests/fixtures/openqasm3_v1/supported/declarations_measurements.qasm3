@@ -1,0 +1,11 @@
+OPENQASM 3;
+qubit first;
+qubit[2] second;
+bit spare;
+bit[2] result;
+U(0, 0, 0) first;
+measure first -> spare;
+result = measure second;
+measure first;
+reset second;
+barrier first, second;

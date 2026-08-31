@@ -1,0 +1,265 @@
+{
+  "artifact_label": "recoverable_malformed.qasm3",
+  "circuit_ir": null,
+  "classical_declarations": [],
+  "construct_ledger": [
+    {
+      "classification": "supported",
+      "construct_id": "construct-0001",
+      "dependent_fact_effects": [],
+      "established": [
+        "The include target and global source span were identified."
+      ],
+      "family": "include",
+      "name": "stdgates.inc",
+      "span": {
+        "end_column": 24,
+        "end_line": 2,
+        "start_column": 1,
+        "start_line": 2
+      },
+      "unavailable": []
+    },
+    {
+      "classification": "malformed",
+      "construct_id": "construct-0002",
+      "dependent_fact_effects": [
+        "Dependent facts are downgraded or withheld."
+      ],
+      "established": [
+        "The statement boundary and construct family were identified."
+      ],
+      "family": "qubit_declaration",
+      "name": "qubit",
+      "span": {
+        "end_column": 18,
+        "end_line": 3,
+        "start_column": 1,
+        "start_line": 3
+      },
+      "unavailable": [
+        "The malformed occurrence was not semantically interpreted."
+      ]
+    },
+    {
+      "classification": "supported",
+      "construct_id": "construct-0003",
+      "dependent_fact_effects": [],
+      "established": [
+        "A qubit declaration with static size 1 was established."
+      ],
+      "family": "qubit_declaration",
+      "name": "q",
+      "span": {
+        "end_column": 9,
+        "end_line": 4,
+        "start_column": 1,
+        "start_line": 4
+      },
+      "unavailable": []
+    },
+    {
+      "classification": "supported",
+      "construct_id": "construct-0004",
+      "dependent_fact_effects": [],
+      "established": [
+        "The operation identity, source span, explicit parameter forms, and explicit target forms were identified."
+      ],
+      "family": "quantum_operation",
+      "name": "h",
+      "span": {
+        "end_column": 5,
+        "end_line": 5,
+        "start_column": 1,
+        "start_line": 5
+      },
+      "unavailable": []
+    }
+  ],
+  "custom_gates": [],
+  "declared_language_version": "3.0",
+  "derived_facts": {
+    "classical_width": {
+      "exactness": "partial",
+      "value": 0
+    },
+    "depth": {
+      "exactness": "not_established",
+      "value": null
+    },
+    "gate_statistics": {
+      "exactness": "partial",
+      "value": {
+        "h": 1
+      }
+    },
+    "interaction_graph": {
+      "exactness": "partial",
+      "value": []
+    },
+    "measurement_count": {
+      "exactness": "lower_bound",
+      "value": 0
+    },
+    "operation_count": {
+      "exactness": "lower_bound",
+      "value": 1
+    },
+    "quantum_width": {
+      "exactness": "partial",
+      "value": 1
+    }
+  },
+  "diagnostics": [
+    {
+      "category": "malformed_syntax",
+      "construct_id": "construct-0002",
+      "message": "The declaration size is invalid.",
+      "severity": "error",
+      "span": {
+        "end_column": 18,
+        "end_line": 3,
+        "start_column": 1,
+        "start_line": 3
+      }
+    }
+  ],
+  "fatal_error": null,
+  "file_status": "partial",
+  "include_ledger": [
+    {
+      "opened": false,
+      "span": {
+        "end_column": 24,
+        "end_line": 2,
+        "start_column": 1,
+        "start_line": 2
+      },
+      "support": "supported",
+      "target": "stdgates.inc"
+    }
+  ],
+  "intent_inferred": false,
+  "limitations": [
+    "Only the D-118 bounded static OpenQASM 3.0 subset is interpreted.",
+    "Unsupported, unrecognized, and recovered-malformed regions qualify or withhold dependent facts.",
+    "Custom-gate bodies are preserved structurally and are not recursively expanded.",
+    "The selected file is partial evidence and is not a complete CircuitIR projection."
+  ],
+  "measurements": [],
+  "modifier_chains": [],
+  "motif_evidence_emitted": false,
+  "network_accessed": false,
+  "non_claims": [
+    "No source or circuit was executed.",
+    "This is not full OpenQASM 3 language support or a language-compliance claim.",
+    "No conversion, semantic equivalence, algorithm correctness, or expected output was established.",
+    "No hardware compatibility, backend suitability, runtime, resource, fidelity, shot-count, or statistical-sufficiency conclusion was established.",
+    "Observed OpenQASM structure does not establish user intent, author intent, or algorithm identity."
+  ],
+  "parser_identity": "qcoder.openqasm3.bounded_parser.v1",
+  "parser_limits": {
+    "broadcast_expansion": {
+      "maximum": 4096,
+      "observed": 1,
+      "status": "within_limit"
+    },
+    "construct_ledger_entries": {
+      "maximum": 12000,
+      "observed": 4,
+      "status": "within_limit"
+    },
+    "custom_gates": {
+      "maximum": 256,
+      "observed": 0,
+      "status": "within_limit"
+    },
+    "declarations": {
+      "maximum": 1000,
+      "observed": 1,
+      "status": "within_limit"
+    },
+    "diagnostics": {
+      "maximum": 512,
+      "observed": 1,
+      "status": "within_limit"
+    },
+    "expression_depth": {
+      "maximum": 32,
+      "observed": 1,
+      "status": "within_limit"
+    },
+    "modifier_depth": {
+      "maximum": 8,
+      "observed": 0,
+      "status": "within_limit"
+    },
+    "nesting_depth": {
+      "maximum": 32,
+      "observed": 1,
+      "status": "within_limit"
+    },
+    "operations": {
+      "maximum": 10000,
+      "observed": 1,
+      "status": "within_limit"
+    },
+    "recovery_events": {
+      "maximum": 128,
+      "observed": 1,
+      "status": "within_limit"
+    },
+    "source_bytes": {
+      "maximum": 100000,
+      "observed": 70,
+      "status": "within_limit"
+    },
+    "statements": {
+      "maximum": 12000,
+      "observed": 5,
+      "status": "within_limit"
+    },
+    "tokens": {
+      "maximum": 40000,
+      "observed": 18,
+      "status": "within_limit"
+    }
+  },
+  "quantum_declarations": [
+    {
+      "base": 0,
+      "name": "q",
+      "size": 1,
+      "span": {
+        "end_column": 9,
+        "end_line": 4,
+        "start_column": 1,
+        "start_line": 4
+      },
+      "support": "supported"
+    }
+  ],
+  "raw_source_included": false,
+  "recovery_ledger": [
+    {
+      "boundary_reliable": true,
+      "category": "malformed_syntax",
+      "construct_id": "construct-0002",
+      "source_repaired": false,
+      "span": {
+        "end_column": 18,
+        "end_line": 3,
+        "start_column": 1,
+        "start_line": 3
+      }
+    }
+  ],
+  "repository_scanned": false,
+  "schema_id": "qcoder.openqasm3_static_evidence.v1",
+  "schema_version": 1,
+  "selection_provenance": "explicit_file_argument",
+  "source_or_circuit_executed": false,
+  "source_sha256": "7c213da42fe17e4e666aa2960bfb300cfd7886c769736d9129074022cd8a2409",
+  "standard_gate_vocabulary_identity": "qcoder.openqasm3.stdgates_3_0.v1",
+  "unsupported_region_ledger": []
+}

@@ -1,0 +1,4 @@
+OPENQASM 3.0;
+include "neighbor.inc";
+qubit q;
+U(0, 0, 0) q;

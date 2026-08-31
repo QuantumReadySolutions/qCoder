@@ -1,0 +1,8 @@
+OPENQASM 3.0;
+qubit[2] q;
+qreg legacy_q[2];
+creg legacy_c[2];
+int value = 1;
+array[int[8], 2] values;
+let alias = q;
+value = value + 1;

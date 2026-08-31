@@ -1,0 +1,10 @@
+OPENQASM 3.0;
+include "stdgates.inc";
+gate pair(theta) left, right {
+  rx(theta) left;
+  cx left, right;
+}
+qubit[2] left;
+qubit[2] right;
+cx left, right;
+pair(pi / 2) left[0], right[0];

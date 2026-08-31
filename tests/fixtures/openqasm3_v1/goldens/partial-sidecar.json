@@ -1,0 +1,333 @@
+{
+  "artifact_label": "control_flow.qasm3",
+  "circuit_ir": null,
+  "classical_declarations": [],
+  "construct_ledger": [
+    {
+      "classification": "supported",
+      "construct_id": "construct-0001",
+      "dependent_fact_effects": [],
+      "established": [
+        "The include target and global source span were identified."
+      ],
+      "family": "include",
+      "name": "stdgates.inc",
+      "span": {
+        "end_column": 24,
+        "end_line": 2,
+        "start_column": 1,
+        "start_line": 2
+      },
+      "unavailable": []
+    },
+    {
+      "classification": "supported",
+      "construct_id": "construct-0002",
+      "dependent_fact_effects": [],
+      "established": [
+        "A qubit declaration with static size 2 was established."
+      ],
+      "family": "qubit_declaration",
+      "name": "q",
+      "span": {
+        "end_column": 12,
+        "end_line": 3,
+        "start_column": 1,
+        "start_line": 3
+      },
+      "unavailable": []
+    },
+    {
+      "classification": "supported",
+      "construct_id": "construct-0003",
+      "dependent_fact_effects": [],
+      "established": [
+        "The operation identity, source span, explicit parameter forms, and explicit target forms were identified."
+      ],
+      "family": "quantum_operation",
+      "name": "h",
+      "span": {
+        "end_column": 8,
+        "end_line": 4,
+        "start_column": 1,
+        "start_line": 4
+      },
+      "unavailable": []
+    },
+    {
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0004",
+      "dependent_fact_effects": [
+        "Every potentially affected structural fact is qualified or withheld."
+      ],
+      "established": [
+        "The construct family, presence, and source span were identified."
+      ],
+      "family": "control_flow_if",
+      "name": "if",
+      "span": {
+        "end_column": 2,
+        "end_line": 7,
+        "start_column": 1,
+        "start_line": 5
+      },
+      "unavailable": [
+        "The construct semantics and body effects were not interpreted."
+      ]
+    },
+    {
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0005",
+      "dependent_fact_effects": [
+        "Every potentially affected structural fact is qualified or withheld."
+      ],
+      "established": [
+        "The construct family, presence, and source span were identified."
+      ],
+      "family": "control_flow_else",
+      "name": "else",
+      "span": {
+        "end_column": 2,
+        "end_line": 9,
+        "start_column": 3,
+        "start_line": 7
+      },
+      "unavailable": [
+        "The construct semantics and body effects were not interpreted."
+      ]
+    },
+    {
+      "classification": "supported",
+      "construct_id": "construct-0006",
+      "dependent_fact_effects": [],
+      "established": [
+        "The operation identity, source span, explicit parameter forms, and explicit target forms were identified."
+      ],
+      "family": "quantum_operation",
+      "name": "cx",
+      "span": {
+        "end_column": 15,
+        "end_line": 10,
+        "start_column": 1,
+        "start_line": 10
+      },
+      "unavailable": []
+    }
+  ],
+  "custom_gates": [],
+  "declared_language_version": "3.0",
+  "derived_facts": {
+    "classical_width": {
+      "exactness": "exact",
+      "value": 0
+    },
+    "depth": {
+      "exactness": "not_established",
+      "value": null
+    },
+    "gate_statistics": {
+      "exactness": "partial",
+      "value": {
+        "cx": 1,
+        "h": 1
+      }
+    },
+    "interaction_graph": {
+      "exactness": "partial",
+      "value": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    "measurement_count": {
+      "exactness": "lower_bound",
+      "value": 0
+    },
+    "operation_count": {
+      "exactness": "lower_bound",
+      "value": 2
+    },
+    "quantum_width": {
+      "exactness": "exact",
+      "value": 2
+    }
+  },
+  "diagnostics": [
+    {
+      "category": "unsupported_construct",
+      "construct_id": "construct-0004",
+      "message": "The construct is recognized but outside the bounded static subset.",
+      "severity": "limitation",
+      "span": {
+        "end_column": 2,
+        "end_line": 7,
+        "start_column": 1,
+        "start_line": 5
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "construct_id": "construct-0005",
+      "message": "The construct is recognized but outside the bounded static subset.",
+      "severity": "limitation",
+      "span": {
+        "end_column": 2,
+        "end_line": 9,
+        "start_column": 3,
+        "start_line": 7
+      }
+    }
+  ],
+  "fatal_error": null,
+  "file_status": "partial",
+  "include_ledger": [
+    {
+      "opened": false,
+      "span": {
+        "end_column": 24,
+        "end_line": 2,
+        "start_column": 1,
+        "start_line": 2
+      },
+      "support": "supported",
+      "target": "stdgates.inc"
+    }
+  ],
+  "intent_inferred": false,
+  "limitations": [
+    "Only the D-118 bounded static OpenQASM 3.0 subset is interpreted.",
+    "Unsupported, unrecognized, and recovered-malformed regions qualify or withhold dependent facts.",
+    "Custom-gate bodies are preserved structurally and are not recursively expanded.",
+    "The selected file is partial evidence and is not a complete CircuitIR projection."
+  ],
+  "measurements": [],
+  "modifier_chains": [],
+  "motif_evidence_emitted": false,
+  "network_accessed": false,
+  "non_claims": [
+    "No source or circuit was executed.",
+    "This is not full OpenQASM 3 language support or a language-compliance claim.",
+    "No conversion, semantic equivalence, algorithm correctness, or expected output was established.",
+    "No hardware compatibility, backend suitability, runtime, resource, fidelity, shot-count, or statistical-sufficiency conclusion was established.",
+    "Observed OpenQASM structure does not establish user intent, author intent, or algorithm identity."
+  ],
+  "parser_identity": "qcoder.openqasm3.bounded_parser.v1",
+  "parser_limits": {
+    "broadcast_expansion": {
+      "maximum": 4096,
+      "observed": 1,
+      "status": "within_limit"
+    },
+    "construct_ledger_entries": {
+      "maximum": 12000,
+      "observed": 6,
+      "status": "within_limit"
+    },
+    "custom_gates": {
+      "maximum": 256,
+      "observed": 0,
+      "status": "within_limit"
+    },
+    "declarations": {
+      "maximum": 1000,
+      "observed": 1,
+      "status": "within_limit"
+    },
+    "diagnostics": {
+      "maximum": 512,
+      "observed": 2,
+      "status": "within_limit"
+    },
+    "expression_depth": {
+      "maximum": 32,
+      "observed": 2,
+      "status": "within_limit"
+    },
+    "modifier_depth": {
+      "maximum": 8,
+      "observed": 0,
+      "status": "within_limit"
+    },
+    "nesting_depth": {
+      "maximum": 32,
+      "observed": 2,
+      "status": "within_limit"
+    },
+    "operations": {
+      "maximum": 10000,
+      "observed": 2,
+      "status": "within_limit"
+    },
+    "recovery_events": {
+      "maximum": 128,
+      "observed": 0,
+      "status": "within_limit"
+    },
+    "source_bytes": {
+      "maximum": 100000,
+      "observed": 116,
+      "status": "within_limit"
+    },
+    "statements": {
+      "maximum": 12000,
+      "observed": 7,
+      "status": "within_limit"
+    },
+    "tokens": {
+      "maximum": 40000,
+      "observed": 50,
+      "status": "within_limit"
+    }
+  },
+  "quantum_declarations": [
+    {
+      "base": 0,
+      "name": "q",
+      "size": 2,
+      "span": {
+        "end_column": 12,
+        "end_line": 3,
+        "start_column": 1,
+        "start_line": 3
+      },
+      "support": "supported"
+    }
+  ],
+  "raw_source_included": false,
+  "recovery_ledger": [],
+  "repository_scanned": false,
+  "schema_id": "qcoder.openqasm3_static_evidence.v1",
+  "schema_version": 1,
+  "selection_provenance": "explicit_file_argument",
+  "source_or_circuit_executed": false,
+  "source_sha256": "e449377bf01e6635bf892a94ab877217c37a864600b6201df0737c8bbb1d1250",
+  "standard_gate_vocabulary_identity": "qcoder.openqasm3.stdgates_3_0.v1",
+  "unsupported_region_ledger": [
+    {
+      "category": "unsupported_construct",
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0004",
+      "limitation": "The construct is recognized but outside the bounded static subset.",
+      "span": {
+        "end_column": 2,
+        "end_line": 7,
+        "start_column": 1,
+        "start_line": 5
+      }
+    },
+    {
+      "category": "unsupported_construct",
+      "classification": "recognized_but_unsupported",
+      "construct_id": "construct-0005",
+      "limitation": "The construct is recognized but outside the bounded static subset.",
+      "span": {
+        "end_column": 2,
+        "end_line": 9,
+        "start_column": 3,
+        "start_line": 7
+      }
+    }
+  ]
+}

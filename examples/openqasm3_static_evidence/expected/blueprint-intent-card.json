@@ -1,0 +1,54 @@
+{
+  "boundaries": {
+    "choice_auto_confirmed": false,
+    "confirmation_authority_changed": false,
+    "intent_inferred_from_source_or_circuit": false,
+    "model_called": false,
+    "persistent_source_of_truth_created": false
+  },
+  "confirmed_blueprint_decisions": [],
+  "explicitly_deferred_choices": [],
+  "intent_state": "absent",
+  "observed_evidence": [
+    {
+      "authority": "selected_evidence_only_not_intent",
+      "observation": "Bounded static support status: supported."
+    },
+    {
+      "authority": "selected_evidence_only_not_intent",
+      "observation": "Classical width: 2 (exact static evidence)."
+    },
+    {
+      "authority": "selected_evidence_only_not_intent",
+      "observation": "Depth: 3 (exact static evidence)."
+    },
+    {
+      "authority": "selected_evidence_only_not_intent",
+      "observation": "Measurement count: 2 (exact static evidence)."
+    },
+    {
+      "authority": "selected_evidence_only_not_intent",
+      "observation": "Operation count: 4 (exact static evidence)."
+    },
+    {
+      "authority": "selected_evidence_only_not_intent",
+      "observation": "Quantum width: 2 (exact static evidence)."
+    },
+    {
+      "authority": "selected_evidence_only_not_intent",
+      "observation": "The explicitly selected input declares OpenQASM 3.0."
+    }
+  ],
+  "projection_role": "view_of_existing_intent_and_confirmed_blueprint_state",
+  "schema_id": "qcoder.blueprint_intent_card_projection.v1",
+  "schema_version": 1,
+  "unresolved_choices": [],
+  "unsupported_assumptions": [
+    "Execution is outside this static evidence path.",
+    "Full-language compliance, conversion, semantic equivalence, correctness, and expected output were not established.",
+    "Hardware suitability, backend ranking, runtime, resources, fidelity, shot count, and statistical sufficiency were not established.",
+    "Observed OpenQASM structure did not establish intent or algorithm identity.",
+    "Observed source or circuit structure does not establish user intent."
+  ],
+  "user_stated_intent": []
+}

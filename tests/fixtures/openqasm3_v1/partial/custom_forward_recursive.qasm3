@@ -1,0 +1,9 @@
+OPENQASM 3.0;
+gate first a {
+  second a;
+}
+gate second b {
+  first b;
+}
+qubit q;
+first q;

@@ -1,0 +1,58 @@
+{
+  "boundaries": {
+    "assistant_quality_guaranteed": false,
+    "customer_review_required_before_sharing": true,
+    "model_called": false,
+    "network_accessed": false,
+    "persistent_memory_created": false,
+    "repository_scanned": false,
+    "source_or_circuit_executed": false
+  },
+  "bounded_next_checks": [
+    {
+      "basis": "existing_local_evidence_supported_next_action",
+      "check_id": "existing-next-check-c7293f3a2043d6ce",
+      "instruction": "Review the bounded diagnostics and select a corrected file if more complete evidence is required."
+    },
+    {
+      "basis": "existing_local_evidence_supported_next_action",
+      "check_id": "existing-next-check-e7556ee6d899d623",
+      "instruction": "qcoder review local-evidence <redacted-local-path> --out-json local-evidence.json"
+    }
+  ],
+  "limitations": [
+    "Custom-gate bodies are preserved structurally and are not recursively expanded.",
+    "Only the D-118 bounded static OpenQASM 3.0 subset is interpreted.",
+    "Unsupported, unrecognized, and recovered-malformed regions qualify or withhold dependent facts."
+  ],
+  "projection_role": "share_safe_assistant_input_from_explicitly_selected_evidence",
+  "schema_id": "qcoder.evidence_prompt_pack.v1",
+  "schema_version": 1,
+  "selected_artifacts": [
+    {
+      "artifact_id": "selected-evidence-184dd326ce8be48a",
+      "artifact_kind": "openqasm_3",
+      "evidence_schemas": [
+        "qcoder.circuit_manifestation.v1",
+        "qcoder.openqasm3_static_evidence.v1"
+      ],
+      "selection": "explicit_file_argument",
+      "sha256": "184dd326ce8be48a625a92bf6d0d37f9847801cdf6f1530f69b3ff7db76908cb"
+    }
+  ],
+  "supported_findings": [
+    "Bounded static support status: supported.",
+    "Classical width: 2 (exact static evidence).",
+    "Depth: 3 (exact static evidence).",
+    "Measurement count: 2 (exact static evidence).",
+    "Operation count: 4 (exact static evidence).",
+    "Quantum width: 2 (exact static evidence).",
+    "The explicitly selected input declares OpenQASM 3.0."
+  ],
+  "unsupported_statements": [
+    "Execution is outside this static evidence path.",
+    "Full-language compliance, conversion, semantic equivalence, correctness, and expected output were not established.",
+    "Hardware suitability, backend ranking, runtime, resources, fidelity, shot count, and statistical sufficiency were not established.",
+    "Observed OpenQASM structure did not establish intent or algorithm identity."
+  ]
+}
