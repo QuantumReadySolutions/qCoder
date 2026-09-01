@@ -283,7 +283,7 @@ from qcoder.review_before_generation import (
     review_revision,
     review_revision_from_validated,
     validate_canonical_first_value_delivery,
-    validate_connected_assistant_proposal,
+    validate_review_content,
 )
 from qcoder.review_before_generation import (
     build_first_value as build_review_before_generation_first_value,
@@ -2774,7 +2774,7 @@ class CurrentLoopCoordinator:
         self,
         *,
         exact_request: str | None = None,
-        connected_assistant_proposal: Mapping[str, Any] | None = None,
+        review_content: Mapping[str, Any] | None = None,
         selected_artifact_identities: Sequence[str] = (),
         intended_artifact_targets: Mapping[str, Mapping[str, Any]] | None = None,
         review_action: str | None = None,
@@ -2786,7 +2786,7 @@ class CurrentLoopCoordinator:
         if review_action is not None:
             if (
                 exact_request is not None
-                or connected_assistant_proposal is not None
+                or review_content is not None
                 or selected_artifact_identities
                 or intended_artifact_targets is not None
             ):
@@ -2811,9 +2811,7 @@ class CurrentLoopCoordinator:
             ):
                 raise ReviewBeforeGenerationError("review_transaction_request_changed")
             current_revision = str(existing.get("review_revision") or "")
-            stored_delivery = existing.get("connected_assistant_proposal", {}).get(
-                "source_delivery"
-            )
+            stored_delivery = existing.get("review_content", {}).get("source_delivery")
             if not isinstance(stored_delivery, Mapping):
                 raise ReviewBeforeGenerationError("review_confirmation_target_binding_invalid")
             if existing.get("intended_artifact_targets") not in ({}, None):
@@ -2834,7 +2832,7 @@ class CurrentLoopCoordinator:
                 )
             expected_revision = review_revision_from_validated(
                 str(existing.get("exact_request") or ""),
-                existing.get("connected_assistant_proposal", {}),
+                existing.get("review_content", {}),
                 selected_artifact_identity_sha256=existing.get(
                     "selected_artifact_identity_sha256", ()
                 ),
@@ -2868,7 +2866,7 @@ class CurrentLoopCoordinator:
                     )
                 return {
                     "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
-                    "schema_version": 2,
+                    "schema_version": 3,
                     "ok": True,
                     "operation": "begin_current_loop",
                     "category": "review_material_choices_ready",
@@ -2881,7 +2879,7 @@ class CurrentLoopCoordinator:
                             "label": item["label"],
                             "current_value": item["value"],
                         }
-                        for item in existing["connected_assistant_proposal"]["recommendations"]
+                        for item in existing["review_content"]["recommendations"]
                     ],
                     "prior_result_token": prior_result_token,
                     "internal_identifiers_exposed": False,
@@ -2896,7 +2894,7 @@ class CurrentLoopCoordinator:
             if existing.get("confirmation_state") == "confirmed":
                 result = {
                     "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
-                    "schema_version": 2,
+                    "schema_version": 3,
                     "ok": True,
                     "operation": "begin_current_loop",
                     "category": "review_confirmation_duplicate",
@@ -2995,7 +2993,7 @@ class CurrentLoopCoordinator:
                 current_step_contract = derive_current_step_contract(confirmed_state)
             result = {
                 "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
-                "schema_version": 2,
+                "schema_version": 3,
                 "ok": True,
                 "operation": "begin_current_loop",
                 "category": "review_confirmation_generation_ready",
@@ -3018,32 +3016,63 @@ class CurrentLoopCoordinator:
 
         if not isinstance(exact_request, str) or not exact_request:
             raise ReviewBeforeGenerationError("review_exact_request_invalid")
-        if connected_assistant_proposal is None:
-            raise ReviewBeforeGenerationError("review_connected_assistant_proposal_required")
-        proposal = validate_connected_assistant_proposal(
+        if review_content is None:
+            raise ReviewBeforeGenerationError("review_content_required")
+        normalized_content = validate_review_content(
             exact_request,
-            connected_assistant_proposal,
+            review_content,
             selected_artifact_identities=selected_artifact_identities,
         )
-        displayed_target = proposal["source_delivery"]["target"]
-        if proposal["transaction_kind"] == "review_before_source_modification" and (
-            proposal["source_delivery"]["mode"] != "workspace_file"
+        displayed_target = normalized_content["source_delivery"]["target"]
+        if normalized_content["transaction_kind"] == "review_before_source_modification" and (
+            normalized_content["source_delivery"]["mode"] != "workspace_file"
             or displayed_target not in set(selected_artifact_identities)
         ):
-            raise ReviewBeforeGenerationError("review_source_modification_target_mismatch")
+            return {
+                "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
+                "schema_version": 3,
+                "ok": True,
+                "operation": "begin_current_loop",
+                "category": "review_before_generation_terminal_blocker",
+                "terminal_for_turn": True,
+                "terminal_customer_text": "Which exact selected source should the proposed changes apply to?",
+                "state_mutated": False,
+                "source_or_qasm_created": False,
+                "file_mutation_performed": False,
+                "execution_performed": False,
+                "protected_service_called": False,
+                "elapsed_seconds": round(self.clock() - started, 6),
+            }
+        blocker = normalized_content.get("blocking_clarification")
+        if isinstance(blocker, str):
+            return {
+                "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
+                "schema_version": 3,
+                "ok": True,
+                "operation": "begin_current_loop",
+                "category": "review_before_generation_terminal_blocker",
+                "terminal_for_turn": True,
+                "terminal_customer_text": blocker,
+                "state_mutated": False,
+                "source_or_qasm_created": False,
+                "file_mutation_performed": False,
+                "execution_performed": False,
+                "protected_service_called": False,
+                "elapsed_seconds": round(self.clock() - started, 6),
+            }
         first_value = build_review_before_generation_first_value(
             exact_request,
-            connected_assistant_proposal,
+            review_content,
             selected_artifact_identities=selected_artifact_identities,
         )
         semantics = build_review_before_generation_semantics(
             exact_request,
-            connected_assistant_proposal,
+            review_content,
             selected_artifact_identities=selected_artifact_identities,
         )
         proposed_revision = review_revision(
             exact_request,
-            connected_assistant_proposal,
+            review_content,
             selected_artifact_identities=selected_artifact_identities,
         )
         canonical_delivery = canonical_first_value_delivery(
@@ -3060,9 +3089,11 @@ class CurrentLoopCoordinator:
             baseline = build_request_baseline(
                 original_request=exact_request,
                 assistant_interpretation={
-                    "proposal_attribution": "connected_assistant",
-                    "semantic_axes": deepcopy(proposal["semantic_axes"]),
-                    "proposal_digest": sha256(canonical_bytes(proposal)).hexdigest(),
+                    "review_content_attribution": "connected_assistant",
+                    "semantic_axes": deepcopy(normalized_content["semantic_axes"]),
+                    "review_content_digest": sha256(
+                        canonical_bytes(normalized_content)
+                    ).hexdigest(),
                 },
             )
             activated = activate_current_loop(
@@ -3099,10 +3130,10 @@ class CurrentLoopCoordinator:
             coordinator["request_baseline_count"] = 1
             coordinator["review_before_generation"] = {
                 "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
-                "schema_version": 2,
+                "schema_version": 3,
                 "exact_request": exact_request,
                 "exact_request_utf8_sha256": sha256(exact_request.encode("utf-8")).hexdigest(),
-                "connected_assistant_proposal": deepcopy(proposal),
+                "review_content": deepcopy(normalized_content),
                 "first_value": deepcopy(first_value),
                 "review_revision": proposed_revision,
                 "canonical_delivery": deepcopy(canonical_delivery),
@@ -3113,7 +3144,7 @@ class CurrentLoopCoordinator:
                     semantics["selected_artifact_identity_sha256"]
                 ),
                 "generation_authority": "held_for_exact_review_confirmation",
-                "execution_authority": proposal["semantic_axes"]["execution_authority"],
+                "execution_authority": normalized_content["semantic_axes"]["execution_authority"],
                 "source_or_qasm_created": False,
                 "file_mutation_performed": False,
                 "execution_performed": False,
@@ -3145,7 +3176,7 @@ class CurrentLoopCoordinator:
             state = self.store.read()
             return {
                 "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
-                "schema_version": 2,
+                "schema_version": 3,
                 "ok": True,
                 "operation": "begin_current_loop",
                 "category": "review_before_generation_ready",
@@ -3180,7 +3211,7 @@ class CurrentLoopCoordinator:
                 raise ReviewBeforeGenerationError("review_confirmation_stale_token")
             return {
                 "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
-                "schema_version": 2,
+                "schema_version": 3,
                 "ok": True,
                 "operation": "begin_current_loop",
                 "category": "review_before_generation_duplicate",
@@ -3200,7 +3231,7 @@ class CurrentLoopCoordinator:
             }
 
         if prior_result_token != current_token:
-            raise ReviewBeforeGenerationError("review_changed_proposal_requires_prior_result_token")
+            raise ReviewBeforeGenerationError("review_changed_content_requires_prior_result_token")
         updated = deepcopy(dict(existing))
         revised_token = (
             "review-result-"
@@ -3221,7 +3252,7 @@ class CurrentLoopCoordinator:
         )
         updated.update(
             {
-                "connected_assistant_proposal": deepcopy(proposal),
+                "review_content": deepcopy(normalized_content),
                 "first_value": deepcopy(first_value),
                 "review_revision": proposed_revision,
                 "canonical_delivery": deepcopy(canonical_delivery),
@@ -3229,7 +3260,7 @@ class CurrentLoopCoordinator:
                 "confirmation_state": "awaiting_exact_review_confirmation",
                 "confirmed_revision": None,
                 "generation_authority": "held_for_exact_review_confirmation",
-                "execution_authority": proposal["semantic_axes"]["execution_authority"],
+                "execution_authority": normalized_content["semantic_axes"]["execution_authority"],
                 "prior_result_token": revised_token,
                 "generation_ready_context": None,
                 "intended_artifact_targets": {},
@@ -3242,7 +3273,7 @@ class CurrentLoopCoordinator:
         revised_state = self.store.read()
         return {
             "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
-            "schema_version": 2,
+            "schema_version": 3,
             "ok": True,
             "operation": "begin_current_loop",
             "category": "review_before_generation_revised",

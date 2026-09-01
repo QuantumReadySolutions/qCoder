@@ -324,8 +324,8 @@ def test_blueprint_first_value_contract_is_bound_into_v48_descriptor() -> None:
         "Use recommended choices",
         "Review or change choices",
     ]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v58"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 57
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v59"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 58
     descriptor = build_client_binding_descriptor(coordinator_prefix=["/runtime/python"])[
         "client_binding_contract"
     ]

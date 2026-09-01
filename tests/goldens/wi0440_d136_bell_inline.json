@@ -1,0 +1,142 @@
+{
+  "canonical_markdown": "## Goal and scope\n\n- **Recommended interpretation:** Create a minimal two-qubit Qiskit program that prepares \\|Φ+\\> = (\\|00\\> + \\|11\\>)/sqrt(2), measures both qubits in the computational basis, and produces readable Python only after the customer confirms the plan.\n- **Requested framework:** Qiskit\n- **Requested artifact:** Source for the requested program.\n- **Requested operation:** Prepare and measure the requested quantum state.\n- **Limitation 1:** The example is not presented as proof of entanglement.\n- **Limitation 2:** The review does not claim algorithm correctness.\n- **Limitation 3:** The review makes no hardware-performance claim.\n\n## Implementation\n\n- **Framework:** Use Qiskit QuantumCircuit.\n- **Registers:** Use two qubits and two classical bits.\n- **Preparation:** Apply H to q0, then CX from q0 to q1.\n- **Measurement:** Measure q0 to c0 and q1 to c1.\n- **Representation:** Produce direct readable Python.\n- **Dependency version:** No dependency version was selected silently.\n- **Execution environment:** No execution environment was selected silently.\n\n## Output and authority\n\n- **Output artifact:** Readable Python source after confirmation\n- **Source delivery:** Inline after confirmation.\n- **Generation authority:** Python source will be produced after you confirm these choices.\n- **Execution authority:** Execution was not requested and is not authorized.\n- **Authority separation:** Confirming these choices does not authorize execution.\n- **Deferred execution choices:** Backend, shots, seed, and result handling remain deferred.\n\n- Use recommended choices\n- Review or change choices\n",
+  "machine_projection": {
+    "confirmable": true,
+    "customer_actions": [
+      "Use recommended choices",
+      "Review or change choices"
+    ],
+    "execution_performed": false,
+    "execution_permitted": false,
+    "file_mutation_performed": false,
+    "initial_decision_group_count": 3,
+    "initial_decision_group_maximum": 3,
+    "initial_decision_groups": [
+      {
+        "items": [
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Recommended interpretation",
+            "value": "Create a minimal two-qubit Qiskit program that prepares |Φ+> = (|00> + |11>)/sqrt(2), measures both qubits in the computational basis, and produces readable Python only after the customer confirms the plan."
+          },
+          {
+            "attribution": "customer_explicit_constraint",
+            "label": "Requested framework",
+            "value": "Qiskit"
+          },
+          {
+            "attribution": "customer_explicit_constraint",
+            "label": "Requested artifact",
+            "value": "Source for the requested program."
+          },
+          {
+            "attribution": "customer_explicit_constraint",
+            "label": "Requested operation",
+            "value": "Prepare and measure the requested quantum state."
+          },
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Limitation 1",
+            "value": "The example is not presented as proof of entanglement."
+          },
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Limitation 2",
+            "value": "The review does not claim algorithm correctness."
+          },
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Limitation 3",
+            "value": "The review makes no hardware-performance claim."
+          }
+        ],
+        "label": "Goal and scope"
+      },
+      {
+        "items": [
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Framework",
+            "value": "Use Qiskit QuantumCircuit."
+          },
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Registers",
+            "value": "Use two qubits and two classical bits."
+          },
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Preparation",
+            "value": "Apply H to q0, then CX from q0 to q1."
+          },
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Measurement",
+            "value": "Measure q0 to c0 and q1 to c1."
+          },
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Representation",
+            "value": "Produce direct readable Python."
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Dependency version",
+            "value": "No dependency version was selected silently."
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Execution environment",
+            "value": "No execution environment was selected silently."
+          }
+        ],
+        "label": "Implementation"
+      },
+      {
+        "items": [
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Output artifact",
+            "value": "Readable Python source after confirmation"
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Source delivery",
+            "value": "Inline after confirmation."
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Generation authority",
+            "value": "Python source will be produced after you confirm these choices."
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Execution authority",
+            "value": "Execution was not requested and is not authorized."
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Authority separation",
+            "value": "Confirming these choices does not authorize execution."
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Deferred execution choices",
+            "value": "Backend, shots, seed, and result handling remain deferred."
+          }
+        ],
+        "label": "Output and authority"
+      }
+    ],
+    "one_qcoder_operation_before_useful_review": true,
+    "protected_service_called": false,
+    "qcoder_authored_recommendation": false,
+    "retention": "current_loop_only_process_and_discard",
+    "review_content_attribution": "connected_assistant",
+    "source_or_qasm_included": false
+  },
+  "projection_digest": "69cfef1fe913071bed027fdba01858be72f3fcd700e1a531b0f7c763a3ab274e",
+  "schema_id": "qcoder.current_loop.canonical_first_value_delivery.v1",
+  "schema_version": 1,
+  "semantic_revision_sha256": "315b51fbc052e815b7d63360c5d7c719722089435b14fe915450e47e16331fff"
+}

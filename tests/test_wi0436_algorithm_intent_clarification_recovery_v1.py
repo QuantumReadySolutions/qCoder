@@ -394,8 +394,8 @@ def test_binding_and_inventory_publish_recovery_without_new_authority_surface() 
         "client_binding_contract"
     ]
     recovery = binding["algorithm_intent_clarification_recovery_contract"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v58"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 57
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v59"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 58
     assert recovery["atomic_capsule_copy_through"] is True
     assert recovery["client_reconstructs_binding_fields"] is False
     assert recovery["card_and_revision_bound"] is True

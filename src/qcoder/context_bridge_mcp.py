@@ -191,8 +191,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 57
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v58"
+CLIENT_BINDING_SCHEMA_VERSION = 58
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v59"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -234,11 +234,10 @@ classify the exact current customer message through the binding's canonical requ
 contract. A concrete explicit qCoder source, QASM, execution, or selected-file review request uses
 the project-local binding-owned begin_current_loop MCP operation. Pass the exact complete current
 customer message once as request_text. Branch-specific target rules apply. Review before generation
-uses request_text plus a compact proposal-v4 source-delivery recommendation: inline, or workspace_file with
-one safe proposed target. qCoder does not infer review write authority from surrounding free-form
-prose. Exact request presence or existing native selected-source provenance is only an anti-invention
-guard. Accepted legacy proposal v3 inputs normalize to the same internal semantics. Missing, unsafe,
-or ungrounded file recommendations converge silently to inline. A grounded
+uses request_text plus semantic-only review_content: one interpretation, substantive labeled
+implementation recommendations, and optional output, limitations, blocker, or proposed source
+target. qCoder derives routing, request facts, delivery, authority, deferrals, revision, and actions.
+Missing, unsafe, or ungrounded proposed targets converge silently to inline. A grounded
 file recommendation is displayed but remains inert until the customer confirms that exact review.
 The successful tool text is qCoder's exact canonical customer Markdown; structuredContent retains
 the same machine projection, so the assistant must not rewrite it. Assistant envelope target fields
@@ -1093,18 +1092,17 @@ choreography.
 REVIEW BEFORE GENERATION
 When the customer explicitly asks to review an interpretation or proposed implementation before
 source generation or source modification, call begin_current_loop once with the exact unchanged
-customer request and one separately attributed connected_assistant_proposal. The connected
-assistant supplies every substantive recommendation, including exactly one source-delivery
-recommendation. qCoder validates exact request binding, structural safety, privacy, substantiveness,
-and revision integrity, then returns the exact canonical customer Markdown as tool text and the
+customer request and one separately attributed review_content object. The connected assistant
+supplies substantive interpretation and implementation recommendations only. qCoder derives all
+routing, request facts, source delivery, authority, deferrals, revision, and actions, validates
+structural safety, privacy and substantiveness, then returns exact canonical customer Markdown as tool text and the
 same machine projection in structuredContent. Deliver that text unchanged; do not reconstruct,
 summarize, prefix, or suffix it. Its three groups and exact customer actions need no model rewrite. Do not
 generate or modify source until the customer confirms the displayed revision. Confirmation of a
 generation plan never grants execution authority. Review before generation has immediate-interaction
-precedence. Recommend inline when no safe target text occurs in request_text. For workspace_file,
-the exact proposed target text must occur in request_text or have existing native selected-source
-provenance. This anti-invention guard does not interpret surrounding language. Missing, unsafe, or ungrounded file
-recommendations and irrelevant envelope targets are discarded before path processing and converge
+precedence. The default delivery is inline. An optional proposed target is inert and must occur in
+request_text or have existing native selected-source provenance. This anti-invention guard does not
+interpret surrounding language. Missing, unsafe, or ungrounded targets and irrelevant envelope targets converge
 to the same inline review. A grounded recommendation is displayed but inert. Confirmation of that
 exact displayed revision is the first source-delivery and workspace-write authority. Source
 modification still requires its exact native-client-selected source.

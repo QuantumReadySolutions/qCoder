@@ -146,8 +146,8 @@ def test_bootstrap_owns_platform_serialization_and_cwd_semantics() -> None:
 
 def test_binding_v7_delivers_bootstrap_and_complete_lifecycle() -> None:
     binding = _descriptor("/runtime/python")
-    assert binding["schema_version"] == 57
-    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v58"
+    assert binding["schema_version"] == 58
+    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v59"
     bootstrap = binding["bootstrap_invocation_contract"]
     assert bootstrap["schema_id"] == BOOTSTRAP_INVOCATION_SCHEMA_ID
     assert bootstrap["supported_entrypoints"][FRESH_ACTIVE_BUILD_ENTRYPOINT][

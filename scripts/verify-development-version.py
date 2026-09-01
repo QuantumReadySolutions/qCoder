@@ -15,10 +15,10 @@ except ModuleNotFoundError:  # pragma: no cover
 
 
 EXPECTED_SCHEMA = "qcoder.private_development_version.v1"
-EXPECTED_VERSION = "0.6.0a24.post0.dev8+canonical.first.value.v1"
-EXPECTED_PREDECESSOR = "0.6.0a24.post0.dev7+review.confirmed.delivery.v1"
+EXPECTED_VERSION = "0.6.0a24.post0.dev9+semantic.only.first.value.v1"
+EXPECTED_PREDECESSOR = "0.6.0a24.post0.dev8+canonical.first.value.v1"
 EXPECTED_BASIS = "0.6.0a24"
-EXPECTED_WORK_IDENTITY = "WI0440_CANONICAL_FIRST_VALUE_DELIVERY_AND_COMPACT_MCP_DISCOVERY_V1"
+EXPECTED_WORK_IDENTITY = "WI0440_SEMANTIC_ONLY_REVIEW_INPUT_AND_TERMINAL_FIRST_VALUE_V1"
 
 
 def verify(root: Path) -> dict[str, object]:
@@ -37,7 +37,7 @@ def verify(root: Path) -> dict[str, object]:
         "canonical_descriptor_sha256",
         "identity_kind",
         "publication_permitted",
-        "proposal",
+        "review_input",
         "public_release_record_preserved_in",
         "public_successor_selected",
         "schema_id",
@@ -71,8 +71,7 @@ def verify(root: Path) -> dict[str, object]:
     if (
         development.get("binding") != descriptor.get("contract_id")
         or development.get("binding_schema") != descriptor.get("schema_version")
-        or development.get("proposal")
-        != "qcoder.connected_assistant.review_before_generation_proposal.v4"
+        or development.get("review_input") != "qcoder.connected_assistant.review_content.v1"
         or development.get("canonical_descriptor_bytes") != len(descriptor_bytes)
         or development.get("canonical_descriptor_sha256")
         != hashlib.sha256(descriptor_bytes).hexdigest()

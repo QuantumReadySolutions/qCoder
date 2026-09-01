@@ -20,14 +20,13 @@ from typing import Any
 
 from qcoder.core.share_safe import contains_local_path, contains_token_or_header
 
-PROPOSAL_SCHEMA_ID = "qcoder.connected_assistant.review_before_generation_proposal.v4"
-LEGACY_PROPOSAL_SCHEMA_ID = "qcoder.connected_assistant.review_before_generation_proposal.v3"
-SEMANTICS_SCHEMA_ID = "qcoder.current_loop.review_before_generation_semantics.v1"
-FIRST_VALUE_SCHEMA_ID = "qcoder.current_loop.review_before_generation_first_value.v2"
-TRANSACTION_SCHEMA_ID = "qcoder.current_loop.review_before_generation_transaction.v2"
-CONTRACT_SCHEMA_ID = "qcoder.current_loop.review_before_generation_contract.v2"
+REVIEW_CONTENT_SCHEMA_ID = "qcoder.connected_assistant.review_content.v1"
+SEMANTICS_SCHEMA_ID = "qcoder.current_loop.review_before_generation_semantics.v2"
+FIRST_VALUE_SCHEMA_ID = "qcoder.current_loop.review_before_generation_first_value.v3"
+TRANSACTION_SCHEMA_ID = "qcoder.current_loop.review_before_generation_transaction.v3"
+CONTRACT_SCHEMA_ID = "qcoder.current_loop.review_before_generation_contract.v3"
 
-PROPOSAL_ATTRIBUTION = "connected_assistant"
+REVIEW_CONTENT_ATTRIBUTION = "connected_assistant"
 CONNECTED_ASSISTANT_ATTRIBUTION = "connected_assistant_recommendation"
 CUSTOMER_ATTRIBUTION = "customer_explicit_constraint"
 QCODER_ATTRIBUTION = "qcoder_deterministic_boundary"
@@ -43,6 +42,32 @@ TRANSACTION_KINDS = (
 )
 EXECUTION_REQUESTS = ("not_requested", "held_for_separate_authorization")
 SOURCE_DELIVERY_MODES = ("inline", "workspace_file")
+
+_REVIEW_CONTENT_KEYS = {
+    "interpretation",
+    "implementation_recommendations",
+    "output_artifact",
+    "limitations",
+    "blocking_question",
+    "proposed_source_target",
+}
+_IGNORED_LEGACY_AUTHORITY_KEYS = {
+    "schema_id",
+    "schema_version",
+    "transaction_kind",
+    "execution_request",
+    "execution_state",
+    "generation_request",
+    "generation_authorized",
+    "execution_authorized",
+    "source_delivery",
+    "customer_constraints",
+    "deferred_choices",
+    "review_revision",
+    "prior_result_token",
+    "retention",
+    "confirmation_state",
+}
 
 _PLACEHOLDERS = {
     "tbd",
@@ -540,27 +565,31 @@ def _validated_display_source_target(value: object) -> str | None:
 
 def _normalized_source_delivery(
     exact_request: str,
-    value: object,
+    proposed_target: object,
     *,
     selected_artifact_identities: Sequence[str] = (),
+    transaction_kind: str,
 ) -> dict[str, str | None]:
-    """Normalize one inert assistant delivery recommendation.
+    """Derive delivery from one inert optional assistant target recommendation.
 
     Request occurrence and native selected-source identity are anti-invention
     provenance only. This function deliberately does not interpret surrounding
     free-form request language and performs no workspace path operation.
     """
 
-    if not isinstance(value, Mapping) or set(value) - {"mode", "target"}:
-        raise ReviewBeforeGenerationError("review_proposal_source_delivery_invalid")
-    mode = value.get("mode")
-    if mode not in SOURCE_DELIVERY_MODES:
-        raise ReviewBeforeGenerationError("review_proposal_source_delivery_mode_invalid")
-    if mode == "inline":
+    if transaction_kind == "review_before_source_modification":
+        if len(selected_artifact_identities) != 1:
+            return {"mode": "inline", "target": None}
+        selected_target = selected_artifact_identities[0]
+        try:
+            target = _validated_display_source_target(selected_target)
+        except ReviewBeforeGenerationError:
+            return {"mode": "inline", "target": None}
+        return {"mode": "workspace_file", "target": target}
+    if proposed_target is None:
         return {"mode": "inline", "target": None}
-    raw_target = value.get("target")
     try:
-        target = _validated_display_source_target(raw_target)
+        target = _validated_display_source_target(proposed_target)
     except ReviewBeforeGenerationError:
         return {"mode": "inline", "target": None}
     if target is None:
@@ -771,231 +800,207 @@ def _authority_items(axes: Mapping[str, str], request_execution_state: str) -> l
     ]
 
 
-def validate_connected_assistant_proposal(
+def _derived_request_facts(exact_request: str) -> list[dict[str, str]]:
+    request = " ".join(_unquoted_request(exact_request).casefold().split())
+    facts: list[dict[str, str]] = []
+    framework = next(
+        (
+            name
+            for token, name in (("qiskit", "Qiskit"), ("cirq", "Cirq"), ("pennylane", "PennyLane"))
+            if re.search(rf"\b{token}\b", request)
+        ),
+        None,
+    )
+    if framework is not None:
+        facts.append(
+            {
+                "label": "Requested framework",
+                "value": framework,
+                "attribution": CUSTOMER_ATTRIBUTION,
+            }
+        )
+    if re.search(r"\b(?:python|program|code|source|script|module)\b", request):
+        facts.append(
+            {
+                "label": "Requested artifact",
+                "value": "Source for the requested program.",
+                "attribution": CUSTOMER_ATTRIBUTION,
+            }
+        )
+    if re.search(r"\bprepar(?:e|es|ing)\b", request) and re.search(
+        r"\bmeasur(?:e|es|ing)\b", request
+    ):
+        facts.append(
+            {
+                "label": "Requested operation",
+                "value": "Prepare and measure the requested quantum state.",
+                "attribution": CUSTOMER_ATTRIBUTION,
+            }
+        )
+    return facts
+
+
+def _derived_review_route(
+    exact_request: str, selected_artifact_identities: Sequence[str]
+) -> tuple[str, str, str, str | None]:
+    request_state = review_source_transaction_state(exact_request)
+    blocker: str | None = None
+    if request_state == "source_modification":
+        transaction_kind = "review_before_source_modification"
+        if len(selected_artifact_identities) != 1:
+            blocker = "Which exact selected source should the proposed changes apply to?"
+    elif request_state == "source_generation":
+        transaction_kind = "review_before_source_generation"
+    elif request_state == "contradictory_or_ambiguous":
+        transaction_kind = "review_before_source_generation"
+        blocker = (
+            "Should qCoder review a new source plan or changes to an existing selected source?"
+        )
+    else:
+        transaction_kind = "review_before_source_generation"
+        blocker = "Should qCoder review this plan before producing or modifying source?"
+    request_execution_state = _execution_request_state(exact_request)
+    execution_request = (
+        "held_for_separate_authorization"
+        if request_execution_state == "explicit_affirmative"
+        else "not_requested"
+    )
+    if request_execution_state == "contradictory_or_ambiguous":
+        blocker = "Should execution remain unauthorized, or be requested separately after source generation?"
+    return transaction_kind, execution_request, request_execution_state, blocker
+
+
+def _semantic_values(value: object, *, limit: int = 256) -> list[str]:
+    values: list[str] = []
+    pending = [value]
+    while pending:
+        current = pending.pop()
+        if isinstance(current, str):
+            values.append(current)
+        elif isinstance(current, Mapping):
+            pending.extend(current.values())
+        elif isinstance(current, list):
+            pending.extend(current)
+        if len(values) + len(pending) > limit:
+            raise ReviewBeforeGenerationError("review_content_too_complex")
+    return values
+
+
+def validate_review_content(
     exact_request: str,
-    proposal: Mapping[str, Any],
+    review_content: Mapping[str, Any],
     *,
     selected_artifact_identities: Sequence[str] = (),
     displayed_source_target: str | None = None,
 ) -> dict[str, Any]:
-    """Validate and normalize one assistant-authored semantic proposal."""
+    """Validate semantic-only assistant content and derive every authority field."""
 
     if not isinstance(exact_request, str) or not exact_request or len(exact_request) > 20_000:
         raise ReviewBeforeGenerationError("review_exact_request_invalid")
-    if not isinstance(proposal, Mapping):
-        raise ReviewBeforeGenerationError("review_connected_assistant_proposal_required")
-    v4_expected = {
-        "schema_id",
-        "schema_version",
-        "transaction_kind",
-        "execution_request",
-        "source_delivery",
-        "interpretation",
-        "constraints",
-        "recommendations",
-        "output_artifact",
-        "deferred",
-        "limitations",
-        "clarification",
+    if not isinstance(review_content, Mapping):
+        raise ReviewBeforeGenerationError("review_content_required")
+    try:
+        encoded_size = len(json.dumps(review_content, ensure_ascii=False).encode("utf-8"))
+    except (TypeError, ValueError) as exc:
+        raise ReviewBeforeGenerationError("review_content_invalid") from exc
+    if encoded_size > 80_000:
+        raise ReviewBeforeGenerationError("review_content_too_large")
+    unknown = set(review_content) - _REVIEW_CONTENT_KEYS - _IGNORED_LEGACY_AUTHORITY_KEYS
+    if unknown:
+        raise ReviewBeforeGenerationError("review_content_unknown_field")
+    display_input = {
+        key: value
+        for key, value in review_content.items()
+        if key in _REVIEW_CONTENT_KEYS and key != "proposed_source_target"
     }
-    v3_expected = {
-        "schema_id",
-        "schema_version",
-        "transaction_kind",
-        "execution_request",
-        "source_delivery",
-        "recommended_interpretation",
-        "customer_constraints",
-        "implementation_recommendations",
-        "material_choices",
-        "output_artifact",
-        "deferred_choices",
-        "limitations_nonclaims",
-        "blocking_clarification",
-    }
-    schema_id = proposal.get("schema_id")
-    schema_version = proposal.get("schema_version")
-    if schema_id == PROPOSAL_SCHEMA_ID and schema_version == 4:
-        _strict_keys(proposal, v4_expected, "review_proposal_schema_invalid")
-        compact = True
-    elif schema_id == LEGACY_PROPOSAL_SCHEMA_ID and schema_version == 3:
-        _strict_keys(proposal, v3_expected, "review_proposal_schema_invalid")
-        compact = False
-    else:
-        raise ReviewBeforeGenerationError("review_proposal_contract_invalid")
-    transaction_kind = str(proposal.get("transaction_kind") or "")
-    execution_request = str(proposal.get("execution_request") or "")
-    if transaction_kind not in TRANSACTION_KINDS or execution_request not in EXECUTION_REQUESTS:
-        raise ReviewBeforeGenerationError("review_proposal_semantic_mode_invalid")
-    validate_review_transaction_kind(exact_request, transaction_kind)
+    all_input_values = _semantic_values(display_input)
+    if _projection_contains_customer_action(all_input_values):
+        raise ReviewBeforeGenerationError("review_content_unsafe_projection_text")
+    if _projection_contains_source_or_qasm(all_input_values):
+        raise ReviewBeforeGenerationError("review_content_source_or_qasm_rejected")
+
+    transaction_kind, execution_request, request_execution_state, generated_blocker = (
+        _derived_review_route(exact_request, selected_artifact_identities)
+    )
+    axes = _semantic_axes(transaction_kind, execution_request)
     delivery = _normalized_source_delivery(
         exact_request,
-        proposal.get("source_delivery"),
+        review_content.get("proposed_source_target"),
         selected_artifact_identities=selected_artifact_identities,
+        transaction_kind=transaction_kind,
     )
     proposed_source_target = delivery["target"]
     if displayed_source_target is not None and displayed_source_target != proposed_source_target:
         raise ReviewBeforeGenerationError("review_displayed_source_target_invalid")
-    axes = _semantic_axes(transaction_kind, execution_request)
-    if transaction_kind == "review_before_source_modification" and not selected_artifact_identities:
-        raise ReviewBeforeGenerationError(
-            "review_source_modification_selection_required",
-            clarification="Which exact source file should the proposed changes apply to?",
-        )
-    request_execution_state, generated_clarification = _validate_request_authority(
-        exact_request, axes, execution_request
-    )
 
     interpretation = _bounded_plain_text(
-        proposal.get("interpretation" if compact else "recommended_interpretation"),
-        category="review_proposal_interpretation_invalid",
+        review_content.get("interpretation"),
+        category="review_content_interpretation_invalid",
         maximum=4_000,
     )
-    if (
-        interpretation.casefold() == exact_request.strip().casefold()
-        or len(interpretation.split()) < 7
-    ):
-        raise ReviewBeforeGenerationError("review_proposal_goal_restatement_only")
-
-    constraint_values = proposal.get("constraints" if compact else "customer_constraints")
-    if not isinstance(constraint_values, list) or len(constraint_values) > 16:
-        raise ReviewBeforeGenerationError("review_proposal_customer_constraints_invalid")
-    constraints: list[str] = []
-    for value in constraint_values:
-        excerpt = _bounded_plain_text(
-            value, category="review_proposal_customer_constraint_invalid", maximum=500
-        )
-        if excerpt not in exact_request:
-            raise ReviewBeforeGenerationError("review_proposal_customer_constraint_not_in_request")
-        if not _customer_constraint_is_material(excerpt):
-            raise ReviewBeforeGenerationError("review_proposal_customer_constraint_not_material")
-        constraints.append(excerpt)
-    if len(set(constraints)) != len(constraints):
-        raise ReviewBeforeGenerationError("review_proposal_customer_constraint_duplicate")
-
-    recommendations: list[dict[str, str]] = []
-    if compact:
-        recommendation_values = proposal.get("recommendations")
-        if (
-            not isinstance(recommendation_values, list)
-            or not recommendation_values
-            or len(recommendation_values) > 24
-        ):
-            raise ReviewBeforeGenerationError("review_proposal_implementation_required")
-        for value in recommendation_values:
-            if not isinstance(value, Mapping):
-                raise ReviewBeforeGenerationError("review_proposal_choice_invalid")
-            _strict_keys(value, {"label", "value"}, "review_proposal_choice_invalid")
-            recommendations.append(
-                {
-                    "label": _bounded_plain_text(
-                        value.get("label"),
-                        category="review_proposal_choice_invalid",
-                        maximum=160,
-                    ),
-                    "value": _bounded_plain_text(
-                        value.get("value"), category="review_proposal_implementation_invalid"
-                    ),
-                }
-            )
-    else:
-        recommendation_values = proposal.get("implementation_recommendations")
-        choices_value = proposal.get("material_choices")
-        if (
-            not isinstance(recommendation_values, list)
-            or not recommendation_values
-            or len(recommendation_values) > 24
-        ):
-            raise ReviewBeforeGenerationError("review_proposal_implementation_required")
-        if not isinstance(choices_value, list) or not choices_value or len(choices_value) > 24:
-            raise ReviewBeforeGenerationError("review_proposal_material_choices_required")
-        for value in choices_value:
-            if not isinstance(value, Mapping):
-                raise ReviewBeforeGenerationError("review_proposal_choice_invalid")
-            _strict_keys(value, {"choice", "recommendation"}, "review_proposal_choice_invalid")
-            candidate = {
-                "label": _bounded_plain_text(
-                    value.get("choice"),
-                    category="review_proposal_choice_invalid",
-                    maximum=160,
-                ),
-                "value": _bounded_plain_text(
-                    value.get("recommendation"), category="review_proposal_choice_invalid"
-                ),
-            }
-            recommendations.append(candidate)
-        for index, value in enumerate(recommendation_values, start=1):
-            candidate_value = _bounded_plain_text(
-                value, category="review_proposal_implementation_invalid"
-            )
-            if _normalized_text(candidate_value).rstrip(".") not in {
-                _normalized_text(item["value"]).rstrip(".") for item in recommendations
-            }:
-                recommendations.append(
-                    {
-                        "label": f"Implementation recommendation {index}",
-                        "value": candidate_value,
-                    }
-                )
-    if len({item["label"].casefold() for item in recommendations}) != len(recommendations):
-        raise ReviewBeforeGenerationError("review_proposal_choice_duplicate")
-    if not any(_is_consequential(item["value"]) for item in recommendations):
-        raise ReviewBeforeGenerationError("review_proposal_implementation_not_consequential")
-
-    output_artifact = _bounded_plain_text(
-        proposal.get("output_artifact"), category="review_proposal_output_artifact_invalid"
-    )
-    if _assistant_values_contradict_authority([output_artifact], axes):
-        raise ReviewBeforeGenerationError("review_proposal_authority_contradiction")
-    if not re.search(
-        r"\b(?:python|source|code|program|file|qasm|script|module)\b",
-        output_artifact,
-        re.IGNORECASE,
-    ):
-        raise ReviewBeforeGenerationError("review_proposal_output_artifact_not_concrete")
-
-    deferred_value = proposal.get("deferred" if compact else "deferred_choices")
-    limitations_value = proposal.get("limitations" if compact else "limitations_nonclaims")
-    if not isinstance(deferred_value, list) or len(deferred_value) > 24:
-        raise ReviewBeforeGenerationError("review_proposal_deferred_choices_invalid")
-    if (
-        not isinstance(limitations_value, list)
-        or not limitations_value
-        or len(limitations_value) > 24
-    ):
-        raise ReviewBeforeGenerationError("review_proposal_limitations_required")
-    deferred = [
-        _bounded_plain_text(value, category="review_proposal_deferred_choice_invalid")
-        for value in deferred_value
-    ]
-    limitations = [
-        _bounded_plain_text(value, category="review_proposal_limitation_invalid")
-        for value in limitations_value
-    ]
-    blocking = proposal.get("clarification" if compact else "blocking_clarification")
+    blocking = review_content.get("blocking_question")
     if blocking is not None:
         blocking = _bounded_plain_text(
-            blocking, category="review_proposal_blocking_clarification_invalid", maximum=600
+            blocking, category="review_content_blocking_question_invalid", maximum=600
         )
-    if generated_clarification is not None:
-        blocking = generated_clarification
+    if generated_blocker is not None:
+        blocking = generated_blocker
+
+    recommendation_values = review_content.get("implementation_recommendations")
+    if (
+        not isinstance(recommendation_values, list)
+        or not recommendation_values
+        or len(recommendation_values) > 24
+    ):
+        raise ReviewBeforeGenerationError("review_content_implementation_required")
+    recommendations: list[dict[str, str]] = []
+    for value in recommendation_values:
+        if not isinstance(value, Mapping) or set(value) != {"label", "value"}:
+            raise ReviewBeforeGenerationError("review_content_recommendation_invalid")
+        candidate = {
+            "label": _bounded_plain_text(
+                value.get("label"), category="review_content_recommendation_invalid", maximum=160
+            ),
+            "value": _bounded_plain_text(
+                value.get("value"), category="review_content_recommendation_invalid"
+            ),
+        }
+        if _assistant_values_contradict_authority(list(candidate.values()), axes):
+            continue
+        recommendations.append(candidate)
+    if len({item["label"].casefold() for item in recommendations}) != len(recommendations):
+        raise ReviewBeforeGenerationError("review_content_recommendation_duplicate")
+    if not recommendations or not any(_is_consequential(item["value"]) for item in recommendations):
+        blocking = blocking or "Which concrete implementation approach should qCoder review?"
+
+    output_value = review_content.get("output_artifact")
+    output_artifact = (
+        _bounded_plain_text(output_value, category="review_content_output_artifact_invalid")
+        if output_value is not None
+        else "Readable Python source for the requested program."
+    )
+    if _assistant_values_contradict_authority([output_artifact], axes):
+        output_artifact = "Readable Python source for the requested program."
+
+    limitation_values = review_content.get("limitations", [])
+    if not isinstance(limitation_values, list) or len(limitation_values) > 16:
+        raise ReviewBeforeGenerationError("review_content_limitations_invalid")
+    limitations = [
+        _bounded_plain_text(value, category="review_content_limitation_invalid")
+        for value in limitation_values
+    ]
 
     untrusted_values = [
         interpretation,
-        *constraints,
         *(item["label"] for item in recommendations),
         *(item["value"] for item in recommendations),
-        output_artifact,
-        *deferred,
         *limitations,
         *([blocking] if isinstance(blocking, str) else []),
     ]
     if _projection_contains_customer_action(untrusted_values):
-        raise ReviewBeforeGenerationError("review_proposal_unsafe_projection_text")
+        raise ReviewBeforeGenerationError("review_content_unsafe_projection_text")
     if _projection_contains_source_or_qasm(untrusted_values):
-        raise ReviewBeforeGenerationError("review_proposal_source_or_qasm_rejected")
-    if _assistant_values_contradict_authority(untrusted_values, axes):
-        raise ReviewBeforeGenerationError("review_proposal_authority_contradiction")
+        raise ReviewBeforeGenerationError("review_content_source_or_qasm_rejected")
 
     displayed_normalized: set[str] = set()
 
@@ -1007,34 +1012,23 @@ def validate_connected_assistant_proposal(
 
     goal_items: list[dict[str, str]] = []
     add_unique(goal_items, _assistant_item("Recommended interpretation", interpretation))
-    for index, value in enumerate(constraints, start=1):
-        add_unique(
-            goal_items,
-            {
-                "label": f"Customer constraint {index}",
-                "value": value,
-                "attribution": CUSTOMER_ATTRIBUTION,
-            },
-        )
+    for fact in _derived_request_facts(exact_request):
+        add_unique(goal_items, fact)
     for index, value in enumerate(limitations, start=1):
         add_unique(goal_items, _assistant_item(f"Limitation {index}", value))
     if isinstance(blocking, str):
-        item = (
-            _qcoder_item("Clarification needed", blocking)
-            if generated_clarification is not None
-            else _assistant_item("Clarification needed", blocking)
-        )
-        add_unique(goal_items, item)
+        add_unique(goal_items, _qcoder_item("Clarification needed", blocking))
 
     implementation_items: list[dict[str, str]] = []
     for item in recommendations:
+        add_unique(implementation_items, _assistant_item(item["label"], item["value"]))
+    if not implementation_items:
         add_unique(
             implementation_items,
-            _assistant_item(item["label"], item["value"]),
+            _qcoder_item(
+                "Implementation status", "A material implementation choice is unresolved."
+            ),
         )
-    # The compact first view presents each recommendation once. The complete,
-    # editable material-choice inventory remains available only through the
-    # token-bound "Review or change choices" action.
     add_unique(
         implementation_items,
         _qcoder_item("Dependency version", "No dependency version was selected silently."),
@@ -1045,10 +1039,21 @@ def validate_connected_assistant_proposal(
     )
 
     output_items: list[dict[str, str]] = []
-    add_unique(output_items, _assistant_item("Output artifact", output_artifact))
     add_unique(
         output_items,
-        _assistant_item(
+        {
+            "label": "Output artifact",
+            "value": output_artifact,
+            "attribution": (
+                CONNECTED_ASSISTANT_ATTRIBUTION
+                if output_value is not None
+                else CUSTOMER_ATTRIBUTION
+            ),
+        },
+    )
+    add_unique(
+        output_items,
+        _qcoder_item(
             "Source delivery",
             "Inline after confirmation."
             if delivery["mode"] == "inline"
@@ -1056,25 +1061,18 @@ def validate_connected_assistant_proposal(
         ),
     )
     if proposed_source_target is not None:
-        add_unique(
-            output_items,
-            _assistant_item("Proposed source target", proposed_source_target),
-        )
+        add_unique(output_items, _assistant_item("Proposed source target", proposed_source_target))
     for item in _authority_items(axes, request_execution_state):
         add_unique(output_items, item)
-    for index, value in enumerate(deferred, start=1):
-        if re.search(r"\b(?:backend|shots?|seed|result handling)\b", value, re.IGNORECASE):
-            continue
-        add_unique(output_items, _assistant_item(f"Deferred choice {index}", value))
     groups = [
         {"group_id": GROUPS[0][0], "label": GROUPS[0][1], "items": goal_items},
         {"group_id": GROUPS[1][0], "label": GROUPS[1][1], "items": implementation_items},
         {"group_id": GROUPS[2][0], "label": GROUPS[2][1], "items": output_items},
     ]
     normalized = {
-        "schema_id": PROPOSAL_SCHEMA_ID,
-        "schema_version": 4,
-        "proposal_attribution": PROPOSAL_ATTRIBUTION,
+        "schema_id": REVIEW_CONTENT_SCHEMA_ID,
+        "schema_version": 1,
+        "review_content_attribution": REVIEW_CONTENT_ATTRIBUTION,
         "exact_request_utf8_sha256": request_digest(exact_request),
         "transaction_kind": transaction_kind,
         "execution_request": execution_request,
@@ -1082,25 +1080,19 @@ def validate_connected_assistant_proposal(
         "request_execution_state": request_execution_state,
         "semantic_axes": axes,
         "interpretation": interpretation,
-        "constraints": constraints,
         "recommendations": [
             {**item, "attribution": CONNECTED_ASSISTANT_ATTRIBUTION} for item in recommendations
         ],
         "review_groups": groups,
         "output_artifact": output_artifact,
-        "deferred_choices": [
-            {
-                "label": f"Deferred choice {index}",
-                "deferred_value": value,
-                "attribution": CONNECTED_ASSISTANT_ATTRIBUTION,
-            }
-            for index, value in enumerate(deferred, start=1)
-        ],
         "limitations_nonclaims": [
             {"value": value, "attribution": CONNECTED_ASSISTANT_ATTRIBUTION}
             for value in limitations
         ],
         "blocking_clarification": blocking,
+        "ignored_legacy_authority_fields": sorted(
+            set(review_content).intersection(_IGNORED_LEGACY_AUTHORITY_KEYS)
+        ),
         "retention": "process_and_discard",
     }
     privacy_projection = deepcopy(normalized)
@@ -1112,20 +1104,20 @@ def validate_connected_assistant_proposal(
             ):
                 item["value"] = "request-grounded-proposed-source-target"
     if _privacy_error(privacy_projection):
-        raise ReviewBeforeGenerationError("review_proposal_private_material_rejected")
+        raise ReviewBeforeGenerationError("review_content_private_material_rejected")
     return normalized
 
 
 def build_review_before_generation_semantics(
     exact_request: str,
-    proposal: Mapping[str, Any],
+    review_content: Mapping[str, Any],
     *,
     selected_artifact_identities: Sequence[str] = (),
     displayed_source_target: str | None = None,
 ) -> dict[str, Any]:
-    validated = validate_connected_assistant_proposal(
+    validated = validate_review_content(
         exact_request,
-        proposal,
+        review_content,
         selected_artifact_identities=selected_artifact_identities,
         displayed_source_target=displayed_source_target,
     )
@@ -1161,14 +1153,14 @@ def build_review_before_generation_semantics(
 
 def review_revision(
     exact_request: str,
-    proposal: Mapping[str, Any],
+    review_content: Mapping[str, Any],
     *,
     selected_artifact_identities: Sequence[str] = (),
     displayed_source_target: str | None = None,
 ) -> str:
-    validated = validate_connected_assistant_proposal(
+    validated = validate_review_content(
         exact_request,
-        proposal,
+        review_content,
         selected_artifact_identities=selected_artifact_identities,
         displayed_source_target=displayed_source_target,
     )
@@ -1186,19 +1178,19 @@ def review_revision(
 
 def review_revision_from_validated(
     exact_request: str,
-    validated_proposal: Mapping[str, Any],
+    validated_review_content: Mapping[str, Any],
     *,
     selected_artifact_identity_sha256: Sequence[str] = (),
     displayed_source_target: str | None = None,
 ) -> str:
-    """Bind a validated proposal and visible target to one internal revision."""
+    """Bind validated semantic content and its visible target to one revision."""
 
     displayed_source_target = _validated_display_source_target(displayed_source_target)
     return "review-revision-" + _digest(
         {
             "exact_request": exact_request,
             "exact_request_utf8_sha256": request_digest(exact_request),
-            "connected_assistant_proposal": deepcopy(dict(validated_proposal)),
+            "review_content": deepcopy(dict(validated_review_content)),
             "selected_artifact_identity_sha256": sorted(selected_artifact_identity_sha256),
             "displayed_source_target": displayed_source_target,
             "privacy_safe_projection": True,
@@ -1229,7 +1221,7 @@ def _displayed_text_values(
 
 
 _FIRST_VALUE_KEYS = {
-    "proposal_attribution",
+    "review_content_attribution",
     "initial_decision_groups",
     "initial_decision_group_count",
     "initial_decision_group_maximum",
@@ -1246,6 +1238,7 @@ _FIRST_VALUE_KEYS = {
 }
 
 _QCODER_ITEM_VALUES = {
+    "Implementation status": {"A material implementation choice is unresolved."},
     "Dependency version": {"No dependency version was selected silently."},
     "Execution environment": {"No execution environment was selected silently."},
     "Generation authority": {
@@ -1261,6 +1254,10 @@ _QCODER_ITEM_VALUES = {
     },
     "Authority separation": {"Confirming these choices does not authorize execution."},
     "Deferred execution choices": {"Backend, shots, seed, and result handling remain deferred."},
+    "Source delivery": {
+        "Inline after confirmation.",
+        "Workspace file after confirmation.",
+    },
     "Clarification needed": {
         "Should execution remain deferred, or be separately authorized after source generation?"
     },
@@ -1327,7 +1324,9 @@ def validate_first_value(value: Mapping[str, Any]) -> dict[str, Any]:
                     )
                 _validated_display_source_target(item_value)
             elif attribution == QCODER_ATTRIBUTION:
-                if item_value not in _QCODER_ITEM_VALUES.get(label, set()):
+                if label == "Clarification needed":
+                    pass
+                elif item_value not in _QCODER_ITEM_VALUES.get(label, set()):
                     raise ReviewBeforeGenerationError("review_first_value_qcoder_boundary_invalid")
             else:
                 untrusted_values.extend((label, item_value))
@@ -1370,7 +1369,7 @@ def validate_first_value(value: Mapping[str, Any]) -> dict[str, Any]:
         raise ReviewBeforeGenerationError("review_first_value_confirmable_invalid")
     if value.get("customer_actions") != (list(CUSTOMER_ACTIONS) if confirmable else []):
         raise ReviewBeforeGenerationError("review_first_value_actions_invalid")
-    if value.get("proposal_attribution") != PROPOSAL_ATTRIBUTION:
+    if value.get("review_content_attribution") != REVIEW_CONTENT_ATTRIBUTION:
         raise ReviewBeforeGenerationError("review_first_value_attribution_invalid")
     if not any(
         item["attribution"] == CONNECTED_ASSISTANT_ATTRIBUTION and _is_consequential(item["value"])
@@ -1422,14 +1421,14 @@ def displayed_source_target(value: Mapping[str, Any]) -> str | None:
 
 def build_first_value(
     exact_request: str,
-    proposal: Mapping[str, Any],
+    review_content: Mapping[str, Any],
     *,
     selected_artifact_identities: Sequence[str] = (),
     displayed_source_target: str | None = None,
 ) -> dict[str, Any]:
-    validated = validate_connected_assistant_proposal(
+    validated = validate_review_content(
         exact_request,
-        proposal,
+        review_content,
         selected_artifact_identities=selected_artifact_identities,
         displayed_source_target=displayed_source_target,
     )
@@ -1444,7 +1443,7 @@ def build_first_value(
         if item["label"] != "Proposed source target"
     ]
     result = {
-        "proposal_attribution": PROPOSAL_ATTRIBUTION,
+        "review_content_attribution": REVIEW_CONTENT_ATTRIBUTION,
         "initial_decision_groups": displayed_groups,
         "initial_decision_group_count": 3,
         "initial_decision_group_maximum": 3,
@@ -1484,8 +1483,7 @@ def canonical_first_value_delivery(
     """Bind one validated machine projection and its exact Markdown to one revision.
 
     The construction excludes opaque continuation tokens, timestamps, transport
-    metadata, and mapping insertion order.  It is therefore suitable for both
-    the text fallback and the packaged MCP App render model.
+    metadata, and mapping insertion order.
     """
 
     validated = validate_first_value(value)
@@ -1495,16 +1493,11 @@ def canonical_first_value_delivery(
         raise ReviewBeforeGenerationError("review_projection_revision_invalid")
     markdown = render_first_value_markdown(validated)
     revision_sha256 = sha256(review_revision_value.encode("utf-8")).hexdigest()
-    render_model = {
-        "groups": deepcopy(validated["initial_decision_groups"]),
-        "actions": list(validated["customer_actions"]),
-    }
     digest_input = {
         "schema_id": "qcoder.current_loop.first_value_projection_digest.v1",
         "semantic_revision_sha256": revision_sha256,
         "machine_projection": validated,
         "canonical_markdown": markdown,
-        "app_render_model": render_model,
     }
     return {
         "schema_id": "qcoder.current_loop.canonical_first_value_delivery.v1",
@@ -1512,7 +1505,6 @@ def canonical_first_value_delivery(
         "semantic_revision_sha256": revision_sha256,
         "machine_projection": validated,
         "canonical_markdown": markdown,
-        "app_render_model": render_model,
         "projection_digest": sha256(
             json.dumps(
                 digest_input,
@@ -1542,12 +1534,12 @@ def validate_canonical_first_value_delivery(
 def contract_snapshot() -> dict[str, Any]:
     return {
         "schema_id": CONTRACT_SCHEMA_ID,
-        "schema_version": 2,
-        "proposal_schema_id": PROPOSAL_SCHEMA_ID,
+        "schema_version": 3,
+        "review_content_schema_id": REVIEW_CONTENT_SCHEMA_ID,
         "semantics_schema_id": SEMANTICS_SCHEMA_ID,
         "first_value_schema_id": FIRST_VALUE_SCHEMA_ID,
         "transaction_schema_id": TRANSACTION_SCHEMA_ID,
-        "proposal_attribution": PROPOSAL_ATTRIBUTION,
+        "review_content_attribution": REVIEW_CONTENT_ATTRIBUTION,
         "transaction_kinds": list(TRANSACTION_KINDS),
         "execution_requests": list(EXECUTION_REQUESTS),
         "initial_groups": [label for _, label in GROUPS],
@@ -1565,7 +1557,9 @@ def contract_snapshot() -> dict[str, Any]:
         "inline_review_cannot_gain_workspace_target_on_confirmation": True,
         "model_facing_confirmation_internal_mechanics": False,
         "one_operation_before_useful_review": True,
-        "backward_compatible_optional_begin_input": True,
+        "model_supplies_authority_fields": False,
+        "safe_semantic_mismatch_is_terminal": True,
+        "duplicate_semantic_call_idempotent": True,
         "protected_service_required": False,
         "qcoder_authors_recommendations": False,
         "process_and_discard": True,
@@ -1574,82 +1568,23 @@ def contract_snapshot() -> dict[str, Any]:
     }
 
 
-def proposal_input_schema() -> dict[str, Any]:
-    """Return the preferred compact valid-by-construction v4 proposal schema."""
+def review_content_input_schema() -> dict[str, Any]:
+    """Return the preferred compact semantic-only review-content schema."""
 
     plain_text = {
         "type": "string",
         "minLength": 1,
         "maxLength": 2000,
-        "description": (
-            "One bounded plain-text value. Do not include Markdown, source code, QASM, customer "
-            "action labels, qCoder boundary text, schema mechanics, or multiline content."
-        ),
     }
     return {
         "type": "object",
-        "description": "Compact assistant-attributed review proposal; qCoder owns projection and authority.",
+        "description": "Substantive review content only; qCoder derives routing and authority.",
         "properties": {
-            "schema_id": {"const": PROPOSAL_SCHEMA_ID},
-            "schema_version": {"const": 4},
-            "transaction_kind": {
-                "type": "string",
-                "enum": list(TRANSACTION_KINDS),
-                "description": (
-                    "Select review before new source generation or review before changes to an "
-                    "explicitly selected source artifact."
-                ),
-            },
-            "execution_request": {
-                "type": "string",
-                "enum": list(EXECUTION_REQUESTS),
-                "description": (
-                    "Use not_requested unless execution was explicitly requested; even then it "
-                    "remains held for separate authorization."
-                ),
-            },
-            "source_delivery": {
-                "type": "object",
-                "description": (
-                    "One connected-assistant recommendation, held without source or write "
-                    "authority until the customer confirms the exact displayed revision. Use "
-                    "inline with no target for inline source. Use workspace_file with one safe "
-                    "workspace-relative Python source target only when that exact path text "
-                    "occurs in request_text or is backed by an existing native selected-source "
-                    "workflow. Missing, unsafe, or ungrounded workspace targets converge "
-                    "silently to inline. Do not infer authority from this recommendation."
-                ),
-                "properties": {
-                    "mode": {"type": "string", "enum": list(SOURCE_DELIVERY_MODES)},
-                    "target": {"type": ["string", "null"], "maxLength": 16384},
-                },
-                "required": ["mode"],
-                "additionalProperties": False,
-            },
             "interpretation": {
                 **plain_text,
                 "maxLength": 4000,
-                "description": (
-                    "Concrete reading of the customer's goal and scope. Do not include source, "
-                    "QASM, Markdown, or an action label."
-                ),
             },
-            "constraints": {
-                "type": "array",
-                "minItems": 0,
-                "maxItems": 16,
-                "uniqueItems": True,
-                "items": {
-                    **plain_text,
-                    "maxLength": 500,
-                    "description": "Exact nonempty excerpt copied from request_text.",
-                },
-                "description": (
-                    "Optional exact material excerpts from unchanged request_text; use an empty "
-                    "list instead of manufacturing a customer fact."
-                ),
-            },
-            "recommendations": {
+            "implementation_recommendations": {
                 "type": "array",
                 "minItems": 1,
                 "maxItems": 24,
@@ -1662,52 +1597,23 @@ def proposal_input_schema() -> dict[str, Any]:
                     "required": ["label", "value"],
                     "additionalProperties": False,
                 },
-                "description": "Each substantive recommendation exactly once.",
             },
             "output_artifact": {
                 **plain_text,
-                "description": "Concrete source artifact form proposed after confirmation.",
-            },
-            "deferred": {
-                "type": "array",
-                "maxItems": 24,
-                "items": plain_text,
-                "description": (
-                    "Material choices deliberately deferred. Defer execution-only choices when "
-                    "execution was not requested."
-                ),
             },
             "limitations": {
                 "type": "array",
-                "minItems": 1,
-                "maxItems": 24,
+                "maxItems": 16,
                 "items": plain_text,
-                "description": "Truthful limitations and nonclaims; no qCoder boundary attribution.",
             },
-            "clarification": {
+            "blocking_question": {
                 "type": ["string", "null"],
                 "maxLength": 600,
-                "description": (
-                    "One genuinely material unresolved question, or null when the concrete "
-                    "recommendation is confirmable."
-                ),
             },
+            "proposed_source_target": {"type": ["string", "null"], "maxLength": 16384},
         },
-        "required": [
-            "schema_id",
-            "schema_version",
-            "transaction_kind",
-            "execution_request",
-            "source_delivery",
-            "interpretation",
-            "constraints",
-            "recommendations",
-            "output_artifact",
-            "deferred",
-            "limitations",
-            "clarification",
-        ],
-        "additionalProperties": False,
+        "required": ["interpretation", "implementation_recommendations"],
+        "additionalProperties": True,
     }
 
 
@@ -1715,8 +1621,7 @@ __all__ = [
     "CONTRACT_SCHEMA_ID",
     "CUSTOMER_ACTIONS",
     "FIRST_VALUE_SCHEMA_ID",
-    "LEGACY_PROPOSAL_SCHEMA_ID",
-    "PROPOSAL_SCHEMA_ID",
+    "REVIEW_CONTENT_SCHEMA_ID",
     "SEMANTICS_SCHEMA_ID",
     "TRANSACTION_SCHEMA_ID",
     "ReviewBeforeGenerationError",
@@ -1726,15 +1631,15 @@ __all__ = [
     "canonical_json",
     "contract_snapshot",
     "displayed_source_target",
-    "proposal_input_schema",
     "render_first_value_markdown",
     "request_digest",
+    "review_content_input_schema",
     "review_revision",
     "review_revision_from_validated",
     "review_source_transaction_state",
     "unquoted_request_text",
     "validate_canonical_first_value_delivery",
-    "validate_connected_assistant_proposal",
     "validate_first_value",
+    "validate_review_content",
     "validate_review_transaction_kind",
 ]

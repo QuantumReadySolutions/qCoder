@@ -32,12 +32,18 @@ from qcoder.current_loop_artifact_targets import (
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.current_loop_operator_timing import (
     OperatorTimingEvidenceError,
-    clear_stdio_operator_timing,
-    record_stdio_operator_timing,
+    clear_begin_attempt_ledger,
+    record_begin_attempt,
 )
 from qcoder.current_loop_pending_completion import (
     PendingCompletionError,
     validate_pending_completion_checkpoint,
+)
+from qcoder.current_loop_reference_resources import (
+    read_resource as read_current_loop_resource,
+)
+from qcoder.current_loop_reference_resources import (
+    resource_descriptors as current_loop_resource_descriptors,
 )
 from qcoder.current_loop_request_semantics import classify_current_request
 from qcoder.current_loop_result_controls import ResultControlError
@@ -45,31 +51,20 @@ from qcoder.current_step_contract import (
     derive_current_step_contract,
     quiet_customer_visibility_contract,
 )
-from qcoder.mcp_first_value_app import (
-    app_tool_metadata,
-)
-from qcoder.mcp_first_value_app import (
-    read_resource as read_first_value_resource,
-)
-from qcoder.mcp_first_value_app import (
-    resource_descriptors as first_value_resource_descriptors,
-)
 from qcoder.review_before_generation import (
     CUSTOMER_ACTIONS as REVIEW_BEFORE_GENERATION_ACTIONS,
 )
 from qcoder.review_before_generation import (
     ReviewBeforeGenerationError,
-    validate_review_transaction_kind,
+    review_content_input_schema,
+    review_source_transaction_state,
 )
 from qcoder.review_before_generation import (
     contract_snapshot as review_before_generation_contract_snapshot,
 )
-from qcoder.review_before_generation import (
-    proposal_input_schema as review_before_generation_proposal_input_schema,
-)
 
-BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v14"
-BINDING_MCP_SCHEMA_VERSION = 14
+BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v15"
+BINDING_MCP_SCHEMA_VERSION = 15
 BINDING_MCP_SERVER_NAME = "qcoder-current-loop"
 BEGIN_CURRENT_LOOP_TOOL_NAME = "begin_current_loop"
 COMPLETE_CURRENT_STEP_TOOL_NAME = "complete_current_step"
@@ -536,11 +531,13 @@ def _unconfirmed_generation_review_has_no_target_authority(
 def _quiet_review_success_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     """Project only review content, its opaque continuation, and authority ceilings."""
 
+    if payload.get("terminal_for_turn") is True:
+        return dict(payload)
     semantics = payload.get("current_request_semantics")
     axes = semantics.get("semantic_axes") if isinstance(semantics, Mapping) else None
     generation_authority = axes.get("generation_authority") if isinstance(axes, Mapping) else None
     execution_authority = axes.get("execution_authority") if isinstance(axes, Mapping) else None
-    return {
+    result = {
         "ok": True,
         "review_before_generation": payload["review_before_generation"],
         "canonical_delivery": payload["canonical_delivery"],
@@ -552,10 +549,24 @@ def _quiet_review_success_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
         "execution_performed": False,
         "protected_service_called": False,
     }
+    for key in (
+        "category",
+        "duplicate_call_idempotent",
+        "prior_result_token_invalidated",
+        "state_mutated",
+    ):
+        if key in payload:
+            result[key] = payload[key]
+    return result
 
 
 def _full_binding_tool_descriptors() -> list[dict[str, Any]]:
     """Return the two private operations in the client-neutral transaction."""
+
+    # D-136 uses the same compact, safety-complete descriptors for every
+    # assistant-facing discovery surface. Historical expanded proposal prose
+    # below is unreachable and retained only until its evidence-only removal.
+    return binding_tool_descriptors()
 
     return [
         {
@@ -566,18 +577,14 @@ def _full_binding_tool_descriptors() -> list[dict[str, Any]]:
                 "exact next instruction against an already complete-resumable loop. "
                 "Supply request_text exactly once as the complete unmodified customer message. "
                 "For review before source generation or modification, make the initial call with "
-                "that exact request and one concrete connected_assistant_proposal. Do not compute "
+                "that exact request and one concrete review_content object. Do not compute "
                 "a hash, invent group identifiers or labels, include source or QASM, or provide "
                 "qCoder authority text. Customer constraints must be exact request excerpts. "
                 "qCoder supplies structure, attribution, authority, revision, and actions. Later "
                 "confirm with only review_action and the opaque prior_result_token; do not replay "
                 "the proposal. Execution authority remains separate. For review before generation, "
-                "include exactly one proposal-v3 source_delivery recommendation: inline, or "
-                "workspace_file with one safe workspace-relative Python target whose exact text "
-                "occurs in request_text or has existing native selected-source provenance. This "
-                "request-presence check prevents invention; qCoder does not interpret surrounding "
-                "free-form delivery language. Missing, unsafe, or ungrounded file recommendations "
-                "converge silently to inline. A grounded file recommendation is displayed but inert. "
+                "optionally include one proposed_source_target. Missing, unsafe, or ungrounded "
+                "targets converge silently to inline. A grounded target is displayed but inert. "
                 "Customer confirmation of that exact displayed revision is the first authority for "
                 "source delivery and workspace write. Assistant envelope target fields cannot grant it. "
                 "For a direct artifact-producing request, supply one exact workspace-relative "
@@ -639,8 +646,8 @@ def _full_binding_tool_descriptors() -> list[dict[str, Any]]:
                             "pre-existing exact source satisfaction. Never discover paths."
                         ),
                     },
-                    "connected_assistant_proposal": {
-                        **review_before_generation_proposal_input_schema(),
+                    "review_content": {
+                        **review_content_input_schema(),
                         "description": (
                             "Optional separately attributed, exact-request-bound semantic and "
                             "implementation proposal for review before generation. The connected "
@@ -672,7 +679,7 @@ def _full_binding_tool_descriptors() -> list[dict[str, Any]]:
                         "required": ["request_text"],
                         "not": {
                             "anyOf": [
-                                {"required": ["connected_assistant_proposal"]},
+                                {"required": ["review_content"]},
                                 {"required": ["review_action"]},
                                 {"required": ["prior_result_token"]},
                             ]
@@ -689,7 +696,7 @@ def _full_binding_tool_descriptors() -> list[dict[str, Any]]:
                             "recommendation is displayed without write authority; exact displayed "
                             "customer confirmation is the first delivery/write authority."
                         ),
-                        "required": ["request_text", "connected_assistant_proposal"],
+                        "required": ["request_text", "review_content"],
                         "not": {"required": ["review_action"]},
                     },
                     {
@@ -719,9 +726,7 @@ def _full_binding_tool_descriptors() -> list[dict[str, Any]]:
             },
             "x-qcoder-review-before-generation-happy-path": {
                 "request_text": "<exact review-before-generation customer message>",
-                "connected_assistant_proposal": (
-                    "<substantive proposal v3 with source_delivery mode inline or workspace_file>"
-                ),
+                "review_content": "<substantive semantic review content>",
             },
             "x-qcoder-selected-file-workflow-happy-path": {
                 "request_text": "<exact selected-file customer message>",
@@ -746,7 +751,7 @@ def _full_binding_tool_descriptors() -> list[dict[str, Any]]:
             },
             "x-qcoder-review-before-generation": {
                 "contract": review_before_generation_contract_snapshot(),
-                "first_call_arguments": ["request_text", "connected_assistant_proposal"],
+                "first_call_arguments": ["request_text", "review_content"],
                 "confirmation_call_arguments": ["review_action", "prior_result_token"],
                 "proposal_replay_on_confirmation": False,
                 "caller_supplies_request_digest": False,
@@ -760,8 +765,7 @@ def _full_binding_tool_descriptors() -> list[dict[str, Any]]:
                 "invented_target_required_before_confirmation": False,
                 "irrelevant_target_disposition": "discarded_before_path_processing",
                 "transaction_kind_bound_before_target_discard": True,
-                "proposal_schema": "qcoder.connected_assistant.review_before_generation_proposal.v3",
-                "assistant_source_delivery_modes": ["inline", "workspace_file"],
+                "review_content_schema": "qcoder.connected_assistant.review_content.v1",
                 "request_path_presence_is_anti_invention_only": True,
                 "free_form_delivery_language_interpreted_by_qcoder": False,
                 "grounded_file_recommendation_authoritative_before_confirmation": False,
@@ -887,17 +891,17 @@ def _without_descriptions(value: object) -> object:
 def binding_tool_descriptors() -> list[dict[str, Any]]:
     """Return the compact, safety-complete two-operation discovery surface."""
 
-    proposal_v4 = _without_descriptions(review_before_generation_proposal_input_schema())
+    semantic_review = _without_descriptions(review_content_input_schema())
     begin = {
         "name": BEGIN_CURRENT_LOOP_TOOL_NAME,
         "description": (
-            "Begin or continue one bounded qCoder Current Loop. Pass the exact request. For "
-            "review before generation, prefer compact proposal v4; qCoder returns canonical "
-            "customer Markdown and holds inline/file delivery inert until exact token-only "
-            "confirmation. File recommendations must use one safe request-present relative path; "
-            "invalid or invented paths become inline without retry. Direct generation and "
-            "selected-file workflows still require exact customer-authorized targets. Never scan "
-            "for a path. Execution authority is separate."
+            "Begin or continue one bounded qCoder Current Loop. Pass the exact request. For review "
+            "before generation, call once with substantive review_content only; qCoder derives "
+            "routing, request facts, delivery and authority, then returns terminal canonical "
+            "customer text. An optional safe request-present source target is inert until exact "
+            "confirmation; invalid targets become inline. Direct generation and selected-file "
+            "workflows retain exact targets. Never scan for a path. Execution authority remains "
+            "separate."
         ),
         "inputSchema": {
             "type": "object",
@@ -919,22 +923,7 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                     "uniqueItems": True,
                     "items": {"type": "string", "maxLength": MAX_TARGET_PATH_BYTES},
                 },
-                "connected_assistant_proposal": {
-                    "oneOf": [
-                        proposal_v4,
-                        {
-                            "type": "object",
-                            "properties": {
-                                "schema_id": {
-                                    "const": "qcoder.connected_assistant.review_before_generation_proposal.v3"
-                                },
-                                "schema_version": {"const": 3},
-                            },
-                            "required": ["schema_id", "schema_version"],
-                            "additionalProperties": True,
-                        },
-                    ]
-                },
+                "review_content": semantic_review,
                 "review_action": {
                     "type": "string",
                     "enum": list(REVIEW_BEFORE_GENERATION_ACTIONS),
@@ -953,7 +942,6 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
             ],
             "additionalProperties": False,
         },
-        "_meta": app_tool_metadata(),
         "x-qcoder-binding-owned-internal-operation": True,
         "x-qcoder-public-context-bridge-tool": False,
     }
@@ -1005,14 +993,19 @@ def _tool_result(payload: Mapping[str, Any]) -> dict[str, Any]:
             "review_before_generation": delivery.get("machine_projection"),
             "semantic_revision_sha256": delivery.get("semantic_revision_sha256"),
             "projection_digest": delivery.get("projection_digest"),
-            "app_render_model": delivery.get("app_render_model"),
         }
         structured.pop("canonical_delivery", None)
         return {
             "content": [{"type": "text", "text": str(delivery.get("canonical_markdown") or "")}],
             "structuredContent": structured,
             "isError": False,
-            "_meta": app_tool_metadata(),
+        }
+    terminal_text = value.get("terminal_customer_text")
+    if isinstance(terminal_text, str) and terminal_text:
+        return {
+            "content": [{"type": "text", "text": terminal_text}],
+            "structuredContent": value,
+            "isError": value.get("ok") is not True,
         }
     return {
         "content": [{"type": "text", "text": json.dumps(value, sort_keys=True)}],
@@ -1041,59 +1034,24 @@ def _handle_binding_jsonrpc_message(
                 },
                 "serverInfo": {"name": BINDING_MCP_SERVER_NAME, "version": __version__},
                 "instructions": (
-                    "NORMAL SUCCESS EVENT ORDER: the first response event is begin_current_loop, "
-                    "not customer-facing text. Do not send a customer-visible message before "
-                    "begin_current_loop, between the native task and "
-                    "complete_current_step, or to explain the transaction. Optional progress is "
-                    "task-level only; after successful completion give one concise task outcome. "
-                    "Never describe activation or loop/step transitions, contracts or bounded "
-                    "authority, typed completion or registration, receipts, revisions, hooks, or "
-                    "evidence bookkeeping during normal success. "
-                    "Surface qCoder mechanics only for a real blocker, ambiguity, bounded "
-                    "recovery, meaningful authority broadening, or requested qCoder help. "
-                    "This project-local qCoder binding exposes two typed operations for one "
-                    "Current Step transaction. Begin once. Then follow only "
-                    "current_step_contract.completion: an exact native-edit event performs "
-                    "synchronous deterministic terminal closure when selected; otherwise call "
-                    "complete_current_step after the native action. Never duplicate completion. "
-                    "Native permission remains client-owned. "
-                    "For an active-loop continuation, call begin_current_loop immediately with "
-                    "the exact next customer message; silently use its compact replacement "
-                    "contract without re-bootstrap, baseline recreation, or procedure narration. "
-                    "Do not construct Shell commands, stdin pipelines, receipts, digests, loop "
-                    "revisions, roles, or stage ceilings. The returned current_step_contract is "
-                    "the only current-stage action source. Hooks may accelerate completion but "
-                    "are never required for correctness. For a fresh artifact-producing request, "
-                    "supply intended_artifact_paths in the first begin call. For an active-loop "
-                    "replacement, omit the path and let qCoder bind the registered current "
-                    "role-head target; never rediscover or reselect it. A different target is "
-                    "valid only when the exact customer message explicitly names it. Do not "
-                    "Read, Glob, Grep, list, scan, or search the workspace to select a target. "
-                    "Use only the exact target returned in the Current Step Contract."
-                    " For exact selected result-evidence controls, copy the customer-named "
-                    "relative paths directly into selected_artifact_paths and use the returned "
-                    "terminal control projection. Do not use CLI/help, inspect state or package "
-                    "files, read the controls yourself, or search any workspace. This operation "
-                    "never executes or changes the current registered result. For an explicitly "
-                    "selected pre-existing source, pass its one exact named path in the same "
-                    "field; no native write is required and qCoder derives selected provenance."
-                    " If a pending completion exists, complete_current_step is the sole next "
-                    "qCoder operation: call it directly with an empty object even on a later turn "
-                    "or same-host MCP restart. Do not call begin_current_loop, inspect state/help, "
-                    "refresh/restage the artifact, or rerun external execution."
-                    " For an external execution step, use only an already prepared and "
-                    "prevalidated native-client runtime. The step does not authorize dependency "
-                    "installation, environment mutation, analytic substitution for sampled "
-                    "shots, or an additional execution attempt; return a blocker instead."
+                    "Use begin_current_loop once for the active exact customer request. For review "
+                    "before generation, supply only substantive review_content: one interpretation, "
+                    "labeled implementation recommendations, and optional output, limitations, "
+                    "blocking question, or proposed source target. qCoder derives routing, request "
+                    "facts, delivery, authority, deferrals, revision, and actions. Display qCoder's "
+                    "returned canonical text unchanged; do not reconstruct it or repair qCoder-owned "
+                    "state. At most one concise nontechnical progress sentence may precede the call. "
+                    "Use exact customer-authorized targets for direct generation and selected-source "
+                    "work; never discover paths. Confirmation and execution authority remain separate."
                 ),
             },
         )
     if method == "resources/list":
-        return _result(message_id, {"resources": first_value_resource_descriptors()})
+        return _result(message_id, {"resources": current_loop_resource_descriptors()})
     if method == "resources/read":
         params = message.get("params") if isinstance(message.get("params"), Mapping) else {}
         uri = params.get("uri")
-        resource = read_first_value_resource(str(uri)) if isinstance(uri, str) else None
+        resource = read_current_loop_resource(str(uri)) if isinstance(uri, str) else None
         if resource is None:
             return _error(message_id, -32602, "unknown_current_loop_resource")
         return _result(message_id, {"contents": [resource]})
@@ -1214,7 +1172,7 @@ def _handle_binding_jsonrpc_message(
             "request_text",
             "intended_artifact_paths",
             "selected_artifact_paths",
-            "connected_assistant_proposal",
+            "review_content",
             "review_action",
             "prior_result_token",
         }
@@ -1234,9 +1192,7 @@ def _handle_binding_jsonrpc_message(
                         "selected_artifact_paths": (
                             "bounded exact customer-named workspace-relative path list"
                         ),
-                        "connected_assistant_proposal": (
-                            "optional exact-request-bound connected-assistant proposal"
-                        ),
+                        "review_content": "optional substantive semantic review content",
                     },
                     "state_mutated": False,
                     "raw_request_echoed": False,
@@ -1245,14 +1201,14 @@ def _handle_binding_jsonrpc_message(
         )
     review_action = arguments.get("review_action")
     prior_result_token = arguments.get("prior_result_token")
-    connected_assistant_proposal = arguments.get("connected_assistant_proposal")
+    review_content = arguments.get("review_content")
     is_review_action = review_action is not None
     if is_review_action and (
         set(arguments) != {"review_action", "prior_result_token"}
         or review_action not in REVIEW_BEFORE_GENERATION_ACTIONS
         or not isinstance(prior_result_token, str)
         or re.fullmatch(r"review-result-[0-9a-f]{64}", prior_result_token) is None
-        or connected_assistant_proposal is not None
+        or review_content is not None
     ):
         return _result(
             message_id,
@@ -1367,7 +1323,7 @@ def _handle_binding_jsonrpc_message(
                         "file_mutation_performed": False,
                         "execution_performed": False,
                         "protected_service_called": False,
-                        "proposal_replay_required": False,
+                        "review_content_replay_required": False,
                     }
                 ),
             )
@@ -1375,51 +1331,19 @@ def _handle_binding_jsonrpc_message(
             {
                 "structured_confirmation_transport": "project_local_binding_mcp",
                 "prior_result_token_received_once": True,
-                "connected_assistant_proposal_replayed": False,
+                "review_content_replayed": False,
                 "request_digest_received": False,
                 "protected_service_called": False,
             }
         )
         return _result(message_id, _tool_result(payload))
-    if connected_assistant_proposal is not None:
-        try:
-            transaction_kind = connected_assistant_proposal.get("transaction_kind")
-            request_transaction_state = validate_review_transaction_kind(
-                str(request_text), transaction_kind
-            )
-        except ReviewBeforeGenerationError as exc:
-            return _result(
-                message_id,
-                _tool_result(
-                    {
-                        "schema_id": "qcoder.current_loop.review_before_generation_rejection.v2",
-                        "schema_version": 2,
-                        "ok": False,
-                        "category": exc.category,
-                        **(
-                            {"customer_clarification": exc.clarification}
-                            if exc.clarification
-                            else {}
-                        ),
-                        "state_mutated": False,
-                        "selected_artifact_identity_discarded": False,
-                        "source_or_qasm_created": False,
-                        "file_mutation_performed": False,
-                        "execution_performed": False,
-                        "protected_service_called": False,
-                        "raw_request_echoed": False,
-                        "raw_proposal_echoed": False,
-                        "workspace_discovery_performed": False,
-                    }
-                ),
-            )
-    else:
-        transaction_kind = None
-        request_transaction_state = "not_established"
+    request_transaction_state = (
+        review_source_transaction_state(str(request_text))
+        if review_content is not None
+        else "not_established"
+    )
     ignore_review_targets = bool(
-        connected_assistant_proposal is not None
-        and transaction_kind == "review_before_source_generation"
-        and request_transaction_state != "source_modification"
+        review_content is not None and request_transaction_state != "source_modification"
     )
     selected_paths_value = (
         None if ignore_review_targets else arguments.get("selected_artifact_paths")
@@ -1445,7 +1369,7 @@ def _handle_binding_jsonrpc_message(
             ),
         )
     selected_paths = list(selected_paths_value or [])
-    if connected_assistant_proposal is not None:
+    if review_content is not None:
         try:
             normalized_selected = (
                 normalize_selected_artifact_paths(
@@ -1460,34 +1384,11 @@ def _handle_binding_jsonrpc_message(
             selected_identities = [
                 str(item["workspace_relative_path"]) for item in normalized_selected
             ]
-            intended_value = (
-                None if ignore_review_targets else arguments.get("intended_artifact_paths")
-            )
-            if intended_value is not None and not isinstance(intended_value, Mapping):
-                raise ArtifactTargetError("exact_intended_artifact_targets_required")
-            intended_input = dict(intended_value or {})
-            if set(intended_input) - {"source"}:
-                raise ArtifactTargetError("review_source_target_only")
-            if (
-                selected_identities
-                and not intended_input
-                and transaction_kind == "review_before_source_modification"
-            ):
-                intended_input = {"source": selected_identities[0]}
-            normalized_targets = (
-                {}
-                if ignore_review_targets
-                else normalize_intended_artifact_targets(
-                    intended_input or None,
-                    workspace_root=coordinator.workspace_root,
-                    required_roles=("source",) if intended_input else (),
-                )
-            )
             payload = coordinator.review_before_generation_transaction(
                 exact_request=str(request_text),
-                connected_assistant_proposal=connected_assistant_proposal,
+                review_content=review_content,
                 selected_artifact_identities=selected_identities,
-                intended_artifact_targets=normalized_targets,
+                intended_artifact_targets={},
                 prior_result_token=(
                     str(prior_result_token) if prior_result_token is not None else None
                 ),
@@ -1497,14 +1398,13 @@ def _handle_binding_jsonrpc_message(
                 message_id,
                 _tool_result(
                     {
-                        "schema_id": ("qcoder.current_loop.review_before_generation_rejection.v2"),
-                        "schema_version": 2,
+                        "schema_id": ("qcoder.current_loop.review_before_generation_rejection.v3"),
+                        "schema_version": 3,
                         "ok": False,
                         "category": str(getattr(exc, "category", exc)),
-                        **(
-                            {"customer_clarification": exc.clarification}
-                            if isinstance(exc, ReviewBeforeGenerationError) and exc.clarification
-                            else {}
+                        "terminal_for_turn": True,
+                        "terminal_customer_text": (
+                            "qCoder could not safely display this review content."
                         ),
                         "state_mutated": False,
                         "source_or_qasm_created": False,
@@ -1512,7 +1412,7 @@ def _handle_binding_jsonrpc_message(
                         "execution_performed": False,
                         "protected_service_called": False,
                         "raw_request_echoed": False,
-                        "raw_proposal_echoed": False,
+                        "raw_review_content_echoed": False,
                         "workspace_discovery_performed": False,
                     }
                 ),
@@ -1861,7 +1761,7 @@ def serve_binding_mcp_stdio(
     )
     if timing_enabled:
         try:
-            clear_stdio_operator_timing(state_root=connection_state_root)
+            clear_begin_attempt_ledger(state_root=connection_state_root)
         except (OSError, OperatorTimingEvidenceError):
             timing_enabled = False
     while True:
@@ -1923,29 +1823,30 @@ def serve_binding_mcp_stdio(
         stdio_result_return_ns = time.perf_counter_ns()
         params = message.get("params") if isinstance(message, Mapping) else None
         measured_operation = (
-            params.get("name")
+            BEGIN_CURRENT_LOOP_TOOL_NAME
             if isinstance(params, Mapping)
             and message.get("method") == "tools/call"
-            and params.get("name")
-            in {BEGIN_CURRENT_LOOP_TOOL_NAME, COMPLETE_CURRENT_STEP_TOOL_NAME}
+            and params.get("name") == BEGIN_CURRENT_LOOP_TOOL_NAME
             else None
         )
         result_value = response.get("result") if isinstance(response, Mapping) else None
         structured = (
             result_value.get("structuredContent") if isinstance(result_value, Mapping) else None
         )
-        accepted_operation = bool(
-            measured_operation is not None
-            and isinstance(structured, Mapping)
-            and structured.get("ok") is True
-        )
-        if timing_enabled and accepted_operation:
+        if timing_enabled and measured_operation is not None and isinstance(structured, Mapping):
+            status = (
+                "accepted"
+                if structured.get("ok") is True and structured.get("terminal_for_turn") is not True
+                else ("terminal_blocker" if structured.get("ok") is True else "terminal_rejected")
+            )
+            category = str(structured.get("category") or "uncategorized")
             try:
-                record_stdio_operator_timing(
+                record_begin_attempt(
                     state_root=connection_state_root,
                     setup_generation=str(connection_generation),
                     session_sha256=str(connection_session_sha256),
-                    operation_name=str(measured_operation),
+                    status=status,
+                    category=category,
                     operation_entry_ns=stdio_operation_entry_ns,
                     processing_complete_ns=stdio_processing_complete_ns,
                     result_return_ns=stdio_result_return_ns,
