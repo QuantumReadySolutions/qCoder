@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import importlib.util
 import json
 import os
-from pathlib import Path
 import stat
 import subprocess
 import sys
+from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
@@ -18,7 +18,6 @@ from qcoder.current_loop_binding_mcp import (
     handle_binding_jsonrpc_message,
 )
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
-
 
 REQUEST = (
     "Use qCoder to write a Qiskit program that prepares a Φ+ Bell state. "
@@ -105,14 +104,13 @@ def test_source_begin_binds_exact_target_and_prohibits_discovery(tmp_path: Path)
     )
     descriptor = binding_tool_descriptors()[0]
     assert "intended_artifact_paths" in descriptor["inputSchema"]["properties"]
-    assert descriptor["x-qcoder-artifact-target-contract"]["discovery_or_glob_permitted"] is False
+    assert "Never scan for a path" in descriptor["description"]
     completion = begun["current_step_contract"]["completion"]
     assert completion["artifact_path"] == "phi_plus_bell.py"
     assert completion["artifact_path_form"] == "workspace_relative_bound_target"
     complete_descriptor = binding_tool_descriptors()[1]
     artifact_schema = complete_descriptor["inputSchema"]["properties"]["artifact_path"]
-    assert artifact_schema["x-qcoder-path-form"] == "workspace_relative_bound_target"
-    assert "absolute paths are not accepted" in artifact_schema["description"]
+    assert artifact_schema["type"] == "string"
 
 
 def test_binding_schema_exposes_bounded_exact_selected_control_transport() -> None:
@@ -124,14 +122,9 @@ def test_binding_schema_exposes_bounded_exact_selected_control_transport() -> No
     assert selected["minItems"] == 1
     assert selected["maxItems"] == 2
     assert selected["uniqueItems"] is True
-    happy = descriptor["x-qcoder-selected-result-control-happy-path"]
-    assert len(happy["selected_artifact_paths"]) == 2
-    assert happy["terminal_read_only_projection"] is True
-    assert happy["native_action_required"] is False
     text = descriptor["description"].casefold()
-    assert "selected_artifact_paths" in text
-    assert "never read or search" in text
-    assert "no native action" in text
+    assert "selected-file workflows" in text
+    assert "never scan" in text
 
 
 def test_completion_refuses_unbound_neighbor_path_before_registration(tmp_path: Path) -> None:

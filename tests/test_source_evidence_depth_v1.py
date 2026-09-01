@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import builtins
-from copy import deepcopy
 import json
+from copy import deepcopy
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
 from qcoder.algorithm_blueprint import (
+    artifact_digest_matches,
     compact_selected_python_source_evidence_for_hosted,
     extract_selected_python_source_evidence,
-    artifact_digest_matches,
 )
 from qcoder.cli import main as cli_main
 from qcoder.context_bridge_mcp import (
@@ -36,7 +37,6 @@ from qcoder.development_evidence import (
     development_evidence_contract_snapshot,
     validate_development_evidence,
 )
-
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "source_evidence_depth_v1"
 
@@ -634,8 +634,7 @@ def test_tool_mode_profile_and_gate_schema_inventories_are_unchanged() -> None:
         if item["name"] == "create_source_blueprint_alignment_review"
     )
     source_schema = descriptor["inputSchema"]["properties"]["selected_python_source_evidence"]
-    assert "source_evidence_depth" in source_schema["properties"]
-    assert "source_evidence_depth" not in source_schema["required"]
+    assert source_schema == {"type": "object"}
     assert "create_implementation_decision_summary" not in EXPECTED_TOOLS
 
 
@@ -674,7 +673,7 @@ def test_context_bridge_automatically_sends_only_compact_depth_projection(tmp_pa
 
     class Response:
         status = 200
-        headers: dict[str, str] = {}
+        headers: ClassVar[dict[str, str]] = {}
 
         def __enter__(self):
             return self
@@ -721,7 +720,7 @@ def test_context_bridge_preserves_precompacted_grover_negative_scope(tmp_path: P
 
     class Response:
         status = 200
-        headers: dict[str, str] = {}
+        headers: ClassVar[dict[str, str]] = {}
 
         def __enter__(self):
             return self

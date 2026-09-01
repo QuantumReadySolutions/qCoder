@@ -9,13 +9,13 @@ operation receipts, and artifact registration ceilings.
 
 from __future__ import annotations
 
-from copy import deepcopy
-from hashlib import sha256
 import json
 import re
 import unicodedata
-from typing import Any, Mapping, Sequence
-
+from collections.abc import Mapping, Sequence
+from copy import deepcopy
+from hashlib import sha256
+from typing import Any
 
 REQUEST_SEMANTICS_SCHEMA_ID = "qcoder.current_loop.request_semantics.v5"
 REQUEST_SEMANTICS_SCHEMA_VERSION = 5
@@ -845,7 +845,7 @@ def validate_request_semantics(value: Mapping[str, Any]) -> None:
     ):
         raise ValueError("current_request_semantics_shot_count_invalid")
     if not isinstance(value.get("currentness_projection_requested"), bool):
-        raise ValueError("current_request_semantics_currentness_projection_invalid")
+        raise TypeError("current_request_semantics_currentness_projection_invalid")
     if value.get("preexisting_exact_source_satisfaction_requested") not in {None, True}:
         raise ValueError("current_request_semantics_preexisting_satisfaction_invalid")
     ceiling = value.get("current_step_ceiling")
@@ -856,6 +856,64 @@ def validate_request_semantics(value: Mapping[str, Any]) -> None:
     unsigned.pop("semantics_digest", None)
     if supplied != _digest(unsigned):
         raise ValueError("current_request_semantics_digest_mismatch")
+
+
+def confirmed_review_generation_semantics(exact_message: str) -> dict[str, Any]:
+    """Project the existing source-generation ceiling after exact review confirmation."""
+
+    if not isinstance(exact_message, str) or not exact_message:
+        raise ValueError("current_request_semantics_message_invalid")
+    operation = "source_generation"
+    roles = ["source"]
+    ceiling = _stage_ceiling(
+        operation=operation,
+        allowed_roles=roles,
+        execution="prohibited_for_current_step",
+        evidence_review="prohibited_for_current_step",
+        stop_after="one_confirmed_source_generation",
+    )
+    authority_layers = _authority_layers(operation=operation, active_loop=True)
+    result: dict[str, Any] = {
+        "schema_id": REQUEST_SEMANTICS_SCHEMA_ID,
+        "schema_version": REQUEST_SEMANTICS_SCHEMA_VERSION,
+        "exact_original_message": exact_message,
+        "original_message_utf8_sha256": sha256(exact_message.encode("utf-8")).hexdigest(),
+        "qcoder_explicitly_requested": True,
+        "active_loop_at_classification": True,
+        "request_context": "confirmed_review_continuation",
+        "route": "active_build",
+        "requested_operation": operation,
+        "requested_artifact_roles": roles,
+        "prohibited_artifact_roles": list(ceiling["prohibited_artifact_roles"]),
+        "qasm_disposition": "prohibited_for_current_step",
+        "execution_disposition": "prohibited_for_current_step",
+        "results_disposition": "prohibited_for_current_step",
+        "requested_shots": None,
+        "currentness_projection_requested": False,
+        "evidence_review_disposition": "prohibited_for_current_step",
+        "current_step_ceiling": ceiling,
+        "ambiguity_state": "none",
+        "clarification_required": False,
+        "customer_clarification": None,
+        "loop_mutation_permitted": True,
+        "bootstrap_required": False,
+        "rebootstrap_permitted": False,
+        "request_baseline_recreation_permitted": False,
+        "authority_layers": authority_layers,
+        "next_authority_object": authority_layers["native_client_permission"]["object"],
+        "recovery": None,
+        "classifier_properties": {
+            "compositional_feature_classification": False,
+            "exact_sentence_identity_used_for_routing": False,
+            "repository_or_transcript_consulted": False,
+            "raw_artifact_consulted": False,
+            "gate_count_consulted": False,
+            "confirmed_review_projection": True,
+        },
+    }
+    result["semantics_digest"] = _digest(result)
+    validate_request_semantics(result)
+    return result
 
 
 def migrate_request_semantics(value: Mapping[str, Any]) -> dict[str, Any]:

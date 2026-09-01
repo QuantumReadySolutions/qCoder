@@ -4,6 +4,10 @@ from pathlib import Path
 
 import pytest
 
+from qcoder.context_bridge_mcp import (
+    CLIENT_BINDING_CONTRACT_ID,
+    build_client_binding_descriptor,
+)
 from qcoder.current_loop_bounded_control import (
     BOUNDED_CONTROL_INPUT_SCHEMA_ID,
     CATEGORY_MEANINGS,
@@ -31,12 +35,7 @@ from qcoder.current_loop_event_receipts import (
     SUPPORTED_OUTPUT_ROLES,
 )
 from qcoder.current_loop_invocation import INVOCATION_CONTRACT_SCHEMA_ID
-from qcoder.context_bridge_mcp import (
-    CLIENT_BINDING_CONTRACT_ID,
-    build_client_binding_descriptor,
-)
 from tests.current_loop_test_support import activate_reviewed_legacy_fixture
-
 
 REQUEST = "Use qCoder for this build. Bind every bounded local control."
 
@@ -337,7 +336,7 @@ def test_binding_v7_delivers_the_static_contract_and_customer_meanings() -> None
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     assert descriptor["contract_id"] == CLIENT_BINDING_CONTRACT_ID
-    assert descriptor["contract_id"].endswith(".v48")
+    assert descriptor["contract_id"].endswith(".v58")
     contract = descriptor["bounded_control_input_contract"]
     assert contract["schema_id"] == BOUNDED_CONTROL_INPUT_SCHEMA_ID
     assert contract["contract_digest"]

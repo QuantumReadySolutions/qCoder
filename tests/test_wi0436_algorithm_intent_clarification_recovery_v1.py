@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import json
+from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 import pytest
 
@@ -25,7 +25,6 @@ from qcoder.context_bridge_mcp import (
 )
 from qcoder.current_loop_binding_mcp import binding_tool_descriptors
 
-
 TOKEN = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 
 
@@ -35,7 +34,7 @@ class _Response:
     def __init__(self, payload: dict[str, Any]) -> None:
         self.payload = payload
 
-    def __enter__(self) -> "_Response":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_args: object) -> None:
@@ -395,8 +394,8 @@ def test_binding_and_inventory_publish_recovery_without_new_authority_surface() 
         "client_binding_contract"
     ]
     recovery = binding["algorithm_intent_clarification_recovery_contract"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v48"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 47
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v58"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 57
     assert recovery["atomic_capsule_copy_through"] is True
     assert recovery["client_reconstructs_binding_fields"] is False
     assert recovery["card_and_revision_bound"] is True

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import io
 import json
-from pathlib import Path
 import socket
 import subprocess
 import sys
 from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 
 import pytest
 
@@ -29,7 +29,6 @@ from qcoder.engines.review.local_evidence import (
     build_share_safe_local_evidence_review,
 )
 from qcoder.engines.review.local_evidence_markdown import render_local_evidence_markdown
-
 
 EXPECTED_MOTIFS = [
     "qiskit.circuit.construction",
@@ -380,8 +379,7 @@ def test_local_help_reuses_v2_and_states_oss_boundaries(tmp_path: Path) -> None:
     assert help_payload["schema_id"] == HELP_SCHEMA_ID
     assert help_payload["projection_type"] == "oss_local_evidence"
     assert (
-        help_payload["installed_qcoder_version"]
-        == "0.6.0a24.post0.dev2+openqasm3.local.evidence.v1"
+        help_payload["installed_qcoder_version"] == "0.6.0a24.post0.dev8+canonical.first.value.v1"
     )
     assert help_payload["local_oss_mode"] is True
     assert help_payload["account_required"] is False

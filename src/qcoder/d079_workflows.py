@@ -38,6 +38,7 @@ from qcoder.engines.review.local_evidence import (
     build_share_safe_local_evidence_review,
     resolve_explicit_files,
 )
+from qcoder.review_before_generation import build_review_before_generation_semantics
 
 BLUEPRINT_PROPOSAL_SCHEMA_ID = "qcoder.connected_assistant.blueprint_proposal.v1"
 CONFIRMED_BLUEPRINT_SCHEMA_ID = "qcoder.connected_assistant.confirmed_blueprint.v1"
@@ -960,7 +961,7 @@ def revise_ide_first_blueprint(
         "assistant_implementation_proposals",
         "durable_blueprint_constraints",
     }
-    unsupported = sorted(set(str(key) for key in semantic_changes) - allowed)
+    unsupported = sorted({str(key) for key in semantic_changes} - allowed)
     if unsupported:
         raise D079WorkflowError(
             _recovery(
@@ -1148,7 +1149,10 @@ def classify_ordinary_customer_workflow(
 
 
 def classify_binding_default_route(
-    *, customer_instruction: str, selected_paths: Sequence[str] = ()
+    *,
+    customer_instruction: str,
+    selected_paths: Sequence[str] = (),
+    connected_assistant_proposal: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Apply the binding's authoritative workstyle precedence to one request."""
 
@@ -1165,6 +1169,26 @@ def classify_binding_default_route(
             "deterministic_single_route": True,
             "raw_mcp_default_entrypoint": False,
             "routing_contract": contract["schema_id"],
+        }
+    if connected_assistant_proposal is not None:
+        review_semantics = build_review_before_generation_semantics(
+            customer_instruction,
+            connected_assistant_proposal,
+            selected_artifact_identities=selected_paths,
+        )
+        return {
+            "schema_id": "qcoder.connected_assistant.route_decision.v1",
+            "selected_route": "active_build",
+            "action": "call_binding_owned_begin_current_loop",
+            "operation": "begin_current_loop",
+            "matched_named_workflow": "review_before_generation",
+            "request_semantics": review_semantics,
+            "named_d079_route_preceded_generic_single_capability": True,
+            "customer_constructs_operation_envelope": False,
+            "deterministic_single_route": True,
+            "raw_mcp_default_entrypoint": False,
+            "routing_contract": contract["schema_id"],
+            "one_operation_before_useful_review": True,
         }
     request_semantics = classify_current_request(
         customer_instruction,

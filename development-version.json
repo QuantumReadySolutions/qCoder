@@ -1,14 +1,17 @@
 {
-  "basis_commit": "698168155050e3e3a60e85a8ee98766e467cb60e",
-  "basis_tree": "9f8985b9e8158a1aca49e6e0251c4dd76225bcfd",
+  "basis_commit": "c98bc5d5f54d4ead32a0387e07a7ca818b4e165e",
+  "basis_tree": "e56f14a33a484e07b0b2411562d14dce383e14fe",
   "basis_version": "0.6.0a24",
-  "binding": "qcoder.connected_assistant.client_binding.v48",
-  "binding_schema": 47,
+  "binding": "qcoder.connected_assistant.client_binding.v58",
+  "binding_schema": 57,
+  "canonical_descriptor_bytes": 238351,
+  "canonical_descriptor_sha256": "b6dbcfb2a88fadfd3b05e5d2027e9d47f01be2618a94c9896084329fdee681f3",
   "identity_kind": "private_unfrozen_development_successor",
   "publication_permitted": false,
+  "proposal": "qcoder.connected_assistant.review_before_generation_proposal.v4",
   "public_release_record_preserved_in": "release-version.json",
   "public_successor_selected": false,
   "schema_id": "qcoder.private_development_version.v1",
-  "version": "0.6.0a24.post0.dev2+openqasm3.local.evidence.v1",
-  "work_identity": "QCODER_OSS_OPENQASM3_AND_LOCAL_EVIDENCE_HARDENING_MARATHON_V1"
+  "version": "0.6.0a24.post0.dev8+canonical.first.value.v1",
+  "work_identity": "WI0440_CANONICAL_FIRST_VALUE_DELIVERY_AND_COMPACT_MCP_DISCOVERY_V1"
 }

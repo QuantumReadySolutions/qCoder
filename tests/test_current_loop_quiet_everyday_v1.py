@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from qcoder.context_bridge_mcp import EXPECTED_TOOLS, build_client_binding_descriptor
 from qcoder.current_loop import CURRENT_LOOP_STATE_SCHEMA_ID, CurrentLoopError
@@ -14,6 +15,7 @@ from qcoder.current_loop_contract import (
 )
 from qcoder.current_loop_contract_sidecar import SIDECAR_SCHEMA_ID, SidecarSession
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
+from qcoder.current_loop_iteration import parent_digest_failure_details
 from qcoder.current_loop_quiet_workflow import (
     ASSISTANT_CONTEXT_UPDATE_SCHEMA_ID,
     COMPLETION_RECEIPT_SCHEMA_ID,
@@ -22,9 +24,7 @@ from qcoder.current_loop_quiet_workflow import (
     INTENT_RECEIPT_SCHEMA_ID,
     quiet_workflow_contract_snapshot,
 )
-from qcoder.current_loop_iteration import parent_digest_failure_details
 from tests.current_loop_test_support import activate_reviewed_legacy_fixture
-
 
 REQUEST = "Use qCoder for this build context with the established quiet-workflow contract."
 
@@ -460,7 +460,7 @@ def test_sidecar_and_binding_share_v2_governance_and_quiet_contract(tmp_path: Pa
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v48"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v58"
     quiet = descriptor["quiet_everyday_workflow_contract"]
     assert quiet["customer_interaction_schema_id"] == CUSTOMER_INTERACTION_SCHEMA_ID
     assert quiet["assist_default"] == "quiet_everyday"

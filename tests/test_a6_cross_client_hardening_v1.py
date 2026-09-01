@@ -50,9 +50,11 @@ def test_nested_authoritative_store_lock_fails_immediately_without_state_change(
     before = canonical_bytes(coordinator.store.read())
     started = time.monotonic()
     with coordinator.store.lock():
-        with pytest.raises(CurrentLoopConflict, match="current_loop_nested_lock_acquisition"):
-            with coordinator.store.lock():
-                raise AssertionError("nested lock unexpectedly acquired")
+        with (
+            pytest.raises(CurrentLoopConflict, match="current_loop_nested_lock_acquisition"),
+            coordinator.store.lock(),
+        ):
+            raise AssertionError("nested lock unexpectedly acquired")
         with pytest.raises(CurrentLoopConflict, match="current_loop_nested_lock_acquisition"):
             coordinator.store.update(
                 lambda state: state,
@@ -131,91 +133,91 @@ def test_hosted_retry_is_conditional_and_stale_continuation_is_exact_only() -> N
     ("arguments", "expected"),
     (
         (
-            dict(
-                operation="status",
-                ok=True,
-                category=None,
-                phase="generation_ready",
-                state_status="ready",
-                persist_performance=False,
-            ),
+            {
+                "operation": "status",
+                "ok": True,
+                "category": None,
+                "phase": "generation_ready",
+                "state_status": "ready",
+                "persist_performance": False,
+            },
             "pure_observation",
         ),
         (
-            dict(
-                operation="status",
-                ok=True,
-                category=None,
-                phase="evidence_processing",
-                state_status="checkpoint_required",
-                persist_performance=True,
-            ),
+            {
+                "operation": "status",
+                "ok": True,
+                "category": None,
+                "phase": "evidence_processing",
+                "state_status": "checkpoint_required",
+                "persist_performance": True,
+            },
             "checkpoint_production",
         ),
         (
-            dict(
-                operation="execute_recovery_action",
-                ok=False,
-                category="recovery_action_not_permitted",
-                phase="evidence_processing",
-                state_status="blocked",
-                persist_performance=True,
-            ),
+            {
+                "operation": "execute_recovery_action",
+                "ok": False,
+                "category": "recovery_action_not_permitted",
+                "phase": "evidence_processing",
+                "state_status": "blocked",
+                "persist_performance": True,
+            },
             "unsupported_action",
         ),
         (
-            dict(
-                operation="execute_recovery_action",
-                ok=False,
-                category="unsupported_recovery_schema",
-                phase="evidence_processing",
-                state_status="blocked",
-                persist_performance=False,
-            ),
+            {
+                "operation": "execute_recovery_action",
+                "ok": False,
+                "category": "unsupported_recovery_schema",
+                "phase": "evidence_processing",
+                "state_status": "blocked",
+                "persist_performance": False,
+            },
             "schema_failure",
         ),
         (
-            dict(
-                operation="record_ide_authority",
-                ok=False,
-                category="ide_write_or_run_denied",
-                phase="generation_ready",
-                state_status="checkpoint_required",
-                persist_performance=True,
-            ),
+            {
+                "operation": "record_ide_authority",
+                "ok": False,
+                "category": "ide_write_or_run_denied",
+                "phase": "generation_ready",
+                "state_status": "checkpoint_required",
+                "persist_performance": True,
+            },
             "authority_denial",
         ),
         (
-            dict(
-                operation="register_artifacts",
-                ok=False,
-                category="operation_receipt_expired",
-                phase="evidence_processing",
-                state_status="blocked",
-                persist_performance=True,
-            ),
+            {
+                "operation": "register_artifacts",
+                "ok": False,
+                "category": "operation_receipt_expired",
+                "phase": "evidence_processing",
+                "state_status": "blocked",
+                "persist_performance": True,
+            },
             "lifecycle_or_expiry_failure",
         ),
         (
-            dict(
-                operation="register_artifacts",
-                ok=True,
-                category=None,
-                phase="evidence_processing",
-                state_status="ready",
-                persist_performance=True,
-            ),
+            {
+                "operation": "register_artifacts",
+                "ok": True,
+                "category": None,
+                "phase": "evidence_processing",
+                "state_status": "ready",
+                "persist_performance": True,
+            },
             "authoritative_mutation",
         ),
         (
-            dict(
-                operation="complete_instruction",
-                ok=True,
-                category=None,
-                phase="completed",
-                state_status="completed",
-                persist_performance=True,
-            ),
+            {
+                "operation": "complete_instruction",
+                "ok": True,
+                "category": None,
+                "phase": "completed",
+                "state_status": "completed",
+                "persist_performance": True,
+            },
             "terminal_state",
         ),
     ),
@@ -248,7 +250,7 @@ def test_parameterized_client_neutral_conformance_profile(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     assert descriptor["contract_id"] == CLIENT_BINDING_CONTRACT_ID
-    assert CLIENT_BINDING_CONTRACT_ID.endswith(".v48")
+    assert CLIENT_BINDING_CONTRACT_ID.endswith(".v58")
     assert descriptor["qcoder_domain_tool_count"] == 12
     assert descriptor["client_neutral_conformance_contract"] == contract
     assert descriptor["cursor_desktop_reference_profile"] == profile

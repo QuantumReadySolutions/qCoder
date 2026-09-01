@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import builtins
 import json
-from pathlib import Path
 import re
+from pathlib import Path
 
 import pytest
 
@@ -31,7 +31,6 @@ from qcoder.development_evidence import (
     validate_development_evidence,
     validate_relationship_declaration,
 )
-
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "development_evidence_v0"
 
@@ -538,8 +537,7 @@ def test_context_bridge_schema_remains_twelve_tools_five_modes_and_optional_delt
         if item["name"] == "create_source_blueprint_alignment_review"
     )
     source_schema = descriptor["inputSchema"]["properties"]["selected_python_source_evidence"]
-    assert "development_evidence" in source_schema["properties"]
-    assert "development_evidence" not in source_schema["required"]
+    assert source_schema == {"type": "object"}
 
 
 def test_no_numerical_confidence_or_effective_runtime_claim() -> None:

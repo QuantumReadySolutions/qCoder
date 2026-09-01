@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import http.client
 import json
-from pathlib import Path
 import socket
+from pathlib import Path
 
+from qcoder.context_bridge_mcp import (
+    CLIENT_BINDING_CONTRACT_ID,
+    EXPECTED_TOOLS,
+    build_client_activation_instructions,
+    build_client_binding_descriptor,
+)
 from qcoder.current_loop_contract_sidecar import (
     SIDECAR_CAPABILITY_HEADER,
     SIDECAR_SCHEMA_ID,
@@ -15,12 +21,7 @@ from qcoder.current_loop_contract_sidecar import (
     start_in_process_sidecar,
 )
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
-from qcoder.context_bridge_mcp import (
-    CLIENT_BINDING_CONTRACT_ID,
-    EXPECTED_TOOLS,
-    build_client_activation_instructions,
-    build_client_binding_descriptor,
-)
+from qcoder.current_loop_evidence_processing import EvidenceProcessingError
 from qcoder.current_loop_invocation import operation_transport_inventory
 from tests.current_loop_test_support import activate_reviewed_legacy_fixture
 
@@ -126,7 +127,7 @@ def test_binding_v10_delivers_sidecar_run_summary_and_evidence_domains(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     assert descriptor["contract_id"] == CLIENT_BINDING_CONTRACT_ID
-    assert descriptor["contract_id"].endswith(".v48")
+    assert descriptor["contract_id"].endswith(".v58")
     assert descriptor["contract_sidecar"]["schema_id"] == SIDECAR_SCHEMA_ID
     assert descriptor["run_summary_contract"]["schema_id"] == ("qcoder.current_loop.run_summary.v2")
     assert descriptor["evidence_view_contract"]["schema_id"] == (
@@ -370,7 +371,7 @@ def test_sidecar_coordinator_has_no_hosted_configuration_or_protected_path(
     assert isolated.hosted_token_file == ""
     try:
         isolated._protected_call("create_context_session_card", {})
-    except Exception as exc:
+    except EvidenceProcessingError as exc:
         assert str(exc) == "local_sidecar_hosted_operation_prohibited"
     else:
         raise AssertionError("local sidecar reached Protected")

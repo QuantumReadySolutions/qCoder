@@ -3,10 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 from qcoder import current_loop_bounded_control as bounded_control_module
@@ -139,7 +139,7 @@ def test_binding_v18_steers_generic_help_to_exactly_one_local_call(tmp_path: Pat
     binding = build_client_binding_descriptor(
         coordinator_prefix=[sys.executable, "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v48"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v58"
     assert binding["generic_help"]["generic_request_topic"] == "overview"
     assert binding["generic_help"]["exactly_one_qcoder_operation"] is True
     assert binding["generic_help"]["automatic_status_call"] is False
@@ -299,8 +299,7 @@ def test_machine_json_stdout_is_exactly_one_json_document(tmp_path: Path) -> Non
         completed = subprocess.run(
             command,
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             env=environment,
         )
         parsed = json.loads(completed.stdout)
@@ -327,7 +326,7 @@ def test_help_performance_is_constant_with_five_retained_snapshots(
         timings.append(time.perf_counter() - started)
         sizes.append(len(json.dumps(result, indent=2, sort_keys=True).encode()))
         assert "snapshots" not in json.dumps(result["details"]["help"])
-    p95 = sorted(timings)[-1]
+    p95 = max(timings)
     assert p95 <= max(1.0, empty_seconds * 1.10)
     assert max(sizes) <= 32 * 1024
     assert max(sizes) - min(sizes) <= 64

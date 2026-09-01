@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import hashlib
 import json
-from packaging.version import Version
-from pathlib import Path
 import re
+from pathlib import Path
+
+from packaging.version import Version
 
 try:
     import tomllib
@@ -13,10 +15,10 @@ except ModuleNotFoundError:  # pragma: no cover
 
 
 EXPECTED_SCHEMA = "qcoder.private_development_version.v1"
-EXPECTED_VERSION = "0.6.0a24.post0.dev2+openqasm3.local.evidence.v1"
-EXPECTED_PREDECESSOR = "0.6.0a24.post0.dev1+deterministic.evidence.usability.pack.v1"
+EXPECTED_VERSION = "0.6.0a24.post0.dev8+canonical.first.value.v1"
+EXPECTED_PREDECESSOR = "0.6.0a24.post0.dev7+review.confirmed.delivery.v1"
 EXPECTED_BASIS = "0.6.0a24"
-EXPECTED_WORK_IDENTITY = "QCODER_OSS_OPENQASM3_AND_LOCAL_EVIDENCE_HARDENING_MARATHON_V1"
+EXPECTED_WORK_IDENTITY = "WI0440_CANONICAL_FIRST_VALUE_DELIVERY_AND_COMPACT_MCP_DISCOVERY_V1"
 
 
 def verify(root: Path) -> dict[str, object]:
@@ -31,8 +33,11 @@ def verify(root: Path) -> dict[str, object]:
         "basis_version",
         "binding",
         "binding_schema",
+        "canonical_descriptor_bytes",
+        "canonical_descriptor_sha256",
         "identity_kind",
         "publication_permitted",
+        "proposal",
         "public_release_record_preserved_in",
         "public_successor_selected",
         "schema_id",
@@ -55,6 +60,24 @@ def verify(root: Path) -> dict[str, object]:
         raise ValueError("public_release_record_changed")
     if development.get("work_identity") != EXPECTED_WORK_IDENTITY:
         raise ValueError("development_work_identity_invalid")
+    from qcoder.context_bridge_mcp import build_client_binding_descriptor
+
+    descriptor = build_client_binding_descriptor(coordinator_prefix=["qcoder"])[
+        "client_binding_contract"
+    ]
+    descriptor_bytes = json.dumps(
+        descriptor, ensure_ascii=True, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    if (
+        development.get("binding") != descriptor.get("contract_id")
+        or development.get("binding_schema") != descriptor.get("schema_version")
+        or development.get("proposal")
+        != "qcoder.connected_assistant.review_before_generation_proposal.v4"
+        or development.get("canonical_descriptor_bytes") != len(descriptor_bytes)
+        or development.get("canonical_descriptor_sha256")
+        != hashlib.sha256(descriptor_bytes).hexdigest()
+    ):
+        raise ValueError("development_binding_descriptor_identity_invalid")
     if development.get("identity_kind") != "private_unfrozen_development_successor":
         raise ValueError("development_identity_kind_invalid")
     if development.get("publication_permitted") is not False:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -19,7 +19,6 @@ from qcoder.current_loop_pending_completion import (
     validate_pending_completion_checkpoint,
 )
 from qcoder.current_loop_result_manifest import STRICT_RESULT_MANIFEST_SCHEMA_ID
-
 
 SOURCE_REQUEST = "Use qCoder to write a Bell-state program. Stop after generating the code."
 SOURCE = "from qiskit import QuantumCircuit\nqc=QuantumCircuit(2)\nqc.h(0)\nqc.cx(0,1)\n"
@@ -190,9 +189,7 @@ def test_private_surface_advertises_direct_pending_completion_without_new_tool()
     ]
     completion = descriptors[1]
     assert completion["inputSchema"]["required"] == []
-    assert completion["x-qcoder-normal-happy-path"] == {}
-    assert completion["x-qcoder-pending-completion"]["begin_current_loop_required"] is False
-    assert completion["x-qcoder-pending-completion"]["external_execution_rerun_permitted"] is False
+    assert "pending completion" in completion["description"]
 
 
 def test_missing_ambiguous_stale_cross_loop_and_cross_request_checkpoints_fail_closed(

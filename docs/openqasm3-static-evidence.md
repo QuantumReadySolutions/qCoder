@@ -1,7 +1,7 @@
 # Bounded OpenQASM 3 static evidence
 
-This document describes the private unpublished
-`0.6.0a24.post0.dev2+openqasm3.local.evidence.v1` candidate. Public qCoder 0.6.0a24 is unchanged.
+This document describes the bounded OpenQASM 3 static-evidence behavior retained in the private
+unpublished `0.6.0a24.post0.dev8+canonical.first.value.v1` candidate. Public qCoder 0.6.0a24 is unchanged.
 
 qCoder extracts bounded static evidence from the explicitly supported OpenQASM 3.0 subset of one
 explicitly selected UTF-8 file. It reports unsupported constructs and qualifies or withholds every

@@ -5,8 +5,8 @@ import importlib.util
 import json
 from pathlib import Path
 
-from packaging.version import Version
 import pytest
+from packaging.version import Version
 
 from qcoder import __version__
 
@@ -24,7 +24,7 @@ def _verifier():
 
 def test_private_development_identity_preserves_public_a24_release_truth() -> None:
     verifier = _verifier()
-    development_version = "0.6.0a24.post0.dev2+openqasm3.local.evidence.v1"
+    development_version = "0.6.0a24.post0.dev8+canonical.first.value.v1"
     assert __version__ == development_version
     assert verifier.source_versions(ROOT) == {
         "pyproject": development_version,
@@ -55,6 +55,7 @@ def test_private_development_identity_preserves_public_a24_release_truth() -> No
     public_basis = Version("0.6.0a24")
     assert candidate > public_basis
     assert candidate > Version("0.6.0a24.post0.dev1+deterministic.evidence.usability.pack.v1")
+    assert candidate > Version("0.6.0a24.post0.dev7+review.confirmed.delivery.v1")
     assert candidate.is_devrelease is True
     assert candidate.release == public_basis.release
     assert candidate.pre == public_basis.pre

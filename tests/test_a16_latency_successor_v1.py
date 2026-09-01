@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import hashlib
 import json
+from copy import deepcopy
 from pathlib import Path
 
 from qcoder.context_bridge_mcp import (
@@ -17,7 +17,6 @@ from qcoder.cursor_post_write_hook import (
     handle_cursor_after_file_edit_event,
     install_cursor_post_write_hook,
 )
-
 
 REQUEST = (
     "Use qCoder to write a Qiskit program that prepares a Φ+ Bell state. "
@@ -56,7 +55,7 @@ def test_inline_binding_is_compact_tiered_digest_verified_and_keeps_twelve_tools
         token_file=tmp_path / "token.txt",
     )
     assert len(instructions.encode("utf-8")) <= 50_000
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v48"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v58"
     assert len(tool_descriptors()) == len(EXPECTED_TOOLS) == 12
     listed = handle_jsonrpc_message(
         {"jsonrpc": "2.0", "id": 1, "method": "resources/list"},
@@ -190,11 +189,12 @@ def test_blueprint_tools_advertise_minimal_shape_and_reject_fields_actionably(
 ) -> None:
     descriptors = {item["name"]: item for item in tool_descriptors()}
     intent = descriptors["create_algorithm_intent_card"]
-    assert intent["x-qcoder-minimal-happy-path"] == {
-        "original_user_intent": "<exact customer algorithm request>",
-        "profile_id": "generic_qiskit",
-    }
-    assert "MINIMAL HAPPY PATH" in intent["description"]
+    assert any(
+        set(branch.get("required", ())) == {"original_user_intent", "profile_id"}
+        for branch in intent["inputSchema"]["anyOf"]
+    )
+    assert "Use exact returned parent objects" in intent["description"]
+    assert "x-qcoder-minimal-happy-path" not in intent
     malformed = handle_jsonrpc_message(
         {
             "jsonrpc": "2.0",

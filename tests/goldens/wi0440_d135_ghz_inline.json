@@ -1,0 +1,205 @@
+{
+  "app_render_model": {
+    "actions": [
+      "Use recommended choices",
+      "Review or change choices"
+    ],
+    "groups": [
+      {
+        "items": [
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Recommended interpretation",
+            "value": "Create a three-qubit GHZ Qiskit program and wait for confirmation before producing source."
+          },
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Limitation 1",
+            "value": "The review does not claim hardware performance."
+          }
+        ],
+        "label": "Goal and scope"
+      },
+      {
+        "items": [
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Framework",
+            "value": "Use Qiskit QuantumCircuit."
+          },
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Registers",
+            "value": "Use three qubits and three classical bits."
+          },
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Preparation",
+            "value": "Apply H to q0, then CX from q0 to q1 and q2."
+          },
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Measurement",
+            "value": "Measure all qubits to matching classical bits."
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Dependency version",
+            "value": "No dependency version was selected silently."
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Execution environment",
+            "value": "No execution environment was selected silently."
+          }
+        ],
+        "label": "Implementation"
+      },
+      {
+        "items": [
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Output artifact",
+            "value": "Readable Python source after confirmation"
+          },
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Source delivery",
+            "value": "Inline after confirmation."
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Generation authority",
+            "value": "Python source will be produced after you confirm these choices."
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Execution authority",
+            "value": "Execution was not requested and is not authorized."
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Authority separation",
+            "value": "Confirming these choices does not authorize execution."
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Deferred execution choices",
+            "value": "Backend, shots, seed, and result handling remain deferred."
+          }
+        ],
+        "label": "Output and authority"
+      }
+    ]
+  },
+  "canonical_markdown": "## Goal and scope\n\n- **Recommended interpretation:** Create a three-qubit GHZ Qiskit program and wait for confirmation before producing source.\n- **Limitation 1:** The review does not claim hardware performance.\n\n## Implementation\n\n- **Framework:** Use Qiskit QuantumCircuit.\n- **Registers:** Use three qubits and three classical bits.\n- **Preparation:** Apply H to q0, then CX from q0 to q1 and q2.\n- **Measurement:** Measure all qubits to matching classical bits.\n- **Dependency version:** No dependency version was selected silently.\n- **Execution environment:** No execution environment was selected silently.\n\n## Output and authority\n\n- **Output artifact:** Readable Python source after confirmation\n- **Source delivery:** Inline after confirmation.\n- **Generation authority:** Python source will be produced after you confirm these choices.\n- **Execution authority:** Execution was not requested and is not authorized.\n- **Authority separation:** Confirming these choices does not authorize execution.\n- **Deferred execution choices:** Backend, shots, seed, and result handling remain deferred.\n\n- Use recommended choices\n- Review or change choices\n",
+  "machine_projection": {
+    "confirmable": true,
+    "customer_actions": [
+      "Use recommended choices",
+      "Review or change choices"
+    ],
+    "execution_performed": false,
+    "execution_permitted": false,
+    "file_mutation_performed": false,
+    "initial_decision_group_count": 3,
+    "initial_decision_group_maximum": 3,
+    "initial_decision_groups": [
+      {
+        "items": [
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Recommended interpretation",
+            "value": "Create a three-qubit GHZ Qiskit program and wait for confirmation before producing source."
+          },
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Limitation 1",
+            "value": "The review does not claim hardware performance."
+          }
+        ],
+        "label": "Goal and scope"
+      },
+      {
+        "items": [
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Framework",
+            "value": "Use Qiskit QuantumCircuit."
+          },
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Registers",
+            "value": "Use three qubits and three classical bits."
+          },
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Preparation",
+            "value": "Apply H to q0, then CX from q0 to q1 and q2."
+          },
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Measurement",
+            "value": "Measure all qubits to matching classical bits."
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Dependency version",
+            "value": "No dependency version was selected silently."
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Execution environment",
+            "value": "No execution environment was selected silently."
+          }
+        ],
+        "label": "Implementation"
+      },
+      {
+        "items": [
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Output artifact",
+            "value": "Readable Python source after confirmation"
+          },
+          {
+            "attribution": "connected_assistant_recommendation",
+            "label": "Source delivery",
+            "value": "Inline after confirmation."
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Generation authority",
+            "value": "Python source will be produced after you confirm these choices."
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Execution authority",
+            "value": "Execution was not requested and is not authorized."
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Authority separation",
+            "value": "Confirming these choices does not authorize execution."
+          },
+          {
+            "attribution": "qcoder_deterministic_boundary",
+            "label": "Deferred execution choices",
+            "value": "Backend, shots, seed, and result handling remain deferred."
+          }
+        ],
+        "label": "Output and authority"
+      }
+    ],
+    "one_qcoder_operation_before_useful_review": true,
+    "proposal_attribution": "connected_assistant",
+    "protected_service_called": false,
+    "qcoder_authored_recommendation": false,
+    "retention": "current_loop_only_process_and_discard",
+    "source_or_qasm_included": false
+  },
+  "projection_digest": "06835119486c9b3d0687f145d8513948713af0314ff83fedb4780a974e475a68",
+  "schema_id": "qcoder.current_loop.canonical_first_value_delivery.v1",
+  "schema_version": 1,
+  "semantic_revision_sha256": "272da33f8ac37fd7e212afc473925e69fe7b65964ea470c5db53e897c56c3060"
+}

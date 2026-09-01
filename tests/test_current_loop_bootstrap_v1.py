@@ -3,9 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 from qcoder.context_bridge_mcp import (
     build_client_activation_instructions,
@@ -23,8 +23,10 @@ from qcoder.current_loop_bootstrap import (
     invocation_lifecycle_snapshot,
     pre_result_entry_inventory,
 )
-from qcoder.current_loop_invocation import invocation_contract_snapshot
-from qcoder.current_loop_invocation import operation_transport_inventory
+from qcoder.current_loop_invocation import (
+    invocation_contract_snapshot,
+    operation_transport_inventory,
+)
 
 
 def _run_bootstrap(
@@ -144,8 +146,8 @@ def test_bootstrap_owns_platform_serialization_and_cwd_semantics() -> None:
 
 def test_binding_v7_delivers_bootstrap_and_complete_lifecycle() -> None:
     binding = _descriptor("/runtime/python")
-    assert binding["schema_version"] == 47
-    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v48"
+    assert binding["schema_version"] == 57
+    assert binding["contract_id"] == "qcoder.connected_assistant.client_binding.v58"
     bootstrap = binding["bootstrap_invocation_contract"]
     assert bootstrap["schema_id"] == BOOTSTRAP_INVOCATION_SCHEMA_ID
     assert bootstrap["supported_entrypoints"][FRESH_ACTIVE_BUILD_ENTRYPOINT][
@@ -228,7 +230,7 @@ def test_black_box_bootstrap_activates_assist_with_exact_receipt(
     request = (
         "Use qCoder for this build. Create and run a simple Bell Qiskit program.\n"
         "Keep `00` and `11`; literal $(printf no), quotes ' \" and Ω 😀."
-    ).encode("utf-8")
+    ).encode()
     completed = _run_bootstrap(bootstrap, workspace=workspace, request=request)
     assert completed.returncode == 0, completed.stderr.decode()
     result = json.loads(completed.stdout)

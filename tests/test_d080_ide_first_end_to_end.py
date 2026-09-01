@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from copy import deepcopy
+from pathlib import Path
 
 from qcoder.context_bridge_mcp import EXPECTED_TOOLS, build_client_binding_descriptor
-from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.current_loop_bootstrap import build_fresh_active_build_bootstrap
+from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.current_loop_invocation import operation_transport_inventory
 from qcoder.current_loop_request_semantics import classify_current_request
 from qcoder.cursor_post_write_hook import (
@@ -18,10 +18,11 @@ from qcoder.cursor_post_write_hook import (
 )
 from qcoder.d079_workflows import classify_binding_default_route
 
-
 SOURCE_ONLY_REQUESTS = (
-    "Use qCoder to write a Qiskit program that prepares a Φ+ Bell state. "
-    "Stop after generating the code.",
+    (
+        "Use qCoder to write a Qiskit program that prepares a Φ+ Bell state. "
+        "Stop after generating the code."
+    ),
     "Have qCoder help me create only the Qiskit source for a Φ+ state.",
     "Let’s use qCoder for this build. Make the Python file, but don’t export QASM or run it.",
     "With qCoder, generate a two-qubit Bell example in Python and stop after the source.",
@@ -166,7 +167,7 @@ def test_binding_route_and_inventory_are_deterministic_and_keep_twelve_tools() -
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v48"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v58"
     assert (
         descriptor["current_request_semantics_contract"]["temporary_current_step_ceiling"] is True
     )
@@ -278,9 +279,7 @@ def test_compressed_native_action_preserves_receipt_and_exact_registration(
         capture_mode="exact_current_customer_message",
         request_transport="stdin",
     )
-    assert activated["compact_next_action"]["post_action_operation"] == (
-        "complete_current_step"
-    )
+    assert activated["compact_next_action"]["post_action_operation"] == ("complete_current_step")
     source = tmp_path / "bell.py"
     source.write_text(
         "from qiskit import QuantumCircuit\nqc = QuantumCircuit(2)\nqc.h(0)\nqc.cx(0, 1)\n",
@@ -380,9 +379,7 @@ def test_binding_owned_black_box_bootstrap_reaches_d080_compact_action(tmp_path:
     assert result["current_request_semantics"]["requested_operation"] == "source_generation"
     assert result["compact_next_action"]["artifact_role"] == "source"
     assert result["compact_next_action_is_sole_procedural_source"] is True
-    assert result["current_step_contract"]["completion"]["operation"] == (
-        "complete_current_step"
-    )
+    assert result["current_step_contract"]["completion"]["operation"] == ("complete_current_step")
     assert result["current_step_contract"]["completion"]["required_arguments"] == [
         "current_action_handle",
         "artifact_path",
@@ -479,12 +476,13 @@ def test_source_plus_qasm_uses_two_exact_native_actions_and_never_runs(tmp_path:
     assert source_registered["registration_completed"] is True
     intermediate = coordinator.store.read()
     assert intermediate["coordinator"]["current_step_substage"] == "qasm"
-    expectation_id = intermediate["coordinator"][
-        "current_step_bounded_action_expectation_id"
-    ]
-    assert intermediate["operation_receipts"][expectation_id]["authority_binding"][
-        "authorized_artifact_role"
-    ] == "circuit_qasm"
+    expectation_id = intermediate["coordinator"]["current_step_bounded_action_expectation_id"]
+    assert (
+        intermediate["operation_receipts"][expectation_id]["authority_binding"][
+            "authorized_artifact_role"
+        ]
+        == "circuit_qasm"
+    )
     qasm = tmp_path / "bell.qasm"
     qasm.write_text(
         'OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[2];\nh q[0];\ncx q[0],q[1];\n',
@@ -538,9 +536,10 @@ def test_source_plus_run_requires_a_second_exact_execution_permission(tmp_path: 
     execution_expectation = state["operation_receipts"][expectation_id]
     assert execution_expectation["authority_binding"]["requested_operation"] == "ide_execute"
     assert execution_expectation["authority_binding"]["authorized_artifact_role"] == "results"
-    assert execution_expectation["authority_effect"][
-        "native_client_permission_granted_by_qcoder"
-    ] is False
+    assert (
+        execution_expectation["authority_effect"]["native_client_permission_granted_by_qcoder"]
+        is False
+    )
     assert len(state["operation_receipts"]) == 2
     assert sorted(row["status"] for row in state["operation_receipts"].values()) == [
         "consumed",

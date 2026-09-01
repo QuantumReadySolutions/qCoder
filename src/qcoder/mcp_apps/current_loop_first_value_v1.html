@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'">
+  <title>qCoder review</title>
+  <style>
+    :root{color-scheme:light dark;font:14px/1.45 system-ui,sans-serif}body{margin:0;padding:16px}
+    h2{font-size:1rem;margin:18px 0 8px}.item{margin:6px 0}.label{font-weight:650}
+    .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}button{font:inherit;padding:7px 11px}
+    #error{color:#b42318} [hidden]{display:none!important}
+  </style>
+</head>
+<body>
+  <main id="review" aria-live="polite"></main><p id="error" hidden></p>
+  <script>
+  (()=>{'use strict';let token=null,requestId=1;
+    const error=document.getElementById('error'),root=document.getElementById('review');
+    const text=(tag,value,cls)=>{const n=document.createElement(tag);n.textContent=value;if(cls)n.className=cls;return n};
+    const canonical=value=>{if(Array.isArray(value))return '['+value.map(canonical).join(',')+']';if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(key=>JSON.stringify(key)+':'+canonical(value[key])).join(',')+'}';return JSON.stringify(value)};
+    const hex=bytes=>Array.from(new Uint8Array(bytes),byte=>byte.toString(16).padStart(2,'0')).join('');
+    async function verified(result){const sc=result&&result.structuredContent;if(!sc||!sc.app_render_model)return;
+      const markdown=result.content&&result.content[0]&&result.content[0].text;if(typeof markdown!=='string')return;
+      const input={schema_id:'qcoder.current_loop.first_value_projection_digest.v1',semantic_revision_sha256:sc.semantic_revision_sha256,machine_projection:sc.review_before_generation,canonical_markdown:markdown,app_render_model:sc.app_render_model};
+      const digest=hex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonical(input))));
+      if(digest!==sc.projection_digest){error.hidden=false;error.textContent='The review projection could not be verified.';return}render(result)}
+    function render(result){const sc=result&&result.structuredContent;if(!sc||!sc.app_render_model)return;
+      const model=sc.app_render_model;token=sc.prior_result_token||null;root.replaceChildren();
+      for(const group of model.groups||[]){root.append(text('h2',group.label));for(const item of group.items||[]){const row=text('div','','item');row.append(text('span',item.label+': ','label'),document.createTextNode(item.value));root.append(row)}}
+      const actions=text('div','','actions');for(const action of model.actions||[]){const button=text('button',action);button.type='button';button.addEventListener('click',()=>call(action));actions.append(button)}root.append(actions)}
+    function call(action){if(!token)return;window.parent.postMessage({jsonrpc:'2.0',id:requestId++,method:'tools/call',params:{name:'begin_current_loop',arguments:{review_action:action,prior_result_token:token}}},'*')}
+    addEventListener('message',event=>{const msg=event.data||{};if(msg.method==='ui/notifications/tool-result'||msg.method==='notifications/tool-result')void verified(msg.params||{});else if(msg.result&&msg.result.structuredContent)void verified(msg.result);else if(msg.error){error.hidden=false;error.textContent='The requested review action could not be completed.'}});
+    window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/initialized'},'*');
+  })();
+  </script>
+</body>
+</html>
