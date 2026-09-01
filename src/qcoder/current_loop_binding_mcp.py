@@ -151,7 +151,7 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                         "type": "string",
                         "enum": list(REVIEW_BEFORE_GENERATION_ACTIONS),
                         "description": (
-                            "Exact action for a stored review. Supply only with prior_result_token; "
+                            "Exact action for the active review. Supply only with prior_result_token; "
                             "do not replay the request digest, proposal, revision, or hidden fields."
                         ),
                     },

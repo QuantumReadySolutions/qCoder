@@ -186,7 +186,7 @@ def test_canonical_vocabulary_binding_and_state_v9_are_identical(tmp_path: Path)
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     vocabulary = vocabulary_snapshot()
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v51"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v52"
     assert binding["canonical_current_loop_vocabulary"] == vocabulary
     assert (
         binding["contract_sidecar"]["accepted_domains"]["canonical_evidence_vocabulary"]

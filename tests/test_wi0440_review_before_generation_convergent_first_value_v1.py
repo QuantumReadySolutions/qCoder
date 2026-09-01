@@ -269,7 +269,7 @@ def test_exact_revision_confirmation_and_duplicate_are_idempotent(tmp_path: Path
         prior_result_token=token,
     )
     assert confirmation["category"] == "review_confirmation_generation_ready"
-    assert confirmation["generation_authority"] == "confirmed_for_stored_displayed_review"
+    assert confirmation["generation_authority"] == "source_generation_authorized_for_confirmed_plan"
     assert confirmation["execution_authority"] == "not_requested"
     assert confirmation["source_or_qasm_created"] is False
     duplicate = binding_call(
@@ -603,8 +603,8 @@ def test_binding_descriptor_is_additive_and_inventory_remains_exact_12_plus_2() 
     descriptor = build_client_binding_descriptor(coordinator_prefix=["qcoder"])[
         "client_binding_contract"
     ]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v51"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 50
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v52"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 51
     assert descriptor["review_before_generation_contract"]["new_public_tool"] is False
     assert descriptor["review_before_generation_contract"]["new_private_operation"] is False
     assert len(EXPECTED_TOOLS) == 12
@@ -654,8 +654,8 @@ def test_local_timing_acceptance_population_passes_without_network() -> None:
         text=True,
     )
     result = json.loads(completed.stdout)
-    assert result["population_cases"] == 36
-    assert result["samples"] == 38
+    assert result["population_cases"] == 56
+    assert result["samples"] == 56
     assert result["scenario_counts"] == {
         "review_first_value": 20,
         "confirmation_without_replay": 1,
@@ -664,14 +664,14 @@ def test_local_timing_acceptance_population_passes_without_network() -> None:
         "generic_proposal_rejection": 1,
         "source_modification": 1,
         "stale_token": 1,
-        "unsafe_content_rejection": 5,
+        "unsafe_content_rejection": 23,
         "direct_generation_control": 1,
         "empty_customer_constraints": 1,
         "execution_authority_binding": 4,
-        "fake_action_rejection": 1,
+        "fake_action_rejection": 2,
         "material_customer_constraints": 1,
         "quiet_projection": 1,
-        "split_source_rejection": 1,
+        "split_source_rejection": 3,
     }
     assert result["unsafe_content_rejection"]["maximum_seconds"] >= 0
     assert result["connected_assistant_model"] == "not_measured_fixture_driven_automation"

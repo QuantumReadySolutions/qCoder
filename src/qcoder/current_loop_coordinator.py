@@ -2803,7 +2803,7 @@ class CurrentLoopCoordinator:
                     "prior_result_token": prior_result_token,
                     "duplicate_confirmation_idempotent": True,
                     "generation_ready_context": deepcopy(existing["generation_ready_context"]),
-                    "generation_authority": "confirmed_for_stored_displayed_review",
+                    "generation_authority": "source_generation_authorized_for_confirmed_plan",
                     "execution_authority": existing["execution_authority"],
                     "source_or_qasm_created": False,
                     "file_mutation_performed": False,
@@ -2833,7 +2833,8 @@ class CurrentLoopCoordinator:
                     if inline
                     else "confirmed_plan_generation_ready_exact_workspace_source"
                 ),
-                "confirmed_stored_review": True,
+                "selected_review_action": "Use recommended choices",
+                "plan_generation_ready": True,
                 "connected_assistant_source_generation_authorized": True,
                 "source_delivery": "inline_next_response" if inline else "exact_workspace_target",
                 "exact_workspace_target": (
@@ -2845,14 +2846,16 @@ class CurrentLoopCoordinator:
                 "execution_authorized": False,
                 "additional_customer_confirmation_required": False,
                 "backend_shots_seed_and_result_handling": "remain_deferred",
-                "review_revision_bound_internally": current_revision,
+                "next_permitted_client_native_step": (
+                    "produce_inline_source" if inline else "write_exact_workspace_source"
+                ),
             }
             updated = deepcopy(dict(existing))
             updated.update(
                 {
                     "confirmation_state": "confirmed",
                     "confirmed_revision": current_revision,
-                    "generation_authority": "confirmed_for_stored_displayed_review",
+                    "generation_authority": "source_generation_authorized_for_confirmed_plan",
                     "generation_ready_context": deepcopy(generation_ready_context),
                 }
             )
@@ -2862,7 +2865,7 @@ class CurrentLoopCoordinator:
                     "state_status": "ready",
                     "checkpoint_kind": "none",
                     "customer_summary": (
-                        "The stored review is confirmed and source generation is ready; "
+                        "The selected plan is ready for source generation; "
                         "execution remains unauthorized."
                     ),
                     "current_request_semantics": generation_semantics,
@@ -2889,7 +2892,7 @@ class CurrentLoopCoordinator:
                 "state_mutated": True,
                 "prior_result_token": prior_result_token,
                 "generation_ready_context": generation_ready_context,
-                "generation_authority": "confirmed_for_stored_displayed_review",
+                "generation_authority": "source_generation_authorized_for_confirmed_plan",
                 "execution_authority": existing["execution_authority"],
                 "source_or_qasm_created": False,
                 "file_mutation_performed": False,

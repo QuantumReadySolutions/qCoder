@@ -28,6 +28,37 @@ OUTSIDE_OLD_VOCABULARY = (
     "Use qCoder to tell me what you think I am asking for and how you would build it. Wait for "
     "my approval before creating it.",
 )
+D127_UNSAFE_VALUES = (
+    'print("premature source")',
+    "qc.append(HGate(), [0])",
+    "for item in values: print(item)",
+    "bell q[0], q[1];",
+    "assert condition",
+    "pass",
+    "break",
+    "continue",
+    "global value",
+    "nonlocal value",
+    "type Alias = int",
+    'f"{value}"',
+    "value if ready else fallback",
+    "delay[100ns] q[0];",
+    'defcalgrammar "openpulse";',
+    "defcal x $0 { play(frame, waveform); }",
+    "let alias = q[0:1];",
+    "int[32] count = 0;",
+    "box[1us] { delay[100ns] q[0]; }",
+    "cal { play(frame, waveform); }",
+    "extern foo(int[32]) -> bit;",
+    "const int[32] n = 2;",
+)
+D127_SPLIT_VALUES = (
+    ["print", "(", '"premature source")'],
+    ["bell q[0]", ",", "q[1]", ";"],
+    ["OPEN", "QASM", "3", ";"],
+    ["Use", "recommended", "choices"],
+    ["Review", "or change", "choices"],
+)
 
 
 def _load(name: str) -> dict[str, Any]:
@@ -199,13 +230,7 @@ def main() -> int:
         combined.append(generic_elapsed)
         scenario_counts["generic_proposal_rejection"] += 1
 
-        for unsafe_value in (
-            "QuantumCircuit(2, 2)",
-            'print("premature source")',
-            "qc.append(HGate(), [0])",
-            "for item in values: print(item)",
-            "bell q[0], q[1];",
-        ):
+        for unsafe_value in ("QuantumCircuit(2, 2)", *D127_UNSAFE_VALUES):
             unsafe = _proposal(EXACT_REQUEST)
             unsafe["implementation_recommendations"][0] = unsafe_value
             with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-unsafe-") as directory:
@@ -223,10 +248,12 @@ def main() -> int:
             unsafe_rejection.append(unsafe_elapsed)
             scenario_counts["unsafe_content_rejection"] += 1
 
-        for unsafe_values, scenario in (
-            (["print(", '"premature source")'], "split_source_rejection"),
-            (["Use recommended", "choices"], "fake_action_rejection"),
-        ):
+        for unsafe_values in D127_SPLIT_VALUES:
+            scenario = (
+                "fake_action_rejection"
+                if unsafe_values[0] in {"Use", "Review"}
+                else "split_source_rejection"
+            )
             unsafe = _proposal(EXACT_REQUEST)
             unsafe["implementation_recommendations"][0:2] = unsafe_values
             with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-split-unsafe-") as directory:
@@ -390,7 +417,7 @@ def main() -> int:
     )
     result = {
         "schema_id": "qcoder.wi0440.local_timing_acceptance.v2",
-        "population_cases": len(cases) + 16,
+        "population_cases": (len(initial) + len(confirmation)) // args.repetitions,
         "repetitions": args.repetitions,
         "samples": len(initial) + len(confirmation),
         "unique_prior_result_tokens": len(tokens),

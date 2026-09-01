@@ -289,8 +289,8 @@ def test_descriptor_is_self_describing_and_valid_by_construction(tmp_path: Path)
     assert len(schema["oneOf"]) == 3
     result = binding_payload(tmp_path, request=EXACT_REQUEST, proposal=proposal_for())
     assert result["category"] == "review_before_generation_ready"
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v51"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 50
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v52"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 51
     assert len(EXPECTED_TOOLS) == 12
     assert [item["name"] for item in binding_tool_descriptors()] == [
         "begin_current_loop",

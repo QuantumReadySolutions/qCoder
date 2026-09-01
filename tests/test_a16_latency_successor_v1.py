@@ -56,7 +56,7 @@ def test_inline_binding_is_compact_tiered_digest_verified_and_keeps_twelve_tools
         token_file=tmp_path / "token.txt",
     )
     assert len(instructions.encode("utf-8")) <= 50_000
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v51"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v52"
     assert len(tool_descriptors()) == len(EXPECTED_TOOLS) == 12
     listed = handle_jsonrpc_message(
         {"jsonrpc": "2.0", "id": 1, "method": "resources/list"},

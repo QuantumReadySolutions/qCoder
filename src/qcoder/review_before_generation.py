@@ -12,8 +12,9 @@ from copy import deepcopy
 from hashlib import sha256
 import json
 import re
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterator, Mapping, Sequence
 import unicodedata
+import warnings
 
 from qcoder.core.share_safe import contains_local_path, contains_token_or_header
 
@@ -81,55 +82,89 @@ _CONSEQUENTIAL_VALUE = re.compile(
     r"function|module|class|json|readable source)\b",
     re.IGNORECASE,
 )
-_EXECUTABLE_PYTHON_NODES = (
-    ast.AnnAssign,
-    ast.Assign,
-    ast.AsyncFor,
-    ast.AsyncFunctionDef,
-    ast.AsyncWith,
-    ast.AugAssign,
-    ast.Await,
-    ast.Call,
-    ast.ClassDef,
-    ast.Delete,
-    ast.DictComp,
-    ast.For,
-    ast.FunctionDef,
-    ast.GeneratorExp,
-    ast.If,
-    ast.Import,
-    ast.ImportFrom,
-    ast.Lambda,
-    ast.ListComp,
-    ast.Match,
-    ast.NamedExpr,
-    ast.Raise,
-    ast.Return,
-    ast.SetComp,
-    ast.Try,
-    ast.While,
-    ast.With,
-    ast.Yield,
-    ast.YieldFrom,
+_SAFE_PYTHON_BINARY_OPERATORS = (
+    ast.Add,
+    ast.Sub,
+    ast.Mult,
+    ast.Div,
+    ast.FloorDiv,
+    ast.Mod,
+    ast.Pow,
 )
-_QASM_SOURCE_PATTERNS = (
-    re.compile(r"\bOPENQASM\s+\d+(?:\.\d+)?\s*;", re.IGNORECASE),
-    re.compile(r"\binclude\s+[\"'][^\"'\r\n]+[\"']\s*;", re.IGNORECASE),
+_SAFE_PYTHON_UNARY_OPERATORS = (ast.UAdd, ast.USub)
+_QASM_STATEMENT_KEYWORDS = (
+    "OPENQASM",
+    "include",
+    "qubit",
+    "bit",
+    "qreg",
+    "creg",
+    "gate",
+    "measure",
+    "reset",
+    "barrier",
+    "delay",
+    "defcalgrammar",
+    "defcal",
+    "cal",
+    "let",
+    "alias",
+    "int",
+    "uint",
+    "float",
+    "angle",
+    "bool",
+    "duration",
+    "stretch",
+    "complex",
+    "array",
+    "const",
+    "box",
+    "extern",
+    "input",
+    "output",
+    "pragma",
+    "if",
+    "else",
+    "for",
+    "while",
+    "switch",
+    "return",
+    "end",
+    "break",
+    "continue",
+)
+_QASM_STATEMENT_HEAD = "(?:" + "|".join(_QASM_STATEMENT_KEYWORDS) + ")"
+_QASM_REFERENCE = r"(?:\$\d+|[A-Za-z_]\w*(?:\s*\[[^\]\r\n;{}]+\])?)"
+_QASM_STRUCTURAL_PATTERNS = (
+    re.compile(r"^\s*OPEN\s*QASM(?=\s*(?:\d|;|$))", re.IGNORECASE),
     re.compile(
-        r"\b(?:qubit|bit|qreg|creg)\b(?:\s*\[[^\]\r\n]+\])?\s+"
-        r"[A-Za-z_]\w*\s*;",
+        rf"^\s*{_QASM_STATEMENT_HEAD}\b[^\r\n]*;(?:\s*)$",
         re.IGNORECASE,
     ),
-    re.compile(r"\bgate\s+[A-Za-z_]\w*(?:\s*\([^{}\r\n]*\))?[^{}\r\n]*\{", re.I),
-    re.compile(r"\b(?:measure|reset|barrier)\b[^\r\n;]*;", re.IGNORECASE),
     re.compile(
-        r"(?:\b(?:ctrl|negctrl|inv|pow)\b(?:\s*\([^;\r\n]*\))?\s*@\s*)*"
-        r"\b[A-Za-z_]\w*(?:\s*\([^;\r\n]*\))?\s+"
-        r"(?:\$\d+|[A-Za-z_]\w*(?:\s*\[[^\]\r\n]+\])?)"
-        r"(?:\s*,\s*(?:\$\d+|[A-Za-z_]\w*(?:\s*\[[^\]\r\n]+\])?))*\s*;",
+        r"^\s*(?:gate|def|defcal|cal|box|if|else|for|while|switch)\b[^\r\n]*\{"
+        r"[\s\S]*\}\s*;?\s*$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"^\s*(?:ctrl|negctrl|inv|pow)(?:\s*\([^;\r\n]*\))?\s*@\s*"
+        rf"[A-Za-z_]\w*(?:\s*\([^;\r\n]*\))?\s+{_QASM_REFERENCE}"
+        rf"(?:\s*,\s*{_QASM_REFERENCE})*\s*;\s*$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"^\s*[A-Za-z_]\w*(?:\s*\([^;\r\n]*\))?\s+{_QASM_REFERENCE}"
+        rf"(?:\s*,\s*{_QASM_REFERENCE})*\s*;\s*$",
+    ),
+    re.compile(
+        rf"^\s*{_QASM_REFERENCE}\s*=\s*[^;\r\n]+;\s*$",
         re.IGNORECASE,
     ),
 )
+_MAX_PROJECTION_FIELDS = 256
+_MAX_PROJECTION_BYTES = 100_000
+_MAX_PROJECTION_SEQUENCE_WORK_BYTES = 8_000_000
 _MATERIAL_CONSTRAINT_TERMS = frozenset(
     {
         "algorithm",
@@ -187,6 +222,21 @@ _TRIVIAL_CONSTRAINTS = frozenset(
         "to",
         "use qcoder",
         "use qcoder to help me",
+    }
+)
+_INTRINSIC_SINGLE_TOKEN_CONSTRAINTS = frozenset(
+    {
+        "bell",
+        "cirq",
+        "openqasm",
+        "pennylane",
+        "python",
+        "qasm",
+        "qiskit",
+        "qubit",
+        "qubits",
+        "source",
+        "φ",
     }
 )
 
@@ -252,33 +302,63 @@ def _contains_customer_action(value: str) -> bool:
     return any(_normalized_text(action) in normalized for action in CUSTOMER_ACTIONS)
 
 
+def _is_harmless_python_expression(node: ast.AST, *, depth: int = 0) -> bool:
+    """Accept only inert literals, names, and bounded mathematical composition."""
+
+    if depth > 32:
+        return False
+    if isinstance(node, ast.Constant):
+        return type(node.value) in {str, int, float, complex, bool, type(None)}
+    if isinstance(node, ast.Name):
+        return True
+    if isinstance(node, ast.UnaryOp):
+        return isinstance(node.op, _SAFE_PYTHON_UNARY_OPERATORS) and _is_harmless_python_expression(
+            node.operand, depth=depth + 1
+        )
+    if isinstance(node, ast.BinOp):
+        return (
+            isinstance(node.op, _SAFE_PYTHON_BINARY_OPERATORS)
+            and _is_harmless_python_expression(node.left, depth=depth + 1)
+            and _is_harmless_python_expression(node.right, depth=depth + 1)
+        )
+    if isinstance(node, ast.BoolOp):
+        return isinstance(node.op, (ast.And, ast.Or)) and all(
+            _is_harmless_python_expression(value, depth=depth + 1) for value in node.values
+        )
+    return False
+
+
 def _contains_executable_python(value: str) -> bool:
     text = value.strip()
     if not text:
         return False
+    # Python 3.12 introduced the soft-keyword type-alias statement. Preserve the
+    # same fail-closed boundary when qCoder is running on an older supported AST.
+    if re.match(r"^type\s+[A-Za-z_]\w*(?:\s*\[[^\]\r\n]+\])?\s*=", text):
+        return True
     try:
-        tree = ast.parse(text, mode="exec")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", SyntaxWarning)
+            tree = ast.parse(text, mode="exec")
     except (SyntaxError, ValueError):
-        tree = None
+        return False
     except (MemoryError, RecursionError, UnicodeError):
         return True
-    if tree is not None:
-        if any(isinstance(node, _EXECUTABLE_PYTHON_NODES) for node in ast.walk(tree)):
-            return True
-        if ";" in text and len(tree.body) > 1:
-            return True
-    return bool(
-        re.search(r"(?:^|[;])\s*@\s*[A-Za-z_]\w*", text)
-        or re.search(
-            r"(?:^|;)\s*(?:async\s+)?(?:def|class|for|while|if|match|try|with)\b[^\r\n]*:",
-            text,
-        )
-        or re.search(r"(?:^|;)\s*(?:import|from)\s+[A-Za-z_]", text)
+    if not tree.body:
+        return False
+    if ";" in text and len(tree.body) > 1:
+        return True
+    return not all(
+        isinstance(statement, ast.Expr) and _is_harmless_python_expression(statement.value)
+        for statement in tree.body
     )
 
 
 def _contains_qasm_source(value: str) -> bool:
-    return any(pattern.search(value) for pattern in _QASM_SOURCE_PATTERNS)
+    text = unicodedata.normalize("NFKC", value).strip()
+    if not text:
+        return False
+    return any(pattern.search(text) for pattern in _QASM_STRUCTURAL_PATTERNS)
 
 
 def _contains_source_or_qasm(value: str) -> bool:
@@ -287,26 +367,32 @@ def _contains_source_or_qasm(value: str) -> bool:
     return _contains_executable_python(value) or _contains_qasm_source(value)
 
 
-def _adjacent_projection_variants(values: Sequence[str]) -> list[str]:
+def _contiguous_projection_variants(values: Sequence[str]) -> Iterator[str]:
     bounded = [unicodedata.normalize("NFKC", value).strip() for value in values]
-    variants = list(bounded)
-    for left, right in zip(bounded, bounded[1:], strict=False):
-        variants.extend(
-            (
-                left.rstrip() + right.lstrip(),
-                left.rstrip() + " " + right.lstrip(),
-                left.rstrip() + "\n" + right.lstrip(),
-            )
-        )
-    return variants
+    if len(bounded) > _MAX_PROJECTION_FIELDS:
+        raise ReviewBeforeGenerationError("review_projection_aggregate_limit_exceeded")
+    if sum(len(value.encode("utf-8")) for value in bounded) > _MAX_PROJECTION_BYTES:
+        raise ReviewBeforeGenerationError("review_projection_aggregate_limit_exceeded")
+    work = 0
+    for separator in ("", " ", "\n"):
+        for start in range(len(bounded)):
+            joined = ""
+            for end in range(start, len(bounded)):
+                joined = bounded[end] if end == start else joined + separator + bounded[end]
+                work += len(joined.encode("utf-8"))
+                if work > _MAX_PROJECTION_SEQUENCE_WORK_BYTES:
+                    raise ReviewBeforeGenerationError("review_projection_aggregate_limit_exceeded")
+                yield joined
 
 
 def _projection_contains_source_or_qasm(values: Sequence[str]) -> bool:
-    return any(_contains_source_or_qasm(value) for value in _adjacent_projection_variants(values))
+    return any(_contains_source_or_qasm(value) for value in _contiguous_projection_variants(values))
 
 
 def _projection_contains_customer_action(values: Sequence[str]) -> bool:
-    return any(_contains_customer_action(value) for value in _adjacent_projection_variants(values))
+    return any(
+        _contains_customer_action(value) for value in _contiguous_projection_variants(values)
+    )
 
 
 def _unsafe_projection_text(value: str) -> bool:
@@ -337,12 +423,12 @@ def _bounded_plain_text(value: Any, *, category: str, maximum: int = 2_000) -> s
         raise ReviewBeforeGenerationError(category)
     if result.casefold().rstrip(".") in _PLACEHOLDERS:
         raise ReviewBeforeGenerationError("review_proposal_not_substantive")
+    if contains_local_path(result) or contains_token_or_header(result):
+        raise ReviewBeforeGenerationError("review_proposal_private_material_rejected")
     if _unsafe_projection_text(result):
         raise ReviewBeforeGenerationError("review_proposal_unsafe_projection_text")
     if _contains_source_or_qasm(result):
         raise ReviewBeforeGenerationError("review_proposal_source_or_qasm_rejected")
-    if contains_local_path(result) or contains_token_or_header(result):
-        raise ReviewBeforeGenerationError("review_proposal_private_material_rejected")
     return result
 
 
@@ -508,6 +594,8 @@ def _customer_constraint_is_material(value: str) -> bool:
     tokens = re.findall(r"[^\W_]+", normalized, flags=re.UNICODE)
     if not tokens or (len(tokens) == 1 and len(tokens[0]) == 1):
         return False
+    if len(tokens) == 1:
+        return tokens[0] in _INTRINSIC_SINGLE_TOKEN_CONSTRAINTS
     if all(
         token in {"a", "an", "and", "for", "me", "of", "please", "the", "to"} for token in tokens
     ):
@@ -1109,6 +1197,7 @@ def contract_snapshot() -> dict[str, Any]:
         "customer_projection_source_free_revalidated": True,
         "token_only_action_call_strict": True,
         "execution_request_bound_to_exact_unquoted_request": True,
+        "model_facing_confirmation_internal_mechanics": False,
         "one_operation_before_useful_review": True,
         "backward_compatible_optional_begin_input": True,
         "protected_service_required": False,
