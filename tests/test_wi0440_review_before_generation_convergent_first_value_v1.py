@@ -606,8 +606,8 @@ def test_binding_descriptor_is_additive_and_inventory_remains_exact_12_plus_2() 
     descriptor = build_client_binding_descriptor(coordinator_prefix=["qcoder"])[
         "client_binding_contract"
     ]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v55"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 54
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v56"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 55
     assert descriptor["review_before_generation_contract"]["new_public_tool"] is False
     assert descriptor["review_before_generation_contract"]["new_private_operation"] is False
     assert len(EXPECTED_TOOLS) == 12
@@ -657,8 +657,8 @@ def test_local_timing_acceptance_population_passes_without_network() -> None:
         text=True,
     )
     result = json.loads(completed.stdout)
-    assert result["population_cases"] == 87
-    assert result["samples"] == 87
+    assert result["population_cases"] == 97
+    assert result["samples"] == 97
     assert result["scenario_counts"] == {
         "review_first_value": 20,
         "confirmation_without_replay": 1,
@@ -682,8 +682,17 @@ def test_local_timing_acceptance_population_passes_without_network() -> None:
         "target_authority_ambiguity_clarification": 1,
         "quiet_projection": 1,
         "split_source_rejection": 3,
+        "d132_prohibition_convergence": 3,
+        "d132_independent_affirmative_resolution": 5,
+        "d132_unknown_directive_clarification": 2,
+        "operator_receipt_create_consume": 1,
     }
     assert result["unsafe_content_rejection"]["maximum_seconds"] >= 0
+    assert result["d132_prohibition_convergence"]["maximum_seconds"] >= 0
+    assert result["d132_independent_affirmative_resolution"]["maximum_seconds"] >= 0
+    assert result["d132_unknown_directive_clarification"]["maximum_seconds"] >= 0
+    assert result["operator_receipt_creation"]["maximum_seconds"] >= 0
+    assert result["operator_receipt_consumption"]["maximum_seconds"] >= 0
     assert result["connected_assistant_model"] == "not_measured_fixture_driven_automation"
     assert result["protected_service_seconds"] == 0
     assert result["first_useful_interpretation_budget_pass"] is True

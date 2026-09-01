@@ -15,6 +15,10 @@ from qcoder.current_loop_binding_mcp import (
     consume_last_binding_timing,
     handle_binding_jsonrpc_message,
 )
+from qcoder.current_loop_operator_timing import (
+    consume_stdio_operator_timing,
+    record_stdio_operator_timing,
+)
 from qcoder.review_before_generation import build_first_value, render_first_value_markdown
 
 
@@ -70,6 +74,22 @@ D131_TARGET_FREE_FRAGMENTS = (
     "Save it as bell.py? No, show source inline after confirmation.",
 )
 D131_ACTIVATION_PREFIX = "Use qCoder to review a Qiskit Bell plan before generating source. "
+D132_PROHIBITION_FRAGMENTS = (
+    "I prefer not to create bell.py; return source inline after confirmation.",
+    "Avoid creating bell.py; show source inline after confirmation.",
+    "Refrain from writing bell.py; show source inline after confirmation.",
+)
+D132_INDEPENDENT_AFFIRMATIVE_FRAGMENTS = (
+    "The example filename is bell.py; generate source in bell.py.",
+    "The example filename is draft.py, but generate source in bell.py.",
+    "Use `draft.py` only as an example, then generate source in bell.py.",
+    "Put the generated source in bell.py.",
+    "Output the generated source to bell.py.",
+)
+D132_UNKNOWN_FRAGMENTS = (
+    "Route the generated source toward bell.py.",
+    "Associate the generated source with bell.py.",
+)
 LOCAL_TIMING_RECEIPTS: list[dict[str, Any]] = []
 
 
@@ -181,6 +201,11 @@ def main() -> int:
     nonauthoritative_target_convergence: list[float] = []
     target_ambiguity_clarification: list[float] = []
     affirmative_target_review: list[float] = []
+    prohibition_convergence: list[float] = []
+    independent_affirmative_resolution: list[float] = []
+    unknown_directive_clarification: list[float] = []
+    operator_receipt_creation: list[float] = []
+    operator_receipt_consumption: list[float] = []
     tokens: set[str] = set()
     scenario_counts = {
         "review_first_value": 0,
@@ -205,6 +230,10 @@ def main() -> int:
         "nonauthoritative_target_language_convergence": 0,
         "target_authority_ambiguity_clarification": 0,
         "affirmative_target_review": 0,
+        "d132_prohibition_convergence": 0,
+        "d132_independent_affirmative_resolution": 0,
+        "d132_unknown_directive_clarification": 0,
+        "operator_receipt_create_consume": 0,
     }
     for _ in range(args.repetitions):
         for request, algorithm in cases:
@@ -365,6 +394,80 @@ def main() -> int:
                 combined.append(elapsed)
                 nonauthoritative_target_convergence.append(elapsed)
                 scenario_counts["nonauthoritative_target_language_convergence"] += 1
+
+        for fragment in D132_PROHIBITION_FRAGMENTS:
+            request = D131_ACTIVATION_PREFIX + fragment
+            with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-d132-prohibition-") as directory:
+                workspace = Path(directory)
+                started = time.monotonic()
+                reviewed = _binding_call(
+                    workspace,
+                    request,
+                    deepcopy(proposal),
+                    intended_artifact_paths={"source": "bell.py"},
+                )
+                elapsed = time.monotonic() - started
+            if any(
+                item["label"] == "Source target"
+                for group in reviewed["review_before_generation"]["initial_decision_groups"]
+                for item in group["items"]
+            ):
+                raise RuntimeError("d132_prohibition_bound_target")
+            initial.append(elapsed)
+            rendering.append(0.0)
+            combined.append(elapsed)
+            prohibition_convergence.append(elapsed)
+            scenario_counts["d132_prohibition_convergence"] += 1
+
+        for fragment in D132_INDEPENDENT_AFFIRMATIVE_FRAGMENTS:
+            request = D131_ACTIVATION_PREFIX + fragment
+            with tempfile.TemporaryDirectory(
+                prefix="qcoder-wi0440-d132-independent-affirmative-"
+            ) as directory:
+                workspace = Path(directory)
+                started = time.monotonic()
+                reviewed = _binding_call(
+                    workspace,
+                    request,
+                    deepcopy(proposal),
+                    intended_artifact_paths={"source": "bell.py"},
+                )
+                elapsed = time.monotonic() - started
+            targets = [
+                item["value"]
+                for group in reviewed["review_before_generation"]["initial_decision_groups"]
+                for item in group["items"]
+                if item["label"] == "Source target"
+            ]
+            if targets != ["bell.py"]:
+                raise RuntimeError("d132_independent_affirmative_target_not_exact")
+            initial.append(elapsed)
+            rendering.append(0.0)
+            combined.append(elapsed)
+            independent_affirmative_resolution.append(elapsed)
+            scenario_counts["d132_independent_affirmative_resolution"] += 1
+
+        for fragment in D132_UNKNOWN_FRAGMENTS:
+            request = D131_ACTIVATION_PREFIX + fragment
+            with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-d132-unknown-") as directory:
+                started = time.monotonic()
+                unresolved = _binding_payload(
+                    Path(directory),
+                    request,
+                    deepcopy(proposal),
+                    intended_artifact_paths={"source": "bell.py"},
+                )
+                elapsed = time.monotonic() - started
+            if (
+                unresolved.get("category") != "review_source_target_authority_ambiguous"
+                or unresolved.get("state_mutated") is not False
+            ):
+                raise RuntimeError("d132_unknown_directive_did_not_clarify")
+            initial.append(elapsed)
+            rendering.append(0.0)
+            combined.append(elapsed)
+            unknown_directive_clarification.append(elapsed)
+            scenario_counts["d132_unknown_directive_clarification"] += 1
 
         ambiguity_request = D131_ACTIVATION_PREFIX + "Save as bell.py or show the source inline."
         with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-d131-ambiguity-") as directory:
@@ -631,6 +734,29 @@ def main() -> int:
         combined.append(direct_elapsed)
         scenario_counts["direct_generation_control"] += 1
 
+        with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-operator-receipt-") as directory:
+            state_root = Path(directory)
+            started = time.monotonic()
+            monotonic = time.monotonic_ns()
+            record_stdio_operator_timing(
+                state_root=state_root,
+                setup_generation="a" * 64,
+                session_sha256="b" * 64,
+                operation_entry_ns=monotonic,
+                processing_complete_ns=monotonic + 1,
+                result_return_ns=monotonic + 2,
+            )
+            created = time.monotonic()
+            consume_stdio_operator_timing(
+                state_root=state_root,
+                setup_generation="a" * 64,
+                session_sha256="b" * 64,
+            )
+            consumed = time.monotonic()
+        operator_receipt_creation.append(created - started)
+        operator_receipt_consumption.append(consumed - created)
+        scenario_counts["operator_receipt_create_consume"] += 1
+
     initial_summary = _summary(initial)
     confirmation_summary = _summary(confirmation)
     rendering_summary = _summary(rendering)
@@ -643,6 +769,11 @@ def main() -> int:
     nonauthoritative_target_summary = _summary(nonauthoritative_target_convergence)
     target_ambiguity_summary = _summary(target_ambiguity_clarification)
     affirmative_target_summary = _summary(affirmative_target_review)
+    prohibition_summary = _summary(prohibition_convergence)
+    independent_affirmative_summary = _summary(independent_affirmative_resolution)
+    unknown_directive_summary = _summary(unknown_directive_clarification)
+    operator_receipt_creation_summary = _summary(operator_receipt_creation)
+    operator_receipt_consumption_summary = _summary(operator_receipt_consumption)
     processing_summary = _summary(
         [float(item["processing_seconds"]) for item in LOCAL_TIMING_RECEIPTS]
     )
@@ -682,6 +813,11 @@ def main() -> int:
         "nonauthoritative_target_language_convergence": nonauthoritative_target_summary,
         "target_authority_ambiguity_clarification": target_ambiguity_summary,
         "affirmative_target_review": affirmative_target_summary,
+        "d132_prohibition_convergence": prohibition_summary,
+        "d132_independent_affirmative_resolution": independent_affirmative_summary,
+        "d132_unknown_directive_clarification": unknown_directive_summary,
+        "operator_receipt_creation": operator_receipt_creation_summary,
+        "operator_receipt_consumption": operator_receipt_consumption_summary,
         "first_useful_interpretation_budget_pass": first_budget,
         "first_material_decision_budget_pass": (
             combined_summary["median_seconds"] <= 15

@@ -490,13 +490,13 @@ def test_canonical_descriptor_construction_and_dev5_identity_are_exact() -> None
     ).encode("utf-8")
     assert descriptor["contract_id"] == CLIENT_BINDING_CONTRACT_ID
     assert descriptor["schema_version"] == CLIENT_BINDING_SCHEMA_VERSION
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v55"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 54
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v56"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 55
     assert len(canonical) == 238_216
     assert sha256(canonical).hexdigest() == (
-        "9475a56b87e8e52cb15309174d13cc7411b2d42017d52d1c90778ddf0299e5b8"
+        "df61ba96f2bf440f019261d7b38961c7d3b5cdb87f8607082b1688b2190db5ce"
     )
-    assert __version__ == "0.6.0a24.post0.dev5+review.before.generation.v3"
+    assert __version__ == "0.6.0a24.post0.dev6+review.before.generation.v4"
     assert Version(__version__) > Version("0.6.0a24.post0.dev4+review.before.generation.v2")
     assert len(EXPECTED_TOOLS) == 12
     assert [descriptor["name"] for descriptor in binding_tool_descriptors()] == [

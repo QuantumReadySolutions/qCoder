@@ -100,7 +100,7 @@ No export is transmitted automatically.
 
 ## Local qCoder Help
 
-- Installed qCoder version: `0.6.0a24.post0.dev5+review.before.generation.v3`
+- Installed qCoder version: `0.6.0a24.post0.dev6+review.before.generation.v4`
 - Mode: local OSS; no qCoder account, qCoder token, Explorer service, or MCP is required.
 - This evidence review does not establish qualification for an IDE or assistant client.
 

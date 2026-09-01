@@ -5,7 +5,7 @@ customer who explicitly asks qCoder to review a proposed interpretation and mate
 choices before source generation or source modification.
 
 Its private candidate identity is
-`0.6.0a24.post0.dev5+review.before.generation.v3`; it is not a selected public successor and is not
+`0.6.0a24.post0.dev6+review.before.generation.v4`; it is not a selected public successor and is not
 authorized for publication or handoff.
 
 The connected assistant sends the exact unchanged customer request and a separately attributed
@@ -28,12 +28,16 @@ unquoted request and any exact native-client selection. When the exact request g
 source-target authority, the initial call uses only `request_text` and
 `connected_assistant_proposal`; it does not invent a path. If a host nevertheless supplies an
 irrelevant intended or selected target, qCoder discards it before path normalization, inspection,
-state binding, or projection and returns the same first review. Only one unambiguous affirmative
-directive in the exact unquoted request can select a target. Straight or curly quotations, Markdown
-code spans, examples, comparisons, hypotheticals, tentative suggestions, questions, rejected or
-negated alternatives, prohibitions, and inline-only filename mentions grant no target authority.
-Qualifiers are checked on both sides of the filename and in a directly following corrective clause.
-Conflicting unresolved directives produce one bounded clarification without state mutation. Every
+state binding, or projection and returns the same first review. Target-bearing language is divided
+into bounded ordered local directive units. Each occurrence resolves to `affirmative`,
+`non_authoritative`, or `unresolved`: exactly one unique affirmative target may bind; an entirely
+non-authoritative set remains target-free; any unresolved occurrence or incompatible file/inline
+directive produces one bounded clarification without state mutation. Straight or curly quotations,
+Markdown code spans, examples, comparisons, hypotheticals, tentative suggestions, questions,
+rejected or negated alternatives, prohibitions, and inline-only filename mentions grant no target
+authority. A later independent affirmative unit is not contaminated by an earlier example, while an
+explicit proven correction may supersede one prior output directive. Unknown target-bearing language
+fails to clarification rather than silently becoming inline. Every
 target that can become a later write is shown in the review and bound to that displayed revision
 before confirmation. Direct generation, review before modifying selected source, selected-file
 workflows, affirmatively customer-authorized targets, and active-loop replacement retain their

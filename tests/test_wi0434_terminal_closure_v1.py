@@ -149,8 +149,8 @@ def test_hook_absent_contract_preserves_typed_completion_equivalence(tmp_path: P
 
 
 def test_terminal_closure_identity_and_inventory_are_bounded() -> None:
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v55"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 54
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v56"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 55
     assert CURRENT_STEP_CONTRACT_SCHEMA_ID == "qcoder.current_loop.current_step_contract.v11"
     assert CURRENT_STEP_CONTRACT_SCHEMA_VERSION == 11
     assert len(EXPECTED_TOOLS) == 12

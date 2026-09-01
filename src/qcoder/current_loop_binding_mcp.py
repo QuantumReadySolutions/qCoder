@@ -9,12 +9,13 @@ a local command, stdin pipeline, receipt, digest, or stage ceiling.
 from __future__ import annotations
 
 from contextvars import ContextVar
+from dataclasses import dataclass, replace
 import json
 from pathlib import Path
 import re
 import sys
 import time
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
 from qcoder import __version__
 from qcoder.context_bridge_connection import record_server_exchange
@@ -68,30 +69,76 @@ _SOURCE_TARGET_PATTERN = re.compile(
 _TARGET_AUTHORITY_QUOTED_SPAN_PATTERN = re.compile(
     r'"[^"\r\n]*"|\'[^\'\r\n]*\'|“[^”\r\n]*”|‘[^’\r\n]*’|`+[^`\r\n]*`+'
 )
-_TARGET_AUTHORITY_ACTION_PATTERN = re.compile(
-    r"\b(?:create|creating|write|writing|save|saving|generate|generating|produce|producing|"
-    r"make|making|draft|drafting|modify|modifying|edit|editing|update|updating|replace|"
-    r"replacing)\b",
+_TARGET_AUTHORITY_DIRECTIVE_BOUNDARY_PATTERN = re.compile(
+    r"\b(?:for\s+example|for\s+illustration|for\s+comparison)\s*,|"
+    r"\b(?:actually|no)\b\s*,?|\brather\s+than\b|\b(?:but|then|however|or)\b|"
+    r"(?:—|–)(?=\s*(?:actually|no)\b)|[,;?!:\n]|\.(?=\s|$)",
     re.IGNORECASE,
 )
-_TARGET_AUTHORITY_NONAUTHORITATIVE_PATTERN = re.compile(
-    r"\b(?:for\s+example|example|illustration|placeholder|for\s+comparison|comparison|compare|"
-    r"versus|possible|possibly|alternative|hypothetical|tentative|maybe|might|could|"
-    r"do\s+not|don't|dont|never|must\s+not|should\s+not|without\s+(?:creating|writing|saving)|"
-    r"create\s+neither|inline[-\s]+only)\b",
+_TARGET_AUTHORITY_ILLUSTRATIVE_PATTERN = re.compile(
+    r"\b(?:example|illustration|placeholder|sample\s+name)\b|\bonly\s+for\s+comparison\b",
     re.IGNORECASE,
 )
-_TARGET_AUTHORITY_INLINE_PATTERN = re.compile(
-    r"\b(?:show|return|provide|produce|generate|write)\b[^.;!?]{0,64}\b(?:source|code|program)\b"
-    r"[^.;!?]{0,40}\binline\b|\binline\b[^.;!?]{0,48}\b(?:source|code|program)\b|"
-    r"\bwithout\s+(?:creating|writing|saving|using)\s+(?:a\s+)?file\b",
+_TARGET_AUTHORITY_COMPARATIVE_PATTERN = re.compile(
+    r"\b(?:compare|comparison|versus)\b|\bpossible\s+(?:alternative|filename|name)\b|"
+    r"\balternative\s+(?:filename|name)\b",
     re.IGNORECASE,
 )
-_TARGET_AUTHORITY_REJECTION_PATTERN = re.compile(
-    r"(?:^|[;!?]\s*)(?:no\b|but\b|instead\b|rather\b)|\b(?:instead|rather\s+than)\b",
+_TARGET_AUTHORITY_TENTATIVE_PATTERN = re.compile(
+    r"\b(?:if|maybe|might|could|would|hypothetical|tentative|possibly)\b",
     re.IGNORECASE,
 )
-_TARGET_AUTHORITY_HARD_DELIMITER_PATTERN = re.compile(r"[!;\n]|\.(?=\s|$)")
+_TARGET_AUTHORITY_NEGATION_PATTERN = re.compile(
+    r"\b(?:prefer\s+not\s+to|do\s+not|don't|dont|never|must\s+not|should\s+not|"
+    r"avoid(?:\s+ever)?|refrain\s+from|without)\b",
+    re.IGNORECASE,
+)
+_TARGET_AUTHORITY_INLINE_DIRECTIVE_PATTERN = re.compile(
+    r"\b(?:show|return|provide|produce|generate|write|output)\b[^.;!?]{0,80}"
+    r"\b(?:source|code|program|it)\b[^.;!?]{0,48}\binline\b|"
+    r"\b(?:show|return|provide|produce|generate|write|output)\b[^.;!?]{0,80}\binline\b|"
+    r"\binline\b[^.;!?]{0,64}\b(?:source|code|program|delivery)\b",
+    re.IGNORECASE,
+)
+
+TargetAuthorityState = Literal["affirmative", "non_authoritative", "unresolved"]
+
+
+@dataclass(frozen=True)
+class _TargetDirectiveUnit:
+    index: int
+    start: int
+    end: int
+    text: str
+    leading_boundary: str
+    trailing_boundary: str
+
+
+@dataclass(frozen=True)
+class _TargetDirectiveOccurrence:
+    target: str
+    start: int
+    end: int
+    unit_index: int
+    state: TargetAuthorityState
+    reason: str
+
+
+@dataclass(frozen=True)
+class _OutputDirective:
+    unit_index: int
+    mode: Literal["file", "inline"]
+    state: TargetAuthorityState
+    target_occurrence_index: int | None
+    reason: str
+
+
+@dataclass(frozen=True)
+class _TargetAuthorityResolution:
+    state: Literal["affirmative", "target_free", "ambiguous"]
+    affirmative_targets: tuple[str, ...]
+    occurrences: tuple[_TargetDirectiveOccurrence, ...]
+    reason: str
 
 
 def _target_occurrence_pattern(target: str) -> re.Pattern[str]:
@@ -118,70 +165,326 @@ def _target_authority_request_view(request_text: str) -> str:
     )
 
 
-def _target_authority_clause(request: str, start: int, end: int) -> tuple[str, int, str]:
-    """Return the containing bounded clause and its directly following correction."""
+def _target_authority_units(request_text: str) -> tuple[_TargetDirectiveUnit, ...]:
+    """Split one bounded request into ordered local directive units."""
 
-    delimiters = [
-        match.start() for match in _TARGET_AUTHORITY_HARD_DELIMITER_PATTERN.finditer(request)
-    ]
-    clause_start = max((position for position in delimiters if position < start), default=-1)
-    clause_end = min((position for position in delimiters if position >= end), default=len(request))
-    next_start = clause_end + 1 if clause_end < len(request) else len(request)
-    next_end = min(
-        (position for position in delimiters if position >= next_start), default=len(request)
+    request = request_text.replace("\\", "/")
+    boundary_view = _target_authority_request_view(request_text)
+    units: list[_TargetDirectiveUnit] = []
+    cursor = 0
+    pending_boundaries: list[str] = []
+    for match in _TARGET_AUTHORITY_DIRECTIVE_BOUNDARY_PATTERN.finditer(boundary_view):
+        raw_segment = request[cursor : match.start()]
+        leading_trim = len(raw_segment) - len(raw_segment.lstrip())
+        trailing_trim = len(raw_segment.rstrip())
+        if trailing_trim > leading_trim:
+            start = cursor + leading_trim
+            end = cursor + trailing_trim
+            units.append(
+                _TargetDirectiveUnit(
+                    index=len(units),
+                    start=start,
+                    end=end,
+                    text=request[start:end],
+                    leading_boundary=" ".join(pending_boundaries),
+                    trailing_boundary=match.group(0).strip().casefold(),
+                )
+            )
+            pending_boundaries = []
+        pending_boundaries.append(" ".join(match.group(0).casefold().split()))
+        cursor = match.end()
+    raw_segment = request[cursor:]
+    leading_trim = len(raw_segment) - len(raw_segment.lstrip())
+    trailing_trim = len(raw_segment.rstrip())
+    if trailing_trim > leading_trim:
+        start = cursor + leading_trim
+        end = cursor + trailing_trim
+        units.append(
+            _TargetDirectiveUnit(
+                index=len(units),
+                start=start,
+                end=end,
+                text=request[start:end],
+                leading_boundary=" ".join(pending_boundaries),
+                trailing_boundary="",
+            )
+        )
+    return tuple(units)
+
+
+def _target_authority_positive_pattern(target: str) -> re.Pattern[str]:
+    exact = re.escape(target)
+    return re.compile(
+        rf"(?:"
+        rf"\b(?:create|creating)\b[^,;!?]{{0,48}}{exact}|"
+        rf"\b(?:write|writing|save|saving)\b[^,;!?]{{0,64}}(?:\b(?:as|to|in)\b\s*)?{exact}|"
+        rf"\b(?:generate|generating)\b[^,;!?]{{0,80}}\b(?:in|to|as)\b\s*{exact}|"
+        rf"\b(?:put|putting|output|outputting|store|storing)\b[^,;!?]{{0,80}}"
+        rf"\b(?:in|to|as)\b\s*{exact}|"
+        rf"\b(?:modify|modifying|edit|editing|update|updating|replace|replacing)\b"
+        rf"[^,;!?]{{0,48}}{exact}"
+        rf")\s*$",
+        re.IGNORECASE,
     )
-    return request[clause_start + 1 : clause_end], clause_start + 1, request[next_start:next_end]
+
+
+def _span_is_quoted_or_code(request: str, start: int, end: int) -> bool:
+    return any(
+        match.start() <= start and end <= match.end()
+        for match in _TARGET_AUTHORITY_QUOTED_SPAN_PATTERN.finditer(request)
+    )
+
+
+def _unit_for_occurrence(
+    units: tuple[_TargetDirectiveUnit, ...], start: int, end: int
+) -> _TargetDirectiveUnit:
+    for unit in units:
+        if unit.start <= start and end <= unit.end:
+            return unit
+    return _TargetDirectiveUnit(
+        index=len(units),
+        start=start,
+        end=end,
+        text="",
+        leading_boundary="",
+        trailing_boundary="",
+    )
+
+
+def _classify_target_occurrence(
+    *,
+    request: str,
+    occurrence: re.Match[str],
+    unit: _TargetDirectiveUnit,
+) -> _TargetDirectiveOccurrence:
+    target = occurrence.group(0).replace("\\", "/")
+    if _span_is_quoted_or_code(request, occurrence.start(), occurrence.end()):
+        return _TargetDirectiveOccurrence(
+            target,
+            occurrence.start(),
+            occurrence.end(),
+            unit.index,
+            "non_authoritative",
+            "quoted_or_code",
+        )
+    local = unit.text
+    local_folded = local.casefold()
+    leading = unit.leading_boundary.casefold()
+    relative_end = occurrence.end() - unit.start
+    directive_through_target = local[:relative_end].rstrip()
+    if "rather than" in leading:
+        state: TargetAuthorityState = "non_authoritative"
+        reason = "comparative_rejected_alternative"
+    elif any(marker in leading for marker in ("for example", "for illustration", "for comparison")):
+        state = "non_authoritative"
+        reason = "illustrative_boundary"
+    elif "?" in unit.trailing_boundary:
+        state = "non_authoritative"
+        reason = "interrogative"
+    elif _TARGET_AUTHORITY_ILLUSTRATIVE_PATTERN.search(local_folded):
+        state = "non_authoritative"
+        reason = "illustrative"
+    elif _TARGET_AUTHORITY_COMPARATIVE_PATTERN.search(local_folded):
+        state = "non_authoritative"
+        reason = "comparative_or_alternative"
+    elif _TARGET_AUTHORITY_NEGATION_PATTERN.search(directive_through_target):
+        state = "non_authoritative"
+        reason = "negated_or_prohibited"
+    elif _TARGET_AUTHORITY_TENTATIVE_PATTERN.search(directive_through_target):
+        state = "non_authoritative"
+        reason = "conditional_or_tentative"
+    elif _target_authority_positive_pattern(target).search(directive_through_target):
+        state = "affirmative"
+        reason = "bounded_affirmative_source_directive"
+    else:
+        state = "unresolved"
+        reason = "target_bearing_directive_not_proven"
+    return _TargetDirectiveOccurrence(
+        target=target,
+        start=occurrence.start(),
+        end=occurrence.end(),
+        unit_index=unit.index,
+        state=state,
+        reason=reason,
+    )
+
+
+def _classify_inline_directive(unit: _TargetDirectiveUnit) -> _OutputDirective | None:
+    local = _TARGET_AUTHORITY_QUOTED_SPAN_PATTERN.sub(" ", unit.text)
+    if "inline" not in local.casefold():
+        return None
+    if "rather than" in unit.leading_boundary.casefold():
+        return _OutputDirective(
+            unit.index, "inline", "non_authoritative", None, "comparative_rejected_alternative"
+        )
+    if "?" in unit.trailing_boundary:
+        return _OutputDirective(unit.index, "inline", "non_authoritative", None, "interrogative")
+    if _TARGET_AUTHORITY_NEGATION_PATTERN.search(local):
+        return _OutputDirective(
+            unit.index, "inline", "non_authoritative", None, "negated_or_prohibited"
+        )
+    if _TARGET_AUTHORITY_TENTATIVE_PATTERN.search(local):
+        return _OutputDirective(
+            unit.index, "inline", "non_authoritative", None, "conditional_or_tentative"
+        )
+    if _TARGET_AUTHORITY_INLINE_DIRECTIVE_PATTERN.search(local):
+        return _OutputDirective(
+            unit.index, "inline", "affirmative", None, "bounded_affirmative_inline_directive"
+        )
+    return _OutputDirective(unit.index, "inline", "unresolved", None, "inline_directive_not_proven")
+
+
+def _explicit_replacement(unit: _TargetDirectiveUnit) -> bool:
+    combined = f"{unit.leading_boundary} {unit.text}".casefold()
+    return "actually" in combined and "instead" in combined
+
+
+def _resolve_request_source_target_authority(request_text: str) -> _TargetAuthorityResolution:
+    """Resolve ordered target and output directives without path processing."""
+
+    request = request_text.replace("\\", "/")
+    units = _target_authority_units(request_text)
+    raw_occurrences = list(_SOURCE_TARGET_PATTERN.finditer(request))
+    if len(raw_occurrences) > MAX_REVIEW_SOURCE_TARGET_CANDIDATES:
+        return _TargetAuthorityResolution("ambiguous", (), (), "candidate_bound_exceeded")
+    occurrences = [
+        _classify_target_occurrence(
+            request=request,
+            occurrence=occurrence,
+            unit=_unit_for_occurrence(units, occurrence.start(), occurrence.end()),
+        )
+        for occurrence in raw_occurrences
+    ]
+    for index, occurrence in enumerate(occurrences):
+        if occurrence.state != "unresolved" or index == 0:
+            continue
+        unit = units[occurrence.unit_index]
+        previous = occurrences[index - 1]
+        if (
+            "or" in unit.leading_boundary.split()
+            and previous.state == "non_authoritative"
+            and previous.reason
+            in {
+                "illustrative",
+                "illustrative_boundary",
+                "comparative_or_alternative",
+            }
+        ):
+            occurrences[index] = replace(
+                occurrence,
+                state="non_authoritative",
+                reason="coordinated_nonauthoritative_alternative",
+            )
+    output_directives: list[_OutputDirective] = [
+        _OutputDirective(
+            occurrence.unit_index,
+            "file",
+            occurrence.state,
+            index,
+            occurrence.reason,
+        )
+        for index, occurrence in enumerate(occurrences)
+    ]
+    output_directives.extend(
+        directive for unit in units if (directive := _classify_inline_directive(unit)) is not None
+    )
+    output_directives.sort(key=lambda item: item.unit_index)
+
+    for current_index, current in enumerate(output_directives):
+        if current.state != "affirmative" or not _explicit_replacement(units[current.unit_index]):
+            continue
+        prior = next(
+            (
+                item
+                for item in reversed(output_directives[:current_index])
+                if item.state == "affirmative" and item.mode != current.mode
+            ),
+            None,
+        )
+        if prior is None:
+            continue
+        prior_position = output_directives.index(prior)
+        output_directives[prior_position] = replace(
+            prior, state="non_authoritative", reason="superseded_by_explicit_correction"
+        )
+        if prior.target_occurrence_index is not None:
+            occurrence = occurrences[prior.target_occurrence_index]
+            occurrences[prior.target_occurrence_index] = replace(
+                occurrence,
+                state="non_authoritative",
+                reason="superseded_by_explicit_correction",
+            )
+
+    if any(item.state == "unresolved" for item in output_directives):
+        return _TargetAuthorityResolution(
+            "ambiguous", (), tuple(occurrences), "unresolved_target_or_output_directive"
+        )
+    affirmative_targets = tuple(
+        dict.fromkeys(
+            occurrence.target for occurrence in occurrences if occurrence.state == "affirmative"
+        )
+    )
+    unique_targets = {target.casefold() for target in affirmative_targets}
+    if len(unique_targets) > 1:
+        return _TargetAuthorityResolution(
+            "ambiguous", (), tuple(occurrences), "multiple_affirmative_targets"
+        )
+    active_modes = {item.mode for item in output_directives if item.state == "affirmative"}
+    if active_modes == {"file", "inline"}:
+        return _TargetAuthorityResolution(
+            "ambiguous", (), tuple(occurrences), "inline_file_output_conflict"
+        )
+    if affirmative_targets:
+        return _TargetAuthorityResolution(
+            "affirmative",
+            affirmative_targets[:1],
+            tuple(occurrences),
+            "one_unique_affirmative_target",
+        )
+    return _TargetAuthorityResolution(
+        "target_free", (), tuple(occurrences), "all_target_occurrences_non_authoritative"
+    )
+
+
+def _request_source_target_directive_diagnostics(
+    request_text: str,
+) -> tuple[dict[str, object], ...]:
+    """Return bounded ephemeral tri-state facts for direct safety tests only."""
+
+    units = _target_authority_units(request_text)
+    unit_spans = {unit.index: [unit.start, unit.end] for unit in units}
+    resolution = _resolve_request_source_target_authority(request_text)
+    return tuple(
+        {
+            "target": occurrence.target,
+            "target_span": [occurrence.start, occurrence.end],
+            "directive_unit": occurrence.unit_index,
+            "directive_span": unit_spans.get(
+                occurrence.unit_index, [occurrence.start, occurrence.end]
+            ),
+            "state": occurrence.state,
+            "reason": occurrence.reason,
+        }
+        for occurrence in resolution.occurrences
+    )
 
 
 def _request_source_target_authority(request_text: str, target: str) -> str:
-    """Prove one exact target from a positive unquoted customer directive."""
+    """Return one target's tri-state result under the complete request resolution."""
 
-    raw_request = request_text.replace("\\", "/")
-    request = _target_authority_request_view(request_text)
-    pattern = _target_occurrence_pattern(target)
-    occurrences = list(pattern.finditer(request))
-    if not occurrences:
-        return (
-            "non_authoritative"
-            if _target_occurrence_pattern(target).search(raw_request) is not None
-            else "absent"
-        )
-    statuses: list[str] = []
-    for occurrence in occurrences:
-        clause, clause_start, following_clause = _target_authority_clause(
-            request, occurrence.start(), occurrence.end()
-        )
-        relative_start = occurrence.start() - clause_start
-        before = clause[:relative_start][-192:]
-        after = clause[relative_start + len(occurrence.group(0)) :][:192]
-        question = "?" in clause
-        unresolved_inline_alternative = bool(
-            re.search(r"\bor\b[^.;!?]{0,64}\binline\b", after, re.IGNORECASE)
-        )
-        following_rejection = bool(
-            _TARGET_AUTHORITY_INLINE_PATTERN.search(following_clause)
-            and _TARGET_AUTHORITY_REJECTION_PATTERN.search(";" + following_clause)
-        )
-        non_authoritative = bool(
-            _TARGET_AUTHORITY_NONAUTHORITATIVE_PATTERN.search(clause)
-            or _TARGET_AUTHORITY_INLINE_PATTERN.search(clause)
-            or question
-            or following_rejection
-        )
-        positive = bool(_TARGET_AUTHORITY_ACTION_PATTERN.search(before))
-        if unresolved_inline_alternative and positive:
-            statuses.append("contradictory_or_ambiguous")
-        elif non_authoritative:
-            statuses.append("non_authoritative")
-        elif positive:
-            statuses.append("affirmative")
-        else:
-            statuses.append("non_authoritative")
-    if "contradictory_or_ambiguous" in statuses:
+    resolution = _resolve_request_source_target_authority(request_text)
+    matches = [
+        occurrence
+        for occurrence in resolution.occurrences
+        if occurrence.target.casefold() == target.replace("\\", "/").casefold()
+    ]
+    if not matches:
+        return "absent"
+    if resolution.state == "ambiguous" or any(item.state == "unresolved" for item in matches):
         return "contradictory_or_ambiguous"
-    if "affirmative" in statuses and "non_authoritative" in statuses:
-        return "contradictory_or_ambiguous"
-    return "affirmative" if "affirmative" in statuses else "non_authoritative"
+    if any(item.state == "affirmative" for item in matches):
+        return "affirmative"
+    return "non_authoritative"
 
 
 def _request_source_target_candidates(request_text: str) -> tuple[str, ...]:
@@ -192,28 +495,13 @@ def _request_source_target_candidates(request_text: str) -> tuple[str, ...]:
 
 
 def _affirmatively_authorized_request_targets(request_text: str) -> tuple[str, ...]:
-    result: list[str] = []
-    candidates = _request_source_target_candidates(request_text)
-    if len(candidates) > MAX_REVIEW_SOURCE_TARGET_CANDIDATES:
+    resolution = _resolve_request_source_target_authority(request_text)
+    if resolution.state == "ambiguous":
         raise ReviewBeforeGenerationError(
             "review_source_target_authority_ambiguous",
-            clarification="Which one exact source target should be used after confirmation?",
+            clarification=("Should the reviewed source be inline, or written to one exact target?"),
         )
-    for target in candidates:
-        authority = _request_source_target_authority(request_text, target)
-        if authority == "contradictory_or_ambiguous":
-            raise ReviewBeforeGenerationError(
-                "review_source_target_authority_ambiguous",
-                clarification="Should the reviewed source be inline, or written to one exact target?",
-            )
-        if authority == "affirmative":
-            result.append(target.replace("\\", "/"))
-    if len(set(item.casefold() for item in result)) > 1:
-        raise ReviewBeforeGenerationError(
-            "review_source_target_authority_ambiguous",
-            clarification="Which one exact source target should be used after confirmation?",
-        )
-    return tuple(result)
+    return resolution.affirmative_targets
 
 
 def _unconfirmed_generation_review_has_no_target_authority(
@@ -269,10 +557,11 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "future artifact production does not create present target authority: do not invent "
                 "a source path before confirmation. Target fields supplied without an exact "
                 "customer-authorized target are ignored before path processing for this immediate "
-                "review. Only one unambiguous affirmative unquoted customer directive can select "
-                "a review target. Quoted, code-spanned, example, comparative, hypothetical, "
-                "tentative, rejected, negated, prohibited, and inline-only filename mentions do "
-                "not grant target authority. Any target that can become a later workspace "
+                "review. qCoder resolves each target occurrence in ordered local directive units "
+                "as affirmative, non-authoritative, or unresolved. Exactly one unique affirmative "
+                "customer target can bind; all-non-authoritative occurrences remain target-free; "
+                "unresolved wording or incompatible file/inline directives require clarification. "
+                "Assistant target fields cannot change that result. Any target that can become a later workspace "
                 "write is displayed in the review before confirmation. "
                 "For a direct artifact-producing request, supply one exact workspace-relative "
                 "intended_artifact_paths entry for every requested role on a fresh loop. For an "
@@ -318,8 +607,9 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                             "an exact affirmatively customer-authorized review target. Omit for review "
                             "before generation when the customer grants no target authority; a supplied "
                             "target is ignored before path processing for that immediate review. A "
-                            "quoted, code-spanned, example, comparative, hypothetical, tentative, "
-                            "rejected, negated, prohibited, or inline-only filename is not authority. "
+                            "target is resolved only from ordered local customer directive units. "
+                            "Non-authoritative occurrences remain target-free; unresolved target or "
+                            "file/inline wording clarifies rather than binding or silently choosing inline. "
                             "Omit for an active-loop "
                             "replacement so qCoder reuses the registered current role-head target."
                         ),
@@ -382,7 +672,8 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                             "proposal's generation-versus-modification kind matches the exact unquoted "
                             "request. Safe target fields already supplied without affirmative customer "
                             "target authority are absorbed and ignored rather than causing a corrective "
-                            "call. A material target is displayed before it can become write authority."
+                            "call. Assistant target fields cannot resolve ambiguous customer language. "
+                            "A material target is displayed before it can become write authority."
                         ),
                         "required": ["request_text", "connected_assistant_proposal"],
                         "not": {"required": ["review_action"]},
@@ -456,6 +747,14 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "target_authority_requires_affirmative_unquoted_request": True,
                 "target_authority_requires_one_unambiguous_directive": True,
                 "nonauthoritative_filename_contexts_fail_target_free": True,
+                "target_authority_directive_units_ordered_and_local": True,
+                "target_authority_states": [
+                    "affirmative",
+                    "non_authoritative",
+                    "unresolved",
+                ],
+                "unknown_target_bearing_directive_disposition": "bounded_clarification",
+                "assistant_target_fields_resolve_customer_ambiguity": False,
                 "post_confirmation_write_target_displayed_before_confirmation": True,
                 "target_free_review_remains_target_free_after_confirmation": True,
             },
@@ -931,8 +1230,10 @@ def _handle_binding_jsonrpc_message(
             request_transaction_state = validate_review_transaction_kind(
                 str(request_text), transaction_kind
             )
-            affirmative_request_targets = _affirmatively_authorized_request_targets(
-                str(request_text)
+            affirmative_request_targets = (
+                _affirmatively_authorized_request_targets(str(request_text))
+                if transaction_kind == "review_before_source_generation"
+                else ()
             )
         except ReviewBeforeGenerationError as exc:
             return _result(

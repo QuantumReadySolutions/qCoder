@@ -15,14 +15,14 @@ except ModuleNotFoundError:  # pragma: no cover
 
 
 EXPECTED_SCHEMA = "qcoder.private_development_version.v1"
-EXPECTED_VERSION = "0.6.0a24.post0.dev5+review.before.generation.v3"
-EXPECTED_PREDECESSOR = "0.6.0a24.post0.dev4+review.before.generation.v2"
+EXPECTED_VERSION = "0.6.0a24.post0.dev6+review.before.generation.v4"
+EXPECTED_PREDECESSOR = "0.6.0a24.post0.dev5+review.before.generation.v3"
 EXPECTED_BASIS = "0.6.0a24"
 EXPECTED_WORK_IDENTITY = "WI0440_REVIEW_BEFORE_GENERATION_CONVERGENT_FIRST_VALUE_V1"
-EXPECTED_BINDING = "qcoder.connected_assistant.client_binding.v55"
-EXPECTED_BINDING_SCHEMA = 54
+EXPECTED_BINDING = "qcoder.connected_assistant.client_binding.v56"
+EXPECTED_BINDING_SCHEMA = 55
 EXPECTED_DESCRIPTOR_BYTES = 238_216
-EXPECTED_DESCRIPTOR_SHA256 = "9475a56b87e8e52cb15309174d13cc7411b2d42017d52d1c90778ddf0299e5b8"
+EXPECTED_DESCRIPTOR_SHA256 = "df61ba96f2bf440f019261d7b38961c7d3b5cdb87f8607082b1688b2190db5ce"
 
 
 def verify(root: Path) -> dict[str, object]:

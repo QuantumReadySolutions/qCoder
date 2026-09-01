@@ -24,7 +24,7 @@ def _verifier():
 
 def test_private_development_identity_preserves_public_a24_release_truth() -> None:
     verifier = _verifier()
-    development_version = "0.6.0a24.post0.dev5+review.before.generation.v3"
+    development_version = "0.6.0a24.post0.dev6+review.before.generation.v4"
     assert __version__ == development_version
     assert verifier.source_versions(ROOT) == {
         "pyproject": development_version,
@@ -44,11 +44,11 @@ def test_private_development_identity_preserves_public_a24_release_truth() -> No
         "ok": True,
         "version": development_version,
         "basis_version": "0.6.0a24",
-        "binding": "qcoder.connected_assistant.client_binding.v55",
-        "binding_schema": 54,
+        "binding": "qcoder.connected_assistant.client_binding.v56",
+        "binding_schema": 55,
         "binding_descriptor_canonical_bytes": 238216,
         "binding_descriptor_canonical_sha256": (
-            "9475a56b87e8e52cb15309174d13cc7411b2d42017d52d1c90778ddf0299e5b8"
+            "df61ba96f2bf440f019261d7b38961c7d3b5cdb87f8607082b1688b2190db5ce"
         ),
         "public_release_record_unchanged": True,
         "publication_permitted": False,

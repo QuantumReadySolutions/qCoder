@@ -188,8 +188,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 54
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v55"
+CLIENT_BINDING_SCHEMA_VERSION = 55
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v56"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -234,9 +234,10 @@ customer message once as request_text. Branch-specific target rules apply: revie
 uses request_text plus connected_assistant_proposal and no invented target; qCoder verifies the
 proposal's generation-versus-modification kind against the exact unquoted request before any target
 can be ignored. A target can become later write authority only when one unambiguous unquoted
-customer directive affirmatively selects it and the first review visibly displays it. Quoted,
-code-spanned, example, comparative, hypothetical, tentative, rejected, negated, prohibited, and
-inline-only filename mentions grant no target authority. Direct generation uses
+customer directive affirmatively selects it and the first review visibly displays it. qCoder
+resolves target occurrences in ordered local directive units: all proven non-authoritative
+occurrences remain target-free, while unresolved wording or conflicting file/inline directives
+clarify without state mutation. Assistant target fields cannot change that result. Direct generation uses
 one exact customer-authorized intended_artifact_paths entry for every requested role; selected-file
 work uses exact customer-named selected_artifact_paths; active-loop continuation reuses its bound
 target unless the customer names a replacement. Choose names solely from the customer task; do not
@@ -1095,8 +1096,9 @@ generate or modify source until the customer confirms the displayed revision. Co
 generation plan never grants execution authority. Review before generation has immediate-interaction
 precedence: future artifact production does not require or authorize an invented source target
 before confirmation. No invented target is permitted. Omit target fields when the customer grants no
-affirmative target authority. Quoted, example-only, negated, and inline-only filenames are not
-authority. If a host nevertheless supplies an irrelevant target, qCoder first verifies the request's
+affirmative target authority. qCoder resolves each local target directive as affirmative,
+non-authoritative, or unresolved; uncertainty clarifies and assistant target fields never resolve it.
+If a host nevertheless supplies an irrelevant target, qCoder first verifies the request's
 generation-versus-modification mode, then discards the target before path processing and returns the
 same first review. Any target that can become a later write is displayed in that review. Source
 modification still requires its exact native-client-selected source.

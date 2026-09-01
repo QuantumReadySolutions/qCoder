@@ -343,8 +343,8 @@ def test_action_schema_is_strict_and_binding_identity_advances() -> None:
     assert branch["required"] == ["review_action", "prior_result_token"]
     assert set(branch["properties"]) == {"review_action", "prior_result_token"}
     assert branch["additionalProperties"] is False
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v55"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 54
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v56"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 55
     assert [item["name"] for item in binding_tool_descriptors()] == [
         "begin_current_loop",
         "complete_current_step",

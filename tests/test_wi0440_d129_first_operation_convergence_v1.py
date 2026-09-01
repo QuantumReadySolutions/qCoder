@@ -296,8 +296,8 @@ def test_descriptor_and_full_compact_instructions_are_branch_consistent() -> Non
         assert "direct generation" in instructions.casefold()
         assert "selected-file" in instructions.casefold()
         assert "active-loop" in instructions.casefold()
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v55"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 54
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v56"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 55
     assert PROPOSAL_SCHEMA_ID.endswith(".v2")
     assert len(EXPECTED_TOOLS) == 12
     assert [item["name"] for item in binding_tool_descriptors()] == [
