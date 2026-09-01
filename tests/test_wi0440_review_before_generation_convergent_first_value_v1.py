@@ -606,8 +606,8 @@ def test_binding_descriptor_is_additive_and_inventory_remains_exact_12_plus_2() 
     descriptor = build_client_binding_descriptor(coordinator_prefix=["qcoder"])[
         "client_binding_contract"
     ]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v54"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 53
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v55"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 54
     assert descriptor["review_before_generation_contract"]["new_public_tool"] is False
     assert descriptor["review_before_generation_contract"]["new_private_operation"] is False
     assert len(EXPECTED_TOOLS) == 12
@@ -657,8 +657,8 @@ def test_local_timing_acceptance_population_passes_without_network() -> None:
         text=True,
     )
     result = json.loads(completed.stdout)
-    assert result["population_cases"] == 65
-    assert result["samples"] == 65
+    assert result["population_cases"] == 87
+    assert result["samples"] == 87
     assert result["scenario_counts"] == {
         "review_first_value": 20,
         "confirmation_without_replay": 1,
@@ -677,6 +677,9 @@ def test_local_timing_acceptance_population_passes_without_network() -> None:
         "negated_target_convergence": 4,
         "material_target_mode_mismatch_rejection": 1,
         "display_before_write_authority": 1,
+        "affirmative_target_review": 1,
+        "nonauthoritative_target_language_convergence": 20,
+        "target_authority_ambiguity_clarification": 1,
         "quiet_projection": 1,
         "split_source_rejection": 3,
     }

@@ -4,6 +4,10 @@ This unpublished development candidate adds a deterministic, binding-owned first
 customer who explicitly asks qCoder to review a proposed interpretation and material implementation
 choices before source generation or source modification.
 
+Its private candidate identity is
+`0.6.0a24.post0.dev5+review.before.generation.v3`; it is not a selected public successor and is not
+authorized for publication or handoff.
+
 The connected assistant sends the exact unchanged customer request and a separately attributed
 structured proposal in one `begin_current_loop` operation. The assistant—not qCoder—supplies the
 substantive recommendations. qCoder validates exact-request binding, the six semantic axes,
@@ -24,11 +28,16 @@ unquoted request and any exact native-client selection. When the exact request g
 source-target authority, the initial call uses only `request_text` and
 `connected_assistant_proposal`; it does not invent a path. If a host nevertheless supplies an
 irrelevant intended or selected target, qCoder discards it before path normalization, inspection,
-state binding, or projection and returns the same first review. Quoted, example-only, negated, and
-inline-only filename mentions grant no target authority. Every target that can become a later write
-is shown in the review and bound to that displayed revision before confirmation. Direct generation,
-review before modifying selected source, selected-file workflows, affirmatively customer-authorized
-targets, and active-loop replacement retain their strict existing target contracts.
+state binding, or projection and returns the same first review. Only one unambiguous affirmative
+directive in the exact unquoted request can select a target. Straight or curly quotations, Markdown
+code spans, examples, comparisons, hypotheticals, tentative suggestions, questions, rejected or
+negated alternatives, prohibitions, and inline-only filename mentions grant no target authority.
+Qualifiers are checked on both sides of the filename and in a directly following corrective clause.
+Conflicting unresolved directives produce one bounded clarification without state mutation. Every
+target that can become a later write is shown in the review and bound to that displayed revision
+before confirmation. Direct generation, review before modifying selected source, selected-file
+workflows, affirmatively customer-authorized targets, and active-loop replacement retain their
+strict existing target contracts.
 
 The compact first review shows assistant recommendations once. Its complete editable material-choice
 inventory remains behind `Review or change choices`, so the initial three groups do not restate the

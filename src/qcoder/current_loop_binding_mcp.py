@@ -47,7 +47,6 @@ from qcoder.review_before_generation import (
     ReviewBeforeGenerationError,
     contract_snapshot as review_before_generation_contract_snapshot,
     proposal_input_schema as review_before_generation_proposal_input_schema,
-    unquoted_request_text,
     validate_review_transaction_kind,
 )
 
@@ -58,6 +57,7 @@ BEGIN_CURRENT_LOOP_TOOL_NAME = "begin_current_loop"
 COMPLETE_CURRENT_STEP_TOOL_NAME = "complete_current_step"
 MAX_REQUEST_BYTES = 65_536
 MAX_PATH_BYTES = 16_384
+MAX_REVIEW_SOURCE_TARGET_CANDIDATES = 32
 _LAST_BINDING_TIMING: ContextVar[dict[str, Any] | None] = ContextVar(
     "qcoder_last_binding_timing", default=None
 )
@@ -65,6 +65,33 @@ _SOURCE_TARGET_PATTERN = re.compile(
     r"(?<![\w./-])(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.(?:py|pyw|qasm)(?![\w/-])",
     re.IGNORECASE,
 )
+_TARGET_AUTHORITY_QUOTED_SPAN_PATTERN = re.compile(
+    r'"[^"\r\n]*"|\'[^\'\r\n]*\'|“[^”\r\n]*”|‘[^’\r\n]*’|`+[^`\r\n]*`+'
+)
+_TARGET_AUTHORITY_ACTION_PATTERN = re.compile(
+    r"\b(?:create|creating|write|writing|save|saving|generate|generating|produce|producing|"
+    r"make|making|draft|drafting|modify|modifying|edit|editing|update|updating|replace|"
+    r"replacing)\b",
+    re.IGNORECASE,
+)
+_TARGET_AUTHORITY_NONAUTHORITATIVE_PATTERN = re.compile(
+    r"\b(?:for\s+example|example|illustration|placeholder|for\s+comparison|comparison|compare|"
+    r"versus|possible|possibly|alternative|hypothetical|tentative|maybe|might|could|"
+    r"do\s+not|don't|dont|never|must\s+not|should\s+not|without\s+(?:creating|writing|saving)|"
+    r"create\s+neither|inline[-\s]+only)\b",
+    re.IGNORECASE,
+)
+_TARGET_AUTHORITY_INLINE_PATTERN = re.compile(
+    r"\b(?:show|return|provide|produce|generate|write)\b[^.;!?]{0,64}\b(?:source|code|program)\b"
+    r"[^.;!?]{0,40}\binline\b|\binline\b[^.;!?]{0,48}\b(?:source|code|program)\b|"
+    r"\bwithout\s+(?:creating|writing|saving|using)\s+(?:a\s+)?file\b",
+    re.IGNORECASE,
+)
+_TARGET_AUTHORITY_REJECTION_PATTERN = re.compile(
+    r"(?:^|[;!?]\s*)(?:no\b|but\b|instead\b|rather\b)|\b(?:instead|rather\s+than)\b",
+    re.IGNORECASE,
+)
+_TARGET_AUTHORITY_HARD_DELIMITER_PATTERN = re.compile(r"[!;\n]|\.(?=\s|$)")
 
 
 def _target_occurrence_pattern(target: str) -> re.Pattern[str]:
@@ -82,69 +109,83 @@ def _request_explicitly_selects_target(request_text: str, target: str) -> bool:
     return _target_occurrence_pattern(target).search(normalized_request) is not None
 
 
-def _request_source_target_authority(request_text: str, target: str) -> str:
-    """Classify only affirmative authority for one exact source target."""
+def _target_authority_request_view(request_text: str) -> str:
+    """Mask quotation and Markdown-code spans without changing source offsets."""
 
-    request = " ".join(unquoted_request_text(request_text).replace("\\", "/").split())
+    normalized = request_text.replace("\\", "/")
+    return _TARGET_AUTHORITY_QUOTED_SPAN_PATTERN.sub(
+        lambda match: " " * len(match.group(0)), normalized
+    )
+
+
+def _target_authority_clause(request: str, start: int, end: int) -> tuple[str, int, str]:
+    """Return the containing bounded clause and its directly following correction."""
+
+    delimiters = [
+        match.start() for match in _TARGET_AUTHORITY_HARD_DELIMITER_PATTERN.finditer(request)
+    ]
+    clause_start = max((position for position in delimiters if position < start), default=-1)
+    clause_end = min((position for position in delimiters if position >= end), default=len(request))
+    next_start = clause_end + 1 if clause_end < len(request) else len(request)
+    next_end = min(
+        (position for position in delimiters if position >= next_start), default=len(request)
+    )
+    return request[clause_start + 1 : clause_end], clause_start + 1, request[next_start:next_end]
+
+
+def _request_source_target_authority(request_text: str, target: str) -> str:
+    """Prove one exact target from a positive unquoted customer directive."""
+
+    raw_request = request_text.replace("\\", "/")
+    request = _target_authority_request_view(request_text)
     pattern = _target_occurrence_pattern(target)
     occurrences = list(pattern.finditer(request))
     if not occurrences:
-        return "absent"
-    affirmative = False
-    non_authoritative = False
+        return (
+            "non_authoritative"
+            if _target_occurrence_pattern(target).search(raw_request) is not None
+            else "absent"
+        )
+    statuses: list[str] = []
     for occurrence in occurrences:
-        clause_start = max(
-            request.rfind(delimiter, 0, occurrence.start())
-            for delimiter in (".", "!", "?", ";", "\n")
+        clause, clause_start, following_clause = _target_authority_clause(
+            request, occurrence.start(), occurrence.end()
         )
-        following_positions = [
-            position
-            for delimiter in (".", "!", "?", ";", "\n")
-            if (position := request.find(delimiter, occurrence.end())) >= 0
-        ]
-        clause_end = min(following_positions, default=len(request))
-        before = request[clause_start + 1 : occurrence.start()].casefold()[-128:]
-        after = request[occurrence.end() : clause_end].casefold()[:96]
-        clause = before + target.casefold() + after
-        negated = bool(
-            re.search(
-                r"\b(?:do\s+not|don't|dont|never|without|not|instead\s+of|rather\s+than)\b"
-                r"[^.;!?]{0,80}$",
-                before,
-            )
+        relative_start = occurrence.start() - clause_start
+        before = clause[:relative_start][-192:]
+        after = clause[relative_start + len(occurrence.group(0)) :][:192]
+        question = "?" in clause
+        unresolved_inline_alternative = bool(
+            re.search(r"\bor\b[^.;!?]{0,64}\binline\b", after, re.IGNORECASE)
         )
-        example_only = bool(
-            re.search(r"\b(?:for\s+example|e\.g\.|example|such\s+as)\b[^.;!?]{0,64}$", before)
+        following_rejection = bool(
+            _TARGET_AUTHORITY_INLINE_PATTERN.search(following_clause)
+            and _TARGET_AUTHORITY_REJECTION_PATTERN.search(";" + following_clause)
         )
-        inline_only = bool(
-            re.search(
-                r"\b(?:inline|in\s+the\s+(?:response|reply|chat)|without\s+(?:a\s+)?file)\b",
-                clause,
-            )
+        non_authoritative = bool(
+            _TARGET_AUTHORITY_NONAUTHORITATIVE_PATTERN.search(clause)
+            or _TARGET_AUTHORITY_INLINE_PATTERN.search(clause)
+            or question
+            or following_rejection
         )
-        positive = bool(
-            re.search(
-                r"\b(?:generate|generating|create|creating|write|writing|save|saving|produce|"
-                r"producing|make|making|draft|drafting|modify|modifying|edit|editing|update|"
-                r"updating|replace|replacing)\b"
-                r"[^.;!?]{0,96}$",
-                before,
-            )
-            or re.search(r"\b(?:target|filename|file\s+name)\b[^.;!?]{0,48}$", before)
-        )
-        if negated or example_only or inline_only:
-            non_authoritative = True
+        positive = bool(_TARGET_AUTHORITY_ACTION_PATTERN.search(before))
+        if unresolved_inline_alternative and positive:
+            statuses.append("contradictory_or_ambiguous")
+        elif non_authoritative:
+            statuses.append("non_authoritative")
         elif positive:
-            affirmative = True
+            statuses.append("affirmative")
         else:
-            non_authoritative = True
-    if affirmative and non_authoritative:
+            statuses.append("non_authoritative")
+    if "contradictory_or_ambiguous" in statuses:
         return "contradictory_or_ambiguous"
-    return "affirmative" if affirmative else "non_authoritative"
+    if "affirmative" in statuses and "non_authoritative" in statuses:
+        return "contradictory_or_ambiguous"
+    return "affirmative" if "affirmative" in statuses else "non_authoritative"
 
 
 def _request_source_target_candidates(request_text: str) -> tuple[str, ...]:
-    request = unquoted_request_text(request_text).replace("\\", "/")
+    request = request_text.replace("\\", "/")
     return tuple(
         dict.fromkeys(match.group(0) for match in _SOURCE_TARGET_PATTERN.finditer(request))
     )
@@ -152,7 +193,13 @@ def _request_source_target_candidates(request_text: str) -> tuple[str, ...]:
 
 def _affirmatively_authorized_request_targets(request_text: str) -> tuple[str, ...]:
     result: list[str] = []
-    for target in _request_source_target_candidates(request_text):
+    candidates = _request_source_target_candidates(request_text)
+    if len(candidates) > MAX_REVIEW_SOURCE_TARGET_CANDIDATES:
+        raise ReviewBeforeGenerationError(
+            "review_source_target_authority_ambiguous",
+            clarification="Which one exact source target should be used after confirmation?",
+        )
+    for target in candidates:
         authority = _request_source_target_authority(request_text, target)
         if authority == "contradictory_or_ambiguous":
             raise ReviewBeforeGenerationError(
@@ -161,6 +208,11 @@ def _affirmatively_authorized_request_targets(request_text: str) -> tuple[str, .
             )
         if authority == "affirmative":
             result.append(target.replace("\\", "/"))
+    if len(set(item.casefold() for item in result)) > 1:
+        raise ReviewBeforeGenerationError(
+            "review_source_target_authority_ambiguous",
+            clarification="Which one exact source target should be used after confirmation?",
+        )
     return tuple(result)
 
 
@@ -217,8 +269,10 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "future artifact production does not create present target authority: do not invent "
                 "a source path before confirmation. Target fields supplied without an exact "
                 "customer-authorized target are ignored before path processing for this immediate "
-                "review. A filename in a quotation, example, negation, or inline-only instruction "
-                "does not grant target authority. Any target that can become a later workspace "
+                "review. Only one unambiguous affirmative unquoted customer directive can select "
+                "a review target. Quoted, code-spanned, example, comparative, hypothetical, "
+                "tentative, rejected, negated, prohibited, and inline-only filename mentions do "
+                "not grant target authority. Any target that can become a later workspace "
                 "write is displayed in the review before confirmation. "
                 "For a direct artifact-producing request, supply one exact workspace-relative "
                 "intended_artifact_paths entry for every requested role on a fresh loop. For an "
@@ -264,7 +318,8 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                             "an exact affirmatively customer-authorized review target. Omit for review "
                             "before generation when the customer grants no target authority; a supplied "
                             "target is ignored before path processing for that immediate review. A "
-                            "negated, quoted, example-only, or inline-only filename is not authority. "
+                            "quoted, code-spanned, example, comparative, hypothetical, tentative, "
+                            "rejected, negated, prohibited, or inline-only filename is not authority. "
                             "Omit for an active-loop "
                             "replacement so qCoder reuses the registered current role-head target."
                         ),
@@ -399,6 +454,8 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "irrelevant_target_disposition": "discarded_before_path_processing",
                 "transaction_kind_bound_before_target_discard": True,
                 "target_authority_requires_affirmative_unquoted_request": True,
+                "target_authority_requires_one_unambiguous_directive": True,
+                "nonauthoritative_filename_contexts_fail_target_free": True,
                 "post_confirmation_write_target_displayed_before_confirmation": True,
                 "target_free_review_remains_target_free_after_confirmation": True,
             },

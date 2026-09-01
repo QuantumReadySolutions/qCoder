@@ -62,6 +62,14 @@ D127_SPLIT_VALUES = (
     ["Use", "recommended", "choices"],
     ["Review", "or change", "choices"],
 )
+D131_TARGET_FREE_FRAGMENTS = (
+    "The filename 'bell.py' is only an example; show source inline after confirmation.",
+    "The filename `bell.py` is only an example; show source inline after confirmation.",
+    "The filename bell.py is only an example; show source inline after confirmation.",
+    "Save as bell.py only for comparison; show source inline after confirmation.",
+    "Save it as bell.py? No, show source inline after confirmation.",
+)
+D131_ACTIVATION_PREFIX = "Use qCoder to review a Qiskit Bell plan before generating source. "
 LOCAL_TIMING_RECEIPTS: list[dict[str, Any]] = []
 
 
@@ -170,6 +178,9 @@ def main() -> int:
     irrelevant_target_convergence: list[float] = []
     negated_target_convergence: list[float] = []
     material_target_rejection: list[float] = []
+    nonauthoritative_target_convergence: list[float] = []
+    target_ambiguity_clarification: list[float] = []
+    affirmative_target_review: list[float] = []
     tokens: set[str] = set()
     scenario_counts = {
         "review_first_value": 0,
@@ -191,6 +202,9 @@ def main() -> int:
         "negated_target_convergence": 0,
         "material_target_mode_mismatch_rejection": 0,
         "display_before_write_authority": 0,
+        "nonauthoritative_target_language_convergence": 0,
+        "target_authority_ambiguity_clarification": 0,
+        "affirmative_target_review": 0,
     }
     for _ in range(args.repetitions):
         for request, algorithm in cases:
@@ -319,6 +333,55 @@ def main() -> int:
             negated_target_convergence.append(elapsed)
             scenario_counts["negated_target_convergence"] += 1
 
+        for fragment in D131_TARGET_FREE_FRAGMENTS:
+            request = D131_ACTIVATION_PREFIX + fragment
+            target_free_review: dict[str, Any] | None = None
+            for target_arguments in negated_variants:
+                with tempfile.TemporaryDirectory(
+                    prefix="qcoder-wi0440-d131-target-language-"
+                ) as directory:
+                    workspace = Path(directory)
+                    started = time.monotonic()
+                    reviewed = _binding_call(
+                        workspace,
+                        request,
+                        deepcopy(proposal),
+                        **target_arguments,
+                    )
+                    elapsed = time.monotonic() - started
+                    state = json.loads(
+                        (workspace / ".qcoder/current-loop/state.json").read_text(encoding="utf-8")
+                    )
+                if state["coordinator"]["review_before_generation"]["intended_artifact_targets"]:
+                    raise RuntimeError("nonauthoritative_target_entered_authoritative_state")
+                semantic = deepcopy(reviewed)
+                semantic.pop("prior_result_token", None)
+                if target_free_review is None:
+                    target_free_review = semantic
+                elif semantic != target_free_review:
+                    raise RuntimeError("nonauthoritative_target_review_did_not_converge")
+                initial.append(elapsed)
+                rendering.append(0.0)
+                combined.append(elapsed)
+                nonauthoritative_target_convergence.append(elapsed)
+                scenario_counts["nonauthoritative_target_language_convergence"] += 1
+
+        ambiguity_request = D131_ACTIVATION_PREFIX + "Save as bell.py or show the source inline."
+        with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-d131-ambiguity-") as directory:
+            started = time.monotonic()
+            ambiguity = _binding_payload(Path(directory), ambiguity_request, deepcopy(proposal))
+            ambiguity_elapsed = time.monotonic() - started
+        if (
+            ambiguity.get("category") != "review_source_target_authority_ambiguous"
+            or ambiguity.get("state_mutated") is not False
+        ):
+            raise RuntimeError("target_authority_ambiguity_not_bounded")
+        initial.append(ambiguity_elapsed)
+        rendering.append(0.0)
+        combined.append(ambiguity_elapsed)
+        target_ambiguity_clarification.append(ambiguity_elapsed)
+        scenario_counts["target_authority_ambiguity_clarification"] += 1
+
         mismatch_request = (
             "Use qCoder to review proposed Qiskit Bell changes to the selected source before "
             "modifying it."
@@ -350,12 +413,14 @@ def main() -> int:
         )
         with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-displayed-target-") as directory:
             workspace = Path(directory)
+            started = time.monotonic()
             displayed = _binding_call(
                 workspace,
                 exact_target_request,
                 deepcopy(proposal),
                 intended_artifact_paths={"source": "bell.py"},
             )
+            displayed_elapsed = time.monotonic() - started
             target_values = [
                 item["value"]
                 for group in displayed["review_before_generation"]["initial_decision_groups"]
@@ -372,7 +437,12 @@ def main() -> int:
             confirmed["generation_ready_context"]["exact_workspace_target"] != "bell.py"
         ):
             raise RuntimeError("write_target_not_display_bound")
+        initial.append(displayed_elapsed)
+        rendering.append(0.0)
+        combined.append(displayed_elapsed)
+        affirmative_target_review.append(displayed_elapsed)
         scenario_counts["display_before_write_authority"] += 1
+        scenario_counts["affirmative_target_review"] += 1
 
         generic = _proposal(EXACT_REQUEST)
         generic["implementation_recommendations"] = ["A concrete option will be used."]
@@ -570,6 +640,9 @@ def main() -> int:
     irrelevant_target_summary = _summary(irrelevant_target_convergence)
     negated_target_summary = _summary(negated_target_convergence)
     material_target_rejection_summary = _summary(material_target_rejection)
+    nonauthoritative_target_summary = _summary(nonauthoritative_target_convergence)
+    target_ambiguity_summary = _summary(target_ambiguity_clarification)
+    affirmative_target_summary = _summary(affirmative_target_review)
     processing_summary = _summary(
         [float(item["processing_seconds"]) for item in LOCAL_TIMING_RECEIPTS]
     )
@@ -606,6 +679,9 @@ def main() -> int:
         "irrelevant_target_convergence": irrelevant_target_summary,
         "negated_target_convergence": negated_target_summary,
         "material_target_mode_mismatch_rejection": material_target_rejection_summary,
+        "nonauthoritative_target_language_convergence": nonauthoritative_target_summary,
+        "target_authority_ambiguity_clarification": target_ambiguity_summary,
+        "affirmative_target_review": affirmative_target_summary,
         "first_useful_interpretation_budget_pass": first_budget,
         "first_material_decision_budget_pass": (
             combined_summary["median_seconds"] <= 15

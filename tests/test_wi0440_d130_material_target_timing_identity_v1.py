@@ -487,9 +487,9 @@ def test_d130_contract_identity_and_inventory_are_exact() -> None:
     assert review_contract["target_authority_requires_affirmative_unquoted_request"] is True
     assert review_contract["post_confirmation_write_target_displayed_before_confirmation"] is True
     assert review_contract["target_free_review_remains_target_free_after_confirmation"] is True
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v54"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 53
-    assert __version__ == "0.6.0a24.post0.dev4+review.before.generation.v2"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v55"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 54
+    assert __version__ == "0.6.0a24.post0.dev5+review.before.generation.v3"
     assert Version(__version__) > Version("0.6.0a24.post0.dev3+review.before.generation.v1")
     assert len(EXPECTED_TOOLS) == 12
     assert [item["name"] for item in binding_tool_descriptors()] == [

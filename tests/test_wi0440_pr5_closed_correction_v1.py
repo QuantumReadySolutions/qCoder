@@ -290,8 +290,8 @@ def test_descriptor_is_self_describing_and_valid_by_construction(tmp_path: Path)
     result = binding_payload(tmp_path, request=EXACT_REQUEST, proposal=proposal_for())
     assert result["ok"] is True
     assert "category" not in result
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v54"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 53
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v55"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 54
     assert len(EXPECTED_TOOLS) == 12
     assert [item["name"] for item in binding_tool_descriptors()] == [
         "begin_current_loop",

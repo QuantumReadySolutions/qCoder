@@ -188,8 +188,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 53
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v54"
+CLIENT_BINDING_SCHEMA_VERSION = 54
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v55"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -233,8 +233,10 @@ the project-local binding-owned begin_current_loop MCP operation. Pass the exact
 customer message once as request_text. Branch-specific target rules apply: review before generation
 uses request_text plus connected_assistant_proposal and no invented target; qCoder verifies the
 proposal's generation-versus-modification kind against the exact unquoted request before any target
-can be ignored. A target can become later write authority only when the request affirmatively
-authorizes it and the first review visibly displays it. Direct generation uses
+can be ignored. A target can become later write authority only when one unambiguous unquoted
+customer directive affirmatively selects it and the first review visibly displays it. Quoted,
+code-spanned, example, comparative, hypothetical, tentative, rejected, negated, prohibited, and
+inline-only filename mentions grant no target authority. Direct generation uses
 one exact customer-authorized intended_artifact_paths entry for every requested role; selected-file
 work uses exact customer-named selected_artifact_paths; active-loop continuation reuses its bound
 target unless the customer names a replacement. Choose names solely from the customer task; do not
