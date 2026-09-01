@@ -183,8 +183,19 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                     },
                     {
                         "title": "Stored-review action call",
+                        "type": "object",
+                        "properties": {
+                            "review_action": {
+                                "type": "string",
+                                "enum": list(REVIEW_BEFORE_GENERATION_ACTIONS),
+                            },
+                            "prior_result_token": {
+                                "type": "string",
+                                "pattern": "^review-result-[0-9a-f]{64}$",
+                            },
+                        },
                         "required": ["review_action", "prior_result_token"],
-                        "not": {"required": ["connected_assistant_proposal"]},
+                        "additionalProperties": False,
                     },
                 ],
                 "additionalProperties": False,
@@ -558,7 +569,8 @@ def handle_binding_jsonrpc_message(
     connected_assistant_proposal = arguments.get("connected_assistant_proposal")
     is_review_action = review_action is not None
     if is_review_action and (
-        review_action not in REVIEW_BEFORE_GENERATION_ACTIONS
+        set(arguments) != {"review_action", "prior_result_token"}
+        or review_action not in REVIEW_BEFORE_GENERATION_ACTIONS
         or not isinstance(prior_result_token, str)
         or re.fullmatch(r"review-result-[0-9a-f]{64}", prior_result_token) is None
         or connected_assistant_proposal is not None

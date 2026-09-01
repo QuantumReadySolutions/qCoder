@@ -45,7 +45,7 @@ FIXTURE = (
 def proposal_for(request: str = EXACT_REQUEST) -> dict[str, object]:
     result = json.loads(FIXTURE.read_text(encoding="utf-8"))
     if request != EXACT_REQUEST:
-        result["customer_constraints"] = ["qCoder"]
+        result["customer_constraints"] = []
     return result
 
 
@@ -152,11 +152,11 @@ def test_qcoder_generates_only_axis_consistent_visible_authority() -> None:
     authority = first["initial_decision_groups"][2]["items"]
     values = {item["label"]: item["value"] for item in authority}
     assert values["Generation authority"] == (
-        "Python source is produced only after the stored displayed review is confirmed."
+        "Python source will be produced after you confirm these choices."
     )
     assert values["Execution authority"] == "Execution was not requested and is not authorized."
     assert values["Authority separation"] == (
-        "Confirmation of source generation does not authorize execution."
+        "Confirming these choices does not authorize execution."
     )
     assert values["Deferred execution choices"] == (
         "Backend, shots, seed, and result handling remain deferred."
@@ -192,7 +192,7 @@ def test_customer_constraint_requires_exact_request_excerpt() -> None:
     validated = validate_connected_assistant_proposal(EXACT_REQUEST, proposal)
     customer = validated["review_groups"][0]["items"][1]
     assert customer == {
-        "label": "Customer constraint",
+        "label": "Customer constraint 1",
         "value": "Qiskit program",
         "attribution": "customer_explicit_constraint",
     }
@@ -289,8 +289,8 @@ def test_descriptor_is_self_describing_and_valid_by_construction(tmp_path: Path)
     assert len(schema["oneOf"]) == 3
     result = binding_payload(tmp_path, request=EXACT_REQUEST, proposal=proposal_for())
     assert result["category"] == "review_before_generation_ready"
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v50"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 49
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v51"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 50
     assert len(EXPECTED_TOOLS) == 12
     assert [item["name"] for item in binding_tool_descriptors()] == [
         "begin_current_loop",

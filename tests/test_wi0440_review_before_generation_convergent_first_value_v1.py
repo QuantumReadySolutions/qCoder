@@ -67,7 +67,7 @@ def proposal_for(
     construction: str | None = None,
 ) -> dict[str, object]:
     proposal = bell_proposal()
-    proposal["customer_constraints"] = ["qCoder"]
+    proposal["customer_constraints"] = []
     if algorithm != "Bell":
         profile = class_matrix()["profiles"][algorithm]
         concrete = construction or profile["construction"]
@@ -223,7 +223,6 @@ def test_blocking_clarification_withholds_confirmation_actions() -> None:
     first = build_first_value(EXACT_BELL_REQUEST, proposal)
     assert first["confirmable"] is False
     assert first["customer_actions"] == []
-    assert first["confirmation_state"] == "blocked"
 
 
 def test_binding_returns_complete_bell_review_in_one_operation(tmp_path: Path) -> None:
@@ -402,7 +401,9 @@ def test_non_bell_proposals_are_concrete_without_correctness_or_execution_claims
     assert first["confirmable"] is True
     assert first["execution_permitted"] is False
     assert first["source_or_qasm_included"] is False
-    assert any("correctness" in item["value"] for item in first["limitations_nonclaims"])
+    assert any(
+        "correctness" in item["value"] for item in first["initial_decision_groups"][0]["items"]
+    )
 
 
 @pytest.mark.parametrize("case", class_matrix()["cases"], ids=lambda case: case["case_id"])
@@ -417,7 +418,10 @@ def test_non_bell_connected_assistant_class_matrix(case: dict[str, object]) -> N
     if case["variant"] == "material_blocker":
         assert first["confirmable"] is False
         assert first["customer_actions"] == []
-        assert first["blocking_clarification"] == case["blocking_clarification"]
+        assert any(
+            item["value"] == case["blocking_clarification"]
+            for item in first["initial_decision_groups"][0]["items"]
+        )
     else:
         assert first["confirmable"] is True
         assert first["customer_actions"] == list(CUSTOMER_ACTIONS)
@@ -433,7 +437,10 @@ def test_material_blocker_is_specific_and_has_no_actions() -> None:
     first = build_first_value(request, proposal)
     assert first["confirmable"] is False
     assert first["customer_actions"] == []
-    assert "oracle" in first["blocking_clarification"].casefold()
+    assert any(
+        "oracle" in item["value"].casefold()
+        for item in first["initial_decision_groups"][0]["items"]
+    )
 
 
 def test_source_modification_preserves_explicit_selected_identity_without_mutation(
@@ -596,8 +603,8 @@ def test_binding_descriptor_is_additive_and_inventory_remains_exact_12_plus_2() 
     descriptor = build_client_binding_descriptor(coordinator_prefix=["qcoder"])[
         "client_binding_contract"
     ]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v50"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 49
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v51"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 50
     assert descriptor["review_before_generation_contract"]["new_public_tool"] is False
     assert descriptor["review_before_generation_contract"]["new_private_operation"] is False
     assert len(EXPECTED_TOOLS) == 12
@@ -647,8 +654,8 @@ def test_local_timing_acceptance_population_passes_without_network() -> None:
         text=True,
     )
     result = json.loads(completed.stdout)
-    assert result["population_cases"] == 28
-    assert result["samples"] == 28
+    assert result["population_cases"] == 36
+    assert result["samples"] == 38
     assert result["scenario_counts"] == {
         "review_first_value": 20,
         "confirmation_without_replay": 1,
@@ -657,9 +664,16 @@ def test_local_timing_acceptance_population_passes_without_network() -> None:
         "generic_proposal_rejection": 1,
         "source_modification": 1,
         "stale_token": 1,
-        "unsafe_content_rejection": 1,
+        "unsafe_content_rejection": 5,
         "direct_generation_control": 1,
+        "empty_customer_constraints": 1,
+        "execution_authority_binding": 4,
+        "fake_action_rejection": 1,
+        "material_customer_constraints": 1,
+        "quiet_projection": 1,
+        "split_source_rejection": 1,
     }
+    assert result["unsafe_content_rejection"]["maximum_seconds"] >= 0
     assert result["connected_assistant_model"] == "not_measured_fixture_driven_automation"
     assert result["protected_service_seconds"] == 0
     assert result["first_useful_interpretation_budget_pass"] is True

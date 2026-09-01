@@ -36,7 +36,7 @@ def _load(name: str) -> dict[str, Any]:
 
 def _proposal(request: str, algorithm: str = "Bell") -> dict[str, Any]:
     proposal = _load("wi0440_bell_review_before_generation_v1.json")
-    proposal["customer_constraints"] = ["qCoder"]
+    proposal["customer_constraints"] = []
     if algorithm == "Bell":
         return proposal
     profile = _load("wi0440_review_before_generation_class_matrix_v1.json")["profiles"][algorithm]
@@ -127,6 +127,7 @@ def main() -> int:
     rendering: list[float] = []
     combined: list[float] = []
     transition: list[float] = []
+    unsafe_rejection: list[float] = []
     tokens: set[str] = set()
     scenario_counts = {
         "review_first_value": 0,
@@ -138,14 +139,29 @@ def main() -> int:
         "stale_token": 0,
         "source_modification": 0,
         "direct_generation_control": 0,
+        "quiet_projection": 0,
+        "split_source_rejection": 0,
+        "fake_action_rejection": 0,
+        "execution_authority_binding": 0,
+        "empty_customer_constraints": 0,
+        "material_customer_constraints": 0,
     }
     for _ in range(args.repetitions):
         for request, algorithm in cases:
             proposal = _proposal(request, algorithm)
             started = time.monotonic()
             first = build_first_value(request, deepcopy(proposal))
-            render_first_value_markdown(first)
+            markdown = render_first_value_markdown(first)
             rendering_elapsed = time.monotonic() - started
+            if request == EXACT_REQUEST:
+                headings = [line for line in markdown.splitlines() if line.startswith("## ")]
+                if headings != [
+                    "## Goal and scope",
+                    "## Implementation",
+                    "## Output and authority",
+                ]:
+                    raise RuntimeError("quiet_projection_group_contract_failed")
+                scenario_counts["quiet_projection"] += 1
             with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-acceptance-") as directory:
                 started = time.monotonic()
                 payload = _binding_call(Path(directory), request, deepcopy(proposal))
@@ -183,21 +199,93 @@ def main() -> int:
         combined.append(generic_elapsed)
         scenario_counts["generic_proposal_rejection"] += 1
 
-        unsafe = _proposal(EXACT_REQUEST)
-        unsafe["implementation_recommendations"] = ["QuantumCircuit(2, 2)"]
-        with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-unsafe-") as directory:
-            started = time.monotonic()
-            rejected = _binding_payload(Path(directory), EXACT_REQUEST, unsafe)
-            unsafe_elapsed = time.monotonic() - started
-        if (
-            rejected.get("ok")
-            or rejected.get("category") != "review_proposal_source_or_qasm_rejected"
+        for unsafe_value in (
+            "QuantumCircuit(2, 2)",
+            'print("premature source")',
+            "qc.append(HGate(), [0])",
+            "for item in values: print(item)",
+            "bell q[0], q[1];",
         ):
-            raise RuntimeError("unsafe_content_not_rejected")
-        initial.append(unsafe_elapsed)
+            unsafe = _proposal(EXACT_REQUEST)
+            unsafe["implementation_recommendations"][0] = unsafe_value
+            with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-unsafe-") as directory:
+                started = time.monotonic()
+                rejected = _binding_payload(Path(directory), EXACT_REQUEST, unsafe)
+                unsafe_elapsed = time.monotonic() - started
+            if (
+                rejected.get("ok")
+                or rejected.get("category") != "review_proposal_source_or_qasm_rejected"
+            ):
+                raise RuntimeError("unsafe_content_not_rejected")
+            initial.append(unsafe_elapsed)
+            rendering.append(0.0)
+            combined.append(unsafe_elapsed)
+            unsafe_rejection.append(unsafe_elapsed)
+            scenario_counts["unsafe_content_rejection"] += 1
+
+        for unsafe_values, scenario in (
+            (["print(", '"premature source")'], "split_source_rejection"),
+            (["Use recommended", "choices"], "fake_action_rejection"),
+        ):
+            unsafe = _proposal(EXACT_REQUEST)
+            unsafe["implementation_recommendations"][0:2] = unsafe_values
+            with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-split-unsafe-") as directory:
+                started = time.monotonic()
+                rejected = _binding_payload(Path(directory), EXACT_REQUEST, unsafe)
+                rejected_elapsed = time.monotonic() - started
+            if rejected.get("ok"):
+                raise RuntimeError(f"{scenario}_not_rejected")
+            unsafe_rejection.append(rejected_elapsed)
+            scenario_counts[scenario] += 1
+
+        execution_cases = (
+            (EXACT_REQUEST, "not_requested", True),
+            (
+                "Use qCoder to review the Qiskit plan, then execute it after I approve.",
+                "held_for_separate_authorization",
+                True,
+            ),
+            (
+                "Use qCoder to review the Qiskit plan; do not execute it.",
+                "not_requested",
+                True,
+            ),
+            (
+                "Use qCoder to review the Qiskit plan; execution later.",
+                "not_requested",
+                True,
+            ),
+        )
+        for execution_request, execution_state, expected_confirmable in execution_cases:
+            execution_proposal = _proposal(execution_request)
+            execution_proposal["execution_request"] = execution_state
+            started = time.monotonic()
+            execution_first = build_first_value(execution_request, execution_proposal)
+            execution_elapsed = time.monotonic() - started
+            if execution_first["confirmable"] is not expected_confirmable:
+                raise RuntimeError("execution_authority_binding_failed")
+            initial.append(execution_elapsed)
+            rendering.append(0.0)
+            combined.append(execution_elapsed)
+            scenario_counts["execution_authority_binding"] += 1
+
+        empty_constraints = _proposal(EXACT_REQUEST)
+        started = time.monotonic()
+        build_first_value(EXACT_REQUEST, empty_constraints)
+        empty_elapsed = time.monotonic() - started
+        initial.append(empty_elapsed)
         rendering.append(0.0)
-        combined.append(unsafe_elapsed)
-        scenario_counts["unsafe_content_rejection"] += 1
+        combined.append(empty_elapsed)
+        scenario_counts["empty_customer_constraints"] += 1
+
+        material_constraints = _load("wi0440_bell_review_before_generation_v1.json")
+        started = time.monotonic()
+        build_first_value(EXACT_REQUEST, material_constraints)
+        material_elapsed = time.monotonic() - started
+        initial.append(material_elapsed)
+        rendering.append(0.0)
+        combined.append(material_elapsed)
+        scenario_counts["material_customer_constraints"] += 1
 
         with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-confirm-") as directory:
             workspace = Path(directory)
@@ -294,6 +382,7 @@ def main() -> int:
     rendering_summary = _summary(rendering)
     combined_summary = _summary(combined)
     transition_summary = _summary(transition)
+    unsafe_rejection_summary = _summary(unsafe_rejection)
     first_budget = (
         combined_summary["median_seconds"] <= 10
         and combined_summary["p95_seconds"] <= 20
@@ -301,7 +390,7 @@ def main() -> int:
     )
     result = {
         "schema_id": "qcoder.wi0440.local_timing_acceptance.v2",
-        "population_cases": len(cases) + 8,
+        "population_cases": len(cases) + 16,
         "repetitions": args.repetitions,
         "samples": len(initial) + len(confirmation),
         "unique_prior_result_tokens": len(tokens),
@@ -314,6 +403,7 @@ def main() -> int:
         "projection_and_rendering": rendering_summary,
         "combined_local_first_value": combined_summary,
         "generation_ready_transition": transition_summary,
+        "unsafe_content_rejection": unsafe_rejection_summary,
         "first_useful_interpretation_budget_pass": first_budget,
         "first_material_decision_budget_pass": (
             combined_summary["median_seconds"] <= 15

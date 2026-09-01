@@ -7,11 +7,13 @@ authority, projection safety, revision integrity, and confirmation boundaries.
 
 from __future__ import annotations
 
+import ast
 from copy import deepcopy
 from hashlib import sha256
 import json
 import re
 from typing import Any, Mapping, Sequence
+import unicodedata
 
 from qcoder.core.share_safe import contains_local_path, contains_token_or_header
 
@@ -79,20 +81,113 @@ _CONSEQUENTIAL_VALUE = re.compile(
     r"function|module|class|json|readable source)\b",
     re.IGNORECASE,
 )
-_PYTHON_SOURCE_PATTERNS = (
-    re.compile(r"\bfrom\s+qiskit(?:\.[A-Za-z_][\w.]*)?\s+import\b", re.IGNORECASE),
-    re.compile(r"\bimport\s+qiskit\b", re.IGNORECASE),
-    re.compile(r"\bQuantumCircuit\s*\("),
-    re.compile(r"\.(?:h|cx|measure|x|y|z|reset|barrier)\s*\("),
-    re.compile(r"\bdef\s+[A-Za-z_]\w*\s*\([^)]*\)\s*:"),
-    re.compile(r"\b[A-Za-z_]\w*\s*=\s*[A-Za-z_]\w*\s*\([^)]*\)"),
+_EXECUTABLE_PYTHON_NODES = (
+    ast.AnnAssign,
+    ast.Assign,
+    ast.AsyncFor,
+    ast.AsyncFunctionDef,
+    ast.AsyncWith,
+    ast.AugAssign,
+    ast.Await,
+    ast.Call,
+    ast.ClassDef,
+    ast.Delete,
+    ast.DictComp,
+    ast.For,
+    ast.FunctionDef,
+    ast.GeneratorExp,
+    ast.If,
+    ast.Import,
+    ast.ImportFrom,
+    ast.Lambda,
+    ast.ListComp,
+    ast.Match,
+    ast.NamedExpr,
+    ast.Raise,
+    ast.Return,
+    ast.SetComp,
+    ast.Try,
+    ast.While,
+    ast.With,
+    ast.Yield,
+    ast.YieldFrom,
 )
 _QASM_SOURCE_PATTERNS = (
-    re.compile(r"\bOPENQASM\s+\d", re.IGNORECASE),
-    re.compile(r"\binclude\s+[\"'][^\"']+[\"']\s*;", re.IGNORECASE),
-    re.compile(r"\b(?:qubit|bit)\s*\[[^\]]+\]\s+[A-Za-z_]\w*\s*;", re.IGNORECASE),
-    re.compile(r"\b(?:measure|reset|barrier)\b[^\n;]*;", re.IGNORECASE),
-    re.compile(r"\b(?:h|x|y|z|cx|cz|swap)\s+[A-Za-z_$][^\n;]*;", re.IGNORECASE),
+    re.compile(r"\bOPENQASM\s+\d+(?:\.\d+)?\s*;", re.IGNORECASE),
+    re.compile(r"\binclude\s+[\"'][^\"'\r\n]+[\"']\s*;", re.IGNORECASE),
+    re.compile(
+        r"\b(?:qubit|bit|qreg|creg)\b(?:\s*\[[^\]\r\n]+\])?\s+"
+        r"[A-Za-z_]\w*\s*;",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bgate\s+[A-Za-z_]\w*(?:\s*\([^{}\r\n]*\))?[^{}\r\n]*\{", re.I),
+    re.compile(r"\b(?:measure|reset|barrier)\b[^\r\n;]*;", re.IGNORECASE),
+    re.compile(
+        r"(?:\b(?:ctrl|negctrl|inv|pow)\b(?:\s*\([^;\r\n]*\))?\s*@\s*)*"
+        r"\b[A-Za-z_]\w*(?:\s*\([^;\r\n]*\))?\s+"
+        r"(?:\$\d+|[A-Za-z_]\w*(?:\s*\[[^\]\r\n]+\])?)"
+        r"(?:\s*,\s*(?:\$\d+|[A-Za-z_]\w*(?:\s*\[[^\]\r\n]+\])?))*\s*;",
+        re.IGNORECASE,
+    ),
+)
+_MATERIAL_CONSTRAINT_TERMS = frozenset(
+    {
+        "algorithm",
+        "artifact",
+        "before",
+        "bell",
+        "bit",
+        "bits",
+        "circuit",
+        "code",
+        "confirm",
+        "confirmation",
+        "create",
+        "creating",
+        "cx",
+        "execute",
+        "execution",
+        "file",
+        "generate",
+        "generating",
+        "h",
+        "measure",
+        "measures",
+        "measuring",
+        "measurement",
+        "modify",
+        "openqasm",
+        "output",
+        "program",
+        "python",
+        "qasm",
+        "qiskit",
+        "qubit",
+        "qubits",
+        "readable",
+        "review",
+        "source",
+        "state",
+        "two",
+        "write",
+        "writing",
+        "φ",
+    }
+)
+_TRIVIAL_CONSTRAINTS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "help",
+        "help me",
+        "please",
+        "qcoder",
+        "the",
+        "to",
+        "use qcoder",
+        "use qcoder to help me",
+    }
 )
 
 
@@ -148,12 +243,70 @@ def _privacy_error(value: Any, *, key: str = "") -> bool:
     return False
 
 
+def _normalized_text(value: str) -> str:
+    return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
+
+
+def _contains_customer_action(value: str) -> bool:
+    normalized = _normalized_text(value)
+    return any(_normalized_text(action) in normalized for action in CUSTOMER_ACTIONS)
+
+
+def _contains_executable_python(value: str) -> bool:
+    text = value.strip()
+    if not text:
+        return False
+    try:
+        tree = ast.parse(text, mode="exec")
+    except (SyntaxError, ValueError):
+        tree = None
+    except (MemoryError, RecursionError, UnicodeError):
+        return True
+    if tree is not None:
+        if any(isinstance(node, _EXECUTABLE_PYTHON_NODES) for node in ast.walk(tree)):
+            return True
+        if ";" in text and len(tree.body) > 1:
+            return True
+    return bool(
+        re.search(r"(?:^|[;])\s*@\s*[A-Za-z_]\w*", text)
+        or re.search(
+            r"(?:^|;)\s*(?:async\s+)?(?:def|class|for|while|if|match|try|with)\b[^\r\n]*:",
+            text,
+        )
+        or re.search(r"(?:^|;)\s*(?:import|from)\s+[A-Za-z_]", text)
+    )
+
+
+def _contains_qasm_source(value: str) -> bool:
+    return any(pattern.search(value) for pattern in _QASM_SOURCE_PATTERNS)
+
+
 def _contains_source_or_qasm(value: str) -> bool:
     if "```" in value or "~~~" in value:
         return True
-    return any(
-        pattern.search(value) for pattern in (*_PYTHON_SOURCE_PATTERNS, *_QASM_SOURCE_PATTERNS)
-    )
+    return _contains_executable_python(value) or _contains_qasm_source(value)
+
+
+def _adjacent_projection_variants(values: Sequence[str]) -> list[str]:
+    bounded = [unicodedata.normalize("NFKC", value).strip() for value in values]
+    variants = list(bounded)
+    for left, right in zip(bounded, bounded[1:], strict=False):
+        variants.extend(
+            (
+                left.rstrip() + right.lstrip(),
+                left.rstrip() + " " + right.lstrip(),
+                left.rstrip() + "\n" + right.lstrip(),
+            )
+        )
+    return variants
+
+
+def _projection_contains_source_or_qasm(values: Sequence[str]) -> bool:
+    return any(_contains_source_or_qasm(value) for value in _adjacent_projection_variants(values))
+
+
+def _projection_contains_customer_action(values: Sequence[str]) -> bool:
+    return any(_contains_customer_action(value) for value in _adjacent_projection_variants(values))
 
 
 def _unsafe_projection_text(value: str) -> bool:
@@ -165,7 +318,7 @@ def _unsafe_projection_text(value: str) -> bool:
         return True
     if re.search(r"<\s*/?\s*(?:script|style|iframe|object|embed|button|form|a)\b", value, re.I):
         return True
-    if re.search(r"\b(?:Use recommended choices|Review or change choices)\b", value):
+    if _contains_customer_action(value):
         return True
     return bool(
         re.search(
@@ -201,7 +354,54 @@ def _markdown_escape(value: str) -> str:
 
 
 def _unquoted_request(exact_request: str) -> str:
-    return re.sub(r'(["“]).*?(["”])', " ", exact_request, flags=re.DOTALL)
+    without_straight = re.sub(r'"[^"\r\n]*"', " ", exact_request)
+    without_curly = re.sub(r"“[^”\r\n]*”", " ", without_straight)
+    return re.sub(r"‘[^’\r\n]*’", " ", without_curly)
+
+
+def _execution_request_state(exact_request: str) -> str:
+    request = " ".join(_unquoted_request(exact_request).casefold().split())
+    occurrences = list(re.finditer(r"\b(?:execute|execution|run|simulate|simulation)\b", request))
+    if not occurrences:
+        return "absent"
+    positive = False
+    negated = False
+    deferred = False
+    ambiguous = False
+    for occurrence in occurrences:
+        before = request[max(0, occurrence.start() - 48) : occurrence.start()]
+        after = request[occurrence.end() : occurrence.end() + 64]
+        nearby = before + occurrence.group(0) + after
+        occurrence_negated = bool(
+            re.search(r"\b(?:do\s+not|don't|never|without|no)\b[^.;]{0,32}$", before)
+        )
+        occurrence_deferred = bool(
+            re.search(
+                r"\b(?:later|deferred|another\s+step|separate\s+step|future\s+step)\b",
+                after,
+            )
+            or re.search(r"\bdefer(?:red|ring)?\b[^.;]{0,24}$", before)
+            or re.search(r"\bin\s+(?:an)?other\s+step\b", nearby)
+        )
+        if occurrence_negated:
+            negated = True
+        elif occurrence_deferred:
+            deferred = True
+        elif occurrence.group(0) in {"execute", "run", "simulate"}:
+            positive = True
+        else:
+            ambiguous = True
+    if positive and (negated or deferred):
+        return "contradictory_or_ambiguous"
+    if positive:
+        return "explicit_affirmative"
+    if deferred:
+        return "deferred"
+    if negated:
+        return "negated"
+    if ambiguous:
+        return "contradictory_or_ambiguous"
+    return "absent"
 
 
 def _semantic_axes(transaction_kind: str, execution_request: str) -> dict[str, str]:
@@ -232,7 +432,11 @@ def _semantic_axes(transaction_kind: str, execution_request: str) -> dict[str, s
     }
 
 
-def _validate_request_authority(exact_request: str, axes: Mapping[str, str]) -> None:
+def _validate_request_authority(
+    exact_request: str,
+    axes: Mapping[str, str],
+    execution_request: str,
+) -> tuple[str, str | None]:
     request = " ".join(_unquoted_request(exact_request).casefold().split())
     if re.search(r"\buse\s+qcoder\b", request) is None:
         raise ReviewBeforeGenerationError("review_request_does_not_activate_qcoder")
@@ -244,15 +448,18 @@ def _validate_request_authority(exact_request: str, axes: Mapping[str, str]) -> 
             "review_request_authority_contradiction",
             clarification="Should source be produced now, or only after you confirm the choices?",
         )
-    execution_negated = bool(
-        re.search(
-            r"\b(?:do not|don't|never|without)\b.{0,48}\b(?:run|execute|simulate|execution)\b",
-            request,
-        )
-        or re.search(r"\b(?:run|execute|execution)\b.{0,32}\b(?:later|deferred)\b", request)
-    )
-    if execution_negated and axes["execution_authority"] != "not_requested":
+    execution_state = _execution_request_state(exact_request)
+    if execution_state == "explicit_affirmative":
+        if execution_request != "held_for_separate_authorization":
+            raise ReviewBeforeGenerationError("review_proposal_execution_request_understated")
+    elif execution_request != "not_requested":
         raise ReviewBeforeGenerationError("review_proposal_execution_authority_broadened")
+    clarification = (
+        "Should execution remain deferred, or be separately authorized after source generation?"
+        if execution_state == "contradictory_or_ambiguous"
+        else None
+    )
+    return execution_state, clarification
 
 
 def _assistant_values_contradict_authority(values: Sequence[str], axes: Mapping[str, str]) -> bool:
@@ -294,6 +501,20 @@ def _is_consequential(value: str) -> bool:
     return bool(_CONSEQUENTIAL_VALUE.search(value))
 
 
+def _customer_constraint_is_material(value: str) -> bool:
+    normalized = _normalized_text(value).strip(" .,:;!?()[]{}\"'")
+    if not normalized or normalized in _TRIVIAL_CONSTRAINTS:
+        return False
+    tokens = re.findall(r"[^\W_]+", normalized, flags=re.UNICODE)
+    if not tokens or (len(tokens) == 1 and len(tokens[0]) == 1):
+        return False
+    if all(
+        token in {"a", "an", "and", "for", "me", "of", "please", "the", "to"} for token in tokens
+    ):
+        return False
+    return any(token in _MATERIAL_CONSTRAINT_TERMS for token in tokens)
+
+
 def _assistant_item(label: str, value: str) -> dict[str, str]:
     return {"label": label, "value": value, "attribution": CONNECTED_ASSISTANT_ATTRIBUTION}
 
@@ -302,23 +523,28 @@ def _qcoder_item(label: str, value: str) -> dict[str, str]:
     return {"label": label, "value": value, "attribution": QCODER_ATTRIBUTION}
 
 
-def _authority_items(axes: Mapping[str, str]) -> list[dict[str, str]]:
+def _authority_items(axes: Mapping[str, str], request_execution_state: str) -> list[dict[str, str]]:
     generation = (
-        "Source modification remains held until the stored displayed review is confirmed."
+        "Source modification will begin after you confirm these choices."
         if axes["ultimate_outcome"] == "source_modification"
-        else "Python source is produced only after the stored displayed review is confirmed."
+        else "Python source will be produced after you confirm these choices."
     )
-    execution = (
-        "Execution was not requested and is not authorized."
-        if axes["execution_authority"] == "not_requested"
-        else "Execution remains held for separate authorization and is not authorized by this review."
-    )
+    if request_execution_state == "explicit_affirmative":
+        execution = "Execution remains held for separate authorization."
+    elif request_execution_state == "negated":
+        execution = "Execution was explicitly declined and is not authorized."
+    elif request_execution_state == "deferred":
+        execution = "Execution remains deferred and is not authorized for this step."
+    elif request_execution_state == "contradictory_or_ambiguous":
+        execution = "Execution is not authorized while the request remains unresolved."
+    else:
+        execution = "Execution was not requested and is not authorized."
     return [
         _qcoder_item("Generation authority", generation),
         _qcoder_item("Execution authority", execution),
         _qcoder_item(
             "Authority separation",
-            "Confirmation of source generation does not authorize execution.",
+            "Confirming these choices does not authorize execution.",
         ),
         _qcoder_item(
             "Deferred execution choices",
@@ -366,7 +592,9 @@ def validate_connected_assistant_proposal(
             "review_source_modification_selection_required",
             clarification="Which exact source file should the proposed changes apply to?",
         )
-    _validate_request_authority(exact_request, axes)
+    request_execution_state, generated_clarification = _validate_request_authority(
+        exact_request, axes, execution_request
+    )
 
     interpretation = _bounded_plain_text(
         proposal.get("recommended_interpretation"),
@@ -380,11 +608,7 @@ def validate_connected_assistant_proposal(
         raise ReviewBeforeGenerationError("review_proposal_goal_restatement_only")
 
     constraint_values = proposal.get("customer_constraints")
-    if (
-        not isinstance(constraint_values, list)
-        or not constraint_values
-        or len(constraint_values) > 16
-    ):
+    if not isinstance(constraint_values, list) or len(constraint_values) > 16:
         raise ReviewBeforeGenerationError("review_proposal_customer_constraints_invalid")
     constraints: list[str] = []
     for value in constraint_values:
@@ -393,6 +617,8 @@ def validate_connected_assistant_proposal(
         )
         if excerpt not in exact_request:
             raise ReviewBeforeGenerationError("review_proposal_customer_constraint_not_in_request")
+        if not _customer_constraint_is_material(excerpt):
+            raise ReviewBeforeGenerationError("review_proposal_customer_constraint_not_material")
         constraints.append(excerpt)
     if len(set(constraints)) != len(constraints):
         raise ReviewBeforeGenerationError("review_proposal_customer_constraint_duplicate")
@@ -462,36 +688,84 @@ def validate_connected_assistant_proposal(
         blocking = _bounded_plain_text(
             blocking, category="review_proposal_blocking_clarification_invalid", maximum=600
         )
+    if generated_clarification is not None:
+        blocking = generated_clarification
 
-    assistant_values = [
+    untrusted_values = [
         interpretation,
+        *constraints,
         *recommendations,
+        *(item["choice"] for item in choices),
         *(item["recommendation"] for item in choices),
         output_artifact,
         *deferred,
         *limitations,
         *([blocking] if isinstance(blocking, str) else []),
     ]
-    if _assistant_values_contradict_authority(assistant_values, axes):
+    if _projection_contains_customer_action(untrusted_values):
+        raise ReviewBeforeGenerationError("review_proposal_unsafe_projection_text")
+    if _projection_contains_source_or_qasm(untrusted_values):
+        raise ReviewBeforeGenerationError("review_proposal_source_or_qasm_rejected")
+    if _assistant_values_contradict_authority(untrusted_values, axes):
         raise ReviewBeforeGenerationError("review_proposal_authority_contradiction")
 
-    goal_items = [_assistant_item("Recommended interpretation", interpretation)] + [
-        {"label": "Customer constraint", "value": value, "attribution": CUSTOMER_ATTRIBUTION}
-        for value in constraints
-    ]
-    implementation_items = [
-        _assistant_item(f"Implementation recommendation {index}", value)
-        for index, value in enumerate(recommendations, start=1)
-    ]
-    implementation_items.extend(
-        [
-            _qcoder_item("Dependency version", "No dependency version was selected silently."),
-            _qcoder_item(
-                "Execution environment", "No execution environment was selected silently."
-            ),
-        ]
+    displayed_normalized: set[str] = set()
+
+    def add_unique(items: list[dict[str, str]], item: dict[str, str]) -> None:
+        normalized_value = _normalized_text(item["value"]).rstrip(".")
+        if normalized_value not in displayed_normalized:
+            displayed_normalized.add(normalized_value)
+            items.append(item)
+
+    goal_items: list[dict[str, str]] = []
+    add_unique(goal_items, _assistant_item("Recommended interpretation", interpretation))
+    for index, value in enumerate(constraints, start=1):
+        add_unique(
+            goal_items,
+            {
+                "label": f"Customer constraint {index}",
+                "value": value,
+                "attribution": CUSTOMER_ATTRIBUTION,
+            },
+        )
+    for index, value in enumerate(limitations, start=1):
+        add_unique(goal_items, _assistant_item(f"Limitation {index}", value))
+    if isinstance(blocking, str):
+        item = (
+            _qcoder_item("Clarification needed", blocking)
+            if generated_clarification is not None
+            else _assistant_item("Clarification needed", blocking)
+        )
+        add_unique(goal_items, item)
+
+    implementation_items: list[dict[str, str]] = []
+    for index, value in enumerate(recommendations, start=1):
+        add_unique(
+            implementation_items,
+            _assistant_item(f"Implementation recommendation {index}", value),
+        )
+    for item in choices:
+        add_unique(
+            implementation_items,
+            _assistant_item(f"Material choice: {item['choice']}", item["recommendation"]),
+        )
+    add_unique(
+        implementation_items,
+        _qcoder_item("Dependency version", "No dependency version was selected silently."),
     )
-    output_items = [_assistant_item("Output artifact", output_artifact), *_authority_items(axes)]
+    add_unique(
+        implementation_items,
+        _qcoder_item("Execution environment", "No execution environment was selected silently."),
+    )
+
+    output_items: list[dict[str, str]] = []
+    add_unique(output_items, _assistant_item("Output artifact", output_artifact))
+    for item in _authority_items(axes, request_execution_state):
+        add_unique(output_items, item)
+    for index, value in enumerate(deferred, start=1):
+        if re.search(r"\b(?:backend|shots?|seed|result handling)\b", value, re.I):
+            continue
+        add_unique(output_items, _assistant_item(f"Deferred choice {index}", value))
     groups = [
         {"group_id": GROUPS[0][0], "label": GROUPS[0][1], "items": goal_items},
         {"group_id": GROUPS[1][0], "label": GROUPS[1][1], "items": implementation_items},
@@ -504,6 +778,7 @@ def validate_connected_assistant_proposal(
         "exact_request_utf8_sha256": request_digest(exact_request),
         "transaction_kind": transaction_kind,
         "execution_request": execution_request,
+        "request_execution_state": request_execution_state,
         "semantic_axes": axes,
         "recommended_interpretation": interpretation,
         "customer_constraints": constraints,
@@ -594,25 +869,59 @@ def review_revision(
     )
 
 
-def _displayed_text_values(value: Mapping[str, Any]) -> list[str]:
-    values = [str(value.get("recommended_interpretation") or "")]
+def _displayed_text_values(value: Mapping[str, Any], *, include_labels: bool = True) -> list[str]:
+    values: list[str] = []
     for group in value.get("initial_decision_groups", ()):
-        if isinstance(group, Mapping):
-            for item in group.get("items", ()):
-                if isinstance(item, Mapping):
-                    values.append(str(item.get("value") or ""))
-    for key, field in (
-        ("material_choices", "recommended_value"),
-        ("deferred_choices", "deferred_value"),
-        ("limitations_nonclaims", "value"),
-    ):
-        for item in value.get(key, ()):
-            if isinstance(item, Mapping):
-                values.append(str(item.get(field) or ""))
-    blocking = value.get("blocking_clarification")
-    if isinstance(blocking, str):
-        values.append(blocking)
+        if not isinstance(group, Mapping):
+            continue
+        if include_labels:
+            values.append(str(group.get("label") or ""))
+        for item in group.get("items", ()):
+            if not isinstance(item, Mapping):
+                continue
+            if include_labels:
+                values.append(str(item.get("label") or ""))
+            values.append(str(item.get("value") or ""))
     return values
+
+
+_FIRST_VALUE_KEYS = {
+    "proposal_attribution",
+    "initial_decision_groups",
+    "initial_decision_group_count",
+    "initial_decision_group_maximum",
+    "confirmable",
+    "customer_actions",
+    "one_qcoder_operation_before_useful_review",
+    "source_or_qasm_included",
+    "file_mutation_performed",
+    "execution_permitted",
+    "execution_performed",
+    "protected_service_called",
+    "qcoder_authored_recommendation",
+    "retention",
+}
+
+_QCODER_ITEM_VALUES = {
+    "Dependency version": {"No dependency version was selected silently."},
+    "Execution environment": {"No execution environment was selected silently."},
+    "Generation authority": {
+        "Python source will be produced after you confirm these choices.",
+        "Source modification will begin after you confirm these choices.",
+    },
+    "Execution authority": {
+        "Execution was not requested and is not authorized.",
+        "Execution was explicitly declined and is not authorized.",
+        "Execution remains deferred and is not authorized for this step.",
+        "Execution remains held for separate authorization.",
+        "Execution is not authorized while the request remains unresolved.",
+    },
+    "Authority separation": {"Confirming these choices does not authorize execution."},
+    "Deferred execution choices": {"Backend, shots, seed, and result handling remain deferred."},
+    "Clarification needed": {
+        "Should execution remain deferred, or be separately authorized after source generation?"
+    },
+}
 
 
 def validate_first_value(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -620,6 +929,8 @@ def validate_first_value(value: Mapping[str, Any]) -> dict[str, Any]:
 
     if not isinstance(value, Mapping):
         raise ReviewBeforeGenerationError("review_first_value_invalid")
+    if set(value) != _FIRST_VALUE_KEYS:
+        raise ReviewBeforeGenerationError("review_first_value_shape_invalid")
     forbidden = {
         "review_revision",
         "exact_request_utf8_sha256",
@@ -630,15 +941,103 @@ def validate_first_value(value: Mapping[str, Any]) -> dict[str, Any]:
     }
     if set(value).intersection(forbidden):
         raise ReviewBeforeGenerationError("review_first_value_internal_metadata_exposed")
-    actual_source = any(_contains_source_or_qasm(item) for item in _displayed_text_values(value))
+    groups = value.get("initial_decision_groups")
+    if not isinstance(groups, list) or len(groups) != len(GROUPS):
+        raise ReviewBeforeGenerationError("review_first_value_group_count_invalid")
+    normalized_values: set[str] = set()
+    untrusted_values: list[str] = []
+    untrusted_item_values: list[str] = []
+    for group, (_, expected_label) in zip(groups, GROUPS, strict=True):
+        if not isinstance(group, Mapping) or set(group) != {"label", "items"}:
+            raise ReviewBeforeGenerationError("review_first_value_group_shape_invalid")
+        if group.get("label") != expected_label or not isinstance(group.get("items"), list):
+            raise ReviewBeforeGenerationError("review_first_value_group_order_invalid")
+        if not group["items"]:
+            raise ReviewBeforeGenerationError("review_first_value_group_empty")
+        labels: set[str] = set()
+        for item in group["items"]:
+            if not isinstance(item, Mapping) or set(item) != {"label", "value", "attribution"}:
+                raise ReviewBeforeGenerationError("review_first_value_item_shape_invalid")
+            label = item.get("label")
+            item_value = item.get("value")
+            attribution = item.get("attribution")
+            if (
+                not isinstance(label, str)
+                or not label
+                or not isinstance(item_value, str)
+                or not item_value
+                or attribution
+                not in {CONNECTED_ASSISTANT_ATTRIBUTION, CUSTOMER_ATTRIBUTION, QCODER_ATTRIBUTION}
+            ):
+                raise ReviewBeforeGenerationError("review_first_value_item_invalid")
+            if label in labels:
+                raise ReviewBeforeGenerationError("review_first_value_item_label_duplicate")
+            labels.add(label)
+            normalized = _normalized_text(item_value).rstrip(".")
+            if normalized in normalized_values:
+                raise ReviewBeforeGenerationError("review_first_value_value_duplicate")
+            normalized_values.add(normalized)
+            if attribution == QCODER_ATTRIBUTION:
+                if item_value not in _QCODER_ITEM_VALUES.get(label, set()):
+                    raise ReviewBeforeGenerationError("review_first_value_qcoder_boundary_invalid")
+            else:
+                untrusted_values.extend((label, item_value))
+                untrusted_item_values.append(item_value)
+    displayed_values = _displayed_text_values(value)
+    actual_source = _projection_contains_source_or_qasm(
+        displayed_values
+    ) or _projection_contains_source_or_qasm(_displayed_text_values(value, include_labels=False))
     if value.get("source_or_qasm_included") is not actual_source:
         raise ReviewBeforeGenerationError("review_first_value_source_invariant_mismatch")
-    if actual_source or (value.get("confirmable") is True and actual_source):
+    if actual_source:
         raise ReviewBeforeGenerationError("review_first_value_source_or_qasm_present")
+    if _projection_contains_customer_action(
+        untrusted_values
+    ) or _projection_contains_customer_action(untrusted_item_values):
+        raise ReviewBeforeGenerationError("review_first_value_untrusted_action_present")
+    serialized_display = " ".join(displayed_values).casefold()
+    if any(
+        fragment in serialized_display
+        for fragment in (
+            "stored displayed review",
+            "review-result-",
+            "review-revision-",
+            "exact_request_utf8_sha256",
+        )
+    ):
+        raise ReviewBeforeGenerationError("review_first_value_internal_metadata_exposed")
     if value.get("initial_decision_group_count") != 3:
         raise ReviewBeforeGenerationError("review_first_value_group_count_invalid")
-    if value.get("customer_actions") not in (list(CUSTOMER_ACTIONS), []):
+    if value.get("initial_decision_group_maximum") != 3:
+        raise ReviewBeforeGenerationError("review_first_value_group_count_invalid")
+    confirmable = value.get("confirmable")
+    if type(confirmable) is not bool:
+        raise ReviewBeforeGenerationError("review_first_value_confirmable_invalid")
+    if value.get("customer_actions") != (list(CUSTOMER_ACTIONS) if confirmable else []):
         raise ReviewBeforeGenerationError("review_first_value_actions_invalid")
+    if value.get("proposal_attribution") != PROPOSAL_ATTRIBUTION:
+        raise ReviewBeforeGenerationError("review_first_value_attribution_invalid")
+    if not any(
+        item["attribution"] == CONNECTED_ASSISTANT_ATTRIBUTION and _is_consequential(item["value"])
+        for item in groups[1]["items"]
+    ):
+        raise ReviewBeforeGenerationError("review_first_value_implementation_not_substantive")
+    if not any(item["label"] == "Output artifact" for item in groups[2]["items"]):
+        raise ReviewBeforeGenerationError("review_first_value_output_artifact_missing")
+    for key, expected in (
+        ("one_qcoder_operation_before_useful_review", True),
+        ("file_mutation_performed", False),
+        ("execution_permitted", False),
+        ("execution_performed", False),
+        ("protected_service_called", False),
+        ("qcoder_authored_recommendation", False),
+    ):
+        if value.get(key) is not expected:
+            raise ReviewBeforeGenerationError("review_first_value_boundary_invalid")
+    if value.get("retention") != "current_loop_only_process_and_discard":
+        raise ReviewBeforeGenerationError("review_first_value_retention_invalid")
+    if _privacy_error(value):
+        raise ReviewBeforeGenerationError("review_first_value_private_material_rejected")
     return deepcopy(dict(value))
 
 
@@ -655,21 +1054,16 @@ def build_first_value(
     displayed_groups = deepcopy(validated["review_groups"])
     for group in displayed_groups:
         group.pop("group_id", None)
+    displayed_values = [str(item["value"]) for group in displayed_groups for item in group["items"]]
     result = {
-        "recommended_interpretation": validated["recommended_interpretation"],
         "proposal_attribution": PROPOSAL_ATTRIBUTION,
         "initial_decision_groups": displayed_groups,
         "initial_decision_group_count": 3,
         "initial_decision_group_maximum": 3,
-        "material_choices": deepcopy(validated["material_choices"]),
-        "deferred_choices": deepcopy(validated["deferred_choices"]),
-        "limitations_nonclaims": deepcopy(validated["limitations_nonclaims"]),
-        "blocking_clarification": validated["blocking_clarification"],
         "confirmable": confirmable,
         "customer_actions": list(CUSTOMER_ACTIONS) if confirmable else [],
-        "confirmation_state": "awaiting_customer_confirmation" if confirmable else "blocked",
         "one_qcoder_operation_before_useful_review": True,
-        "source_or_qasm_included": False,
+        "source_or_qasm_included": _projection_contains_source_or_qasm(displayed_values),
         "file_mutation_performed": False,
         "execution_permitted": False,
         "execution_performed": False,
@@ -682,12 +1076,7 @@ def build_first_value(
 
 def render_first_value_markdown(value: Mapping[str, Any]) -> str:
     validated = validate_first_value(value)
-    lines = [
-        "# Review before generation",
-        "",
-        _markdown_escape(validated["recommended_interpretation"]),
-        "",
-    ]
+    lines: list[str] = []
     for group in validated["initial_decision_groups"]:
         lines.extend([f"## {group['label']}", ""])
         for item in group["items"]:
@@ -695,31 +1084,9 @@ def render_first_value_markdown(value: Mapping[str, Any]) -> str:
                 f"- **{_markdown_escape(item['label'])}:** {_markdown_escape(item['value'])}"
             )
         lines.append("")
-    if validated["deferred_choices"]:
-        lines.extend(["## Deferred choices", ""])
-        for item in validated["deferred_choices"]:
-            lines.append(
-                f"- **{_markdown_escape(item['label'])}:** "
-                f"{_markdown_escape(item['deferred_value'])}"
-            )
-        lines.append("")
-    lines.extend(["## Limitations and nonclaims", ""])
-    for item in validated["limitations_nonclaims"]:
-        lines.append(f"- {_markdown_escape(item['value'])}")
-    lines.append("")
     if validated["customer_actions"]:
-        lines.extend(["## Actions", ""])
         lines.extend(f"- {action}" for action in validated["customer_actions"])
         lines.append("")
-    elif validated.get("blocking_clarification"):
-        lines.extend(
-            [
-                "## Clarification needed",
-                "",
-                _markdown_escape(validated["blocking_clarification"]),
-                "",
-            ]
-        )
     return "\n".join(lines)
 
 
@@ -738,6 +1105,10 @@ def contract_snapshot() -> dict[str, Any]:
         "customer_actions": list(CUSTOMER_ACTIONS),
         "request_digest_computed_by_qcoder": True,
         "customer_projection_excludes_revision_and_token": True,
+        "customer_projection_group_count": 3,
+        "customer_projection_source_free_revalidated": True,
+        "token_only_action_call_strict": True,
+        "execution_request_bound_to_exact_unquoted_request": True,
         "one_operation_before_useful_review": True,
         "backward_compatible_optional_begin_input": True,
         "protected_service_required": False,
@@ -797,7 +1168,7 @@ def proposal_input_schema() -> dict[str, Any]:
             },
             "customer_constraints": {
                 "type": "array",
-                "minItems": 1,
+                "minItems": 0,
                 "maxItems": 16,
                 "uniqueItems": True,
                 "items": {
@@ -806,7 +1177,8 @@ def proposal_input_schema() -> dict[str, Any]:
                     "description": "Exact nonempty excerpt copied from request_text.",
                 },
                 "description": (
-                    "Only exact excerpts from unchanged request_text; do not paraphrase customer facts."
+                    "Optional exact material excerpts from unchanged request_text; use an empty "
+                    "list instead of manufacturing a customer fact."
                 ),
             },
             "implementation_recommendations": {

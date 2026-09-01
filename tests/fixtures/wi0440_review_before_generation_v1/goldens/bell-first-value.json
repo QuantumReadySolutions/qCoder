@@ -1,32 +1,8 @@
 {
-  "blocking_clarification": null,
   "confirmable": true,
-  "confirmation_state": "awaiting_customer_confirmation",
   "customer_actions": [
     "Use recommended choices",
     "Review or change choices"
-  ],
-  "deferred_choices": [
-    {
-      "attribution": "connected_assistant_recommendation",
-      "deferred_value": "Backend remains deferred until execution is separately requested.",
-      "label": "Deferred choice 1"
-    },
-    {
-      "attribution": "connected_assistant_recommendation",
-      "deferred_value": "Shots remain deferred until execution is separately requested.",
-      "label": "Deferred choice 2"
-    },
-    {
-      "attribution": "connected_assistant_recommendation",
-      "deferred_value": "Seed remains deferred until execution is separately requested.",
-      "label": "Deferred choice 3"
-    },
-    {
-      "attribution": "connected_assistant_recommendation",
-      "deferred_value": "Result handling remains deferred until execution is separately requested.",
-      "label": "Deferred choice 4"
-    }
   ],
   "execution_performed": false,
   "execution_permitted": false,
@@ -43,18 +19,33 @@
         },
         {
           "attribution": "customer_explicit_constraint",
-          "label": "Customer constraint",
+          "label": "Customer constraint 1",
           "value": "Qiskit program"
         },
         {
           "attribution": "customer_explicit_constraint",
-          "label": "Customer constraint",
+          "label": "Customer constraint 2",
           "value": "prepares and measures a Φ+ Bell state"
         },
         {
           "attribution": "customer_explicit_constraint",
-          "label": "Customer constraint",
+          "label": "Customer constraint 3",
           "value": "Before generating the code"
+        },
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Limitation 1",
+          "value": "The example is not presented as proof of entanglement."
+        },
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Limitation 2",
+          "value": "The review does not claim algorithm correctness."
+        },
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Limitation 3",
+          "value": "The review makes no hardware-performance claim."
         }
       ],
       "label": "Goal and scope"
@@ -92,6 +83,21 @@
           "value": "Produce direct readable Python."
         },
         {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Material choice: Framework",
+          "value": "Qiskit"
+        },
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Material choice: Construction",
+          "value": "QuantumCircuit with H on q0 followed by CX from q0 to q1"
+        },
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Material choice: Representation",
+          "value": "Direct readable Python"
+        },
+        {
           "attribution": "qcoder_deterministic_boundary",
           "label": "Dependency version",
           "value": "No dependency version was selected silently."
@@ -114,7 +120,7 @@
         {
           "attribution": "qcoder_deterministic_boundary",
           "label": "Generation authority",
-          "value": "Python source is produced only after the stored displayed review is confirmed."
+          "value": "Python source will be produced after you confirm these choices."
         },
         {
           "attribution": "qcoder_deterministic_boundary",
@@ -124,7 +130,7 @@
         {
           "attribution": "qcoder_deterministic_boundary",
           "label": "Authority separation",
-          "value": "Confirmation of source generation does not authorize execution."
+          "value": "Confirming these choices does not authorize execution."
         },
         {
           "attribution": "qcoder_deterministic_boundary",
@@ -135,47 +141,10 @@
       "label": "Output and authority"
     }
   ],
-  "limitations_nonclaims": [
-    {
-      "attribution": "connected_assistant_recommendation",
-      "value": "The example is not presented as proof of entanglement."
-    },
-    {
-      "attribution": "connected_assistant_recommendation",
-      "value": "The review does not claim algorithm correctness."
-    },
-    {
-      "attribution": "connected_assistant_recommendation",
-      "value": "The review makes no hardware-performance claim."
-    }
-  ],
-  "material_choices": [
-    {
-      "attribution": "connected_assistant_recommendation",
-      "label": "Framework",
-      "recommended_value": "Qiskit"
-    },
-    {
-      "attribution": "connected_assistant_recommendation",
-      "label": "Construction",
-      "recommended_value": "QuantumCircuit with H on q0 followed by CX from q0 to q1"
-    },
-    {
-      "attribution": "connected_assistant_recommendation",
-      "label": "Measurement mapping",
-      "recommended_value": "Measure q0 to c0 and q1 to c1"
-    },
-    {
-      "attribution": "connected_assistant_recommendation",
-      "label": "Representation",
-      "recommended_value": "Direct readable Python"
-    }
-  ],
   "one_qcoder_operation_before_useful_review": true,
   "proposal_attribution": "connected_assistant",
   "protected_service_called": false,
   "qcoder_authored_recommendation": false,
-  "recommended_interpretation": "Create a minimal two-qubit Qiskit program that prepares |Φ+> = (|00> + |11>)/sqrt(2), measures both qubits in the computational basis, and produces readable Python only after the customer confirms the plan.",
   "retention": "current_loop_only_process_and_discard",
   "source_or_qasm_included": false
 }

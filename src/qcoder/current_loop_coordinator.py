@@ -2736,10 +2736,15 @@ class CurrentLoopCoordinator:
 
         started = self.clock()
         if review_action is not None:
+            if (
+                exact_request is not None
+                or connected_assistant_proposal is not None
+                or selected_artifact_identities
+                or intended_artifact_targets is not None
+            ):
+                raise ReviewBeforeGenerationError("review_action_extra_arguments_prohibited")
             if review_action not in {"Use recommended choices", "Review or change choices"}:
                 raise ReviewBeforeGenerationError("review_customer_action_invalid")
-            if connected_assistant_proposal is not None:
-                raise ReviewBeforeGenerationError("review_confirmation_proposal_replay_prohibited")
             if not isinstance(prior_result_token, str) or not prior_result_token:
                 raise ReviewBeforeGenerationError("review_prior_result_token_required")
             try:
