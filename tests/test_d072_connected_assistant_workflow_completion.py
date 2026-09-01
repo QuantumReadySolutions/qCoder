@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import ClassVar, Self
 
 from qcoder.algorithm_blueprint import with_artifact_digest
 from qcoder.algorithm_intent_recovery import build_atomic_clarification_continuation
@@ -36,12 +37,12 @@ def _result(*, tool_name: str, context_status: str, **extra: object) -> dict[str
 
 class _Response:
     status = 200
-    headers: dict[str, str] = {}
+    headers: ClassVar[dict[str, str]] = {}
 
     def __init__(self, payload: dict[str, object]) -> None:
         self.payload = payload
 
-    def __enter__(self) -> _Response:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_args: object) -> None:
@@ -412,7 +413,7 @@ def test_distributed_binding_and_tool_descriptions_expose_shared_d072_semantics(
     workflow = descriptor["named_workflow_completion"]
     descriptions = {item["name"]: item["description"] for item in tool_descriptors()}
 
-    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v48"
+    assert descriptor["contract_id"] == "qcoder.connected_assistant.client_binding.v59"
     assert len(EXPECTED_TOOLS) == 12
     assert workflow["preparatory_success_is_completion"] is False
     assert workflow["automatic_continuation_scope"] == "already_selected_named_workflow_only"

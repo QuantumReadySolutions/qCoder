@@ -100,7 +100,7 @@ No export is transmitted automatically.
 
 ## Local qCoder Help
 
-- Installed qCoder version: `0.6.0a24.post0.dev2+openqasm3.local.evidence.v1`
+- Installed qCoder version: `0.6.0a24.post0.dev9+semantic.only.first.value.v1`
 - Mode: local OSS; no qCoder account, qCoder token, Explorer service, or MCP is required.
 - This evidence review does not establish qualification for an IDE or assistant client.
 

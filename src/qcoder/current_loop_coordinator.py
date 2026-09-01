@@ -7,16 +7,17 @@ human checkpoints. It never reconstructs required state from conversation.
 
 from __future__ import annotations
 
-from copy import deepcopy
-from hashlib import sha256
 import json
 import os
-from pathlib import Path
 import secrets
 import sys
 import tempfile
 import time
-from typing import Any, Callable, Mapping, Protocol, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from copy import deepcopy
+from hashlib import sha256
+from pathlib import Path
+from typing import Any, Protocol
 
 from qcoder.algorithm_blueprint import (
     artifact_digest_matches,
@@ -24,7 +25,13 @@ from qcoder.algorithm_blueprint import (
     with_artifact_digest,
 )
 from qcoder.algorithm_blueprint_first_value import build_first_value_dialogue
+from qcoder.blueprint_decisions import (
+    catalog_entries,
+    consistency_digest,
+    unpack_decision_record_set,
+)
 from qcoder.context_loop import (
+    CONTEXT_LOOP_GATE,
     CURRENT_BUILD_EVIDENCE_PARENT_ORDER,
     build_circuit_manifestation,
     build_decision_evidence_lineage,
@@ -32,11 +39,6 @@ from qcoder.context_loop import (
     build_result_manifestation,
     build_stage_availability,
     share_safe_request_baseline,
-)
-from qcoder.blueprint_decisions import (
-    catalog_entries,
-    consistency_digest,
-    unpack_decision_record_set,
 )
 from qcoder.current_loop import (
     AUTHORIZED_ARTIFACT_ROLES,
@@ -55,8 +57,8 @@ from qcoder.current_loop import (
     migrate_current_loop_state,
     propose_selected_artifact_authorization,
     purge_completed_loop_local_evidence,
-    read_run_summary,
     read_run_summaries,
+    read_run_summary,
     save_exact_canonical_artifact,
     save_run_summary,
     select_current_loop_generation_posture,
@@ -78,11 +80,29 @@ from qcoder.current_loop_adaptive_intent import (
     initialize_fields_file,
     invalidate_fields_file,
 )
+from qcoder.current_loop_artifact_targets import (
+    ArtifactTargetError,
+    normalize_intended_artifact_targets,
+)
+from qcoder.current_loop_bootstrap import (
+    BOOTSTRAP_INVOCATION_SCHEMA_ID,
+    INVOCATION_LIFECYCLE_SCHEMA_ID,
+    PRE_RESULT_ENTRY_INVENTORY_SCHEMA_ID,
+)
+from qcoder.current_loop_bounded_control import (
+    BOUNDED_CONTROL_INPUT_SCHEMA_ID,
+    bounded_control_contract_snapshot,
+    bounded_control_contracts,
+    dynamic_argument_contracts,
+)
+from qcoder.current_loop_bounded_control import (
+    contract_for_operation as bounded_contract_for_operation,
+)
 from qcoder.current_loop_checkpoint_input import (
     CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_ID,
-    CHECKPOINT_INPUT_SEMANTIC_SCHEMA_ID,
     CHECKPOINT_INPUT_SCHEMA_ID,
     CHECKPOINT_INPUT_SCHEMA_VERSION,
+    CHECKPOINT_INPUT_SEMANTIC_SCHEMA_ID,
     DECISION_AUTHORITY_PROVENANCE,
     POSTURE_AUTHORITY_PROVENANCE,
     CheckpointInputStructuralError,
@@ -93,44 +113,6 @@ from qcoder.current_loop_checkpoint_input import (
     checkpoint_input_values,
     normalize_checkpoint_input,
 )
-from qcoder.current_loop_invocation import (
-    HOSTED_CAPABLE,
-    INVOCATION_CONTRACT_SCHEMA_ID,
-    LOCAL_ONLY,
-    build_operation_invocation,
-    invocation_contract_snapshot,
-    operation_for_subcommand,
-    operation_transport_inventory,
-)
-from qcoder.current_loop_request_semantics import (
-    ceiling_allows,
-    classify_current_request,
-    migrate_request_semantics,
-    semantics_contract_snapshot,
-    validate_request_semantics,
-)
-from qcoder.current_loop_result_controls import (
-    ResultControlError,
-    evaluate_selected_result_controls,
-)
-from qcoder.current_loop_artifact_targets import normalize_intended_artifact_targets
-from qcoder.current_step_contract import (
-    CURRENT_STEP_CONTRACT_SCHEMA_ID,
-    CURRENT_STEP_CONTRACT_SCHEMA_VERSION,
-    derive_current_step_contract,
-    quiet_customer_visibility_projection,
-)
-from qcoder.current_loop_pending_completion import (
-    PendingCompletionError,
-    build_pending_completion_checkpoint,
-    completed_checkpoint,
-    validate_pending_completion_checkpoint,
-)
-from qcoder.current_loop_bootstrap import (
-    BOOTSTRAP_INVOCATION_SCHEMA_ID,
-    INVOCATION_LIFECYCLE_SCHEMA_ID,
-    PRE_RESULT_ENTRY_INVENTORY_SCHEMA_ID,
-)
 from qcoder.current_loop_contract import (
     ADJUSTMENT_DIMENSIONS,
     ADJUSTMENT_VALUES_BY_DIMENSION,
@@ -140,11 +122,19 @@ from qcoder.current_loop_contract import (
     CurrentLoopContractError,
     confirm_broadening,
     contract_snapshot,
-    exclude_evidence as contract_exclude_evidence,
-    permits as contract_permits,
-    record_deletion as contract_record_deletion,
-    restore_evidence as contract_restore_evidence,
     validate_contract,
+)
+from qcoder.current_loop_contract import (
+    exclude_evidence as contract_exclude_evidence,
+)
+from qcoder.current_loop_contract import (
+    permits as contract_permits,
+)
+from qcoder.current_loop_contract import (
+    record_deletion as contract_record_deletion,
+)
+from qcoder.current_loop_contract import (
+    restore_evidence as contract_restore_evidence,
 )
 from qcoder.current_loop_contract_management import (
     CONTRACT_CHANGE_SET_SCHEMA_ID,
@@ -163,12 +153,11 @@ from qcoder.current_loop_contract_management import (
     reset_customer_contract_document,
     review_customer_contract_document,
 )
-from qcoder.current_loop_bounded_control import (
-    BOUNDED_CONTROL_INPUT_SCHEMA_ID,
-    bounded_control_contract_snapshot,
-    bounded_control_contracts,
-    contract_for_operation as bounded_contract_for_operation,
-    dynamic_argument_contracts,
+from qcoder.current_loop_derivation import (
+    derivation_contract_snapshot,
+    derive_pending_snapshot,
+    promote_derivation_snapshot,
+    read_manifestation_revision,
 )
 from qcoder.current_loop_event_receipts import (
     EventReceiptError,
@@ -180,39 +169,6 @@ from qcoder.current_loop_event_receipts import (
     validate_operation_receipt,
     validate_operation_receipt_lifecycle,
 )
-from qcoder.current_loop_registration import (
-    commit_registration_transaction,
-    prepare_registration_transaction,
-    registration_continuation_binding,
-    registration_contract_snapshot,
-)
-from qcoder.current_loop_derivation import (
-    derive_pending_snapshot,
-    derivation_contract_snapshot,
-    promote_derivation_snapshot,
-    read_manifestation_revision,
-)
-from qcoder.current_loop_freshness import (
-    freshness_contract_snapshot,
-    run_summary_status,
-    snapshot_status,
-)
-from qcoder.current_loop_result_envelope import (
-    BOUNDED_CONTROL_REFERENCE_SCHEMA_ID,
-    CUSTOMER_ENVELOPE_SCHEMA_ID,
-    TIERED_RESULT_ENVELOPE_SCHEMA_ID,
-    bounded_control_envelope,
-    control_policy_matrix,
-    controls_required_inline,
-    customer_envelope,
-    performance_diagnostics,
-)
-from qcoder.current_loop_retention import retention_contract_snapshot
-from qcoder.current_loop_recovery import (
-    recovery_contract_snapshot,
-    resolve_live_recovery_policy,
-)
-from qcoder.current_loop_vocabulary import vocabulary_snapshot
 from qcoder.current_loop_evidence_processing import (
     ARTIFACT_FORMAT_CONTRACT_SCHEMA_ID,
     FAILURE_PROVENANCE_SCHEMA_ID,
@@ -230,23 +186,19 @@ from qcoder.current_loop_evidence_processing import (
     recovery_fingerprint,
     registration_format_outcome,
 )
-from qcoder.current_loop_run_summary import (
-    EVIDENCE_VIEW_IDS,
-    RunSummaryError,
-    build_evidence_view,
-    build_run_summary,
-    evidence_view_contract_snapshot,
-    run_summary_contract_snapshot,
-    share_safe_run_summary_projection,
+from qcoder.current_loop_freshness import (
+    freshness_contract_snapshot,
+    run_summary_status,
+    snapshot_status,
 )
-from qcoder.current_loop_quiet_workflow import (
-    HELP_TOPICS,
-    assistant_context_update,
-    completion_receipt,
-    customer_interaction,
-    help_response,
-    intent_receipt,
-    quiet_workflow_contract_snapshot,
+from qcoder.current_loop_invocation import (
+    HOSTED_CAPABLE,
+    INVOCATION_CONTRACT_SCHEMA_ID,
+    LOCAL_ONLY,
+    build_operation_invocation,
+    invocation_contract_snapshot,
+    operation_for_subcommand,
+    operation_transport_inventory,
 )
 from qcoder.current_loop_iteration import (
     ITERATION_AUTHORITY_RECEIPT_SCHEMA_ID,
@@ -257,7 +209,88 @@ from qcoder.current_loop_iteration import (
     parent_digest_failure_provenance_valid,
     parent_error_taxonomy_snapshot,
 )
-from qcoder.context_loop import CONTEXT_LOOP_GATE
+from qcoder.current_loop_pending_completion import (
+    PendingCompletionError,
+    build_pending_completion_checkpoint,
+    completed_checkpoint,
+    validate_pending_completion_checkpoint,
+)
+from qcoder.current_loop_quiet_workflow import (
+    HELP_TOPICS,
+    assistant_context_update,
+    completion_receipt,
+    customer_interaction,
+    help_response,
+    intent_receipt,
+    quiet_workflow_contract_snapshot,
+)
+from qcoder.current_loop_recovery import (
+    recovery_contract_snapshot,
+    resolve_live_recovery_policy,
+)
+from qcoder.current_loop_registration import (
+    commit_registration_transaction,
+    prepare_registration_transaction,
+    registration_continuation_binding,
+    registration_contract_snapshot,
+)
+from qcoder.current_loop_request_semantics import (
+    ceiling_allows,
+    classify_current_request,
+    confirmed_review_generation_semantics,
+    migrate_request_semantics,
+    semantics_contract_snapshot,
+    validate_request_semantics,
+)
+from qcoder.current_loop_result_controls import (
+    ResultControlError,
+    evaluate_selected_result_controls,
+)
+from qcoder.current_loop_result_envelope import (
+    BOUNDED_CONTROL_REFERENCE_SCHEMA_ID,
+    CUSTOMER_ENVELOPE_SCHEMA_ID,
+    TIERED_RESULT_ENVELOPE_SCHEMA_ID,
+    bounded_control_envelope,
+    control_policy_matrix,
+    controls_required_inline,
+    customer_envelope,
+    performance_diagnostics,
+)
+from qcoder.current_loop_retention import retention_contract_snapshot
+from qcoder.current_loop_run_summary import (
+    EVIDENCE_VIEW_IDS,
+    RunSummaryError,
+    build_evidence_view,
+    build_run_summary,
+    evidence_view_contract_snapshot,
+    run_summary_contract_snapshot,
+    share_safe_run_summary_projection,
+)
+from qcoder.current_loop_vocabulary import vocabulary_snapshot
+from qcoder.current_step_contract import (
+    CURRENT_STEP_CONTRACT_SCHEMA_ID,
+    CURRENT_STEP_CONTRACT_SCHEMA_VERSION,
+    derive_current_step_contract,
+    quiet_customer_visibility_projection,
+)
+from qcoder.review_before_generation import (
+    TRANSACTION_SCHEMA_ID as REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
+)
+from qcoder.review_before_generation import (
+    ReviewBeforeGenerationError,
+    build_review_before_generation_semantics,
+    canonical_first_value_delivery,
+    review_revision,
+    review_revision_from_validated,
+    validate_canonical_first_value_delivery,
+    validate_review_content,
+)
+from qcoder.review_before_generation import (
+    build_first_value as build_review_before_generation_first_value,
+)
+from qcoder.review_before_generation import (
+    displayed_source_target as projected_review_source_target,
+)
 
 COORDINATOR_RESULT_SCHEMA_ID = "qcoder.current_loop.coordinator_result.v21"
 COORDINATOR_RESULT_SCHEMA_VERSION = 21
@@ -312,8 +345,7 @@ def result_semantic_classification(
     if normalized and (
         "schema" in normalized
         or "json" in normalized
-        or normalized.startswith("adaptive_intent_")
-        or normalized.startswith("checkpoint_input_")
+        or normalized.startswith(("adaptive_intent_", "checkpoint_input_"))
     ):
         return "schema_failure"
     if normalized and (
@@ -615,8 +647,10 @@ EXPLORATORY_FIXED_PROHIBITIONS = (
 _RECOVERY_PRESENTATION = {
     "circuit_format_unsupported": (
         "The exact circuit artifact is not a locally supported structural-analysis format.",
-        "Continue with the available evidence, provide an exact OpenQASM 2 artifact under "
-        "separate IDE authority, skip this artifact derivation, or stop the loop.",
+        (
+            "Continue with the available evidence, provide an exact OpenQASM 2 artifact under "
+            "separate IDE authority, skip this artifact derivation, or stop the loop."
+        ),
         True,
         False,
         True,
@@ -624,8 +658,10 @@ _RECOVERY_PRESENTATION = {
     ),
     "artifact_format_unsupported": (
         "The exact artifact format is outside this role's automatic processing contract.",
-        "Use the advertised exact-artifact fallback, provide a supported artifact, skip "
-        "this derivation, or stop the loop.",
+        (
+            "Use the advertised exact-artifact fallback, provide a supported artifact, skip "
+            "this derivation, or stop the loop."
+        ),
         True,
         False,
         True,
@@ -649,8 +685,10 @@ _RECOVERY_PRESENTATION = {
     ),
     "unknown_local_internal": (
         "A bounded local qCoder operation failed without a safely publishable detail.",
-        "Keep prior evidence intact, refresh the result, then choose an advertised bounded "
-        "alternative or stop the loop.",
+        (
+            "Keep prior evidence intact, refresh the result, then choose an advertised bounded "
+            "alternative or stop the loop."
+        ),
         True,
         False,
         True,
@@ -658,8 +696,10 @@ _RECOVERY_PRESENTATION = {
     ),
     "activation_capture_required": (
         "No reviewed exact Request Baseline capture exists in this workspace.",
-        "Stage the complete customer message through activate without approval, review the "
-        "returned exact capture, then approve it.",
+        (
+            "Stage the complete customer message through activate without approval, review the "
+            "returned exact capture, then approve it."
+        ),
         True,
         False,
         True,
@@ -707,8 +747,10 @@ _RECOVERY_PRESENTATION = {
     ),
     "current_loop_contract_policy_prohibited": (
         "The effective Current Loop Contract does not permit this participation step.",
-        "Keep the existing evidence and authority intact. Skip this step, or ask qCoder "
-        "for a bounded contract change; any broadening still requires separate approval.",
+        (
+            "Keep the existing evidence and authority intact. Skip this step, or ask qCoder "
+            "for a bounded contract change; any broadening still requires separate approval."
+        ),
         True,
         True,
         True,
@@ -804,8 +846,10 @@ _RECOVERY_PRESENTATION = {
     ),
     "operation_receipt_missing": (
         "The exact qCoder operation receipt is not available for this registration.",
-        "Keep the literal output paths unchanged and obtain a fresh bounded IDE event receipt, "
-        "or use the existing exact-artifact selection fallback.",
+        (
+            "Keep the literal output paths unchanged and obtain a fresh bounded IDE event receipt, "
+            "or use the existing exact-artifact selection fallback."
+        ),
         True,
         True,
         True,
@@ -813,16 +857,20 @@ _RECOVERY_PRESENTATION = {
     ),
     "operation_receipt_stale": (
         "The operation receipt is stale for the current local state revision.",
-        "Use qCoder's bounded successor receipt and exact prebound retry; no artifact-review "
-        "fallback is required while the original IDE authority remains trustworthy.",
+        (
+            "Use qCoder's bounded successor receipt and exact prebound retry; no artifact-review "
+            "fallback is required while the original IDE authority remains trustworthy."
+        ),
         True,
         False,
         True,
         False,
     ),
     "causal_continuation_blocked": (
-        "The one bounded continuation attempt was stopped because the authorized action no "
-        "longer matched current authoritative state.",
+        (
+            "The one bounded continuation attempt was stopped because the authorized action no "
+            "longer matched current authoritative state."
+        ),
         "Review the material change before requesting any new action-specific authority.",
         False,
         True,
@@ -831,8 +879,10 @@ _RECOVERY_PRESENTATION = {
     ),
     "qcoder_local_state_artifact_prohibited": (
         "qCoder local state cannot be selected as a review artifact.",
-        "Use only an exact non-qCoder path retained from an authorized IDE operation "
-        "or explicitly selected by the user. Do not inspect qCoder local state.",
+        (
+            "Use only an exact non-qCoder path retained from an authorized IDE operation "
+            "or explicitly selected by the user. Do not inspect qCoder local state."
+        ),
         True,
         False,
         True,
@@ -840,8 +890,10 @@ _RECOVERY_PRESENTATION = {
     ),
     "artifact_candidate_discovery_expression_invalid": (
         "A discovery expression cannot be registered as an exact review artifact.",
-        "Use the exact file path returned by an authorized IDE operation or explicitly "
-        "selected by the user. Do not glob, list, find, or search for candidates.",
+        (
+            "Use the exact file path returned by an authorized IDE operation or explicitly "
+            "selected by the user. Do not glob, list, find, or search for candidates."
+        ),
         True,
         False,
         True,
@@ -849,8 +901,10 @@ _RECOVERY_PRESENTATION = {
     ),
     "artifact_candidate_file_required": (
         "The exact registered artifact must exist and be a regular file.",
-        "Use the exact file path returned by the authorized IDE operation or explicit "
-        "user selection. Do not search for a replacement.",
+        (
+            "Use the exact file path returned by the authorized IDE operation or explicit "
+            "user selection. Do not search for a replacement."
+        ),
         True,
         False,
         True,
@@ -858,8 +912,10 @@ _RECOVERY_PRESENTATION = {
     ),
     "artifact_candidate_provenance_conflict": (
         "The same exact artifact path was supplied with conflicting provenance.",
-        "Correct the provenance from the known IDE operation or explicit user selection; "
-        "do not guess or rediscover the path.",
+        (
+            "Correct the provenance from the known IDE operation or explicit user selection; "
+            "do not guess or rediscover the path."
+        ),
         True,
         False,
         True,
@@ -1358,7 +1414,7 @@ class ContextBridgeTransport:
         self.base_url = base_url
         self.token_file = token_file
         self.credential_profile = (
-            str(getattr(token_file, "profile_id"))
+            str(token_file.profile_id)
             if isinstance(getattr(token_file, "profile_id", None), str)
             else None
         )
@@ -2534,7 +2590,7 @@ class CurrentLoopCoordinator:
             ""
             if local_only_surface
             else (
-                str(getattr(transport, "base_url"))
+                str(transport.base_url)
                 if transport is not None and hasattr(transport, "base_url")
                 else hosted_base_url
             )
@@ -2713,6 +2769,528 @@ class CurrentLoopCoordinator:
             proposal=proposal,
             confirmation=confirmation,
         )
+
+    def review_before_generation_transaction(
+        self,
+        *,
+        exact_request: str | None = None,
+        review_content: Mapping[str, Any] | None = None,
+        selected_artifact_identities: Sequence[str] = (),
+        intended_artifact_targets: Mapping[str, Mapping[str, Any]] | None = None,
+        review_action: str | None = None,
+        prior_result_token: str | None = None,
+    ) -> dict[str, Any]:
+        """Project or confirm one assistant-authored review in the current loop."""
+
+        started = self.clock()
+        if review_action is not None:
+            if (
+                exact_request is not None
+                or review_content is not None
+                or selected_artifact_identities
+                or intended_artifact_targets is not None
+            ):
+                raise ReviewBeforeGenerationError("review_action_extra_arguments_prohibited")
+            if review_action not in {"Use recommended choices", "Review or change choices"}:
+                raise ReviewBeforeGenerationError("review_customer_action_invalid")
+            if not isinstance(prior_result_token, str) or not prior_result_token:
+                raise ReviewBeforeGenerationError("review_prior_result_token_required")
+            try:
+                state = self.store.read()
+            except CurrentLoopError as exc:
+                raise ReviewBeforeGenerationError("review_confirmation_unshown_revision") from exc
+            coordinator = self._coordinator_state(state)
+            existing = coordinator.get("review_before_generation")
+            if not isinstance(existing, Mapping):
+                raise ReviewBeforeGenerationError("review_confirmation_unshown_revision")
+            if prior_result_token != existing.get("prior_result_token"):
+                raise ReviewBeforeGenerationError("review_confirmation_stale_token")
+            if isinstance(exact_request, str) and (
+                sha256(exact_request.encode("utf-8")).hexdigest()
+                != existing.get("exact_request_utf8_sha256")
+            ):
+                raise ReviewBeforeGenerationError("review_transaction_request_changed")
+            current_revision = str(existing.get("review_revision") or "")
+            stored_delivery = existing.get("review_content", {}).get("source_delivery")
+            if not isinstance(stored_delivery, Mapping):
+                raise ReviewBeforeGenerationError("review_confirmation_target_binding_invalid")
+            if existing.get("intended_artifact_targets") not in ({}, None):
+                raise ReviewBeforeGenerationError("review_confirmation_hidden_target_invalid")
+            stored_source_target = stored_delivery.get("target")
+            if stored_source_target is not None and not isinstance(stored_source_target, str):
+                raise ReviewBeforeGenerationError("review_confirmation_target_binding_invalid")
+            if (
+                projected_review_source_target(existing.get("first_value", {}))
+                != stored_source_target
+            ):
+                raise ReviewBeforeGenerationError(
+                    "review_confirmation_target_display_binding_invalid"
+                )
+            if existing.get("displayed_source_target") != stored_source_target:
+                raise ReviewBeforeGenerationError(
+                    "review_confirmation_target_display_binding_invalid"
+                )
+            expected_revision = review_revision_from_validated(
+                str(existing.get("exact_request") or ""),
+                existing.get("review_content", {}),
+                selected_artifact_identity_sha256=existing.get(
+                    "selected_artifact_identity_sha256", ()
+                ),
+                displayed_source_target=stored_source_target,
+            )
+            if expected_revision != current_revision:
+                raise ReviewBeforeGenerationError(
+                    "review_confirmation_target_revision_binding_invalid"
+                )
+            validate_canonical_first_value_delivery(
+                existing.get("canonical_delivery", {}),
+                review_revision_value=current_revision,
+            )
+            if review_action == "Review or change choices":
+                delivery_choices = [
+                    {
+                        "label": "Source delivery",
+                        "current_value": (
+                            "Inline after confirmation."
+                            if stored_delivery.get("mode") == "inline"
+                            else "Workspace file after confirmation."
+                        ),
+                    }
+                ]
+                if stored_source_target is not None:
+                    delivery_choices.append(
+                        {
+                            "label": "Proposed source target",
+                            "current_value": stored_source_target,
+                        }
+                    )
+                return {
+                    "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
+                    "schema_version": 3,
+                    "ok": True,
+                    "operation": "begin_current_loop",
+                    "category": "review_material_choices_ready",
+                    "state_revision": state["state_revision"],
+                    "loop_ref": state["loop_ref"],
+                    "state_mutated": False,
+                    "material_choices": delivery_choices
+                    + [
+                        {
+                            "label": item["label"],
+                            "current_value": item["value"],
+                        }
+                        for item in existing["review_content"]["recommendations"]
+                    ],
+                    "prior_result_token": prior_result_token,
+                    "internal_identifiers_exposed": False,
+                    "source_or_qasm_created": False,
+                    "file_mutation_performed": False,
+                    "execution_performed": False,
+                    "protected_service_called": False,
+                    "elapsed_seconds": round(self.clock() - started, 6),
+                }
+            if existing.get("first_value", {}).get("confirmable") is not True:
+                raise ReviewBeforeGenerationError("review_non_substantive_revision_not_confirmable")
+            if existing.get("confirmation_state") == "confirmed":
+                result = {
+                    "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
+                    "schema_version": 3,
+                    "ok": True,
+                    "operation": "begin_current_loop",
+                    "category": "review_confirmation_duplicate",
+                    "state_revision": state["state_revision"],
+                    "loop_ref": state["loop_ref"],
+                    "state_mutated": False,
+                    "prior_result_token": prior_result_token,
+                    "duplicate_confirmation_idempotent": True,
+                    "generation_ready_context": deepcopy(existing["generation_ready_context"]),
+                    "generation_authority": "source_generation_authorized_for_confirmed_plan",
+                    "execution_authority": existing["execution_authority"],
+                    "source_or_qasm_created": False,
+                    "file_mutation_performed": False,
+                    "execution_performed": False,
+                    "protected_service_called": False,
+                    "elapsed_seconds": round(self.clock() - started, 6),
+                }
+                if coordinator.get("current_step_status") == "awaiting_external_client_action":
+                    result["current_step_contract"] = derive_current_step_contract(state)
+                return result
+
+            stored_request = str(existing["exact_request"])
+            generation_semantics = confirmed_review_generation_semantics(stored_request)
+            inline = stored_delivery.get("mode") == "inline"
+            confirmed_targets: dict[str, dict[str, Any]] = {}
+            exact_target: Mapping[str, Any] | None = None
+            if not inline:
+                if not isinstance(stored_source_target, str):
+                    raise ReviewBeforeGenerationError("review_confirmation_target_binding_invalid")
+                try:
+                    confirmed_targets = normalize_intended_artifact_targets(
+                        {"source": stored_source_target},
+                        workspace_root=self.workspace_root,
+                        required_roles=("source",),
+                    )
+                except ArtifactTargetError as exc:
+                    raise ReviewBeforeGenerationError(
+                        "review_confirmed_source_target_invalid"
+                    ) from exc
+                exact_target = confirmed_targets["source"]
+            generation_ready_context = {
+                "schema_id": "qcoder.current_loop.confirmed_plan_generation_ready.v1",
+                "schema_version": 1,
+                "category": (
+                    "confirmed_plan_generation_ready_inline_source"
+                    if inline
+                    else "confirmed_plan_generation_ready_exact_workspace_source"
+                ),
+                "selected_review_action": "Use recommended choices",
+                "plan_generation_ready": True,
+                "connected_assistant_source_generation_authorized": True,
+                "source_delivery": "inline_next_response" if inline else "exact_workspace_target",
+                "exact_workspace_target": (
+                    None if inline else exact_target.get("workspace_relative_path")
+                ),
+                "qcoder_emits_source": False,
+                "qcoder_writes_file": False,
+                "qasm_authorized": False,
+                "execution_authorized": False,
+                "additional_customer_confirmation_required": False,
+                "backend_shots_seed_and_result_handling": "remain_deferred",
+                "next_permitted_client_native_step": (
+                    "produce_inline_source" if inline else "write_exact_workspace_source"
+                ),
+            }
+            updated = deepcopy(dict(existing))
+            updated.update(
+                {
+                    "confirmation_state": "confirmed",
+                    "confirmed_revision": current_revision,
+                    "generation_authority": "source_generation_authorized_for_confirmed_plan",
+                    "generation_ready_context": deepcopy(generation_ready_context),
+                }
+            )
+            coordinator.update(
+                {
+                    "phase": "generation_ready",
+                    "state_status": "ready",
+                    "checkpoint_kind": "none",
+                    "customer_summary": (
+                        "The selected plan is ready for source generation; "
+                        "execution remains unauthorized."
+                    ),
+                    "current_request_semantics": generation_semantics,
+                    "current_step_substage": "source",
+                    "current_step_status": "action_ready",
+                    "intended_artifact_targets": deepcopy(confirmed_targets),
+                    "review_before_generation": updated,
+                }
+            )
+            self._replace_coordinator(coordinator)
+            confirmed_state = self.store.read()
+            current_step_contract = None
+            if not inline:
+                confirmed_state = self._install_bounded_action_expectation()
+                current_step_contract = derive_current_step_contract(confirmed_state)
+            result = {
+                "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
+                "schema_version": 3,
+                "ok": True,
+                "operation": "begin_current_loop",
+                "category": "review_confirmation_generation_ready",
+                "state_revision": confirmed_state["state_revision"],
+                "loop_ref": confirmed_state["loop_ref"],
+                "state_mutated": True,
+                "prior_result_token": prior_result_token,
+                "generation_ready_context": generation_ready_context,
+                "generation_authority": "source_generation_authorized_for_confirmed_plan",
+                "execution_authority": existing["execution_authority"],
+                "source_or_qasm_created": False,
+                "file_mutation_performed": False,
+                "execution_performed": False,
+                "protected_service_called": False,
+                "elapsed_seconds": round(self.clock() - started, 6),
+            }
+            if current_step_contract is not None:
+                result["current_step_contract"] = current_step_contract
+            return result
+
+        if not isinstance(exact_request, str) or not exact_request:
+            raise ReviewBeforeGenerationError("review_exact_request_invalid")
+        if review_content is None:
+            raise ReviewBeforeGenerationError("review_content_required")
+        normalized_content = validate_review_content(
+            exact_request,
+            review_content,
+            selected_artifact_identities=selected_artifact_identities,
+        )
+        displayed_target = normalized_content["source_delivery"]["target"]
+        if normalized_content["transaction_kind"] == "review_before_source_modification" and (
+            normalized_content["source_delivery"]["mode"] != "workspace_file"
+            or displayed_target not in set(selected_artifact_identities)
+        ):
+            return {
+                "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
+                "schema_version": 3,
+                "ok": True,
+                "operation": "begin_current_loop",
+                "category": "review_before_generation_terminal_blocker",
+                "terminal_for_turn": True,
+                "terminal_customer_text": "Which exact selected source should the proposed changes apply to?",
+                "state_mutated": False,
+                "source_or_qasm_created": False,
+                "file_mutation_performed": False,
+                "execution_performed": False,
+                "protected_service_called": False,
+                "elapsed_seconds": round(self.clock() - started, 6),
+            }
+        blocker = normalized_content.get("blocking_clarification")
+        if isinstance(blocker, str):
+            return {
+                "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
+                "schema_version": 3,
+                "ok": True,
+                "operation": "begin_current_loop",
+                "category": "review_before_generation_terminal_blocker",
+                "terminal_for_turn": True,
+                "terminal_customer_text": blocker,
+                "state_mutated": False,
+                "source_or_qasm_created": False,
+                "file_mutation_performed": False,
+                "execution_performed": False,
+                "protected_service_called": False,
+                "elapsed_seconds": round(self.clock() - started, 6),
+            }
+        first_value = build_review_before_generation_first_value(
+            exact_request,
+            review_content,
+            selected_artifact_identities=selected_artifact_identities,
+        )
+        semantics = build_review_before_generation_semantics(
+            exact_request,
+            review_content,
+            selected_artifact_identities=selected_artifact_identities,
+        )
+        proposed_revision = review_revision(
+            exact_request,
+            review_content,
+            selected_artifact_identities=selected_artifact_identities,
+        )
+        canonical_delivery = canonical_first_value_delivery(
+            first_value, review_revision_value=proposed_revision
+        )
+
+        try:
+            state = self.store.read()
+        except CurrentLoopError as exc:
+            if exc.category != "current_loop_not_active":
+                raise
+            if prior_result_token is not None:
+                raise ReviewBeforeGenerationError("review_confirmation_unshown_revision") from exc
+            baseline = build_request_baseline(
+                original_request=exact_request,
+                assistant_interpretation={
+                    "review_content_attribution": "connected_assistant",
+                    "semantic_axes": deepcopy(normalized_content["semantic_axes"]),
+                    "review_content_digest": sha256(
+                        canonical_bytes(normalized_content)
+                    ).hexdigest(),
+                },
+            )
+            activated = activate_current_loop(
+                workspace_root=self.workspace_root,
+                generation_posture="blueprint_guided",
+                explicit_authority=True,
+                external_state_path=(
+                    self.state_path
+                    if self.state_path
+                    != self.workspace_root / ".qcoder" / "current-loop" / "state.json"
+                    else None
+                ),
+                request_baseline_digest=sha256(exact_request.encode("utf-8")).hexdigest(),
+                activation_capture_provenance="exact_current_customer_message",
+            )
+            self._save_artifact("request_baseline", baseline, "request-baseline.json")
+            coordinator = self._initial_coordinator_state(
+                phase="intent_review",
+                state_status="checkpoint_required",
+                checkpoint_kind="intent_review",
+                summary="Review the proposed interpretation and material implementation choices.",
+            )
+            coordinator["activation"] = {
+                "explicit": True,
+                "capture_mode": "exact_current_customer_message",
+                "original_request_preserved": True,
+                "generation_posture_explicit": False,
+                "generation_governance": "assistant_proposal_held_for_customer_confirmation",
+            }
+            coordinator["request_baseline_reference"] = _artifact_reference(baseline)
+            coordinator["assist_ready"] = True
+            coordinator["effective_generation_posture"] = "blueprint_guided"
+            coordinator["bootstrap_count"] = 1
+            coordinator["request_baseline_count"] = 1
+            coordinator["review_before_generation"] = {
+                "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
+                "schema_version": 3,
+                "exact_request": exact_request,
+                "exact_request_utf8_sha256": sha256(exact_request.encode("utf-8")).hexdigest(),
+                "review_content": deepcopy(normalized_content),
+                "first_value": deepcopy(first_value),
+                "review_revision": proposed_revision,
+                "canonical_delivery": deepcopy(canonical_delivery),
+                "projection_digest": canonical_delivery["projection_digest"],
+                "confirmation_state": "awaiting_exact_review_confirmation",
+                "confirmed_revision": None,
+                "selected_artifact_identity_sha256": list(
+                    semantics["selected_artifact_identity_sha256"]
+                ),
+                "generation_authority": "held_for_exact_review_confirmation",
+                "execution_authority": normalized_content["semantic_axes"]["execution_authority"],
+                "source_or_qasm_created": False,
+                "file_mutation_performed": False,
+                "execution_performed": False,
+                "protected_service_called": False,
+                "retention": "current_loop_only_process_and_discard",
+                "intended_artifact_targets": {},
+                "displayed_source_target": displayed_target,
+            }
+            token = (
+                "review-result-"
+                + sha256(
+                    canonical_bytes(
+                        {
+                            "loop_ref": activated["state"]["loop_ref"],
+                            "workspace_identity_sha256": sha256(
+                                str(self.workspace_root).encode("utf-8")
+                            ).hexdigest(),
+                            "review_revision": proposed_revision,
+                            "exact_request_utf8_sha256": sha256(
+                                exact_request.encode("utf-8")
+                            ).hexdigest(),
+                        }
+                    )
+                ).hexdigest()
+            )
+            coordinator["review_before_generation"]["prior_result_token"] = token
+            coordinator["review_before_generation"]["generation_ready_context"] = None
+            self._replace_coordinator(coordinator)
+            state = self.store.read()
+            return {
+                "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
+                "schema_version": 3,
+                "ok": True,
+                "operation": "begin_current_loop",
+                "category": "review_before_generation_ready",
+                "state_revision": state["state_revision"],
+                "loop_ref": activated["state"]["loop_ref"],
+                "state_mutated": True,
+                "review_before_generation": first_value,
+                "canonical_delivery": deepcopy(canonical_delivery),
+                "prior_result_token": token,
+                "current_request_semantics": semantics,
+                "source_or_qasm_created": False,
+                "file_mutation_performed": False,
+                "execution_performed": False,
+                "protected_service_called": False,
+                "elapsed_seconds": round(self.clock() - started, 6),
+            }
+
+        coordinator = self._coordinator_state(state)
+        existing = coordinator.get("review_before_generation")
+        if not isinstance(existing, Mapping):
+            raise ReviewBeforeGenerationError("review_transaction_conflicts_with_active_loop")
+        if (
+            existing.get("exact_request_utf8_sha256")
+            != sha256(exact_request.encode("utf-8")).hexdigest()
+        ):
+            raise ReviewBeforeGenerationError("review_transaction_request_changed")
+        current_revision = str(existing.get("review_revision") or "")
+        current_token = str(existing.get("prior_result_token") or "")
+
+        if proposed_revision == current_revision:
+            if prior_result_token is not None and prior_result_token != current_token:
+                raise ReviewBeforeGenerationError("review_confirmation_stale_token")
+            return {
+                "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
+                "schema_version": 3,
+                "ok": True,
+                "operation": "begin_current_loop",
+                "category": "review_before_generation_duplicate",
+                "state_revision": state["state_revision"],
+                "loop_ref": state["loop_ref"],
+                "state_mutated": False,
+                "review_before_generation": deepcopy(existing["first_value"]),
+                "canonical_delivery": deepcopy(existing["canonical_delivery"]),
+                "prior_result_token": current_token,
+                "current_request_semantics": semantics,
+                "duplicate_call_idempotent": True,
+                "source_or_qasm_created": False,
+                "file_mutation_performed": False,
+                "execution_performed": False,
+                "protected_service_called": False,
+                "elapsed_seconds": round(self.clock() - started, 6),
+            }
+
+        if prior_result_token != current_token:
+            raise ReviewBeforeGenerationError("review_changed_content_requires_prior_result_token")
+        updated = deepcopy(dict(existing))
+        revised_token = (
+            "review-result-"
+            + sha256(
+                canonical_bytes(
+                    {
+                        "loop_ref": state["loop_ref"],
+                        "workspace_identity_sha256": sha256(
+                            str(self.workspace_root).encode("utf-8")
+                        ).hexdigest(),
+                        "review_revision": proposed_revision,
+                        "exact_request_utf8_sha256": sha256(
+                            exact_request.encode("utf-8")
+                        ).hexdigest(),
+                    }
+                )
+            ).hexdigest()
+        )
+        updated.update(
+            {
+                "review_content": deepcopy(normalized_content),
+                "first_value": deepcopy(first_value),
+                "review_revision": proposed_revision,
+                "canonical_delivery": deepcopy(canonical_delivery),
+                "projection_digest": canonical_delivery["projection_digest"],
+                "confirmation_state": "awaiting_exact_review_confirmation",
+                "confirmed_revision": None,
+                "generation_authority": "held_for_exact_review_confirmation",
+                "execution_authority": normalized_content["semantic_axes"]["execution_authority"],
+                "prior_result_token": revised_token,
+                "generation_ready_context": None,
+                "intended_artifact_targets": {},
+                "displayed_source_target": displayed_target,
+            }
+        )
+        coordinator["review_before_generation"] = updated
+        coordinator["customer_summary"] = "Review the revised material choices before generation."
+        self._replace_coordinator(coordinator)
+        revised_state = self.store.read()
+        return {
+            "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
+            "schema_version": 3,
+            "ok": True,
+            "operation": "begin_current_loop",
+            "category": "review_before_generation_revised",
+            "state_revision": revised_state["state_revision"],
+            "loop_ref": revised_state["loop_ref"],
+            "state_mutated": True,
+            "review_before_generation": first_value,
+            "canonical_delivery": deepcopy(canonical_delivery),
+            "prior_result_token": revised_token,
+            "current_request_semantics": semantics,
+            "prior_result_token_invalidated": True,
+            "source_or_qasm_created": False,
+            "file_mutation_performed": False,
+            "execution_performed": False,
+            "protected_service_called": False,
+            "elapsed_seconds": round(self.clock() - started, 6),
+        }
 
     def interpret_current_request(
         self,
@@ -13739,13 +14317,7 @@ class CurrentLoopCoordinator:
                         )
                     ),
                     "confirmation_transmission_state": (
-                        "supplied"
-                        if clarification
-                        else (
-                            "not_supplied"
-                            if category == "confirmation_not_transmitted"
-                            else "not_supplied"
-                        )
+                        "supplied" if clarification else "not_supplied"
                     ),
                     "permitted_input_source": (
                         "qcoder_hosted_presented_values_or_explicit_user_correction"
@@ -15318,11 +15890,9 @@ class CurrentLoopCoordinator:
         invocation = deepcopy(dict(invocation))
         try:
             operation = operation_for_subcommand(
-                (
-                    str(invocation["subcommand"])
-                    if isinstance(invocation.get("subcommand"), str)
-                    else None
-                )
+                str(invocation["subcommand"])
+                if isinstance(invocation.get("subcommand"), str)
+                else None
             )
             if operation == "prepare_adaptive_intent":
                 adaptive_contract = self._adaptive_intent_contract(
@@ -16108,7 +16678,7 @@ class CurrentLoopCoordinator:
 
     def _exception_result(self, operation: str, exc: Exception, started: float) -> dict[str, Any]:
         category = (
-            str(getattr(exc, "category"))
+            str(exc.category)
             if isinstance(getattr(exc, "category", None), str)
             else "unknown_local_internal"
         )

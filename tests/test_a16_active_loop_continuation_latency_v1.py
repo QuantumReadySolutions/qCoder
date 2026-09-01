@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import json
+from copy import deepcopy
 from pathlib import Path
 
 from qcoder.context_bridge_mcp import (
@@ -16,7 +16,6 @@ from qcoder.current_loop_binding_mcp import (
     handle_binding_jsonrpc_message,
 )
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
-
 
 SOURCE_REQUEST = (
     "Use qCoder to write a Qiskit program that prepares a Φ+ Bell state. "
@@ -159,18 +158,15 @@ def test_qasm_continuation_completes_without_rebootstrap_or_results(tmp_path: Pa
 def test_continuation_binding_is_direct_quiet_and_keeps_two_private_tools(
     tmp_path: Path,
 ) -> None:
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v48"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v59"
     assert len(EXPECTED_TOOLS) == 12
     descriptors = binding_tool_descriptors()
     assert [row["name"] for row in descriptors] == [
         BEGIN_CURRENT_LOOP_TOOL_NAME,
         COMPLETE_CURRENT_STEP_TOOL_NAME,
     ]
-    continuation = descriptors[0]["x-qcoder-active-loop-continuation"]
-    assert continuation["reuse_active_loop"] is True
-    assert continuation["rebootstrap"] is False
-    assert continuation["pre_contract_procedure_reasoning"] is False
-    assert continuation["customer_visible_transition_narration"] is False
+    assert "Begin or continue one bounded qCoder Current Loop" in descriptors[0]["description"]
+    assert "Never scan for a path" in descriptors[0]["description"]
     instructions = build_client_activation_instructions(
         base_url="https://example.invalid",
         token_file=tmp_path / "token.txt",

@@ -16,7 +16,6 @@ from qcoder.current_loop_binding_mcp import (
     handle_binding_jsonrpc_message,
 )
 
-
 REQUEST = (
     "Use qCoder to write a Qiskit program that prepares a Φ+ Bell state. "
     "Stop after generating the code."
@@ -54,7 +53,7 @@ def test_binding_and_private_tools_encode_semantic_quiet_success(tmp_path: Path)
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     visibility = descriptor["surfaces"]["current_step_transaction"]["customer_visibility"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v48"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v59"
     assert visibility["normal_success"] == "internal_transaction_silent"
     assert visibility["intermediate_customer_message_permitted"] is False
     assert visibility["final_response"] == "concise_task_outcome_only"
@@ -71,9 +70,12 @@ def test_binding_and_private_tools_encode_semantic_quiet_success(tmp_path: Path)
         "explain_receipts_state_revisions_hooks_or_evidence_bookkeeping",
     }
     assert visibility["native_permission_explanation"]["maximum_customer_messages"] == 1
-    assert visibility["native_permission_explanation"][
-        "only_when_native_client_actually_requires_permission"
-    ] is True
+    assert (
+        visibility["native_permission_explanation"][
+            "only_when_native_client_actually_requires_permission"
+        ]
+        is True
+    )
     assert set(visibility["surface_when"]) >= {
         "blocking_failure",
         "ambiguity",
@@ -84,17 +86,7 @@ def test_binding_and_private_tools_encode_semantic_quiet_success(tmp_path: Path)
         BEGIN_CURRENT_LOOP_TOOL_NAME,
         COMPLETE_CURRENT_STEP_TOOL_NAME,
     ]
-    assert all(item["x-qcoder-customer-visibility"] == visibility for item in private)
-    assert private[0]["x-qcoder-normal-success-presentation"] == {
-        "customer_message_before_tool_call": "none",
-        "customer_message_after_tool_call": "none_or_task_level_progress_only",
-        "internal_mechanics_explanation": False,
-    }
-    assert private[1]["x-qcoder-normal-success-presentation"] == {
-        "customer_message_before_tool_call": "none",
-        "customer_message_after_tool_call": "one_concise_task_outcome",
-        "internal_mechanics_explanation": False,
-    }
+    assert all("internal mechanics" not in item["description"].casefold() for item in private)
     assert len(EXPECTED_TOOLS) == 12
     instructions = build_client_activation_instructions(
         base_url="https://example.invalid",

@@ -1,35 +1,22 @@
 from __future__ import annotations
 
 import argparse
-from copy import deepcopy
 import hashlib
 import json
 import ntpath
 import os
-from pathlib import Path
 import posixpath
 import re
 import stat
 import sys
-from typing import Any, Callable, Mapping
 import urllib.error
 import urllib.request
+from collections.abc import Callable, Mapping
+from copy import deepcopy
+from pathlib import Path
+from typing import Any
 
 from qcoder import __version__
-from qcoder.context_bridge_connection import (
-    ConnectionObservationError,
-    connection_status,
-    record_server_exchange,
-)
-from qcoder.context_bridge_profiles import (
-    CredentialProfileError,
-    CredentialProfileManager,
-    SelectedCredential,
-    credential_profile_contract_snapshot,
-    hidden_secret_prompt,
-    platform_storage_capability,
-    safe_profile_error,
-)
 from qcoder.algorithm_blueprint import (
     ALGORITHM_BLUEPRINT_ARTIFACT_DISCRIMINATORS,
     ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS,
@@ -47,8 +34,8 @@ from qcoder.algorithm_blueprint_first_value import (
     first_value_dialogue_contract_snapshot,
 )
 from qcoder.algorithm_intent_recovery import (
-    ClarificationRecoveryError,
     RECOVERY_INPUT_FIELD,
+    ClarificationRecoveryError,
     build_atomic_clarification_continuation,
     clarification_recovery_contract_snapshot,
     prepare_clarification_recovery,
@@ -70,6 +57,26 @@ from qcoder.blueprint_decisions import (
     catalog_entries,
     unpack_decision_record_set,
 )
+from qcoder.connected_assistant_conformance import (
+    client_neutral_conformance_contract,
+    cursor_desktop_reference_profile,
+    named_workflow_completion_contract,
+    retention_evidence_contract,
+)
+from qcoder.context_bridge_connection import (
+    ConnectionObservationError,
+    connection_status,
+    record_server_exchange,
+)
+from qcoder.context_bridge_profiles import (
+    CredentialProfileError,
+    CredentialProfileManager,
+    SelectedCredential,
+    credential_profile_contract_snapshot,
+    hidden_secret_prompt,
+    platform_storage_capability,
+    safe_profile_error,
+)
 from qcoder.context_loop import (
     CONTEXT_LOOP_DISABLED,
     CONTEXT_LOOP_GATE,
@@ -88,76 +95,75 @@ from qcoder.context_loop import (
     portable_current_build_context_error,
     share_safe_request_baseline,
 )
-from qcoder.current_loop_coordinator import coordinator_contract_snapshot
-from qcoder.current_loop_invocation import (
-    invocation_contract_snapshot,
-    operation_transport_inventory,
-)
-from qcoder.current_loop_request_semantics import semantics_contract_snapshot
-from qcoder.current_loop_bounded_control import bounded_control_contract_snapshot
-from qcoder.current_loop_adaptive_intent import (
-    adaptive_intent_completeness_matrix,
-    adaptive_intent_contract_snapshot,
-)
-from qcoder.current_loop_contract_sidecar import sidecar_contract_snapshot
-from qcoder.current_loop_contract_management import contract_management_snapshot
-from qcoder.current_loop_run_summary import (
-    evidence_view_contract_snapshot,
-    run_summary_contract_snapshot,
-)
-from qcoder.current_loop_quiet_workflow import quiet_workflow_contract_snapshot
-from qcoder.current_loop_iteration import (
-    iteration_contract_snapshot,
-    parent_error_taxonomy_snapshot,
-)
-from qcoder.current_loop_evidence_processing import (
-    artifact_format_contract_snapshot,
-    evidence_processing_contract_snapshot,
-    recovery_action_contract_snapshot,
-)
-from qcoder.current_loop_registration import registration_contract_snapshot
-from qcoder.current_loop_artifact_satisfaction import satisfaction_contract_snapshot
-from qcoder.current_loop_evidence_reconciler import reconciler_contract_snapshot
-from qcoder.current_loop_result_manifest import result_manifest_contract_snapshot
-from qcoder.framework_native_evidence import framework_native_contract_snapshot
-from qcoder.current_step_contract import quiet_customer_visibility_contract
-from qcoder.current_loop_artifact_targets import target_contract_snapshot
-from qcoder.current_loop_derivation import derivation_contract_snapshot
-from qcoder.current_loop_freshness import freshness_contract_snapshot
-from qcoder.current_loop_retention import retention_contract_snapshot
-from qcoder.current_loop_recovery import recovery_contract_snapshot
-from qcoder.current_loop_vocabulary import vocabulary_snapshot
-from qcoder.current_loop_bootstrap import (
-    bootstrap_contract_snapshot,
-    invocation_lifecycle_snapshot,
-    pre_result_entry_inventory,
-)
-from qcoder.current_loop_checkpoint_input import (
-    CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_ID,
-    CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_VERSION,
-    CHECKPOINT_INPUT_SEMANTIC_SCHEMA_ID,
-    CHECKPOINT_INPUT_SEMANTIC_SCHEMA_VERSION,
-    CHECKPOINT_INPUT_SCHEMA_ID,
-    CHECKPOINT_INPUT_SCHEMA_VERSION,
-)
 from qcoder.current_loop import (
     CurrentLoopError,
     canonical_operation_request_sha256,
     expand_next_loop_seed,
 )
-from qcoder.connected_assistant_conformance import (
-    client_neutral_conformance_contract,
-    cursor_desktop_reference_profile,
-    named_workflow_completion_contract,
-    retention_evidence_contract,
+from qcoder.current_loop_adaptive_intent import (
+    adaptive_intent_completeness_matrix,
+    adaptive_intent_contract_snapshot,
 )
+from qcoder.current_loop_artifact_satisfaction import satisfaction_contract_snapshot
+from qcoder.current_loop_artifact_targets import target_contract_snapshot
+from qcoder.current_loop_bootstrap import (
+    bootstrap_contract_snapshot,
+    invocation_lifecycle_snapshot,
+    pre_result_entry_inventory,
+)
+from qcoder.current_loop_bounded_control import bounded_control_contract_snapshot
+from qcoder.current_loop_checkpoint_input import (
+    CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_ID,
+    CHECKPOINT_INPUT_CONSTRUCTION_SCHEMA_VERSION,
+    CHECKPOINT_INPUT_SCHEMA_ID,
+    CHECKPOINT_INPUT_SCHEMA_VERSION,
+    CHECKPOINT_INPUT_SEMANTIC_SCHEMA_ID,
+    CHECKPOINT_INPUT_SEMANTIC_SCHEMA_VERSION,
+)
+from qcoder.current_loop_contract_management import contract_management_snapshot
+from qcoder.current_loop_contract_sidecar import sidecar_contract_snapshot
+from qcoder.current_loop_coordinator import coordinator_contract_snapshot
+from qcoder.current_loop_derivation import derivation_contract_snapshot
+from qcoder.current_loop_evidence_processing import (
+    artifact_format_contract_snapshot,
+    evidence_processing_contract_snapshot,
+    recovery_action_contract_snapshot,
+)
+from qcoder.current_loop_evidence_reconciler import reconciler_contract_snapshot
+from qcoder.current_loop_freshness import freshness_contract_snapshot
+from qcoder.current_loop_invocation import (
+    invocation_contract_snapshot,
+    operation_transport_inventory,
+)
+from qcoder.current_loop_iteration import (
+    iteration_contract_snapshot,
+    parent_error_taxonomy_snapshot,
+)
+from qcoder.current_loop_quiet_workflow import quiet_workflow_contract_snapshot
+from qcoder.current_loop_recovery import recovery_contract_snapshot
+from qcoder.current_loop_registration import registration_contract_snapshot
+from qcoder.current_loop_request_semantics import semantics_contract_snapshot
+from qcoder.current_loop_result_manifest import result_manifest_contract_snapshot
+from qcoder.current_loop_retention import retention_contract_snapshot
+from qcoder.current_loop_run_summary import (
+    evidence_view_contract_snapshot,
+    run_summary_contract_snapshot,
+)
+from qcoder.current_loop_vocabulary import vocabulary_snapshot
+from qcoder.current_step_contract import quiet_customer_visibility_contract
+from qcoder.d079_workflows import d079_orchestration_contract_snapshot
 from qcoder.development_evidence import (
     ALIGNMENT_STATUSES,
     CHOICE_ORIGINS,
-    EVIDENCE_CONFIDENCE_LABELS as DECISION_EVIDENCE_CONFIDENCE_LABELS,
     RELATIONSHIP_DECLARATION_STATES,
 )
-from qcoder.d079_workflows import d079_orchestration_contract_snapshot
+from qcoder.development_evidence import (
+    EVIDENCE_CONFIDENCE_LABELS as DECISION_EVIDENCE_CONFIDENCE_LABELS,
+)
+from qcoder.framework_native_evidence import framework_native_contract_snapshot
+from qcoder.review_before_generation import (
+    contract_snapshot as review_before_generation_contract_snapshot,
+)
 
 DEFAULT_BASE_URL = "https://preview-api.qcoder.ai"
 ROUTE_PATH = "/v0/internal/hosted-mcp/context"
@@ -185,8 +191,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 47
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v48"
+CLIENT_BINDING_SCHEMA_VERSION = 58
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v59"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -227,8 +233,18 @@ Concrete D-080 current request: before planning-language or generic single-capab
 classify the exact current customer message through the binding's canonical request-semantics
 contract. A concrete explicit qCoder source, QASM, execution, or selected-file review request uses
 the project-local binding-owned begin_current_loop MCP operation. Pass the exact complete current
-customer message once as request_text and one exact workspace-relative intended_artifact_paths
-entry for every requested artifact role. Choose those names solely from the customer task; do not
+customer message once as request_text. Branch-specific target rules apply. Review before generation
+uses request_text plus semantic-only review_content: one interpretation, substantive labeled
+implementation recommendations, and optional output, limitations, blocker, or proposed source
+target. qCoder derives routing, request facts, delivery, authority, deferrals, revision, and actions.
+Missing, unsafe, or ungrounded proposed targets converge silently to inline. A grounded
+file recommendation is displayed but remains inert until the customer confirms that exact review.
+The successful tool text is qCoder's exact canonical customer Markdown; structuredContent retains
+the same machine projection, so the assistant must not rewrite it. Assistant envelope target fields
+cannot establish authority. Direct generation uses
+one exact customer-authorized intended_artifact_paths entry for every requested role; selected-file
+work uses exact customer-named selected_artifact_paths; active-loop continuation reuses its bound
+target unless the customer names a replacement. Choose names solely from the customer task; do not
 Read, Grep, Glob, list, scan, or search the workspace or neighboring artifacts. Do not construct Shell, CLI, stdin, flags, JSON envelopes,
 IDs, digests, or lineage. One structured activation preserves the exact Request Baseline
 and activates Assist for this request only. The returned current_step_contract is the sole
@@ -664,6 +680,7 @@ def build_client_binding_descriptor(
             "local_credential_profile_contract": credential_profile_contract_snapshot(),
             "customer_managed_connection_contract": _customer_managed_connection_contract(),
             "blueprint_first_value_dialogue_contract": first_value_dialogue_contract_snapshot(),
+            "review_before_generation_contract": review_before_generation_contract_snapshot(),
             "current_request_semantics_contract": semantics_contract_snapshot(),
             "artifact_target_contract": target_contract_snapshot(),
             "bounded_control_input_contract": bounded_control_contract_snapshot(),
@@ -1072,10 +1089,32 @@ through the D-079 binding-owned workflow. Only unrelated bounded single capabili
 to an applicable MCP tool. Never silently activate or replace local orchestration with raw MCP
 choreography.
 
+REVIEW BEFORE GENERATION
+When the customer explicitly asks to review an interpretation or proposed implementation before
+source generation or source modification, call begin_current_loop once with the exact unchanged
+customer request and one separately attributed review_content object. The connected assistant
+supplies substantive interpretation and implementation recommendations only. qCoder derives all
+routing, request facts, source delivery, authority, deferrals, revision, and actions, validates
+structural safety, privacy and substantiveness, then returns exact canonical customer Markdown as tool text and the
+same machine projection in structuredContent. Deliver that text unchanged; do not reconstruct,
+summarize, prefix, or suffix it. Its three groups and exact customer actions need no model rewrite. Do not
+generate or modify source until the customer confirms the displayed revision. Confirmation of a
+generation plan never grants execution authority. Review before generation has immediate-interaction
+precedence. The default delivery is inline. An optional proposed target is inert and must occur in
+request_text or have existing native selected-source provenance. This anti-invention guard does not
+interpret surrounding language. Missing, unsafe, or ungrounded targets and irrelevant envelope targets converge
+to the same inline review. A grounded recommendation is displayed but inert. Confirmation of that
+exact displayed revision is the first source-delivery and workspace-write authority. Source
+modification still requires its exact native-client-selected source.
+
 ACTIVE-BUILD STRUCTURED ACTIVATION
 Call the project-local qcoder-current-loop begin_current_loop operation once with request_text set
-to the exact complete current customer message. For every requested artifact role, also supply one
-exact workspace-relative intended_artifact_paths value chosen solely from the task without Read,
+to the exact complete current customer message. For direct generation, supply one exact
+workspace-relative intended_artifact_paths value per requested role, chosen solely from the task.
+For selected-file work, supply only the exact customer-named selected_artifact_paths. For an
+active-loop continuation, use its already bound target. These direct-generation target requirements
+do not apply to an unconfirmed review-before-generation recommendation.
+Never use Read,
 Grep, Glob, listing, scanning, or neighboring-artifact search. The typed required argument makes missing stdin or
 command construction inapplicable. The customer never types the command. Never construct a command
 from coordinator_prefix; it and inventories are diagnostics only. Do not run current-loop --help,
@@ -2614,7 +2653,7 @@ def post_context_bridge(
         status = int(exc.code)
         payload = decode_json(exc.read())
         retry_after = exc.headers.get("Retry-After") if exc.headers else None
-    except Exception:
+    except (OSError, TypeError, ValueError, urllib.error.URLError):
         return safe_error("context_bridge_unreachable", status_category="network_error")
 
     payload.setdefault(
@@ -3530,36 +3569,41 @@ def _tool_schema(tool_name: str) -> dict[str, Any]:
 
 
 def _assistant_facing_tool_schema(tool_name: str) -> dict[str, Any]:
-    """Keep validation exact while omitting non-load-bearing property prose."""
+    """Project a compact discovery schema while runtime keeps exact validation."""
 
     schema = _tool_schema(tool_name)
-    retained_descriptions = set(TOOL_REQUIRED_FIELDS[tool_name]) | {
-        "before",
-        "after",
-        "evidence_parent_artifacts",
+    properties = schema.get("properties", {})
+    projected_properties: dict[str, Any] = {}
+    for name, value in properties.items():
+        if not isinstance(value, Mapping):
+            continue
+        projected = {
+            key: deepcopy(value[key])
+            for key in (
+                "type",
+                "const",
+                "enum",
+                "minLength",
+                "maxLength",
+                "minItems",
+                "maxItems",
+                "uniqueItems",
+            )
+            if key in value
+        }
+        if not projected:
+            projected = {"type": "object"}
+        projected_properties[name] = projected
+    result: dict[str, Any] = {
+        "type": "object",
+        "properties": projected_properties,
+        "required": list(schema.get("required", ())),
+        "additionalProperties": False,
     }
-
-    def compact(value: object, *, property_name: str | None = None) -> object:
-        if isinstance(value, dict):
-            result: dict[str, object] = {}
-            for key, item in value.items():
-                if key == "description" and property_name not in retained_descriptions:
-                    continue
-                if key == "properties" and isinstance(item, dict):
-                    result[key] = {
-                        name: compact(child, property_name=name) for name, child in item.items()
-                    }
-                else:
-                    result[key] = compact(item, property_name=property_name)
-            return result
-        if isinstance(value, list):
-            return [compact(item, property_name=property_name) for item in value]
-        return value
-
-    projected = compact(schema)
-    if not isinstance(projected, dict):
-        raise TypeError("assistant_tool_schema_projection_invalid")
-    return projected
+    for key in ("anyOf", "oneOf"):
+        if key in schema:
+            result[key] = deepcopy(schema[key])
+    return result
 
 
 def tool_descriptors() -> list[dict[str, Any]]:
@@ -3663,17 +3707,8 @@ def tool_descriptors() -> list[dict[str, Any]]:
         }
         if name in minimal_happy_paths:
             descriptor["description"] = (
-                "MINIMAL HAPPY PATH: supply exactly the fields shown in "
-                "x-qcoder-minimal-happy-path, using exact returned parent objects for later stages. "
-                + descriptor["description"]
+                "Use exact returned parent objects for later stages. " + descriptor["description"]
             )
-            descriptor["x-qcoder-minimal-happy-path"] = minimal_happy_paths[name]
-            descriptor["x-qcoder-shape-error-contract"] = {
-                "names_offending_or_missing_field": True,
-                "provides_expected_type_or_domain": True,
-                "echoes_argument_values": False,
-                "full_validation_retained": True,
-            }
         descriptors.append(descriptor)
     return descriptors
 
@@ -4043,7 +4078,7 @@ def _record_connection_exchange_best_effort(
             request=message,
             response=response,
         )
-    except Exception:
+    except (OSError, TypeError, ValueError):
         # Connection evidence is diagnostic only.  It must never alter MCP behavior.
         return
 

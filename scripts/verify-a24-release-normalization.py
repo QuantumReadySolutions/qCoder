@@ -6,10 +6,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import subprocess
+import sys
 from pathlib import Path
 
-from qcoder.context_bridge_mcp import EXPECTED_TOOLS, build_client_binding_descriptor
+from qcoder.context_bridge_mcp import EXPECTED_TOOLS
 from qcoder.current_loop_binding_mcp import binding_tool_descriptors
 
 PRODUCT_BASIS_COMMIT = "75babdcc27f894094f776bc9e3d1382ab9e1496f"
@@ -105,9 +107,24 @@ def verify(root: Path) -> dict[str, object]:
         raise ValueError("a24_public_tool_inventory_changed")
     if private_operations != EXPECTED_PRIVATE_OPERATIONS:
         raise ValueError("a24_private_operation_inventory_changed")
-    descriptor = build_client_binding_descriptor(
-        coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
-    )["client_binding_contract"]
+    descriptor_probe = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import json; from qcoder.context_bridge_mcp import "
+                "build_client_binding_descriptor; print(json.dumps("
+                "build_client_binding_descriptor(coordinator_prefix=['python','-m','qcoder',"
+                "'current-loop'])['client_binding_contract'],sort_keys=True))"
+            ),
+        ],
+        cwd=root,
+        env={**os.environ, "PYTHONPATH": str(root / "src")},
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    descriptor = json.loads(descriptor_probe.stdout)
     if (
         descriptor.get("contract_id") != EXPECTED_CONTRACT
         or descriptor.get("schema_version") != EXPECTED_SCHEMA

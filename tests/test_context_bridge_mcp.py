@@ -11,15 +11,16 @@ import urllib.error
 from contextlib import redirect_stdout
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import ClassVar, Self
 
-from qcoder import __version__
-from qcoder.cli import main
+from qcoder import __version__, context_bridge_mcp
 from qcoder.algorithm_blueprint import ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS
 from qcoder.blueprint_decisions import (
     build_decision_records,
     pack_decision_record_set,
     with_consistency_digest,
 )
+from qcoder.cli import main
 from qcoder.context_bridge_mcp import (
     CLIENT_BINDING_CONTRACT_ID,
     CLIENT_BINDING_SCHEMA_ID,
@@ -43,7 +44,6 @@ from qcoder.context_loop import (
     canonical_context_bridge_request_sha256,
     canonical_portable_current_build_context_json,
 )
-import qcoder.context_bridge_mcp as context_bridge_mcp
 
 
 class _FakeResponse:
@@ -52,7 +52,7 @@ class _FakeResponse:
     def __init__(self, payload: dict[str, object] | None = None) -> None:
         self.payload = payload
 
-    def __enter__(self) -> "_FakeResponse":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
@@ -153,22 +153,14 @@ def test_tool_descriptors_are_exact_public_context_bridge_tools() -> None:
     )
     assert "without history or lookup" in diff["description"]
     assert "preserve salient user-provided result observations" in diff["description"]
-    assert "result_evidence" in diff["inputSchema"]["properties"]["after"]["properties"]
-    assert (
-        "Preserve salient user-provided observations"
-        in diff["inputSchema"]["properties"]["before"]["description"]
-    )
-    assert (
-        "generic 'result evidence is present'"
-        in diff["inputSchema"]["properties"]["after"]["description"]
-    )
+    assert diff["inputSchema"]["properties"]["after"] == {"type": "object"}
+    assert diff["inputSchema"]["properties"]["before"] == {"type": "object"}
     blueprint = next(
         tool for tool in tool_descriptors() if tool["name"] == "create_implementation_blueprint"
     )
     assert "allOf" not in blueprint["inputSchema"]
     parent_schema = blueprint["inputSchema"]["properties"]["evidence_parent_artifacts"]
     assert parent_schema["minItems"] == 1
-    assert "no lookup occurs" in parent_schema["description"]
     assert "inherited exactly" in blueprint["description"]
 
 
@@ -345,8 +337,8 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
     assert binding["surfaces"]["local_orchestration"] == {
         "transport": "project_local_binding_mcp",
         "server_name": "qcoder-current-loop",
-            "structured_activation_operation": "begin_current_loop",
-            "typed_completion_operation": "complete_current_step",
+        "structured_activation_operation": "begin_current_loop",
+        "typed_completion_operation": "complete_current_step",
         "structured_activation_argument": "request_text",
         "structured_artifact_target_argument": "intended_artifact_paths",
         "structured_exact_selection_argument": "selected_artifact_paths",
@@ -356,7 +348,7 @@ def test_client_binding_descriptor_is_exact_deterministic_and_secret_free() -> N
         "exact_request_transported_once": True,
         "normal_path_shell_or_cli": False,
         "normal_path_stdin_plumbing": False,
-            "binding_internal_tool_count": 2,
+        "binding_internal_tool_count": 2,
         "public_context_bridge_tool_count_unchanged": 12,
         "command_prefix": prefix,
         "command_prefix_diagnostics_only": True,
@@ -1247,55 +1239,15 @@ def test_current_build_context_composes_share_safe_request_baseline_from_existin
         for branch in schema["anyOf"]
     )
     properties = schema["properties"]
-    stage_schema = properties["stage_availability"]
-    assert stage_schema["required"] == ["schema_id", "artifact_type", "stages"]
-    assert set(stage_schema["properties"]["stages"]["required"]) == {
-        "human_intent",
-        "python_source",
-        "logical_circuit",
-        "target_circuit",
-        "run_results",
-        "next_human_intent",
-    }
-    lineage_schema = properties["decision_evidence_lineage"]
-    assert lineage_schema["properties"]["schema_id"]["const"] == (
-        "qcoder.decision_evidence_lineage.v1"
-    )
-    relationship_schema = lineage_schema["properties"]["links"]["items"]["properties"][
-        "relationship"
-    ]
-    assert relationship_schema["required"] == [
-        "relationship_type",
-        "source",
-        "target",
-        "direction",
-        "supplied_evidence_basis",
-        "declaration_state",
-        "non_proof",
-    ]
-    assert relationship_schema["properties"]["source"]["properties"]["artifact_reference"][
-        "properties"
-    ]["retrievable"] == {"const": False}
-    assert properties["current_lineage_reference"]["pattern"] == (
-        r"^session-artifact-[0-9a-f]{16,64}$"
-    )
+    assert properties["stage_availability"] == {"type": "object"}
+    assert properties["decision_evidence_lineage"] == {"type": "object"}
+    assert properties["current_lineage_reference"]["type"] == "string"
     intent_schema = next(
         tool["inputSchema"]
         for tool in tool_descriptors()
         if tool["name"] == "create_algorithm_intent_card"
     )
-    dispositions = intent_schema["properties"]["decision_dispositions"]["oneOf"][0]["items"]
-    assert dispositions["properties"]["user_disposition"]["enum"] == [
-        "selected_choice",
-        "bounded_alternatives",
-        "bounded_value_range",
-        "deferred_to_source_evidence",
-        "deferred_to_later_evidence",
-        "left_unresolved",
-        "not_supplied",
-    ]
-    assert "selected_value" in dispositions["properties"]
-    assert "selected_choice" not in dispositions["properties"]
+    assert intent_schema["properties"]["decision_dispositions"] == {"type": "object"}
 
 
 def test_current_build_context_rejects_conflicting_reconstructed_request_baseline(
@@ -1697,9 +1649,9 @@ def test_selected_bundle_expansion_preserves_exact_input_and_digest(
 
     class Response:
         status = 200
-        headers: dict[str, str] = {}
+        headers: ClassVar[dict[str, str]] = {}
 
-        def __enter__(self) -> "Response":
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, *_args: object) -> None:
@@ -1976,9 +1928,9 @@ def test_run_readiness_call_promotes_existing_label_contract_for_named_clients(
 
     class _ReadinessResponse:
         status = 200
-        headers: dict[str, str] = {}
+        headers: ClassVar[dict[str, str]] = {}
 
-        def __enter__(self) -> "_ReadinessResponse":
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, *_args: object) -> None:
@@ -2502,7 +2454,7 @@ def test_mcp_stdio_content_length_preserves_structured_diff_arguments(tmp_path: 
     captured: dict[str, object] = {}
 
     class Handler(BaseHTTPRequestHandler):
-        def do_POST(self) -> None:  # noqa: N802
+        def do_POST(self) -> None:
             length = int(self.headers.get("content-length", "0"))
             body = self.rfile.read(length)
             payload = json.loads(body.decode("utf-8"))

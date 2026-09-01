@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+import json
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
-import json
 from pathlib import Path
 from threading import Barrier
-from typing import Any, Callable, Mapping
+from typing import Any
 
 import pytest
 
-import qcoder.current_loop_coordinator as coordinator_module
 import qcoder.current_loop_contract_sidecar as sidecar_module
+import qcoder.current_loop_coordinator as coordinator_module
+from qcoder.context_bridge_mcp import (
+    CLIENT_BINDING_CONTRACT_ID,
+    EXPECTED_TOOLS,
+    build_client_binding_descriptor,
+)
 from qcoder.current_loop import CurrentLoopConflict, canonical_bytes
 from qcoder.current_loop_contract import adjust
 from qcoder.current_loop_contract_management import customer_contract_document
@@ -25,11 +31,6 @@ from qcoder.current_loop_recovery import recovery_contract_snapshot
 from qcoder.current_loop_registration import (
     commit_registration_transaction,
     prepare_registration_transaction,
-)
-from qcoder.context_bridge_mcp import (
-    CLIENT_BINDING_CONTRACT_ID,
-    EXPECTED_TOOLS,
-    build_client_binding_descriptor,
 )
 from tests.current_loop_test_support import activate_reviewed_legacy_fixture
 
@@ -1039,8 +1040,8 @@ def test_binding_v18_delta_preserves_exact_twelve_tool_inventory() -> None:
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v48"
-    assert descriptor["schema_version"] == 47
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v59"
+    assert descriptor["schema_version"] == 58
     assert len(EXPECTED_TOOLS) == 12
     assert descriptor["qcoder_domain_tool_count"] == 12
     receipt = event_receipt_snapshot()

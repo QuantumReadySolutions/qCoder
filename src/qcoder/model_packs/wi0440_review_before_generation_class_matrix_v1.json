@@ -1,0 +1,172 @@
+{
+  "fixture_identity": "wi0440.review_before_generation.connected_assistant_class_matrix.v1",
+  "proposal_attribution": "connected_assistant",
+  "profiles": {
+    "GHZ": {
+      "classical_scope": "Three classical bits matching the three measured qubits",
+      "construction": "QuantumCircuit with H on q0, CX from q0 to q1, CX from q1 to q2, and measurements",
+      "intended_artifact": "A readable three-qubit GHZ source example in Python",
+      "measurement_basis": "Computational-basis measurement of all three qubits",
+      "measurement_mapping": "Measure q0 to c0, q1 to c1, and q2 to c2",
+      "output_structure": "Direct readable Python with explicit quantum and classical registers",
+      "quantum_scope": "Three qubits prepared with one H and a two-CX entangling chain",
+      "recommended_interpretation": "Create a concrete three-qubit Qiskit GHZ preparation and measurement program only after the customer confirms the displayed plan."
+    },
+    "Grover": {
+      "classical_scope": "Two classical bits matching the measured search register",
+      "construction": "QuantumCircuit with a two-qubit search register, an explicit phase oracle marking 11, and one diffusion operation",
+      "intended_artifact": "A bounded two-qubit Grover source example in Python",
+      "measurement_basis": "Computational-basis measurement of the search register",
+      "measurement_mapping": "Measure search qubit q0 to c0 and q1 to c1",
+      "output_structure": "Direct readable Python with oracle and diffusion construction kept explicit",
+      "quantum_scope": "Two search qubits with one marked-state oracle and one diffusion iteration",
+      "recommended_interpretation": "Create a bounded Qiskit Grover source example for an explicit 11 phase oracle and one diffusion iteration only after confirmation."
+    },
+    "Teleportation": {
+      "classical_scope": "Two classical measurement bits controlling the receiver corrections",
+      "construction": "QuantumCircuit with Bell-pair preparation, sender CNOT and H, sender measurements, and conditional X/Z receiver corrections",
+      "intended_artifact": "A readable three-qubit teleportation source example in Python",
+      "measurement_basis": "Computational-basis sender measurements with explicit classical conditions",
+      "measurement_mapping": "Measure sender qubits to two classical bits used for receiver corrections",
+      "output_structure": "Direct readable Python separating preparation, measurement, and correction stages",
+      "quantum_scope": "Three qubits: message, entangled sender half, and receiver half",
+      "recommended_interpretation": "Create a Qiskit teleportation circuit with explicit sender measurements and conditional receiver corrections only after confirmation."
+    },
+    "QAOA": {
+      "classical_scope": "Classical output bits matching the measured problem register",
+      "construction": "Qiskit parameterized circuit with explicit cost and mixer layers for a fixed two-node Max-Cut example",
+      "intended_artifact": "A bounded QAOA circuit-construction source example in Python",
+      "measurement_basis": "Computational-basis measurement of the problem register",
+      "measurement_mapping": "Measure both problem qubits to matching classical bits",
+      "output_structure": "Direct readable Python that constructs the parameterized circuit without running an optimizer",
+      "quantum_scope": "Two problem qubits, one cost layer, one mixer layer, and symbolic beta/gamma parameters",
+      "recommended_interpretation": "Create the circuit-construction portion of a bounded two-node Max-Cut QAOA Qiskit example only after confirmation, without optimizer or backend execution."
+    }
+  },
+  "cases": [
+    {
+      "algorithm": "GHZ",
+      "case_id": "ghz_review_before_generation",
+      "request": "Use qCoder to review a concrete GHZ Qiskit construction before generating source.",
+      "variant": "review_before_generation"
+    },
+    {
+      "algorithm": "GHZ",
+      "case_id": "ghz_reordered",
+      "request": "Generate GHZ Qiskit source after you use qCoder to review the construction choices with me.",
+      "variant": "reordered"
+    },
+    {
+      "algorithm": "GHZ",
+      "case_id": "ghz_fully_specified",
+      "request": "Use qCoder to review a three-qubit Qiskit GHZ plan with H q0, CX q0-q1, CX q1-q2, and matching measurements before writing code.",
+      "variant": "fully_specified"
+    },
+    {
+      "algorithm": "GHZ",
+      "case_id": "ghz_responsibly_recommendable",
+      "request": "Use qCoder to walk through choices for a small GHZ Qiskit example before creating the program.",
+      "variant": "responsibly_recommendable"
+    },
+    {
+      "algorithm": "GHZ",
+      "blocking_clarification": "How many qubits must the requested GHZ source contain?",
+      "case_id": "ghz_material_blocker",
+      "request": "Use qCoder to review a GHZ Qiskit construction before generating source; the required qubit count must come from me.",
+      "variant": "material_blocker"
+    },
+    {
+      "algorithm": "Grover",
+      "case_id": "grover_review_before_generation",
+      "request": "Use qCoder to review oracle and diffusion choices before creating a Grover Qiskit program.",
+      "variant": "review_before_generation"
+    },
+    {
+      "algorithm": "Grover",
+      "case_id": "grover_reordered",
+      "request": "Use qCoder to check the oracle and diffusion plan with me, then create Grover Qiskit source after confirmation.",
+      "variant": "reordered"
+    },
+    {
+      "algorithm": "Grover",
+      "case_id": "grover_fully_specified",
+      "request": "Use qCoder to review a two-qubit Qiskit Grover plan marking 11 with one diffusion iteration before writing code.",
+      "variant": "fully_specified"
+    },
+    {
+      "algorithm": "Grover",
+      "case_id": "grover_responsibly_recommendable",
+      "request": "Use qCoder to sanity-check choices for a minimal Grover Qiskit example before generating the program.",
+      "variant": "responsibly_recommendable"
+    },
+    {
+      "algorithm": "Grover",
+      "blocking_clarification": "Which exact marked-state oracle must the requested source implement?",
+      "case_id": "grover_material_blocker",
+      "request": "Use qCoder to review a Grover Qiskit plan before generating source; I must choose the oracle.",
+      "variant": "material_blocker"
+    },
+    {
+      "algorithm": "Teleportation",
+      "case_id": "teleportation_review_before_generation",
+      "request": "Use qCoder to check teleportation circuit and correction choices before writing Qiskit code.",
+      "variant": "review_before_generation"
+    },
+    {
+      "algorithm": "Teleportation",
+      "case_id": "teleportation_reordered",
+      "request": "Use qCoder to review the measurement and correction plan, then write Qiskit teleportation source after confirmation.",
+      "variant": "reordered"
+    },
+    {
+      "algorithm": "Teleportation",
+      "case_id": "teleportation_fully_specified",
+      "request": "Use qCoder to review a three-qubit Qiskit teleportation plan with sender measurements and conditional X/Z corrections before generating code.",
+      "variant": "fully_specified"
+    },
+    {
+      "algorithm": "Teleportation",
+      "case_id": "teleportation_responsibly_recommendable",
+      "request": "Use qCoder to walk through choices for a compact teleportation Qiskit program before creating source.",
+      "variant": "responsibly_recommendable"
+    },
+    {
+      "algorithm": "Teleportation",
+      "blocking_clarification": "Which explicit input-state preparation must the source preserve?",
+      "case_id": "teleportation_material_blocker",
+      "request": "Use qCoder to review a Qiskit teleportation plan before generating source; I must specify the input-state preparation.",
+      "variant": "material_blocker"
+    },
+    {
+      "algorithm": "QAOA",
+      "case_id": "qaoa_review_before_generation",
+      "request": "Use qCoder to review QAOA circuit and parameter choices before generating Qiskit source.",
+      "variant": "review_before_generation"
+    },
+    {
+      "algorithm": "QAOA",
+      "case_id": "qaoa_reordered",
+      "request": "Use qCoder to review the circuit-structure choices, then create a QAOA Qiskit program after confirmation.",
+      "variant": "reordered"
+    },
+    {
+      "algorithm": "QAOA",
+      "case_id": "qaoa_fully_specified",
+      "request": "Use qCoder to review a two-node Max-Cut QAOA Qiskit circuit with one cost and mixer layer before writing source only.",
+      "variant": "fully_specified"
+    },
+    {
+      "algorithm": "QAOA",
+      "case_id": "qaoa_responsibly_recommendable",
+      "request": "Use qCoder to explain choices for a small QAOA Qiskit circuit before creating the program.",
+      "variant": "responsibly_recommendable"
+    },
+    {
+      "algorithm": "QAOA",
+      "blocking_clarification": "Which exact objective Hamiltonian must the requested source encode?",
+      "case_id": "qaoa_material_blocker",
+      "request": "Use qCoder to review a QAOA Qiskit plan before generating source; I must provide the objective Hamiltonian.",
+      "variant": "material_blocker"
+    }
+  ]
+}

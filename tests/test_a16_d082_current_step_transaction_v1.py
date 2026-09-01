@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -23,7 +23,6 @@ from qcoder.cursor_post_write_hook import (
     handle_cursor_after_file_edit_event,
     install_cursor_post_write_hook,
 )
-
 
 REQUEST = (
     "Use qCoder to write a Qiskit program that prepares a Φ+ Bell state. "
@@ -123,7 +122,7 @@ def test_private_inventory_is_begin_and_complete_while_public_remains_twelve() -
     assert all(item["x-qcoder-public-context-bridge-tool"] is False for item in descriptors)
     completion = descriptors[1]
     assert completion["inputSchema"]["required"] == []
-    assert completion["x-qcoder-normal-happy-path"] == {}
+    assert "Complete the exact active typed Current Step" in completion["description"]
     assert "artifact_digest" not in completion["inputSchema"]["properties"]
     assert "approval" not in completion["inputSchema"]["properties"]
     assert "state_revision" not in completion["inputSchema"]["properties"]

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Mapping
 from copy import deepcopy
 from pathlib import Path
-import time
 from typing import Any
 
 import pytest
@@ -23,12 +23,12 @@ from qcoder.current_loop import (
     canonical_bytes,
     migrate_current_loop_state,
 )
-from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.current_loop_contract_management import (
     customer_contract_document,
     reset_customer_contract_document,
 )
 from qcoder.current_loop_contract_sidecar import SidecarSession
+from qcoder.current_loop_coordinator import CurrentLoopCoordinator
 from qcoder.current_loop_derivation import (
     derive_pending_snapshot,
     promote_derivation_snapshot,
@@ -186,7 +186,7 @@ def test_canonical_vocabulary_binding_and_state_v9_are_identical(tmp_path: Path)
         coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
     vocabulary = vocabulary_snapshot()
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v48"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v59"
     assert binding["canonical_current_loop_vocabulary"] == vocabulary
     assert (
         binding["contract_sidecar"]["accepted_domains"]["canonical_evidence_vocabulary"]

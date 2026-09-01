@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
 
+from qcoder.context_bridge_mcp import (
+    CLIENT_BINDING_CONTRACT_ID,
+    EXPECTED_TOOLS,
+    build_client_binding_descriptor,
+)
 from qcoder.current_loop import CURRENT_LOOP_STATE_MAX_BYTES, canonical_bytes
 from qcoder.current_loop_contract_management import (
     CONTRACT_CHANGE_RECEIPT_SCHEMA_ID,
@@ -26,20 +31,14 @@ from qcoder.current_loop_contract_management import (
     semantic_contract_equivalence,
 )
 from qcoder.current_loop_contract_sidecar import (
-    SIDECAR_SCHEMA_ID,
-    SidecarSession,
     _CSS,
     _HTML,
     _JS,
+    SIDECAR_SCHEMA_ID,
+    SidecarSession,
     sidecar_contract_snapshot,
 )
 from qcoder.current_loop_coordinator import CurrentLoopCoordinator
-from qcoder.context_bridge_mcp import (
-    CLIENT_BINDING_CONTRACT_ID,
-    EXPECTED_TOOLS,
-    build_client_binding_descriptor,
-)
-
 
 REQUEST = (
     "Use qCoder for this build. Create and run one bounded local Qiskit program. "
@@ -417,7 +416,7 @@ def test_binding_v18_publishes_management_without_changing_tools() -> None:
     binding = build_client_binding_descriptor(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v48"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v59"
     assert binding["contract_management"]["schema_id"] == CONTRACT_MANAGEMENT_SCHEMA_ID
     assert binding["browser_and_ide_share_contract_management_service"] is True
     assert binding["effective_contract_json_read_only"] is True
