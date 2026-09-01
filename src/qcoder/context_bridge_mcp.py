@@ -188,8 +188,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 52
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v53"
+CLIENT_BINDING_SCHEMA_VERSION = 53
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v54"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -231,7 +231,10 @@ classify the exact current customer message through the binding's canonical requ
 contract. A concrete explicit qCoder source, QASM, execution, or selected-file review request uses
 the project-local binding-owned begin_current_loop MCP operation. Pass the exact complete current
 customer message once as request_text. Branch-specific target rules apply: review before generation
-uses request_text plus connected_assistant_proposal and no invented target; direct generation uses
+uses request_text plus connected_assistant_proposal and no invented target; qCoder verifies the
+proposal's generation-versus-modification kind against the exact unquoted request before any target
+can be ignored. A target can become later write authority only when the request affirmatively
+authorizes it and the first review visibly displays it. Direct generation uses
 one exact customer-authorized intended_artifact_paths entry for every requested role; selected-file
 work uses exact customer-named selected_artifact_paths; active-loop continuation reuses its bound
 target unless the customer names a replacement. Choose names solely from the customer task; do not
@@ -1089,9 +1092,12 @@ Display its three groups and exact customer actions without adding another qCode
 generate or modify source until the customer confirms the displayed revision. Confirmation of a
 generation plan never grants execution authority. Review before generation has immediate-interaction
 precedence: future artifact production does not require or authorize an invented source target
-before confirmation. No invented target is permitted. Omit target fields when the customer names no target. If a host nevertheless
-supplies such a target, qCoder discards it before path processing and returns the same first review.
-Source modification still requires its exact customer-selected source.
+before confirmation. No invented target is permitted. Omit target fields when the customer grants no
+affirmative target authority. Quoted, example-only, negated, and inline-only filenames are not
+authority. If a host nevertheless supplies an irrelevant target, qCoder first verifies the request's
+generation-versus-modification mode, then discards the target before path processing and returns the
+same first review. Any target that can become a later write is displayed in that review. Source
+modification still requires its exact native-client-selected source.
 
 ACTIVE-BUILD STRUCTURED ACTIVATION
 Call the project-local qcoder-current-loop begin_current_loop operation once with request_text set
@@ -1099,7 +1105,8 @@ to the exact complete current customer message. For direct generation, supply on
 workspace-relative intended_artifact_paths value per requested role, chosen solely from the task.
 For selected-file work, supply only the exact customer-named selected_artifact_paths. For an
 active-loop continuation, use its already bound target. These target requirements do not apply to
-an unconfirmed review-before-generation interaction with no customer-named target. Never use Read,
+an unconfirmed review-before-generation interaction with no affirmative customer target authority.
+Never use Read,
 Grep, Glob, listing, scanning, or neighboring-artifact search. The typed required argument makes missing stdin or
 command construction inapplicable. The customer never types the command. Never construct a command
 from coordinator_prefix; it and inventories are diagnostics only. Do not run current-loop --help,

@@ -13,8 +13,8 @@ except ModuleNotFoundError:  # pragma: no cover
 
 
 EXPECTED_SCHEMA = "qcoder.private_development_version.v1"
-EXPECTED_VERSION = "0.6.0a24.post0.dev3+review.before.generation.v1"
-EXPECTED_PREDECESSOR = "0.6.0a24.post0.dev2+openqasm3.local.evidence.v1"
+EXPECTED_VERSION = "0.6.0a24.post0.dev4+review.before.generation.v2"
+EXPECTED_PREDECESSOR = "0.6.0a24.post0.dev3+review.before.generation.v1"
 EXPECTED_BASIS = "0.6.0a24"
 EXPECTED_WORK_IDENTITY = "WI0440_REVIEW_BEFORE_GENERATION_CONVERGENT_FIRST_VALUE_V1"
 

@@ -168,6 +168,8 @@ def main() -> int:
     transition: list[float] = []
     unsafe_rejection: list[float] = []
     irrelevant_target_convergence: list[float] = []
+    negated_target_convergence: list[float] = []
+    material_target_rejection: list[float] = []
     tokens: set[str] = set()
     scenario_counts = {
         "review_first_value": 0,
@@ -186,6 +188,9 @@ def main() -> int:
         "empty_customer_constraints": 0,
         "material_customer_constraints": 0,
         "irrelevant_target_convergence": 0,
+        "negated_target_convergence": 0,
+        "material_target_mode_mismatch_rejection": 0,
+        "display_before_write_authority": 0,
     }
     for _ in range(args.repetitions):
         for request, algorithm in cases:
@@ -264,6 +269,110 @@ def main() -> int:
             combined.append(elapsed)
             irrelevant_target_convergence.append(elapsed)
             scenario_counts["irrelevant_target_convergence"] += 1
+
+        negated_request = (
+            "Use qCoder to review a Qiskit Bell program before generating source. Do not create "
+            "bell.py; show the source inline after confirmation."
+        )
+        negated_variants = (
+            {},
+            {"intended_artifact_paths": {"source": "bell.py"}},
+            {"intended_artifact_paths": {"source": "invented.py"}},
+            {
+                "intended_artifact_paths": {"source": "bell.py"},
+                "selected_artifact_paths": ["invented.py"],
+            },
+        )
+        negated_review: dict[str, Any] | None = None
+        for target_arguments in negated_variants:
+            with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-negated-target-") as directory:
+                workspace = Path(directory)
+                started = time.monotonic()
+                reviewed = _binding_call(
+                    workspace,
+                    negated_request,
+                    deepcopy(proposal),
+                    **target_arguments,
+                )
+                elapsed = time.monotonic() - started
+                confirmed = _binding_call(
+                    workspace,
+                    None,
+                    review_action="Use recommended choices",
+                    prior_result_token=reviewed["prior_result_token"],
+                )
+            semantic = deepcopy(reviewed)
+            semantic.pop("prior_result_token", None)
+            if negated_review is None:
+                negated_review = semantic
+            elif semantic != negated_review:
+                raise RuntimeError("negated_target_review_did_not_converge")
+            ready = confirmed["generation_ready_context"]
+            if (
+                ready["category"] != "confirmed_plan_generation_ready_inline_source"
+                or ready["exact_workspace_target"] is not None
+            ):
+                raise RuntimeError("negated_target_created_write_authority")
+            initial.append(elapsed)
+            rendering.append(0.0)
+            combined.append(elapsed)
+            negated_target_convergence.append(elapsed)
+            scenario_counts["negated_target_convergence"] += 1
+
+        mismatch_request = (
+            "Use qCoder to review proposed Qiskit Bell changes to the selected source before "
+            "modifying it."
+        )
+        with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-mode-mismatch-") as directory:
+            workspace = Path(directory)
+            (workspace / "selected.py").write_text("ORIGINAL\n", encoding="utf-8")
+            started = time.monotonic()
+            mismatch = _binding_payload(
+                workspace,
+                mismatch_request,
+                deepcopy(proposal),
+                selected_artifact_paths=["selected.py"],
+            )
+            mismatch_elapsed = time.monotonic() - started
+        if (
+            mismatch.get("category") != "review_request_proposal_transaction_kind_mismatch"
+            or mismatch.get("state_mutated") is not False
+        ):
+            raise RuntimeError("material_target_mode_mismatch_not_rejected")
+        initial.append(mismatch_elapsed)
+        rendering.append(0.0)
+        combined.append(mismatch_elapsed)
+        material_target_rejection.append(mismatch_elapsed)
+        scenario_counts["material_target_mode_mismatch_rejection"] += 1
+
+        exact_target_request = (
+            "Use qCoder to review a Bell plan before generating source in bell.py."
+        )
+        with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-displayed-target-") as directory:
+            workspace = Path(directory)
+            displayed = _binding_call(
+                workspace,
+                exact_target_request,
+                deepcopy(proposal),
+                intended_artifact_paths={"source": "bell.py"},
+            )
+            target_values = [
+                item["value"]
+                for group in displayed["review_before_generation"]["initial_decision_groups"]
+                for item in group["items"]
+                if item["label"] == "Source target"
+            ]
+            confirmed = _binding_call(
+                workspace,
+                None,
+                review_action="Use recommended choices",
+                prior_result_token=displayed["prior_result_token"],
+            )
+        if target_values != ["bell.py"] or (
+            confirmed["generation_ready_context"]["exact_workspace_target"] != "bell.py"
+        ):
+            raise RuntimeError("write_target_not_display_bound")
+        scenario_counts["display_before_write_authority"] += 1
 
         generic = _proposal(EXACT_REQUEST)
         generic["implementation_recommendations"] = ["A concrete option will be used."]
@@ -459,6 +568,8 @@ def main() -> int:
     transition_summary = _summary(transition)
     unsafe_rejection_summary = _summary(unsafe_rejection)
     irrelevant_target_summary = _summary(irrelevant_target_convergence)
+    negated_target_summary = _summary(negated_target_convergence)
+    material_target_rejection_summary = _summary(material_target_rejection)
     processing_summary = _summary(
         [float(item["processing_seconds"]) for item in LOCAL_TIMING_RECEIPTS]
     )
@@ -493,6 +604,8 @@ def main() -> int:
         "generation_ready_transition": transition_summary,
         "unsafe_content_rejection": unsafe_rejection_summary,
         "irrelevant_target_convergence": irrelevant_target_summary,
+        "negated_target_convergence": negated_target_summary,
+        "material_target_mode_mismatch_rejection": material_target_rejection_summary,
         "first_useful_interpretation_budget_pass": first_budget,
         "first_material_decision_budget_pass": (
             combined_summary["median_seconds"] <= 15

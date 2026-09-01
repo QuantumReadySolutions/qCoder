@@ -18,13 +18,17 @@ Only a substantive, unblocked review exposes `Use recommended choices` and `Revi
 choices`. Confirmation binds to the exact displayed revision. It grants source-generation or
 source-modification authority for that revision only; execution always remains independent.
 
-Review before generation has immediate-interaction precedence over future artifact production.
-When the exact request names no source target, the initial call uses only `request_text` and
+Review before generation has immediate-interaction precedence over future artifact production only
+after qCoder verifies that the proposal's generation-versus-modification kind agrees with the exact
+unquoted request and any exact native-client selection. When the exact request grants no affirmative
+source-target authority, the initial call uses only `request_text` and
 `connected_assistant_proposal`; it does not invent a path. If a host nevertheless supplies an
 irrelevant intended or selected target, qCoder discards it before path normalization, inspection,
-state binding, or projection and returns the same first review. Direct generation, review before
-modifying selected source, selected-file workflows, exact customer-named targets, and active-loop
-replacement retain their strict existing target contracts.
+state binding, or projection and returns the same first review. Quoted, example-only, negated, and
+inline-only filename mentions grant no target authority. Every target that can become a later write
+is shown in the review and bound to that displayed revision before confirmation. Direct generation,
+review before modifying selected source, selected-file workflows, affirmatively customer-authorized
+targets, and active-loop replacement retain their strict existing target contracts.
 
 The compact first review shows assistant recommendations once. Its complete editable material-choice
 inventory remains behind `Review or change choices`, so the initial three groups do not restate the
@@ -49,4 +53,8 @@ python scripts/wi0440-review-before-generation-acceptance.py --repetitions 10
 
 The timing command measures only fixture-driven deterministic local work. It does not measure an AI
 assistant, a protected service, a client, or the historical 188.8-second customer-visible event.
+The real stdio binding additionally writes one session-bound, sanitized, operator-only timing receipt
+after flushing its result. A separate local operator process consumes that receipt exactly once; the
+receipt never enters the MCP result or customer projection and retains no request, proposal, result
+token, target, source, QASM, credential, or client stream.
 Targeted native-Windows Cursor end-to-end timing remains a later Roadmap-gated lifecycle step.

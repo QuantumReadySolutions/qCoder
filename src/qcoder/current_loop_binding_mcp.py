@@ -34,6 +34,10 @@ from qcoder.current_loop_pending_completion import (
     validate_pending_completion_checkpoint,
 )
 from qcoder.current_loop_result_controls import ResultControlError
+from qcoder.current_loop_operator_timing import (
+    clear_stdio_operator_timing,
+    record_stdio_operator_timing,
+)
 from qcoder.current_step_contract import (
     derive_current_step_contract,
     quiet_customer_visibility_contract,
@@ -43,6 +47,8 @@ from qcoder.review_before_generation import (
     ReviewBeforeGenerationError,
     contract_snapshot as review_before_generation_contract_snapshot,
     proposal_input_schema as review_before_generation_proposal_input_schema,
+    unquoted_request_text,
+    validate_review_transaction_kind,
 )
 
 BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v14"
@@ -61,22 +67,101 @@ _SOURCE_TARGET_PATTERN = re.compile(
 )
 
 
-def _request_explicitly_selects_target(request_text: str, target: str) -> bool:
-    normalized_request = request_text.replace("\\", "/").casefold()
+def _target_occurrence_pattern(target: str) -> re.Pattern[str]:
     normalized_target = target.replace("\\", "/").casefold()
-    return bool(
-        normalized_target
-        and re.search(
-            rf"(?<![\w./-]){re.escape(normalized_target)}(?![\w/-])",
-            normalized_request,
-        )
+    return re.compile(
+        rf"(?<![\w./-]){re.escape(normalized_target)}(?![\w/-])",
+        re.IGNORECASE,
     )
 
 
-def _request_names_source_target(request_text: str) -> bool:
-    """Return whether the exact request itself names a bounded source-like target."""
+def _request_explicitly_selects_target(request_text: str, target: str) -> bool:
+    """Preserve exact lexical selection checks for non-review target branches."""
 
-    return _SOURCE_TARGET_PATTERN.search(request_text.replace("\\", "/")) is not None
+    normalized_request = request_text.replace("\\", "/")
+    return _target_occurrence_pattern(target).search(normalized_request) is not None
+
+
+def _request_source_target_authority(request_text: str, target: str) -> str:
+    """Classify only affirmative authority for one exact source target."""
+
+    request = " ".join(unquoted_request_text(request_text).replace("\\", "/").split())
+    pattern = _target_occurrence_pattern(target)
+    occurrences = list(pattern.finditer(request))
+    if not occurrences:
+        return "absent"
+    affirmative = False
+    non_authoritative = False
+    for occurrence in occurrences:
+        clause_start = max(
+            request.rfind(delimiter, 0, occurrence.start())
+            for delimiter in (".", "!", "?", ";", "\n")
+        )
+        following_positions = [
+            position
+            for delimiter in (".", "!", "?", ";", "\n")
+            if (position := request.find(delimiter, occurrence.end())) >= 0
+        ]
+        clause_end = min(following_positions, default=len(request))
+        before = request[clause_start + 1 : occurrence.start()].casefold()[-128:]
+        after = request[occurrence.end() : clause_end].casefold()[:96]
+        clause = before + target.casefold() + after
+        negated = bool(
+            re.search(
+                r"\b(?:do\s+not|don't|dont|never|without|not|instead\s+of|rather\s+than)\b"
+                r"[^.;!?]{0,80}$",
+                before,
+            )
+        )
+        example_only = bool(
+            re.search(r"\b(?:for\s+example|e\.g\.|example|such\s+as)\b[^.;!?]{0,64}$", before)
+        )
+        inline_only = bool(
+            re.search(
+                r"\b(?:inline|in\s+the\s+(?:response|reply|chat)|without\s+(?:a\s+)?file)\b",
+                clause,
+            )
+        )
+        positive = bool(
+            re.search(
+                r"\b(?:generate|generating|create|creating|write|writing|save|saving|produce|"
+                r"producing|make|making|draft|drafting|modify|modifying|edit|editing|update|"
+                r"updating|replace|replacing)\b"
+                r"[^.;!?]{0,96}$",
+                before,
+            )
+            or re.search(r"\b(?:target|filename|file\s+name)\b[^.;!?]{0,48}$", before)
+        )
+        if negated or example_only or inline_only:
+            non_authoritative = True
+        elif positive:
+            affirmative = True
+        else:
+            non_authoritative = True
+    if affirmative and non_authoritative:
+        return "contradictory_or_ambiguous"
+    return "affirmative" if affirmative else "non_authoritative"
+
+
+def _request_source_target_candidates(request_text: str) -> tuple[str, ...]:
+    request = unquoted_request_text(request_text).replace("\\", "/")
+    return tuple(
+        dict.fromkeys(match.group(0) for match in _SOURCE_TARGET_PATTERN.finditer(request))
+    )
+
+
+def _affirmatively_authorized_request_targets(request_text: str) -> tuple[str, ...]:
+    result: list[str] = []
+    for target in _request_source_target_candidates(request_text):
+        authority = _request_source_target_authority(request_text, target)
+        if authority == "contradictory_or_ambiguous":
+            raise ReviewBeforeGenerationError(
+                "review_source_target_authority_ambiguous",
+                clarification="Should the reviewed source be inline, or written to one exact target?",
+            )
+        if authority == "affirmative":
+            result.append(target.replace("\\", "/"))
+    return tuple(result)
 
 
 def _unconfirmed_generation_review_has_no_target_authority(
@@ -87,7 +172,7 @@ def _unconfirmed_generation_review_has_no_target_authority(
     return (
         isinstance(proposal, Mapping)
         and proposal.get("transaction_kind") == "review_before_source_generation"
-        and not _request_names_source_target(request_text)
+        and not _affirmatively_authorized_request_targets(request_text)
     )
 
 
@@ -131,7 +216,10 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "the proposal. Execution authority remains separate. For review before generation, "
                 "future artifact production does not create present target authority: do not invent "
                 "a source path before confirmation. Target fields supplied without an exact "
-                "customer-named target are ignored before path processing for this immediate review. "
+                "customer-authorized target are ignored before path processing for this immediate "
+                "review. A filename in a quotation, example, negation, or inline-only instruction "
+                "does not grant target authority. Any target that can become a later workspace "
+                "write is displayed in the review before confirmation. "
                 "For a direct artifact-producing request, supply one exact workspace-relative "
                 "intended_artifact_paths entry for every requested role on a fresh loop. For an "
                 "active-loop replacement, omit the path: qCoder binds the current registered "
@@ -173,9 +261,11 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                         "additionalProperties": False,
                         "description": (
                             "Fresh-loop exact workspace-relative targets for direct generation or "
-                            "an exact customer-named review target. Omit for review before generation "
-                            "when the customer names no target; a supplied target is ignored before "
-                            "path processing for that immediate review. Omit for an active-loop "
+                            "an exact affirmatively customer-authorized review target. Omit for review "
+                            "before generation when the customer grants no target authority; a supplied "
+                            "target is ignored before path processing for that immediate review. A "
+                            "negated, quoted, example-only, or inline-only filename is not authority. "
+                            "Omit for an active-loop "
                             "replacement so qCoder reuses the registered current role-head target."
                         ),
                     },
@@ -233,9 +323,11 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                         "title": "Initial or revised review-before-generation call",
                         "description": (
                             "Use exact request_text and a substantive proposal. Do not invent a "
-                            "future source target before confirmation. Safe target fields already "
-                            "supplied without customer target authority are absorbed and ignored by "
-                            "qCoder rather than causing a corrective call."
+                            "future source target before confirmation. qCoder first verifies that the "
+                            "proposal's generation-versus-modification kind matches the exact unquoted "
+                            "request. Safe target fields already supplied without affirmative customer "
+                            "target authority are absorbed and ignored rather than causing a corrective "
+                            "call. A material target is displayed before it can become write authority."
                         ),
                         "required": ["request_text", "connected_assistant_proposal"],
                         "not": {"required": ["review_action"]},
@@ -305,6 +397,10 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "immediate_review_precedes_future_artifact_target": True,
                 "invented_target_required_before_confirmation": False,
                 "irrelevant_target_disposition": "discarded_before_path_processing",
+                "transaction_kind_bound_before_target_discard": True,
+                "target_authority_requires_affirmative_unquoted_request": True,
+                "post_confirmation_write_target_displayed_before_confirmation": True,
+                "target_free_review_remains_target_free_after_confirmation": True,
             },
             "x-qcoder-active-loop-continuation": {
                 "request_text": "<exact next customer message>",
@@ -772,11 +868,50 @@ def _handle_binding_jsonrpc_message(
             }
         )
         return _result(message_id, _tool_result(payload))
-    ignore_review_targets = (
+    if connected_assistant_proposal is not None:
+        try:
+            transaction_kind = connected_assistant_proposal.get("transaction_kind")
+            request_transaction_state = validate_review_transaction_kind(
+                str(request_text), transaction_kind
+            )
+            affirmative_request_targets = _affirmatively_authorized_request_targets(
+                str(request_text)
+            )
+        except ReviewBeforeGenerationError as exc:
+            return _result(
+                message_id,
+                _tool_result(
+                    {
+                        "schema_id": "qcoder.current_loop.review_before_generation_rejection.v2",
+                        "schema_version": 2,
+                        "ok": False,
+                        "category": exc.category,
+                        **(
+                            {"customer_clarification": exc.clarification}
+                            if exc.clarification
+                            else {}
+                        ),
+                        "state_mutated": False,
+                        "selected_artifact_identity_discarded": False,
+                        "source_or_qasm_created": False,
+                        "file_mutation_performed": False,
+                        "execution_performed": False,
+                        "protected_service_called": False,
+                        "raw_request_echoed": False,
+                        "raw_proposal_echoed": False,
+                        "workspace_discovery_performed": False,
+                    }
+                ),
+            )
+    else:
+        transaction_kind = None
+        request_transaction_state = "not_established"
+        affirmative_request_targets = ()
+    ignore_review_targets = bool(
         connected_assistant_proposal is not None
-        and _unconfirmed_generation_review_has_no_target_authority(
-            str(request_text), connected_assistant_proposal
-        )
+        and transaction_kind == "review_before_source_generation"
+        and request_transaction_state != "source_modification"
+        and not affirmative_request_targets
     )
     selected_paths_value = (
         None if ignore_review_targets else arguments.get("selected_artifact_paths")
@@ -817,8 +952,8 @@ def _handle_binding_jsonrpc_message(
             selected_identities = [
                 str(item["workspace_relative_path"]) for item in normalized_selected
             ]
-            if any(
-                not _request_explicitly_selects_target(request_text, identity)
+            if transaction_kind == "review_before_source_generation" and any(
+                _request_source_target_authority(str(request_text), identity) != "affirmative"
                 for identity in selected_identities
             ):
                 raise ArtifactTargetError("review_selected_path_not_named_by_customer")
@@ -834,9 +969,8 @@ def _handle_binding_jsonrpc_message(
                 intended_input = {"source": selected_identities[0]}
             if (
                 not intended_input
-                and connected_assistant_proposal.get("transaction_kind")
-                == "review_before_source_generation"
-                and _request_names_source_target(str(request_text))
+                and transaction_kind == "review_before_source_generation"
+                and affirmative_request_targets
             ):
                 raise ArtifactTargetError("review_source_target_required")
             normalized_targets = normalize_intended_artifact_targets(
@@ -845,8 +979,12 @@ def _handle_binding_jsonrpc_message(
                 required_roles=("source",) if intended_input else (),
             )
             if any(
-                not _request_explicitly_selects_target(
-                    str(request_text), str(item["workspace_relative_path"])
+                (
+                    transaction_kind == "review_before_source_generation"
+                    and _request_source_target_authority(
+                        str(request_text), str(item["workspace_relative_path"])
+                    )
+                    != "affirmative"
                 )
                 for item in normalized_targets.values()
             ):
@@ -1222,12 +1360,23 @@ def serve_binding_mcp_stdio(
     """Serve the internal binding MCP over JSON-lines or Content-Length stdio."""
 
     stdin = sys.stdin.buffer
+    timing_enabled = bool(
+        connection_state_root is not None
+        and connection_generation is not None
+        and connection_session_sha256 is not None
+    )
+    if timing_enabled:
+        try:
+            clear_stdio_operator_timing(state_root=connection_state_root)
+        except Exception:  # noqa: BLE001 - operator evidence cannot alter MCP behavior
+            pass
     while True:
         first = stdin.readline()
         if not first:
             break
         if not first.strip():
             continue
+        stdio_operation_entry_ns = time.monotonic_ns()
         framed = not first.lstrip().startswith(b"{")
         raw = first
         if framed:
@@ -1269,12 +1418,26 @@ def serve_binding_mcp_stdio(
                 message=message,
                 response=response,
             )
+        stdio_processing_complete_ns = time.monotonic_ns()
         if response is None:
             continue
         if framed:
             _write_content_length_response(response)
         else:
             print(json.dumps(response, sort_keys=True), flush=True)
+        stdio_result_return_ns = time.monotonic_ns()
+        if timing_enabled:
+            try:
+                record_stdio_operator_timing(
+                    state_root=connection_state_root,
+                    setup_generation=str(connection_generation),
+                    session_sha256=str(connection_session_sha256),
+                    operation_entry_ns=stdio_operation_entry_ns,
+                    processing_complete_ns=stdio_processing_complete_ns,
+                    result_return_ns=stdio_result_return_ns,
+                )
+            except Exception:  # noqa: BLE001 - operator evidence cannot alter MCP behavior
+                pass
     return 0
 
 

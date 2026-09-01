@@ -213,8 +213,11 @@ def test_caller_supplied_request_digest_is_rejected() -> None:
 def test_source_modification_requires_an_explicit_selected_artifact() -> None:
     proposal = bell_proposal()
     proposal["transaction_kind"] = "review_before_source_modification"
+    modification_request = (
+        "Use qCoder to review proposed Bell changes to the selected source before modifying it."
+    )
     with pytest.raises(ReviewBeforeGenerationError, match="selection_required"):
-        validate_connected_assistant_proposal(EXACT_BELL_REQUEST, proposal)
+        validate_connected_assistant_proposal(modification_request, proposal)
 
 
 def test_blocking_clarification_withholds_confirmation_actions() -> None:
@@ -603,8 +606,8 @@ def test_binding_descriptor_is_additive_and_inventory_remains_exact_12_plus_2() 
     descriptor = build_client_binding_descriptor(coordinator_prefix=["qcoder"])[
         "client_binding_contract"
     ]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v53"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 52
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v54"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 53
     assert descriptor["review_before_generation_contract"]["new_public_tool"] is False
     assert descriptor["review_before_generation_contract"]["new_private_operation"] is False
     assert len(EXPECTED_TOOLS) == 12
@@ -654,8 +657,8 @@ def test_local_timing_acceptance_population_passes_without_network() -> None:
         text=True,
     )
     result = json.loads(completed.stdout)
-    assert result["population_cases"] == 60
-    assert result["samples"] == 60
+    assert result["population_cases"] == 65
+    assert result["samples"] == 65
     assert result["scenario_counts"] == {
         "review_first_value": 20,
         "confirmation_without_replay": 1,
@@ -671,6 +674,9 @@ def test_local_timing_acceptance_population_passes_without_network() -> None:
         "fake_action_rejection": 2,
         "material_customer_constraints": 1,
         "irrelevant_target_convergence": 4,
+        "negated_target_convergence": 4,
+        "material_target_mode_mismatch_rejection": 1,
+        "display_before_write_authority": 1,
         "quiet_projection": 1,
         "split_source_rejection": 3,
     }

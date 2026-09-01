@@ -366,8 +366,8 @@ def test_duplicate_and_stale_confirmation_preserve_internal_binding(tmp_path: Pa
 
 def test_contract_identity_advances_without_inventory_or_proposal_change() -> None:
     descriptors = binding_tool_descriptors()
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v53"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 52
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v54"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 53
     assert [item["name"] for item in descriptors] == [
         "begin_current_loop",
         "complete_current_step",

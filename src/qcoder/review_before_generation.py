@@ -11,6 +11,7 @@ import ast
 from copy import deepcopy
 from hashlib import sha256
 import json
+from pathlib import PurePosixPath
 import re
 from typing import Any, Iterator, Mapping, Sequence
 import unicodedata
@@ -445,6 +446,94 @@ def _unquoted_request(exact_request: str) -> str:
     return re.sub(r"‘[^’\r\n]*’", " ", without_curly)
 
 
+def unquoted_request_text(exact_request: str) -> str:
+    """Return the bounded request text with quoted examples removed."""
+
+    return _unquoted_request(exact_request)
+
+
+def review_source_transaction_state(exact_request: str) -> str:
+    """Return only the bounded generation/modification authority axis."""
+
+    request = " ".join(_unquoted_request(exact_request).casefold().split())
+    modification = bool(
+        re.search(
+            r"\b(?:modify|modifying|modified|edit|editing|edited|change|changes|changing|"
+            r"update|updating|replace|replacing|refactor|refactoring)\b"
+            r"[^.!?;]{0,80}\b(?:selected|existing|current|source|file|code|program|script)\b",
+            request,
+        )
+        or re.search(
+            r"\b(?:selected|existing|current)\b[^.!?;]{0,64}"
+            r"\b(?:source|file|code|program|script)\b[^.!?;]{0,80}"
+            r"\b(?:modify|modifying|edit|editing|change|update|replace|refactor)\b",
+            request,
+        )
+        or re.search(
+            r"\bproposed\b[^.!?;]{0,40}\bchanges?\b[^.!?;]{0,64}"
+            r"\b(?:source|file|code|program|script)\b",
+            request,
+        )
+    )
+    generation = bool(
+        re.search(
+            r"\b(?:generate|generating|create|creating|write|writing|produce|producing|"
+            r"make|making|draft|drafting|code|coding)\b[^.!?;]{0,80}"
+            r"\b(?:source|code|program|script|file|implementation)\b",
+            request,
+        )
+        or re.search(
+            r"\b(?:source|code|program|script|file|implementation)\b[^.!?;]{0,80}"
+            r"\b(?:generate|generating|create|creating|write|writing|produce|make|draft)\b",
+            request,
+        )
+    )
+    if modification and generation:
+        return "contradictory_or_ambiguous"
+    if modification:
+        return "source_modification"
+    if generation:
+        return "source_generation"
+    return "not_established"
+
+
+def validate_review_transaction_kind(exact_request: str, transaction_kind: object) -> str:
+    """Bind an assistant proposal kind to the exact unquoted customer request."""
+
+    request_state = review_source_transaction_state(exact_request)
+    expected = {
+        "source_generation": "review_before_source_generation",
+        "source_modification": "review_before_source_modification",
+    }.get(request_state)
+    if request_state == "contradictory_or_ambiguous":
+        raise ReviewBeforeGenerationError(
+            "review_request_source_transaction_ambiguous",
+            clarification="Should qCoder review a new source plan or changes to selected source?",
+        )
+    if expected is not None and transaction_kind != expected:
+        raise ReviewBeforeGenerationError("review_request_proposal_transaction_kind_mismatch")
+    return request_state
+
+
+def _validated_display_source_target(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value or len(value.encode("utf-8")) > 16_384:
+        raise ReviewBeforeGenerationError("review_displayed_source_target_invalid")
+    if "\\" in value or any(ord(character) < 32 for character in value):
+        raise ReviewBeforeGenerationError("review_displayed_source_target_invalid")
+    candidate = PurePosixPath(value)
+    if (
+        candidate.is_absolute()
+        or not candidate.parts
+        or any(part in {"", ".", ".."} for part in candidate.parts)
+    ):
+        raise ReviewBeforeGenerationError("review_displayed_source_target_invalid")
+    if candidate.suffix.casefold() not in {".py", ".pyw", ".qasm"}:
+        raise ReviewBeforeGenerationError("review_displayed_source_target_invalid")
+    return value
+
+
 def _execution_request_state(exact_request: str) -> str:
     request = " ".join(_unquoted_request(exact_request).casefold().split())
     occurrences = list(re.finditer(r"\b(?:execute|execution|run|simulate|simulation)\b", request))
@@ -646,6 +735,7 @@ def validate_connected_assistant_proposal(
     proposal: Mapping[str, Any],
     *,
     selected_artifact_identities: Sequence[str] = (),
+    displayed_source_target: str | None = None,
 ) -> dict[str, Any]:
     """Validate and normalize one assistant-authored semantic proposal."""
 
@@ -674,6 +764,8 @@ def validate_connected_assistant_proposal(
     execution_request = str(proposal.get("execution_request") or "")
     if transaction_kind not in TRANSACTION_KINDS or execution_request not in EXECUTION_REQUESTS:
         raise ReviewBeforeGenerationError("review_proposal_semantic_mode_invalid")
+    validate_review_transaction_kind(exact_request, transaction_kind)
+    displayed_source_target = _validated_display_source_target(displayed_source_target)
     axes = _semantic_axes(transaction_kind, execution_request)
     if transaction_kind == "review_before_source_modification" and not selected_artifact_identities:
         raise ReviewBeforeGenerationError(
@@ -846,6 +938,8 @@ def validate_connected_assistant_proposal(
 
     output_items: list[dict[str, str]] = []
     add_unique(output_items, _assistant_item("Output artifact", output_artifact))
+    if displayed_source_target is not None:
+        add_unique(output_items, _qcoder_item("Source target", displayed_source_target))
     for item in _authority_items(axes, request_execution_state):
         add_unique(output_items, item)
     for index, value in enumerate(deferred, start=1):
@@ -894,7 +988,15 @@ def validate_connected_assistant_proposal(
         "blocking_clarification": blocking,
         "retention": "process_and_discard",
     }
-    if _privacy_error(normalized):
+    privacy_projection = deepcopy(normalized)
+    for group in privacy_projection["review_groups"]:
+        for item in group["items"]:
+            if (
+                item.get("label") == "Source target"
+                and item.get("attribution") == QCODER_ATTRIBUTION
+            ):
+                item["value"] = "customer-authorized-source-target"
+    if _privacy_error(privacy_projection):
         raise ReviewBeforeGenerationError("review_proposal_private_material_rejected")
     return normalized
 
@@ -904,9 +1006,13 @@ def build_review_before_generation_semantics(
     proposal: Mapping[str, Any],
     *,
     selected_artifact_identities: Sequence[str] = (),
+    displayed_source_target: str | None = None,
 ) -> dict[str, Any]:
     validated = validate_connected_assistant_proposal(
-        exact_request, proposal, selected_artifact_identities=selected_artifact_identities
+        exact_request,
+        proposal,
+        selected_artifact_identities=selected_artifact_identities,
+        displayed_source_target=displayed_source_target,
     )
     result = {
         "schema_id": SEMANTICS_SCHEMA_ID,
@@ -917,6 +1023,11 @@ def build_review_before_generation_semantics(
             sha256(value.encode("utf-8")).hexdigest()
             for value in sorted(selected_artifact_identities)
         ],
+        "displayed_source_target_sha256": (
+            sha256(displayed_source_target.encode("utf-8")).hexdigest()
+            if displayed_source_target is not None
+            else None
+        ),
         "route": "binding_owned_review_before_generation",
         "operation": "begin_current_loop",
         "one_operation_before_useful_review": True,
@@ -937,25 +1048,53 @@ def review_revision(
     proposal: Mapping[str, Any],
     *,
     selected_artifact_identities: Sequence[str] = (),
+    displayed_source_target: str | None = None,
 ) -> str:
     validated = validate_connected_assistant_proposal(
-        exact_request, proposal, selected_artifact_identities=selected_artifact_identities
+        exact_request,
+        proposal,
+        selected_artifact_identities=selected_artifact_identities,
+        displayed_source_target=displayed_source_target,
     )
+    return review_revision_from_validated(
+        exact_request,
+        validated,
+        selected_artifact_identity_sha256=[
+            sha256(value.encode("utf-8")).hexdigest()
+            for value in sorted(selected_artifact_identities)
+        ],
+        displayed_source_target=displayed_source_target,
+    )
+
+
+def review_revision_from_validated(
+    exact_request: str,
+    validated_proposal: Mapping[str, Any],
+    *,
+    selected_artifact_identity_sha256: Sequence[str] = (),
+    displayed_source_target: str | None = None,
+) -> str:
+    """Bind a validated proposal and visible target to one internal revision."""
+
+    displayed_source_target = _validated_display_source_target(displayed_source_target)
     return "review-revision-" + _digest(
         {
             "exact_request": exact_request,
             "exact_request_utf8_sha256": request_digest(exact_request),
-            "connected_assistant_proposal": validated,
-            "selected_artifact_identity_sha256": [
-                sha256(value.encode("utf-8")).hexdigest()
-                for value in sorted(selected_artifact_identities)
-            ],
+            "connected_assistant_proposal": deepcopy(dict(validated_proposal)),
+            "selected_artifact_identity_sha256": sorted(selected_artifact_identity_sha256),
+            "displayed_source_target": displayed_source_target,
             "privacy_safe_projection": True,
         }
     )
 
 
-def _displayed_text_values(value: Mapping[str, Any], *, include_labels: bool = True) -> list[str]:
+def _displayed_text_values(
+    value: Mapping[str, Any],
+    *,
+    include_labels: bool = True,
+    include_source_target: bool = True,
+) -> list[str]:
     values: list[str] = []
     for group in value.get("initial_decision_groups", ()):
         if not isinstance(group, Mapping):
@@ -967,7 +1106,8 @@ def _displayed_text_values(value: Mapping[str, Any], *, include_labels: bool = T
                 continue
             if include_labels:
                 values.append(str(item.get("label") or ""))
-            values.append(str(item.get("value") or ""))
+            if include_source_target or item.get("label") != "Source target":
+                values.append(str(item.get("value") or ""))
     return values
 
 
@@ -1064,15 +1204,23 @@ def validate_first_value(value: Mapping[str, Any]) -> dict[str, Any]:
                 raise ReviewBeforeGenerationError("review_first_value_value_duplicate")
             normalized_values.add(normalized)
             if attribution == QCODER_ATTRIBUTION:
-                if item_value not in _QCODER_ITEM_VALUES.get(label, set()):
+                if label == "Source target":
+                    _validated_display_source_target(item_value)
+                elif item_value not in _QCODER_ITEM_VALUES.get(label, set()):
                     raise ReviewBeforeGenerationError("review_first_value_qcoder_boundary_invalid")
             else:
                 untrusted_values.extend((label, item_value))
                 untrusted_item_values.append(item_value)
-    displayed_values = _displayed_text_values(value)
+    displayed_values = _displayed_text_values(value, include_source_target=False)
     actual_source = _projection_contains_source_or_qasm(
         displayed_values
-    ) or _projection_contains_source_or_qasm(_displayed_text_values(value, include_labels=False))
+    ) or _projection_contains_source_or_qasm(
+        _displayed_text_values(
+            value,
+            include_labels=False,
+            include_source_target=False,
+        )
+    )
     if value.get("source_or_qasm_included") is not actual_source:
         raise ReviewBeforeGenerationError("review_first_value_source_invariant_mismatch")
     if actual_source:
@@ -1122,9 +1270,32 @@ def validate_first_value(value: Mapping[str, Any]) -> dict[str, Any]:
             raise ReviewBeforeGenerationError("review_first_value_boundary_invalid")
     if value.get("retention") != "current_loop_only_process_and_discard":
         raise ReviewBeforeGenerationError("review_first_value_retention_invalid")
-    if _privacy_error(value):
+    privacy_projection = deepcopy(dict(value))
+    for group in privacy_projection["initial_decision_groups"]:
+        for item in group["items"]:
+            if (
+                item.get("label") == "Source target"
+                and item.get("attribution") == QCODER_ATTRIBUTION
+            ):
+                item["value"] = "customer-authorized-source-target"
+    if _privacy_error(privacy_projection):
         raise ReviewBeforeGenerationError("review_first_value_private_material_rejected")
     return deepcopy(dict(value))
+
+
+def displayed_source_target(value: Mapping[str, Any]) -> str | None:
+    """Return the sole qCoder-displayed source target, if present."""
+
+    validated = validate_first_value(value)
+    matches = [
+        item["value"]
+        for group in validated["initial_decision_groups"]
+        for item in group["items"]
+        if item["label"] == "Source target" and item["attribution"] == QCODER_ATTRIBUTION
+    ]
+    if len(matches) > 1:
+        raise ReviewBeforeGenerationError("review_first_value_source_target_duplicate")
+    return matches[0] if matches else None
 
 
 def build_first_value(
@@ -1132,15 +1303,24 @@ def build_first_value(
     proposal: Mapping[str, Any],
     *,
     selected_artifact_identities: Sequence[str] = (),
+    displayed_source_target: str | None = None,
 ) -> dict[str, Any]:
     validated = validate_connected_assistant_proposal(
-        exact_request, proposal, selected_artifact_identities=selected_artifact_identities
+        exact_request,
+        proposal,
+        selected_artifact_identities=selected_artifact_identities,
+        displayed_source_target=displayed_source_target,
     )
     confirmable = validated["blocking_clarification"] is None
     displayed_groups = deepcopy(validated["review_groups"])
     for group in displayed_groups:
         group.pop("group_id", None)
-    displayed_values = [str(item["value"]) for group in displayed_groups for item in group["items"]]
+    displayed_values = [
+        str(item["value"])
+        for group in displayed_groups
+        for item in group["items"]
+        if item["label"] != "Source target"
+    ]
     result = {
         "proposal_attribution": PROPOSAL_ATTRIBUTION,
         "initial_decision_groups": displayed_groups,
@@ -1195,6 +1375,9 @@ def contract_snapshot() -> dict[str, Any]:
         "customer_projection_source_free_revalidated": True,
         "token_only_action_call_strict": True,
         "execution_request_bound_to_exact_unquoted_request": True,
+        "source_transaction_kind_bound_to_exact_unquoted_request": True,
+        "workspace_target_must_be_customer_authorized_and_displayed": True,
+        "inline_review_cannot_gain_workspace_target_on_confirmation": True,
         "model_facing_confirmation_internal_mechanics": False,
         "one_operation_before_useful_review": True,
         "backward_compatible_optional_begin_input": True,
@@ -1349,10 +1532,15 @@ __all__ = [
     "build_review_before_generation_semantics",
     "canonical_json",
     "contract_snapshot",
+    "displayed_source_target",
     "proposal_input_schema",
     "render_first_value_markdown",
     "request_digest",
     "review_revision",
+    "review_revision_from_validated",
+    "review_source_transaction_state",
+    "unquoted_request_text",
+    "validate_review_transaction_kind",
     "validate_connected_assistant_proposal",
     "validate_first_value",
 ]

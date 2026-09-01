@@ -139,7 +139,7 @@ def test_binding_v18_steers_generic_help_to_exactly_one_local_call(tmp_path: Pat
     binding = build_client_binding_descriptor(
         coordinator_prefix=[sys.executable, "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v53"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v54"
     assert binding["generic_help"]["generic_request_topic"] == "overview"
     assert binding["generic_help"]["exactly_one_qcoder_operation"] is True
     assert binding["generic_help"]["automatic_status_call"] is False
