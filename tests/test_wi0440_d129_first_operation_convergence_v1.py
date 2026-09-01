@@ -433,3 +433,6 @@ def test_generated_descriptor_identity_is_deterministic() -> None:
     second_bytes = json.dumps(second, sort_keys=True, separators=(",", ":")).encode("utf-8")
     assert first_bytes == second_bytes
     assert sha256(first_bytes).hexdigest()
+    development = json.loads((ROOT / "development-version.json").read_text(encoding="utf-8"))
+    assert development["binding"] == CLIENT_BINDING_CONTRACT_ID
+    assert development["binding_schema"] == CLIENT_BINDING_SCHEMA_VERSION
