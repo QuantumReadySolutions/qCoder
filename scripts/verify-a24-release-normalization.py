@@ -6,11 +6,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 from pathlib import Path
-
-from qcoder.context_bridge_mcp import EXPECTED_TOOLS, build_client_binding_descriptor
-from qcoder.current_loop_binding_mcp import binding_tool_descriptors
+import sys
 
 PRODUCT_BASIS_COMMIT = "75babdcc27f894094f776bc9e3d1382ab9e1496f"
 PRODUCT_BASIS_TREE = "6887f0fbdf27cfce7c2316f2eed336f663ac2bf2"
@@ -75,6 +74,31 @@ def _changed_paths(root: Path) -> set[str]:
     return tracked | untracked
 
 
+def _binding_observation(root: Path) -> dict[str, object]:
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(root / "src")
+    source = """
+import json
+from qcoder.context_bridge_mcp import EXPECTED_TOOLS, build_client_binding_descriptor
+from qcoder.current_loop_binding_mcp import binding_tool_descriptors
+print(json.dumps({
+    "public_tools": list(EXPECTED_TOOLS),
+    "private_operations": [item["name"] for item in binding_tool_descriptors()],
+    "descriptor": build_client_binding_descriptor(
+        coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
+    )["client_binding_contract"],
+}, sort_keys=True))
+"""
+    return json.loads(
+        subprocess.check_output(
+            [sys.executable, "-c", source],
+            cwd=root,
+            env=environment,
+            text=True,
+        )
+    )
+
+
 def verify(root: Path) -> dict[str, object]:
     root = root.resolve()
     if _git(root, "rev-parse", f"{PRODUCT_BASIS_COMMIT}^{{tree}}") != PRODUCT_BASIS_TREE:
@@ -99,15 +123,14 @@ def verify(root: Path) -> dict[str, object]:
         root / "scripts/verify-development-version.py"
     ).exists():
         raise ValueError("a24_private_development_identity_retained")
-    public_tools = tuple(EXPECTED_TOOLS)
-    private_operations = tuple(item["name"] for item in binding_tool_descriptors())
+    observation = _binding_observation(root)
+    public_tools = tuple(observation["public_tools"])
+    private_operations = tuple(observation["private_operations"])
     if public_tools != EXPECTED_PUBLIC_TOOLS:
         raise ValueError("a24_public_tool_inventory_changed")
     if private_operations != EXPECTED_PRIVATE_OPERATIONS:
         raise ValueError("a24_private_operation_inventory_changed")
-    descriptor = build_client_binding_descriptor(
-        coordinator_prefix=["python", "-m", "qcoder", "current-loop"]
-    )["client_binding_contract"]
+    descriptor = observation["descriptor"]
     if (
         descriptor.get("contract_id") != EXPECTED_CONTRACT
         or descriptor.get("schema_version") != EXPECTED_SCHEMA

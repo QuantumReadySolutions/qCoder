@@ -1039,8 +1039,8 @@ def test_binding_v18_delta_preserves_exact_twelve_tool_inventory() -> None:
     descriptor = build_client_binding_descriptor(
         coordinator_prefix=["/runtime/python", "-m", "qcoder", "current-loop"]
     )["client_binding_contract"]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v48"
-    assert descriptor["schema_version"] == 47
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v57"
+    assert descriptor["schema_version"] == 56
     assert len(EXPECTED_TOOLS) == 12
     assert descriptor["qcoder_domain_tool_count"] == 12
     receipt = event_receipt_snapshot()

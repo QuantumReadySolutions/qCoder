@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from hashlib import sha256
 import json
 from packaging.version import Version
 from pathlib import Path
 import re
+import sys
 
 try:
     import tomllib
@@ -13,10 +15,14 @@ except ModuleNotFoundError:  # pragma: no cover
 
 
 EXPECTED_SCHEMA = "qcoder.private_development_version.v1"
-EXPECTED_VERSION = "0.6.0a24.post0.dev2+openqasm3.local.evidence.v1"
-EXPECTED_PREDECESSOR = "0.6.0a24.post0.dev1+deterministic.evidence.usability.pack.v1"
+EXPECTED_VERSION = "0.6.0a24.post0.dev7+review.confirmed.delivery.v1"
+EXPECTED_PREDECESSOR = "0.6.0a24.post0.dev6+review.before.generation.v4"
 EXPECTED_BASIS = "0.6.0a24"
-EXPECTED_WORK_IDENTITY = "QCODER_OSS_OPENQASM3_AND_LOCAL_EVIDENCE_HARDENING_MARATHON_V1"
+EXPECTED_WORK_IDENTITY = "WI0440_REVIEW_BEFORE_GENERATION_CONVERGENT_FIRST_VALUE_V1"
+EXPECTED_BINDING = "qcoder.connected_assistant.client_binding.v57"
+EXPECTED_BINDING_SCHEMA = 56
+EXPECTED_DESCRIPTOR_BYTES = 238_355
+EXPECTED_DESCRIPTOR_SHA256 = "f49e7cfae62129dbab212efe3db5165fbbb0502fc7bf951e6421c6ee35868790"
 
 
 def verify(root: Path) -> dict[str, object]:
@@ -30,6 +36,9 @@ def verify(root: Path) -> dict[str, object]:
         "basis_tree",
         "basis_version",
         "binding",
+        "binding_descriptor_canonical_bytes",
+        "binding_descriptor_canonical_sha256",
+        "binding_descriptor_coordinator_prefix",
         "binding_schema",
         "identity_kind",
         "publication_permitted",
@@ -55,6 +64,12 @@ def verify(root: Path) -> dict[str, object]:
         raise ValueError("public_release_record_changed")
     if development.get("work_identity") != EXPECTED_WORK_IDENTITY:
         raise ValueError("development_work_identity_invalid")
+    if (
+        development.get("binding") != EXPECTED_BINDING
+        or development.get("binding_schema") != EXPECTED_BINDING_SCHEMA
+        or development.get("binding_descriptor_coordinator_prefix") != ["qcoder"]
+    ):
+        raise ValueError("development_binding_identity_invalid")
     if development.get("identity_kind") != "private_unfrozen_development_successor":
         raise ValueError("development_identity_kind_invalid")
     if development.get("publication_permitted") is not False:
@@ -68,10 +83,36 @@ def verify(root: Path) -> dict[str, object]:
         raise ValueError("development_version_pep440_ordering_invalid")
     if candidate.release != basis.release or candidate.pre != basis.pre:
         raise ValueError("development_public_successor_selected")
+    sys.path.insert(0, str(root / "src"))
+    from qcoder.context_bridge_mcp import build_client_binding_descriptor
+
+    descriptor = build_client_binding_descriptor(coordinator_prefix=["qcoder"])[
+        "client_binding_contract"
+    ]
+    canonical_descriptor = json.dumps(
+        descriptor,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    descriptor_digest = sha256(canonical_descriptor).hexdigest()
+    if (
+        descriptor.get("contract_id") != EXPECTED_BINDING
+        or descriptor.get("schema_version") != EXPECTED_BINDING_SCHEMA
+        or len(canonical_descriptor) != EXPECTED_DESCRIPTOR_BYTES
+        or descriptor_digest != EXPECTED_DESCRIPTOR_SHA256
+        or development.get("binding_descriptor_canonical_bytes") != EXPECTED_DESCRIPTOR_BYTES
+        or development.get("binding_descriptor_canonical_sha256") != EXPECTED_DESCRIPTOR_SHA256
+    ):
+        raise ValueError("development_binding_descriptor_identity_invalid")
     return {
         "ok": True,
         "version": EXPECTED_VERSION,
         "basis_version": EXPECTED_BASIS,
+        "binding": EXPECTED_BINDING,
+        "binding_schema": EXPECTED_BINDING_SCHEMA,
+        "binding_descriptor_canonical_bytes": EXPECTED_DESCRIPTOR_BYTES,
+        "binding_descriptor_canonical_sha256": EXPECTED_DESCRIPTOR_SHA256,
         "public_release_record_unchanged": True,
         "publication_permitted": False,
         "pep440_ordering_after_basis": True,

@@ -1,0 +1,120 @@
+{
+  "confirmable": true,
+  "customer_actions": [
+    "Use recommended choices",
+    "Review or change choices"
+  ],
+  "execution_performed": false,
+  "execution_permitted": false,
+  "file_mutation_performed": false,
+  "initial_decision_group_count": 3,
+  "initial_decision_group_maximum": 3,
+  "initial_decision_groups": [
+    {
+      "items": [
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Recommended interpretation",
+          "value": "Create a concrete three-qubit Qiskit GHZ preparation and measurement program only after the customer confirms the displayed plan."
+        },
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Limitation 1",
+          "value": "The example is not presented as proof of entanglement."
+        },
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Limitation 2",
+          "value": "The review does not claim algorithm correctness."
+        },
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Limitation 3",
+          "value": "The review makes no hardware-performance claim."
+        }
+      ],
+      "label": "Goal and scope"
+    },
+    {
+      "items": [
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Implementation recommendation 1",
+          "value": "Use Qiskit QuantumCircuit."
+        },
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Implementation recommendation 2",
+          "value": "Three qubits prepared with one H and a two-CX entangling chain"
+        },
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Implementation recommendation 3",
+          "value": "QuantumCircuit with H on q0, CX from q0 to q1, CX from q1 to q2, and measurements"
+        },
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Implementation recommendation 4",
+          "value": "Measure q0 to c0, q1 to c1, and q2 to c2"
+        },
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Implementation recommendation 5",
+          "value": "Direct readable Python with explicit quantum and classical registers"
+        },
+        {
+          "attribution": "qcoder_deterministic_boundary",
+          "label": "Dependency version",
+          "value": "No dependency version was selected silently."
+        },
+        {
+          "attribution": "qcoder_deterministic_boundary",
+          "label": "Execution environment",
+          "value": "No execution environment was selected silently."
+        }
+      ],
+      "label": "Implementation"
+    },
+    {
+      "items": [
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Output artifact",
+          "value": "A readable three-qubit GHZ source example in Python"
+        },
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Source delivery",
+          "value": "Inline after confirmation."
+        },
+        {
+          "attribution": "qcoder_deterministic_boundary",
+          "label": "Generation authority",
+          "value": "Python source will be produced after you confirm these choices."
+        },
+        {
+          "attribution": "qcoder_deterministic_boundary",
+          "label": "Execution authority",
+          "value": "Execution was not requested and is not authorized."
+        },
+        {
+          "attribution": "qcoder_deterministic_boundary",
+          "label": "Authority separation",
+          "value": "Confirming these choices does not authorize execution."
+        },
+        {
+          "attribution": "qcoder_deterministic_boundary",
+          "label": "Deferred execution choices",
+          "value": "Backend, shots, seed, and result handling remain deferred."
+        }
+      ],
+      "label": "Output and authority"
+    }
+  ],
+  "one_qcoder_operation_before_useful_review": true,
+  "proposal_attribution": "connected_assistant",
+  "protected_service_called": false,
+  "qcoder_authored_recommendation": false,
+  "retention": "current_loop_only_process_and_discard",
+  "source_or_qasm_included": false
+}

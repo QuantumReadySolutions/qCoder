@@ -158,6 +158,9 @@ from qcoder.development_evidence import (
     RELATIONSHIP_DECLARATION_STATES,
 )
 from qcoder.d079_workflows import d079_orchestration_contract_snapshot
+from qcoder.review_before_generation import (
+    contract_snapshot as review_before_generation_contract_snapshot,
+)
 
 DEFAULT_BASE_URL = "https://preview-api.qcoder.ai"
 ROUTE_PATH = "/v0/internal/hosted-mcp/context"
@@ -185,8 +188,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 47
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v48"
+CLIENT_BINDING_SCHEMA_VERSION = 56
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v57"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -227,8 +230,16 @@ Concrete D-080 current request: before planning-language or generic single-capab
 classify the exact current customer message through the binding's canonical request-semantics
 contract. A concrete explicit qCoder source, QASM, execution, or selected-file review request uses
 the project-local binding-owned begin_current_loop MCP operation. Pass the exact complete current
-customer message once as request_text and one exact workspace-relative intended_artifact_paths
-entry for every requested artifact role. Choose those names solely from the customer task; do not
+customer message once as request_text. Branch-specific target rules apply. Review before generation
+uses request_text plus a proposal-v3 source-delivery recommendation: inline, or workspace_file with
+one safe proposed target. qCoder does not infer review write authority from surrounding free-form
+prose. Exact request presence or existing native selected-source provenance is only an anti-invention
+guard. Missing, unsafe, or ungrounded file recommendations converge silently to inline. A grounded
+file recommendation is displayed but remains inert until the customer confirms that exact review.
+Assistant envelope target fields cannot establish authority. Direct generation uses
+one exact customer-authorized intended_artifact_paths entry for every requested role; selected-file
+work uses exact customer-named selected_artifact_paths; active-loop continuation reuses its bound
+target unless the customer names a replacement. Choose names solely from the customer task; do not
 Read, Grep, Glob, list, scan, or search the workspace or neighboring artifacts. Do not construct Shell, CLI, stdin, flags, JSON envelopes,
 IDs, digests, or lineage. One structured activation preserves the exact Request Baseline
 and activates Assist for this request only. The returned current_step_contract is the sole
@@ -664,6 +675,7 @@ def build_client_binding_descriptor(
             "local_credential_profile_contract": credential_profile_contract_snapshot(),
             "customer_managed_connection_contract": _customer_managed_connection_contract(),
             "blueprint_first_value_dialogue_contract": first_value_dialogue_contract_snapshot(),
+            "review_before_generation_contract": review_before_generation_contract_snapshot(),
             "current_request_semantics_contract": semantics_contract_snapshot(),
             "artifact_target_contract": target_contract_snapshot(),
             "bounded_control_input_contract": bounded_control_contract_snapshot(),
@@ -1072,10 +1084,32 @@ through the D-079 binding-owned workflow. Only unrelated bounded single capabili
 to an applicable MCP tool. Never silently activate or replace local orchestration with raw MCP
 choreography.
 
+REVIEW BEFORE GENERATION
+When the customer explicitly asks to review an interpretation or proposed implementation before
+source generation or source modification, call begin_current_loop once with the exact unchanged
+customer request and one separately attributed connected_assistant_proposal. The connected
+assistant supplies every substantive recommendation, including exactly one source-delivery
+recommendation. qCoder validates exact request binding, structural safety, privacy, substantiveness,
+and revision integrity, then returns one display-ready review.
+Display its three groups and exact customer actions without adding another qCoder operation. Do not
+generate or modify source until the customer confirms the displayed revision. Confirmation of a
+generation plan never grants execution authority. Review before generation has immediate-interaction
+precedence. Recommend inline when no safe target text occurs in request_text. For workspace_file,
+the exact proposed target text must occur in request_text or have existing native selected-source
+provenance. This anti-invention guard does not interpret surrounding language. Missing, unsafe, or ungrounded file
+recommendations and irrelevant envelope targets are discarded before path processing and converge
+to the same inline review. A grounded recommendation is displayed but inert. Confirmation of that
+exact displayed revision is the first source-delivery and workspace-write authority. Source
+modification still requires its exact native-client-selected source.
+
 ACTIVE-BUILD STRUCTURED ACTIVATION
 Call the project-local qcoder-current-loop begin_current_loop operation once with request_text set
-to the exact complete current customer message. For every requested artifact role, also supply one
-exact workspace-relative intended_artifact_paths value chosen solely from the task without Read,
+to the exact complete current customer message. For direct generation, supply one exact
+workspace-relative intended_artifact_paths value per requested role, chosen solely from the task.
+For selected-file work, supply only the exact customer-named selected_artifact_paths. For an
+active-loop continuation, use its already bound target. These direct-generation target requirements
+do not apply to an unconfirmed review-before-generation recommendation.
+Never use Read,
 Grep, Glob, listing, scanning, or neighboring-artifact search. The typed required argument makes missing stdin or
 command construction inapplicable. The customer never types the command. Never construct a command
 from coordinator_prefix; it and inventories are diagnostics only. Do not run current-loop --help,

@@ -24,7 +24,7 @@ def _verifier():
 
 def test_private_development_identity_preserves_public_a24_release_truth() -> None:
     verifier = _verifier()
-    development_version = "0.6.0a24.post0.dev2+openqasm3.local.evidence.v1"
+    development_version = "0.6.0a24.post0.dev7+review.confirmed.delivery.v1"
     assert __version__ == development_version
     assert verifier.source_versions(ROOT) == {
         "pyproject": development_version,
@@ -44,6 +44,12 @@ def test_private_development_identity_preserves_public_a24_release_truth() -> No
         "ok": True,
         "version": development_version,
         "basis_version": "0.6.0a24",
+        "binding": "qcoder.connected_assistant.client_binding.v57",
+        "binding_schema": 56,
+        "binding_descriptor_canonical_bytes": 238355,
+        "binding_descriptor_canonical_sha256": (
+            "f49e7cfae62129dbab212efe3db5165fbbb0502fc7bf951e6421c6ee35868790"
+        ),
         "public_release_record_unchanged": True,
         "publication_permitted": False,
         "pep440_ordering_after_basis": True,
@@ -55,6 +61,7 @@ def test_private_development_identity_preserves_public_a24_release_truth() -> No
     public_basis = Version("0.6.0a24")
     assert candidate > public_basis
     assert candidate > Version("0.6.0a24.post0.dev1+deterministic.evidence.usability.pack.v1")
+    assert candidate > Version("0.6.0a24.post0.dev2+openqasm3.local.evidence.v1")
     assert candidate.is_devrelease is True
     assert candidate.release == public_basis.release
     assert candidate.pre == public_basis.pre

@@ -8,11 +8,14 @@ a local command, stdin pipeline, receipt, digest, or stage ceiling.
 
 from __future__ import annotations
 
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 import json
 from pathlib import Path
 import re
 import sys
-from typing import Any, Mapping
+import time
+from typing import Any, Literal, Mapping
 
 from qcoder import __version__
 from qcoder.context_bridge_connection import record_server_exchange
@@ -32,30 +35,505 @@ from qcoder.current_loop_pending_completion import (
     validate_pending_completion_checkpoint,
 )
 from qcoder.current_loop_result_controls import ResultControlError
+from qcoder.current_loop_operator_timing import (
+    clear_stdio_operator_timing,
+    record_stdio_operator_timing,
+)
 from qcoder.current_step_contract import (
     derive_current_step_contract,
     quiet_customer_visibility_contract,
 )
+from qcoder.review_before_generation import (
+    CUSTOMER_ACTIONS as REVIEW_BEFORE_GENERATION_ACTIONS,
+    ReviewBeforeGenerationError,
+    contract_snapshot as review_before_generation_contract_snapshot,
+    proposal_input_schema as review_before_generation_proposal_input_schema,
+    validate_review_transaction_kind,
+)
 
-BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v12"
-BINDING_MCP_SCHEMA_VERSION = 12
+BINDING_MCP_SCHEMA_ID = "qcoder.current_loop.binding_mcp.v14"
+BINDING_MCP_SCHEMA_VERSION = 14
 BINDING_MCP_SERVER_NAME = "qcoder-current-loop"
 BEGIN_CURRENT_LOOP_TOOL_NAME = "begin_current_loop"
 COMPLETE_CURRENT_STEP_TOOL_NAME = "complete_current_step"
 MAX_REQUEST_BYTES = 65_536
 MAX_PATH_BYTES = 16_384
+MAX_REVIEW_SOURCE_TARGET_CANDIDATES = 32
+_LAST_BINDING_TIMING: ContextVar[dict[str, Any] | None] = ContextVar(
+    "qcoder_last_binding_timing", default=None
+)
+_SOURCE_TARGET_PATTERN = re.compile(
+    r"(?<![\w./-])(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.(?:py|pyw|qasm)(?![\w/-])",
+    re.IGNORECASE,
+)
+_TARGET_AUTHORITY_QUOTED_SPAN_PATTERN = re.compile(
+    r'"[^"\r\n]*"|\'[^\'\r\n]*\'|“[^”\r\n]*”|‘[^’\r\n]*’|`+[^`\r\n]*`+'
+)
+_TARGET_AUTHORITY_DIRECTIVE_BOUNDARY_PATTERN = re.compile(
+    r"\b(?:for\s+example|for\s+illustration|for\s+comparison)\s*,|"
+    r"\b(?:actually|no)\b\s*,?|\brather\s+than\b|\b(?:but|then|however|or)\b|"
+    r"(?:—|–)(?=\s*(?:actually|no)\b)|[,;?!:\n]|\.(?=\s|$)",
+    re.IGNORECASE,
+)
+_TARGET_AUTHORITY_ILLUSTRATIVE_PATTERN = re.compile(
+    r"\b(?:example|illustration|placeholder|sample\s+name)\b|\bonly\s+for\s+comparison\b",
+    re.IGNORECASE,
+)
+_TARGET_AUTHORITY_COMPARATIVE_PATTERN = re.compile(
+    r"\b(?:compare|comparison|versus)\b|\bpossible\s+(?:alternative|filename|name)\b|"
+    r"\balternative\s+(?:filename|name)\b",
+    re.IGNORECASE,
+)
+_TARGET_AUTHORITY_TENTATIVE_PATTERN = re.compile(
+    r"\b(?:if|maybe|might|could|would|hypothetical|tentative|possibly)\b",
+    re.IGNORECASE,
+)
+_TARGET_AUTHORITY_NEGATION_PATTERN = re.compile(
+    r"\b(?:prefer\s+not\s+to|do\s+not|don't|dont|never|must\s+not|should\s+not|"
+    r"avoid(?:\s+ever)?|refrain\s+from|without)\b",
+    re.IGNORECASE,
+)
+_TARGET_AUTHORITY_INLINE_DIRECTIVE_PATTERN = re.compile(
+    r"\b(?:show|return|provide|produce|generate|write|output)\b[^.;!?]{0,80}"
+    r"\b(?:source|code|program|it)\b[^.;!?]{0,48}\binline\b|"
+    r"\b(?:show|return|provide|produce|generate|write|output)\b[^.;!?]{0,80}\binline\b|"
+    r"\binline\b[^.;!?]{0,64}\b(?:source|code|program|delivery)\b",
+    re.IGNORECASE,
+)
+
+TargetAuthorityState = Literal["affirmative", "non_authoritative", "unresolved"]
+
+
+@dataclass(frozen=True)
+class _TargetDirectiveUnit:
+    index: int
+    start: int
+    end: int
+    text: str
+    leading_boundary: str
+    trailing_boundary: str
+
+
+@dataclass(frozen=True)
+class _TargetDirectiveOccurrence:
+    target: str
+    start: int
+    end: int
+    unit_index: int
+    state: TargetAuthorityState
+    reason: str
+
+
+@dataclass(frozen=True)
+class _OutputDirective:
+    unit_index: int
+    mode: Literal["file", "inline"]
+    state: TargetAuthorityState
+    target_occurrence_index: int | None
+    reason: str
+
+
+@dataclass(frozen=True)
+class _TargetAuthorityResolution:
+    state: Literal["affirmative", "target_free", "ambiguous"]
+    affirmative_targets: tuple[str, ...]
+    occurrences: tuple[_TargetDirectiveOccurrence, ...]
+    reason: str
+
+
+def _target_occurrence_pattern(target: str) -> re.Pattern[str]:
+    normalized_target = target.replace("\\", "/").casefold()
+    return re.compile(
+        rf"(?<![\w./-]){re.escape(normalized_target)}(?![\w/-])",
+        re.IGNORECASE,
+    )
 
 
 def _request_explicitly_selects_target(request_text: str, target: str) -> bool:
-    normalized_request = request_text.replace("\\", "/").casefold()
-    normalized_target = target.replace("\\", "/").casefold()
-    return bool(
-        normalized_target
-        and re.search(
-            rf"(?<![\w./-]){re.escape(normalized_target)}(?![\w./-])",
-            normalized_request,
+    """Preserve exact lexical selection checks for non-review target branches."""
+
+    normalized_request = request_text.replace("\\", "/")
+    return _target_occurrence_pattern(target).search(normalized_request) is not None
+
+
+def _target_authority_request_view(request_text: str) -> str:
+    """Mask quotation and Markdown-code spans without changing source offsets."""
+
+    normalized = request_text.replace("\\", "/")
+    return _TARGET_AUTHORITY_QUOTED_SPAN_PATTERN.sub(
+        lambda match: " " * len(match.group(0)), normalized
+    )
+
+
+def _target_authority_units(request_text: str) -> tuple[_TargetDirectiveUnit, ...]:
+    """Split one bounded request into ordered local directive units."""
+
+    request = request_text.replace("\\", "/")
+    boundary_view = _target_authority_request_view(request_text)
+    units: list[_TargetDirectiveUnit] = []
+    cursor = 0
+    pending_boundaries: list[str] = []
+    for match in _TARGET_AUTHORITY_DIRECTIVE_BOUNDARY_PATTERN.finditer(boundary_view):
+        raw_segment = request[cursor : match.start()]
+        leading_trim = len(raw_segment) - len(raw_segment.lstrip())
+        trailing_trim = len(raw_segment.rstrip())
+        if trailing_trim > leading_trim:
+            start = cursor + leading_trim
+            end = cursor + trailing_trim
+            units.append(
+                _TargetDirectiveUnit(
+                    index=len(units),
+                    start=start,
+                    end=end,
+                    text=request[start:end],
+                    leading_boundary=" ".join(pending_boundaries),
+                    trailing_boundary=match.group(0).strip().casefold(),
+                )
+            )
+            pending_boundaries = []
+        pending_boundaries.append(" ".join(match.group(0).casefold().split()))
+        cursor = match.end()
+    raw_segment = request[cursor:]
+    leading_trim = len(raw_segment) - len(raw_segment.lstrip())
+    trailing_trim = len(raw_segment.rstrip())
+    if trailing_trim > leading_trim:
+        start = cursor + leading_trim
+        end = cursor + trailing_trim
+        units.append(
+            _TargetDirectiveUnit(
+                index=len(units),
+                start=start,
+                end=end,
+                text=request[start:end],
+                leading_boundary=" ".join(pending_boundaries),
+                trailing_boundary="",
+            )
+        )
+    return tuple(units)
+
+
+def _target_authority_positive_pattern(target: str) -> re.Pattern[str]:
+    exact = re.escape(target)
+    return re.compile(
+        rf"(?:"
+        rf"\b(?:create|creating)\b[^,;!?]{{0,48}}{exact}|"
+        rf"\b(?:write|writing|save|saving)\b[^,;!?]{{0,64}}(?:\b(?:as|to|in)\b\s*)?{exact}|"
+        rf"\b(?:generate|generating)\b[^,;!?]{{0,80}}\b(?:in|to|as)\b\s*{exact}|"
+        rf"\b(?:put|putting|output|outputting|store|storing)\b[^,;!?]{{0,80}}"
+        rf"\b(?:in|to|as)\b\s*{exact}|"
+        rf"\b(?:modify|modifying|edit|editing|update|updating|replace|replacing)\b"
+        rf"[^,;!?]{{0,48}}{exact}"
+        rf")\s*$",
+        re.IGNORECASE,
+    )
+
+
+def _span_is_quoted_or_code(request: str, start: int, end: int) -> bool:
+    return any(
+        match.start() <= start and end <= match.end()
+        for match in _TARGET_AUTHORITY_QUOTED_SPAN_PATTERN.finditer(request)
+    )
+
+
+def _unit_for_occurrence(
+    units: tuple[_TargetDirectiveUnit, ...], start: int, end: int
+) -> _TargetDirectiveUnit:
+    for unit in units:
+        if unit.start <= start and end <= unit.end:
+            return unit
+    return _TargetDirectiveUnit(
+        index=len(units),
+        start=start,
+        end=end,
+        text="",
+        leading_boundary="",
+        trailing_boundary="",
+    )
+
+
+def _classify_target_occurrence(
+    *,
+    request: str,
+    occurrence: re.Match[str],
+    unit: _TargetDirectiveUnit,
+) -> _TargetDirectiveOccurrence:
+    target = occurrence.group(0).replace("\\", "/")
+    if _span_is_quoted_or_code(request, occurrence.start(), occurrence.end()):
+        return _TargetDirectiveOccurrence(
+            target,
+            occurrence.start(),
+            occurrence.end(),
+            unit.index,
+            "non_authoritative",
+            "quoted_or_code",
+        )
+    local = unit.text
+    local_folded = local.casefold()
+    leading = unit.leading_boundary.casefold()
+    relative_end = occurrence.end() - unit.start
+    directive_through_target = local[:relative_end].rstrip()
+    if "rather than" in leading:
+        state: TargetAuthorityState = "non_authoritative"
+        reason = "comparative_rejected_alternative"
+    elif any(marker in leading for marker in ("for example", "for illustration", "for comparison")):
+        state = "non_authoritative"
+        reason = "illustrative_boundary"
+    elif "?" in unit.trailing_boundary:
+        state = "non_authoritative"
+        reason = "interrogative"
+    elif _TARGET_AUTHORITY_ILLUSTRATIVE_PATTERN.search(local_folded):
+        state = "non_authoritative"
+        reason = "illustrative"
+    elif _TARGET_AUTHORITY_COMPARATIVE_PATTERN.search(local_folded):
+        state = "non_authoritative"
+        reason = "comparative_or_alternative"
+    elif _TARGET_AUTHORITY_NEGATION_PATTERN.search(directive_through_target):
+        state = "non_authoritative"
+        reason = "negated_or_prohibited"
+    elif _TARGET_AUTHORITY_TENTATIVE_PATTERN.search(directive_through_target):
+        state = "non_authoritative"
+        reason = "conditional_or_tentative"
+    elif _target_authority_positive_pattern(target).search(directive_through_target):
+        state = "affirmative"
+        reason = "bounded_affirmative_source_directive"
+    else:
+        state = "unresolved"
+        reason = "target_bearing_directive_not_proven"
+    return _TargetDirectiveOccurrence(
+        target=target,
+        start=occurrence.start(),
+        end=occurrence.end(),
+        unit_index=unit.index,
+        state=state,
+        reason=reason,
+    )
+
+
+def _classify_inline_directive(unit: _TargetDirectiveUnit) -> _OutputDirective | None:
+    local = _TARGET_AUTHORITY_QUOTED_SPAN_PATTERN.sub(" ", unit.text)
+    if "inline" not in local.casefold():
+        return None
+    if "rather than" in unit.leading_boundary.casefold():
+        return _OutputDirective(
+            unit.index, "inline", "non_authoritative", None, "comparative_rejected_alternative"
+        )
+    if "?" in unit.trailing_boundary:
+        return _OutputDirective(unit.index, "inline", "non_authoritative", None, "interrogative")
+    if _TARGET_AUTHORITY_NEGATION_PATTERN.search(local):
+        return _OutputDirective(
+            unit.index, "inline", "non_authoritative", None, "negated_or_prohibited"
+        )
+    if _TARGET_AUTHORITY_TENTATIVE_PATTERN.search(local):
+        return _OutputDirective(
+            unit.index, "inline", "non_authoritative", None, "conditional_or_tentative"
+        )
+    if _TARGET_AUTHORITY_INLINE_DIRECTIVE_PATTERN.search(local):
+        return _OutputDirective(
+            unit.index, "inline", "affirmative", None, "bounded_affirmative_inline_directive"
+        )
+    return _OutputDirective(unit.index, "inline", "unresolved", None, "inline_directive_not_proven")
+
+
+def _explicit_replacement(unit: _TargetDirectiveUnit) -> bool:
+    combined = f"{unit.leading_boundary} {unit.text}".casefold()
+    return "actually" in combined and "instead" in combined
+
+
+def _resolve_request_source_target_authority(request_text: str) -> _TargetAuthorityResolution:
+    """Resolve ordered target and output directives without path processing."""
+
+    request = request_text.replace("\\", "/")
+    units = _target_authority_units(request_text)
+    raw_occurrences = list(_SOURCE_TARGET_PATTERN.finditer(request))
+    if len(raw_occurrences) > MAX_REVIEW_SOURCE_TARGET_CANDIDATES:
+        return _TargetAuthorityResolution("ambiguous", (), (), "candidate_bound_exceeded")
+    occurrences = [
+        _classify_target_occurrence(
+            request=request,
+            occurrence=occurrence,
+            unit=_unit_for_occurrence(units, occurrence.start(), occurrence.end()),
+        )
+        for occurrence in raw_occurrences
+    ]
+    for index, occurrence in enumerate(occurrences):
+        if occurrence.state != "unresolved" or index == 0:
+            continue
+        unit = units[occurrence.unit_index]
+        previous = occurrences[index - 1]
+        if (
+            "or" in unit.leading_boundary.split()
+            and previous.state == "non_authoritative"
+            and previous.reason
+            in {
+                "illustrative",
+                "illustrative_boundary",
+                "comparative_or_alternative",
+            }
+        ):
+            occurrences[index] = replace(
+                occurrence,
+                state="non_authoritative",
+                reason="coordinated_nonauthoritative_alternative",
+            )
+    output_directives: list[_OutputDirective] = [
+        _OutputDirective(
+            occurrence.unit_index,
+            "file",
+            occurrence.state,
+            index,
+            occurrence.reason,
+        )
+        for index, occurrence in enumerate(occurrences)
+    ]
+    output_directives.extend(
+        directive for unit in units if (directive := _classify_inline_directive(unit)) is not None
+    )
+    output_directives.sort(key=lambda item: item.unit_index)
+
+    for current_index, current in enumerate(output_directives):
+        if current.state != "affirmative" or not _explicit_replacement(units[current.unit_index]):
+            continue
+        prior = next(
+            (
+                item
+                for item in reversed(output_directives[:current_index])
+                if item.state == "affirmative" and item.mode != current.mode
+            ),
+            None,
+        )
+        if prior is None:
+            continue
+        prior_position = output_directives.index(prior)
+        output_directives[prior_position] = replace(
+            prior, state="non_authoritative", reason="superseded_by_explicit_correction"
+        )
+        if prior.target_occurrence_index is not None:
+            occurrence = occurrences[prior.target_occurrence_index]
+            occurrences[prior.target_occurrence_index] = replace(
+                occurrence,
+                state="non_authoritative",
+                reason="superseded_by_explicit_correction",
+            )
+
+    if any(item.state == "unresolved" for item in output_directives):
+        return _TargetAuthorityResolution(
+            "ambiguous", (), tuple(occurrences), "unresolved_target_or_output_directive"
+        )
+    affirmative_targets = tuple(
+        dict.fromkeys(
+            occurrence.target for occurrence in occurrences if occurrence.state == "affirmative"
         )
     )
+    unique_targets = {target.casefold() for target in affirmative_targets}
+    if len(unique_targets) > 1:
+        return _TargetAuthorityResolution(
+            "ambiguous", (), tuple(occurrences), "multiple_affirmative_targets"
+        )
+    active_modes = {item.mode for item in output_directives if item.state == "affirmative"}
+    if active_modes == {"file", "inline"}:
+        return _TargetAuthorityResolution(
+            "ambiguous", (), tuple(occurrences), "inline_file_output_conflict"
+        )
+    if affirmative_targets:
+        return _TargetAuthorityResolution(
+            "affirmative",
+            affirmative_targets[:1],
+            tuple(occurrences),
+            "one_unique_affirmative_target",
+        )
+    return _TargetAuthorityResolution(
+        "target_free", (), tuple(occurrences), "all_target_occurrences_non_authoritative"
+    )
+
+
+def _request_source_target_directive_diagnostics(
+    request_text: str,
+) -> tuple[dict[str, object], ...]:
+    """Return bounded ephemeral tri-state facts for direct safety tests only."""
+
+    units = _target_authority_units(request_text)
+    unit_spans = {unit.index: [unit.start, unit.end] for unit in units}
+    resolution = _resolve_request_source_target_authority(request_text)
+    return tuple(
+        {
+            "target": occurrence.target,
+            "target_span": [occurrence.start, occurrence.end],
+            "directive_unit": occurrence.unit_index,
+            "directive_span": unit_spans.get(
+                occurrence.unit_index, [occurrence.start, occurrence.end]
+            ),
+            "state": occurrence.state,
+            "reason": occurrence.reason,
+        }
+        for occurrence in resolution.occurrences
+    )
+
+
+def _request_source_target_authority(request_text: str, target: str) -> str:
+    """Return one target's tri-state result under the complete request resolution."""
+
+    resolution = _resolve_request_source_target_authority(request_text)
+    matches = [
+        occurrence
+        for occurrence in resolution.occurrences
+        if occurrence.target.casefold() == target.replace("\\", "/").casefold()
+    ]
+    if not matches:
+        return "absent"
+    if resolution.state == "ambiguous" or any(item.state == "unresolved" for item in matches):
+        return "contradictory_or_ambiguous"
+    if any(item.state == "affirmative" for item in matches):
+        return "affirmative"
+    return "non_authoritative"
+
+
+def _request_source_target_candidates(request_text: str) -> tuple[str, ...]:
+    request = request_text.replace("\\", "/")
+    return tuple(
+        dict.fromkeys(match.group(0) for match in _SOURCE_TARGET_PATTERN.finditer(request))
+    )
+
+
+def _affirmatively_authorized_request_targets(request_text: str) -> tuple[str, ...]:
+    resolution = _resolve_request_source_target_authority(request_text)
+    if resolution.state == "ambiguous":
+        raise ReviewBeforeGenerationError(
+            "review_source_target_authority_ambiguous",
+            clarification=("Should the reviewed source be inline, or written to one exact target?"),
+        )
+    return resolution.affirmative_targets
+
+
+def _unconfirmed_generation_review_has_no_target_authority(
+    request_text: str, proposal: object
+) -> bool:
+    """Give the immediate review interaction precedence over future production."""
+
+    return (
+        isinstance(proposal, Mapping)
+        and proposal.get("transaction_kind") == "review_before_source_generation"
+        and not _affirmatively_authorized_request_targets(request_text)
+    )
+
+
+def _quiet_review_success_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Project only review content, its opaque continuation, and authority ceilings."""
+
+    semantics = payload.get("current_request_semantics")
+    axes = semantics.get("semantic_axes") if isinstance(semantics, Mapping) else None
+    generation_authority = axes.get("generation_authority") if isinstance(axes, Mapping) else None
+    execution_authority = axes.get("execution_authority") if isinstance(axes, Mapping) else None
+    return {
+        "ok": True,
+        "review_before_generation": payload["review_before_generation"],
+        "prior_result_token": payload["prior_result_token"],
+        "generation_authority": generation_authority or "held_for_exact_review_confirmation",
+        "execution_authority": execution_authority or "not_requested",
+        "source_or_qasm_created": False,
+        "file_mutation_performed": False,
+        "execution_performed": False,
+        "protected_service_called": False,
+    }
 
 
 def binding_tool_descriptors() -> list[dict[str, Any]]:
@@ -69,7 +547,22 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "customer-facing preface. Begin qCoder's bounded Current Loop, or interpret the "
                 "exact next instruction against an already complete-resumable loop. "
                 "Supply request_text exactly once as the complete unmodified customer message. "
-                "For an artifact-producing request, also supply one exact workspace-relative "
+                "For review before source generation or modification, make the initial call with "
+                "that exact request and one concrete connected_assistant_proposal. Do not compute "
+                "a hash, invent group identifiers or labels, include source or QASM, or provide "
+                "qCoder authority text. Customer constraints must be exact request excerpts. "
+                "qCoder supplies structure, attribution, authority, revision, and actions. Later "
+                "confirm with only review_action and the opaque prior_result_token; do not replay "
+                "the proposal. Execution authority remains separate. For review before generation, "
+                "include exactly one proposal-v3 source_delivery recommendation: inline, or "
+                "workspace_file with one safe workspace-relative Python target whose exact text "
+                "occurs in request_text or has existing native selected-source provenance. This "
+                "request-presence check prevents invention; qCoder does not interpret surrounding "
+                "free-form delivery language. Missing, unsafe, or ungrounded file recommendations "
+                "converge silently to inline. A grounded file recommendation is displayed but inert. "
+                "Customer confirmation of that exact displayed revision is the first authority for "
+                "source delivery and workspace write. Assistant envelope target fields cannot grant it. "
+                "For a direct artifact-producing request, supply one exact workspace-relative "
                 "intended_artifact_paths entry for every requested role on a fresh loop. For an "
                 "active-loop replacement, omit the path: qCoder binds the current registered "
                 "role-head target automatically. A different target is accepted only when the "
@@ -109,7 +602,10 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                         },
                         "additionalProperties": False,
                         "description": (
-                            "Fresh-loop exact workspace-relative targets. Omit for an active-loop "
+                            "Fresh-loop exact workspace-relative targets for direct generation. "
+                            "These envelope fields do not establish authority for review before "
+                            "generation and are ignored before path processing there; use the inert "
+                            "proposal-v3 source_delivery recommendation instead. Omit for an active-loop "
                             "replacement so qCoder reuses the registered current role-head target."
                         ),
                     },
@@ -125,15 +621,93 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                             "pre-existing exact source satisfaction. Never discover paths."
                         ),
                     },
+                    "connected_assistant_proposal": {
+                        **review_before_generation_proposal_input_schema(),
+                        "description": (
+                            "Optional separately attributed, exact-request-bound semantic and "
+                            "implementation proposal for review before generation. The connected "
+                            "assistant supplies all substantive recommendations, including exactly "
+                            "one inert source-delivery recommendation; qCoder validates and projects "
+                            "them deterministically."
+                        ),
+                    },
+                    "review_action": {
+                        "type": "string",
+                        "enum": list(REVIEW_BEFORE_GENERATION_ACTIONS),
+                        "description": (
+                            "Exact action for the active review. Supply only with prior_result_token; "
+                            "do not replay the request digest, proposal, revision, or hidden fields."
+                        ),
+                    },
+                    "prior_result_token": {
+                        "type": "string",
+                        "pattern": "^review-result-[0-9a-f]{64}$",
+                        "description": (
+                            "Opaque token returned by the prior review result. It is internal "
+                            "transport, not customer-visible content."
+                        ),
+                    },
                 },
-                "required": ["request_text"],
+                "oneOf": [
+                    {
+                        "title": "Ordinary existing begin call",
+                        "required": ["request_text"],
+                        "not": {
+                            "anyOf": [
+                                {"required": ["connected_assistant_proposal"]},
+                                {"required": ["review_action"]},
+                                {"required": ["prior_result_token"]},
+                            ]
+                        },
+                    },
+                    {
+                        "title": "Initial or revised review-before-generation call",
+                        "description": (
+                            "Use exact request_text and a substantive proposal v3. Recommend inline, "
+                            "or workspace_file with one safe target whose exact text occurs in the "
+                            "request (or has native selected-source provenance). qCoder treats that "
+                            "presence only as an anti-invention guard and does not interpret surrounding "
+                            "delivery prose. Safe envelope targets are ignored. A grounded file "
+                            "recommendation is displayed without write authority; exact displayed "
+                            "customer confirmation is the first delivery/write authority."
+                        ),
+                        "required": ["request_text", "connected_assistant_proposal"],
+                        "not": {"required": ["review_action"]},
+                    },
+                    {
+                        "title": "Stored-review action call",
+                        "type": "object",
+                        "properties": {
+                            "review_action": {
+                                "type": "string",
+                                "enum": list(REVIEW_BEFORE_GENERATION_ACTIONS),
+                            },
+                            "prior_result_token": {
+                                "type": "string",
+                                "pattern": "^review-result-[0-9a-f]{64}$",
+                            },
+                        },
+                        "required": ["review_action", "prior_result_token"],
+                        "additionalProperties": False,
+                    },
+                ],
                 "additionalProperties": False,
             },
             "x-qcoder-binding-owned-internal-operation": True,
             "x-qcoder-public-context-bridge-tool": False,
-            "x-qcoder-normal-happy-path": {
+            "x-qcoder-direct-generation-happy-path": {
                 "request_text": "<exact current customer message>",
                 "intended_artifact_paths": {"source": "<exact workspace-relative filename>"},
+            },
+            "x-qcoder-review-before-generation-happy-path": {
+                "request_text": "<exact review-before-generation customer message>",
+                "connected_assistant_proposal": (
+                    "<substantive proposal v3 with source_delivery mode inline or workspace_file>"
+                ),
+            },
+            "x-qcoder-selected-file-workflow-happy-path": {
+                "request_text": "<exact selected-file customer message>",
+                "selected_artifact_paths": ["<exact customer-named relative path>"],
             },
             "x-qcoder-artifact-target-contract": target_contract_snapshot(),
             "x-qcoder-selected-result-control-happy-path": {
@@ -151,6 +725,33 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "native_write_required": False,
                 "completion_arguments": {},
                 "artifact_disposition_derived_by_qcoder": "pre_existing_exact_artifact",
+            },
+            "x-qcoder-review-before-generation": {
+                "contract": review_before_generation_contract_snapshot(),
+                "first_call_arguments": ["request_text", "connected_assistant_proposal"],
+                "confirmation_call_arguments": ["review_action", "prior_result_token"],
+                "proposal_replay_on_confirmation": False,
+                "caller_supplies_request_digest": False,
+                "caller_supplies_group_ids_or_labels": False,
+                "qcoder_supplies_authority_and_attribution": True,
+                "one_operation_before_useful_review": True,
+                "protected_service_called": False,
+                "source_before_confirmation": False,
+                "qcoder_authors_recommendations": False,
+                "immediate_review_precedes_future_artifact_target": True,
+                "invented_target_required_before_confirmation": False,
+                "irrelevant_target_disposition": "discarded_before_path_processing",
+                "transaction_kind_bound_before_target_discard": True,
+                "proposal_schema": "qcoder.connected_assistant.review_before_generation_proposal.v3",
+                "assistant_source_delivery_modes": ["inline", "workspace_file"],
+                "request_path_presence_is_anti_invention_only": True,
+                "free_form_delivery_language_interpreted_by_qcoder": False,
+                "grounded_file_recommendation_authoritative_before_confirmation": False,
+                "displayed_revision_confirmation_is_first_delivery_authority": True,
+                "assistant_envelope_target_fields_establish_authority": False,
+                "invalid_or_ungrounded_file_recommendation_disposition": "silent_inline",
+                "post_confirmation_write_target_displayed_before_confirmation": True,
+                "target_free_review_remains_target_free_after_confirmation": True,
             },
             "x-qcoder-active-loop-continuation": {
                 "request_text": "<exact next customer message>",
@@ -270,7 +871,7 @@ def _tool_result(payload: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def handle_binding_jsonrpc_message(
+def _handle_binding_jsonrpc_message(
     message: Mapping[str, Any], *, workspace_root: str | Path
 ) -> dict[str, Any] | None:
     """Handle one MCP request without accepting workspace or authority from the model."""
@@ -446,12 +1047,15 @@ def handle_binding_jsonrpc_message(
         )
         return _result(message_id, _tool_result(payload))
 
-    if (
-        not isinstance(arguments, Mapping)
-        or set(arguments).difference(
-            {"request_text", "intended_artifact_paths", "selected_artifact_paths"}
-        )
-        or "request_text" not in arguments
+    if not isinstance(arguments, Mapping) or set(arguments).difference(
+        {
+            "request_text",
+            "intended_artifact_paths",
+            "selected_artifact_paths",
+            "connected_assistant_proposal",
+            "review_action",
+            "prior_result_token",
+        }
     ):
         return _result(
             message_id,
@@ -468,14 +1072,41 @@ def handle_binding_jsonrpc_message(
                         "selected_artifact_paths": (
                             "bounded exact customer-named workspace-relative path list"
                         ),
+                        "connected_assistant_proposal": (
+                            "optional exact-request-bound connected-assistant proposal"
+                        ),
                     },
                     "state_mutated": False,
                     "raw_request_echoed": False,
                 }
             ),
         )
+    review_action = arguments.get("review_action")
+    prior_result_token = arguments.get("prior_result_token")
+    connected_assistant_proposal = arguments.get("connected_assistant_proposal")
+    is_review_action = review_action is not None
+    if is_review_action and (
+        set(arguments) != {"review_action", "prior_result_token"}
+        or review_action not in REVIEW_BEFORE_GENERATION_ACTIONS
+        or not isinstance(prior_result_token, str)
+        or re.fullmatch(r"review-result-[0-9a-f]{64}", prior_result_token) is None
+        or connected_assistant_proposal is not None
+    ):
+        return _result(
+            message_id,
+            _tool_result(
+                {
+                    "schema_id": "qcoder.current_loop.review_before_generation_rejection.v2",
+                    "schema_version": 2,
+                    "ok": False,
+                    "category": "review_action_and_prior_result_token_required",
+                    "state_mutated": False,
+                    "proposal_replay_required": False,
+                }
+            ),
+        )
     request_text = arguments.get("request_text")
-    if (
+    if not is_review_action and (
         not isinstance(request_text, str)
         or not request_text
         or len(request_text.encode("utf-8")) > MAX_REQUEST_BYTES
@@ -504,7 +1135,7 @@ def handle_binding_jsonrpc_message(
         current = coordinator.store.read()
         active_state = current
         current_status = current.get("coordinator", {}).get("current_step_status")
-        if current_status == "awaiting_external_client_action":
+        if current_status == "awaiting_external_client_action" and not is_review_action:
             try:
                 checkpoint, _receipt = validate_pending_completion_checkpoint(
                     state=current,
@@ -553,7 +1184,84 @@ def handle_binding_jsonrpc_message(
                 ),
             )
         continuation = current_status == "complete_resumable"
-    selected_paths_value = arguments.get("selected_artifact_paths")
+    if is_review_action:
+        try:
+            payload = coordinator.review_before_generation_transaction(
+                exact_request=(str(request_text) if isinstance(request_text, str) else None),
+                review_action=str(review_action),
+                prior_result_token=str(prior_result_token),
+            )
+        except ReviewBeforeGenerationError as exc:
+            return _result(
+                message_id,
+                _tool_result(
+                    {
+                        "schema_id": "qcoder.current_loop.review_before_generation_rejection.v2",
+                        "schema_version": 2,
+                        "ok": False,
+                        "category": exc.category,
+                        "state_mutated": False,
+                        "source_or_qasm_created": False,
+                        "file_mutation_performed": False,
+                        "execution_performed": False,
+                        "protected_service_called": False,
+                        "proposal_replay_required": False,
+                    }
+                ),
+            )
+        payload.setdefault("details", {}).update(
+            {
+                "structured_confirmation_transport": "project_local_binding_mcp",
+                "prior_result_token_received_once": True,
+                "connected_assistant_proposal_replayed": False,
+                "request_digest_received": False,
+                "protected_service_called": False,
+            }
+        )
+        return _result(message_id, _tool_result(payload))
+    if connected_assistant_proposal is not None:
+        try:
+            transaction_kind = connected_assistant_proposal.get("transaction_kind")
+            request_transaction_state = validate_review_transaction_kind(
+                str(request_text), transaction_kind
+            )
+        except ReviewBeforeGenerationError as exc:
+            return _result(
+                message_id,
+                _tool_result(
+                    {
+                        "schema_id": "qcoder.current_loop.review_before_generation_rejection.v2",
+                        "schema_version": 2,
+                        "ok": False,
+                        "category": exc.category,
+                        **(
+                            {"customer_clarification": exc.clarification}
+                            if exc.clarification
+                            else {}
+                        ),
+                        "state_mutated": False,
+                        "selected_artifact_identity_discarded": False,
+                        "source_or_qasm_created": False,
+                        "file_mutation_performed": False,
+                        "execution_performed": False,
+                        "protected_service_called": False,
+                        "raw_request_echoed": False,
+                        "raw_proposal_echoed": False,
+                        "workspace_discovery_performed": False,
+                    }
+                ),
+            )
+    else:
+        transaction_kind = None
+        request_transaction_state = "not_established"
+    ignore_review_targets = bool(
+        connected_assistant_proposal is not None
+        and transaction_kind == "review_before_source_generation"
+        and request_transaction_state != "source_modification"
+    )
+    selected_paths_value = (
+        None if ignore_review_targets else arguments.get("selected_artifact_paths")
+    )
     if selected_paths_value is not None and (
         not isinstance(selected_paths_value, list)
         or any(not isinstance(item, str) for item in selected_paths_value)
@@ -575,6 +1283,79 @@ def handle_binding_jsonrpc_message(
             ),
         )
     selected_paths = list(selected_paths_value or [])
+    if connected_assistant_proposal is not None:
+        try:
+            normalized_selected = (
+                normalize_selected_artifact_paths(
+                    selected_paths,
+                    workspace_root=coordinator.workspace_root,
+                    minimum_count=1,
+                    maximum_count=2,
+                )
+                if selected_paths
+                else []
+            )
+            selected_identities = [
+                str(item["workspace_relative_path"]) for item in normalized_selected
+            ]
+            intended_value = (
+                None if ignore_review_targets else arguments.get("intended_artifact_paths")
+            )
+            if intended_value is not None and not isinstance(intended_value, Mapping):
+                raise ArtifactTargetError("exact_intended_artifact_targets_required")
+            intended_input = dict(intended_value or {})
+            if set(intended_input) - {"source"}:
+                raise ArtifactTargetError("review_source_target_only")
+            if (
+                selected_identities
+                and not intended_input
+                and transaction_kind == "review_before_source_modification"
+            ):
+                intended_input = {"source": selected_identities[0]}
+            normalized_targets = (
+                {}
+                if ignore_review_targets
+                else normalize_intended_artifact_targets(
+                    intended_input or None,
+                    workspace_root=coordinator.workspace_root,
+                    required_roles=("source",) if intended_input else (),
+                )
+            )
+            payload = coordinator.review_before_generation_transaction(
+                exact_request=str(request_text),
+                connected_assistant_proposal=connected_assistant_proposal,
+                selected_artifact_identities=selected_identities,
+                intended_artifact_targets=normalized_targets,
+                prior_result_token=(
+                    str(prior_result_token) if prior_result_token is not None else None
+                ),
+            )
+        except (ArtifactTargetError, ReviewBeforeGenerationError) as exc:
+            return _result(
+                message_id,
+                _tool_result(
+                    {
+                        "schema_id": ("qcoder.current_loop.review_before_generation_rejection.v2"),
+                        "schema_version": 2,
+                        "ok": False,
+                        "category": str(getattr(exc, "category", exc)),
+                        **(
+                            {"customer_clarification": exc.clarification}
+                            if isinstance(exc, ReviewBeforeGenerationError) and exc.clarification
+                            else {}
+                        ),
+                        "state_mutated": False,
+                        "source_or_qasm_created": False,
+                        "file_mutation_performed": False,
+                        "execution_performed": False,
+                        "protected_service_called": False,
+                        "raw_request_echoed": False,
+                        "raw_proposal_echoed": False,
+                        "workspace_discovery_performed": False,
+                    }
+                ),
+            )
+        return _result(message_id, _tool_result(_quiet_review_success_payload(payload)))
     semantics = classify_current_request(
         request_text,
         active_loop=continuation,
@@ -867,6 +1648,40 @@ def _record_connection_exchange_best_effort(
         return
 
 
+def handle_binding_jsonrpc_message(
+    message: Mapping[str, Any], *, workspace_root: str | Path
+) -> dict[str, Any] | None:
+    """Handle one MCP request and retain one bounded process-local timing receipt."""
+
+    operation_entry = time.monotonic()
+    response = _handle_binding_jsonrpc_message(message, workspace_root=workspace_root)
+    processing_complete = time.monotonic()
+    result_return_boundary = time.monotonic()
+    _LAST_BINDING_TIMING.set(
+        {
+            "schema_id": "qcoder.current_loop.binding_local_timing.v1",
+            "schema_version": 1,
+            "operation_entry_monotonic_seconds": operation_entry,
+            "processing_complete_monotonic_seconds": processing_complete,
+            "result_return_boundary_monotonic_seconds": result_return_boundary,
+            "processing_seconds": max(0.0, processing_complete - operation_entry),
+            "return_boundary_seconds": max(0.0, result_return_boundary - processing_complete),
+            "total_qcoder_local_seconds": max(0.0, result_return_boundary - operation_entry),
+            "process_and_discard": True,
+            "customer_visible": False,
+        }
+    )
+    return response
+
+
+def consume_last_binding_timing() -> dict[str, Any] | None:
+    """Consume the latest request-local timing receipt without persistent telemetry."""
+
+    value = _LAST_BINDING_TIMING.get()
+    _LAST_BINDING_TIMING.set(None)
+    return dict(value) if isinstance(value, Mapping) else None
+
+
 def serve_binding_mcp_stdio(
     *,
     workspace_root: str | Path,
@@ -877,12 +1692,23 @@ def serve_binding_mcp_stdio(
     """Serve the internal binding MCP over JSON-lines or Content-Length stdio."""
 
     stdin = sys.stdin.buffer
+    timing_enabled = bool(
+        connection_state_root is not None
+        and connection_generation is not None
+        and connection_session_sha256 is not None
+    )
+    if timing_enabled:
+        try:
+            clear_stdio_operator_timing(state_root=connection_state_root)
+        except Exception:  # noqa: BLE001 - operator evidence cannot alter MCP behavior
+            pass
     while True:
         first = stdin.readline()
         if not first:
             break
         if not first.strip():
             continue
+        stdio_operation_entry_ns = time.monotonic_ns()
         framed = not first.lstrip().startswith(b"{")
         raw = first
         if framed:
@@ -924,12 +1750,26 @@ def serve_binding_mcp_stdio(
                 message=message,
                 response=response,
             )
+        stdio_processing_complete_ns = time.monotonic_ns()
         if response is None:
             continue
         if framed:
             _write_content_length_response(response)
         else:
             print(json.dumps(response, sort_keys=True), flush=True)
+        stdio_result_return_ns = time.monotonic_ns()
+        if timing_enabled:
+            try:
+                record_stdio_operator_timing(
+                    state_root=connection_state_root,
+                    setup_generation=str(connection_generation),
+                    session_sha256=str(connection_session_sha256),
+                    operation_entry_ns=stdio_operation_entry_ns,
+                    processing_complete_ns=stdio_processing_complete_ns,
+                    result_return_ns=stdio_result_return_ns,
+                )
+            except Exception:  # noqa: BLE001 - operator evidence cannot alter MCP behavior
+                pass
     return 0
 
 
@@ -939,6 +1779,7 @@ __all__ = [
     "BINDING_MCP_SCHEMA_ID",
     "BINDING_MCP_SERVER_NAME",
     "binding_tool_descriptors",
+    "consume_last_binding_timing",
     "handle_binding_jsonrpc_message",
     "serve_binding_mcp_stdio",
 ]
