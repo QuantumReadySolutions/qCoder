@@ -225,6 +225,7 @@ def test_material_source_modification_selection_remains_strict(tmp_path: Path) -
     proposal = proposal_for()
     proposal["customer_constraints"] = []
     proposal["transaction_kind"] = "review_before_source_modification"
+    proposal["source_delivery"] = {"mode": "workspace_file", "target": "selected.py"}
     missing = binding_call(
         tmp_path / "missing",
         {"request_text": request, "connected_assistant_proposal": proposal},
@@ -245,8 +246,9 @@ def test_material_source_modification_selection_remains_strict(tmp_path: Path) -
     )
     assert selected["ok"] is True
     state = CurrentLoopCoordinator(workspace_root=workspace).store.read()
-    targets = state["coordinator"]["review_before_generation"]["intended_artifact_targets"]
-    assert targets["source"]["workspace_relative_path"] == "selected.py"
+    review = state["coordinator"]["review_before_generation"]
+    assert review["intended_artifact_targets"] == {}
+    assert review["displayed_source_target"] == "selected.py"
     assert (workspace / "selected.py").read_text(encoding="utf-8") == "ORIGINAL\n"
 
 
@@ -254,17 +256,17 @@ def test_exact_customer_named_target_and_direct_generation_remain_strict(tmp_pat
     request = "Use qCoder to review the plan before generating source in exact-bell.py."
     proposal = proposal_for()
     proposal["customer_constraints"] = []
-    missing = binding_call(
+    inline = binding_call(
         tmp_path / "review-missing",
         {"request_text": request, "connected_assistant_proposal": proposal},
     )
-    assert missing["category"] == "review_source_target_required"
+    assert inline["ok"] is True
+    proposal["source_delivery"] = {"mode": "workspace_file", "target": "exact-bell.py"}
     exact = binding_call(
         tmp_path / "review-exact",
         {
             "request_text": request,
             "connected_assistant_proposal": proposal,
-            "intended_artifact_paths": {"source": "exact-bell.py"},
         },
     )
     assert exact["ok"] is True
@@ -286,19 +288,20 @@ def test_descriptor_and_full_compact_instructions_are_branch_consistent() -> Non
     assert "intended_artifact_paths" in descriptor["x-qcoder-direct-generation-happy-path"]
     assert "selected_artifact_paths" in descriptor["x-qcoder-selected-file-workflow-happy-path"]
     description = descriptor["description"]
-    assert "do not invent a source path before confirmation" in description
-    assert "ignored before path processing" in description
+    assert "source_delivery recommendation" in description
+    assert "prevents invention" in description
+    assert "first authority for source delivery and workspace write" in description
     full = context_bridge_mcp.CLIENT_ACTIVATION_INSTRUCTIONS
     compact = context_bridge_mcp._compact_client_activation_instructions()
     for instructions in (full, compact):
         assert "review before generation" in instructions.casefold()
-        assert "no invented target" in instructions.casefold()
+        assert "anti-invention" in instructions.casefold()
         assert "direct generation" in instructions.casefold()
         assert "selected-file" in instructions.casefold()
         assert "active-loop" in instructions.casefold()
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v56"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 55
-    assert PROPOSAL_SCHEMA_ID.endswith(".v2")
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v57"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 56
+    assert PROPOSAL_SCHEMA_ID.endswith(".v3")
     assert len(EXPECTED_TOOLS) == 12
     assert [item["name"] for item in binding_tool_descriptors()] == [
         "begin_current_loop",

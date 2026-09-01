@@ -124,7 +124,10 @@ from qcoder.current_loop_result_controls import (
     ResultControlError,
     evaluate_selected_result_controls,
 )
-from qcoder.current_loop_artifact_targets import normalize_intended_artifact_targets
+from qcoder.current_loop_artifact_targets import (
+    ArtifactTargetError,
+    normalize_intended_artifact_targets,
+)
 from qcoder.current_step_contract import (
     CURRENT_STEP_CONTRACT_SCHEMA_ID,
     CURRENT_STEP_CONTRACT_SCHEMA_VERSION,
@@ -2766,15 +2769,14 @@ class CurrentLoopCoordinator:
             ):
                 raise ReviewBeforeGenerationError("review_transaction_request_changed")
             current_revision = str(existing.get("review_revision") or "")
-            stored_targets = existing.get("intended_artifact_targets")
-            stored_source_target_record = (
-                stored_targets.get("source") if isinstance(stored_targets, Mapping) else None
+            stored_delivery = existing.get("connected_assistant_proposal", {}).get(
+                "source_delivery"
             )
-            stored_source_target = (
-                stored_source_target_record.get("workspace_relative_path")
-                if isinstance(stored_source_target_record, Mapping)
-                else None
-            )
+            if not isinstance(stored_delivery, Mapping):
+                raise ReviewBeforeGenerationError("review_confirmation_target_binding_invalid")
+            if existing.get("intended_artifact_targets") not in ({}, None):
+                raise ReviewBeforeGenerationError("review_confirmation_hidden_target_invalid")
+            stored_source_target = stored_delivery.get("target")
             if stored_source_target is not None and not isinstance(stored_source_target, str):
                 raise ReviewBeforeGenerationError("review_confirmation_target_binding_invalid")
             if (
@@ -2801,6 +2803,23 @@ class CurrentLoopCoordinator:
                     "review_confirmation_target_revision_binding_invalid"
                 )
             if review_action == "Review or change choices":
+                delivery_choices = [
+                    {
+                        "label": "Source delivery",
+                        "current_value": (
+                            "Inline after confirmation."
+                            if stored_delivery.get("mode") == "inline"
+                            else "Workspace file after confirmation."
+                        ),
+                    }
+                ]
+                if stored_source_target is not None:
+                    delivery_choices.append(
+                        {
+                            "label": "Proposed source target",
+                            "current_value": stored_source_target,
+                        }
+                    )
                 return {
                     "schema_id": REVIEW_BEFORE_GENERATION_TRANSACTION_SCHEMA_ID,
                     "schema_version": 2,
@@ -2810,7 +2829,8 @@ class CurrentLoopCoordinator:
                     "state_revision": state["state_revision"],
                     "loop_ref": state["loop_ref"],
                     "state_mutated": False,
-                    "material_choices": [
+                    "material_choices": delivery_choices
+                    + [
                         {
                             "label": item["label"],
                             "current_value": item["recommended_value"],
@@ -2854,13 +2874,23 @@ class CurrentLoopCoordinator:
 
             stored_request = str(existing["exact_request"])
             generation_semantics = confirmed_review_generation_semantics(stored_request)
-            exact_target = (
-                stored_targets.get("source") if isinstance(stored_targets, Mapping) else None
-            )
-            inline = not (
-                isinstance(exact_target, Mapping)
-                and isinstance(exact_target.get("workspace_relative_path"), str)
-            )
+            inline = stored_delivery.get("mode") == "inline"
+            confirmed_targets: dict[str, dict[str, Any]] = {}
+            exact_target: Mapping[str, Any] | None = None
+            if not inline:
+                if not isinstance(stored_source_target, str):
+                    raise ReviewBeforeGenerationError("review_confirmation_target_binding_invalid")
+                try:
+                    confirmed_targets = normalize_intended_artifact_targets(
+                        {"source": stored_source_target},
+                        workspace_root=self.workspace_root,
+                        required_roles=("source",),
+                    )
+                except ArtifactTargetError as exc:
+                    raise ReviewBeforeGenerationError(
+                        "review_confirmed_source_target_invalid"
+                    ) from exc
+                exact_target = confirmed_targets["source"]
             generation_ready_context = {
                 "schema_id": "qcoder.current_loop.confirmed_plan_generation_ready.v1",
                 "schema_version": 1,
@@ -2907,7 +2937,7 @@ class CurrentLoopCoordinator:
                     "current_request_semantics": generation_semantics,
                     "current_step_substage": "source",
                     "current_step_status": "action_ready",
-                    "intended_artifact_targets": deepcopy(dict(stored_targets or {})),
+                    "intended_artifact_targets": deepcopy(confirmed_targets),
                     "review_before_generation": updated,
                 }
             )
@@ -2944,41 +2974,31 @@ class CurrentLoopCoordinator:
             raise ReviewBeforeGenerationError("review_exact_request_invalid")
         if connected_assistant_proposal is None:
             raise ReviewBeforeGenerationError("review_connected_assistant_proposal_required")
-        source_target_record = (
-            intended_artifact_targets.get("source")
-            if isinstance(intended_artifact_targets, Mapping)
-            else None
-        )
-        displayed_target = (
-            source_target_record.get("workspace_relative_path")
-            if isinstance(source_target_record, Mapping)
-            else None
-        )
-        if displayed_target is not None and not isinstance(displayed_target, str):
-            raise ReviewBeforeGenerationError("review_displayed_source_target_invalid")
         proposal = validate_connected_assistant_proposal(
             exact_request,
             connected_assistant_proposal,
             selected_artifact_identities=selected_artifact_identities,
-            displayed_source_target=displayed_target,
         )
+        displayed_target = proposal["source_delivery"]["target"]
+        if proposal["transaction_kind"] == "review_before_source_modification":
+            if proposal["source_delivery"][
+                "mode"
+            ] != "workspace_file" or displayed_target not in set(selected_artifact_identities):
+                raise ReviewBeforeGenerationError("review_source_modification_target_mismatch")
         first_value = build_review_before_generation_first_value(
             exact_request,
             connected_assistant_proposal,
             selected_artifact_identities=selected_artifact_identities,
-            displayed_source_target=displayed_target,
         )
         semantics = build_review_before_generation_semantics(
             exact_request,
             connected_assistant_proposal,
             selected_artifact_identities=selected_artifact_identities,
-            displayed_source_target=displayed_target,
         )
         proposed_revision = review_revision(
             exact_request,
             connected_assistant_proposal,
             selected_artifact_identities=selected_artifact_identities,
-            displayed_source_target=displayed_target,
         )
 
         try:
@@ -3048,7 +3068,7 @@ class CurrentLoopCoordinator:
                 "execution_performed": False,
                 "protected_service_called": False,
                 "retention": "current_loop_only_process_and_discard",
-                "intended_artifact_targets": deepcopy(dict(intended_artifact_targets or {})),
+                "intended_artifact_targets": {},
                 "displayed_source_target": displayed_target,
             }
             token = (
@@ -3157,7 +3177,7 @@ class CurrentLoopCoordinator:
                 "execution_authority": proposal["semantic_axes"]["execution_authority"],
                 "prior_result_token": revised_token,
                 "generation_ready_context": None,
-                "intended_artifact_targets": deepcopy(dict(intended_artifact_targets or {})),
+                "intended_artifact_targets": {},
                 "displayed_source_target": displayed_target,
             }
         )

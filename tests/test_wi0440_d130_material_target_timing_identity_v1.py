@@ -48,6 +48,8 @@ def proposal(*, transaction_kind: str = "review_before_source_generation") -> di
     value = json.loads(BELL_FIXTURE.read_text(encoding="utf-8"))
     value["transaction_kind"] = transaction_kind
     value["customer_constraints"] = []
+    if transaction_kind == "review_before_source_modification":
+        value["source_delivery"] = {"mode": "workspace_file", "target": "selected.py"}
     return value
 
 
@@ -73,7 +75,7 @@ def first_value_source_target(result: dict[str, object]) -> str | None:
         item["value"]
         for group in review["initial_decision_groups"]
         for item in group["items"]
-        if item["label"] == "Source target"
+        if item["label"] == "Proposed source target"
     ]
     assert len(matches) <= 1
     return matches[0] if matches else None
@@ -145,7 +147,7 @@ def test_correct_modification_kind_requires_and_preserves_exact_native_selection
     state = CurrentLoopCoordinator(workspace_root=workspace).store.read()
     review = state["coordinator"]["review_before_generation"]
     assert review["displayed_source_target"] == "selected.py"
-    assert review["intended_artifact_targets"]["source"]["workspace_relative_path"] == "selected.py"
+    assert review["intended_artifact_targets"] == {}
     assert (workspace / "selected.py").read_text(encoding="utf-8") == "ORIGINAL\n"
 
 
@@ -253,11 +255,11 @@ def test_affirmative_exact_target_is_displayed_bound_and_preserved_through_confi
     tmp_path: Path,
 ) -> None:
     request = "Use qCoder to review a Bell plan before generating source in bell.py."
-    missing = binding_call(
+    inline = binding_call(
         tmp_path / "missing",
         {"request_text": request, "connected_assistant_proposal": proposal()},
     )
-    assert missing["category"] == "review_source_target_required"
+    assert inline["ok"] is True
     wrong = binding_call(
         tmp_path / "wrong",
         {
@@ -266,16 +268,15 @@ def test_affirmative_exact_target_is_displayed_bound_and_preserved_through_confi
             "intended_artifact_paths": {"source": "other.py"},
         },
     )
-    assert wrong["category"] == "review_source_target_not_named_by_customer"
+    assert wrong["ok"] is True
+    assert first_value_source_target(wrong) is None
 
     workspace = tmp_path / "exact"
+    result_proposal = proposal()
+    result_proposal["source_delivery"] = {"mode": "workspace_file", "target": "bell.py"}
     result = binding_call(
         workspace,
-        {
-            "request_text": request,
-            "connected_assistant_proposal": proposal(),
-            "intended_artifact_paths": {"source": "bell.py"},
-        },
+        {"request_text": request, "connected_assistant_proposal": result_proposal},
     )
     assert result["ok"] is True
     assert first_value_source_target(result) == "bell.py"
@@ -484,12 +485,13 @@ def test_d130_contract_identity_and_inventory_are_exact() -> None:
     descriptor = binding_tool_descriptors()[0]
     review_contract = descriptor["x-qcoder-review-before-generation"]
     assert review_contract["transaction_kind_bound_before_target_discard"] is True
-    assert review_contract["target_authority_requires_affirmative_unquoted_request"] is True
+    assert review_contract["request_path_presence_is_anti_invention_only"] is True
+    assert review_contract["free_form_delivery_language_interpreted_by_qcoder"] is False
     assert review_contract["post_confirmation_write_target_displayed_before_confirmation"] is True
     assert review_contract["target_free_review_remains_target_free_after_confirmation"] is True
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v56"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 55
-    assert __version__ == "0.6.0a24.post0.dev6+review.before.generation.v4"
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v57"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 56
+    assert __version__ == "0.6.0a24.post0.dev7+review.confirmed.delivery.v1"
     assert Version(__version__) > Version("0.6.0a24.post0.dev3+review.before.generation.v1")
     assert len(EXPECTED_TOOLS) == 12
     assert [item["name"] for item in binding_tool_descriptors()] == [

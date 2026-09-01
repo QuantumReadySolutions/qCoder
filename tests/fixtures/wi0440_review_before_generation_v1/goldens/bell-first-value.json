@@ -103,6 +103,11 @@
           "value": "Readable Python source after confirmation"
         },
         {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Source delivery",
+          "value": "Inline after confirmation."
+        },
+        {
           "attribution": "qcoder_deterministic_boundary",
           "label": "Generation authority",
           "value": "Python source will be produced after you confirm these choices."

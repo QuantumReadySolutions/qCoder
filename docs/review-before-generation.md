@@ -5,13 +5,14 @@ customer who explicitly asks qCoder to review a proposed interpretation and mate
 choices before source generation or source modification.
 
 Its private candidate identity is
-`0.6.0a24.post0.dev6+review.before.generation.v4`; it is not a selected public successor and is not
+`0.6.0a24.post0.dev7+review.confirmed.delivery.v1`; it is not a selected public successor and is not
 authorized for publication or handoff.
 
 The connected assistant sends the exact unchanged customer request and a separately attributed
-structured proposal in one `begin_current_loop` operation. The assistant—not qCoder—supplies the
-substantive recommendations. qCoder validates exact-request binding, the six semantic axes,
-substantiveness, authority, privacy, retention, and revision integrity. It then returns one
+proposal v3 in one `begin_current_loop` operation. The assistant—not qCoder—supplies the substantive
+recommendations, including exactly one inert source-delivery recommendation: `inline`, or
+`workspace_file` with one proposed target. qCoder validates exact-request binding, the six semantic
+axes, substantiveness, structural safety, privacy, retention, and revision integrity. It then returns one
 display-ready review with exactly:
 
 1. Goal and scope
@@ -19,29 +20,26 @@ display-ready review with exactly:
 3. Output and authority
 
 Only a substantive, unblocked review exposes `Use recommended choices` and `Review or change
-choices`. Confirmation binds to the exact displayed revision. It grants source-generation or
-source-modification authority for that revision only; execution always remains independent.
+choices`. Before confirmation, even a displayed workspace-file recommendation has no write
+authority. Confirmation binds to the exact displayed revision and is the first source-delivery and
+workspace-write authority. It grants source generation or modification for that revision only;
+execution always remains independent.
 
 Review before generation has immediate-interaction precedence over future artifact production only
 after qCoder verifies that the proposal's generation-versus-modification kind agrees with the exact
-unquoted request and any exact native-client selection. When the exact request grants no affirmative
-source-target authority, the initial call uses only `request_text` and
-`connected_assistant_proposal`; it does not invent a path. If a host nevertheless supplies an
-irrelevant intended or selected target, qCoder discards it before path normalization, inspection,
-state binding, or projection and returns the same first review. Target-bearing language is divided
-into bounded ordered local directive units. Each occurrence resolves to `affirmative`,
-`non_authoritative`, or `unresolved`: exactly one unique affirmative target may bind; an entirely
-non-authoritative set remains target-free; any unresolved occurrence or incompatible file/inline
-directive produces one bounded clarification without state mutation. Straight or curly quotations,
-Markdown code spans, examples, comparisons, hypotheticals, tentative suggestions, questions,
-rejected or negated alternatives, prohibitions, and inline-only filename mentions grant no target
-authority. A later independent affirmative unit is not contaminated by an earlier example, while an
-explicit proven correction may supersede one prior output directive. Unknown target-bearing language
-fails to clarification rather than silently becoming inline. Every
-target that can become a later write is shown in the review and bound to that displayed revision
-before confirmation. Direct generation, review before modifying selected source, selected-file
-workflows, affirmatively customer-authorized targets, and active-loop replacement retain their
-strict existing target contracts.
+unquoted request and any exact native-client selection. qCoder does not infer review delivery or
+write authority from free-form customer prose. A proposed workspace target is displayable only when
+it is a structurally safe workspace-relative Python path and its exact text occurs in the unchanged
+request, or existing native selected-source provenance grounds it. Request presence is an
+anti-invention guard, not semantic interpretation: quotation, examples, comparisons, hypotheticals,
+questions, negation, prohibition, correction, and directive wording do not autonomously grant or
+deny review write authority. Missing, unsafe, absolute, traversing, unsupported, or ungrounded file
+recommendations silently converge to inline without a correction turn. Assistant intended/selected
+envelope fields remain irrelevant for generation review. A grounded file recommendation is shown
+once and revision-bound, but remains inert until exact displayed confirmation. Only then does qCoder
+apply workspace containment and create the exact-target Current Step Contract. Direct generation,
+review before modifying selected source, selected-file workflows, and active-loop replacement retain
+their strict existing target contracts.
 
 The compact first review shows assistant recommendations once. Its complete editable material-choice
 inventory remains behind `Review or change choices`, so the initial three groups do not restate the

@@ -164,7 +164,8 @@ def test_qcoder_generates_only_axis_consistent_visible_authority() -> None:
     assert all(
         item["attribution"] == "qcoder_deterministic_boundary"
         for item in authority
-        if item["label"] != "Output artifact"
+        if item["label"]
+        not in {"Output artifact", "Source delivery", "Proposed source target"}
     )
 
 
@@ -279,7 +280,7 @@ def test_descriptor_is_self_describing_and_valid_by_construction(tmp_path: Path)
     properties = schema["properties"]
     proposal_schema = properties["connected_assistant_proposal"]
     assert descriptor["name"] == "begin_current_loop"
-    assert PROPOSAL_SCHEMA_ID.endswith(".v2")
+    assert PROPOSAL_SCHEMA_ID.endswith(".v3")
     assert "exact_request_utf8_sha256" not in proposal_schema["properties"]
     assert "semantic_axes" not in proposal_schema["properties"]
     assert "review_groups" not in proposal_schema["properties"]
@@ -290,8 +291,8 @@ def test_descriptor_is_self_describing_and_valid_by_construction(tmp_path: Path)
     result = binding_payload(tmp_path, request=EXACT_REQUEST, proposal=proposal_for())
     assert result["ok"] is True
     assert "category" not in result
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v56"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 55
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v57"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 56
     assert len(EXPECTED_TOOLS) == 12
     assert [item["name"] for item in binding_tool_descriptors()] == [
         "begin_current_loop",
@@ -386,10 +387,12 @@ def test_changed_proposal_requires_old_token_and_issues_new_token(tmp_path: Path
 
 def test_exact_file_confirmation_returns_existing_current_step_contract(tmp_path: Path) -> None:
     request = "Use qCoder to review the Bell choices before creating bell.py after I agree."
+    file_proposal = proposal_for(request)
+    file_proposal["source_delivery"] = {"mode": "workspace_file", "target": "bell.py"}
     first = binding_payload(
         tmp_path,
         request=request,
-        proposal=proposal_for(request),
+        proposal=file_proposal,
         intended_artifact_paths={"source": "bell.py"},
     )
     confirmed = binding_payload(
@@ -425,6 +428,7 @@ def test_source_modification_confirmation_reuses_exact_selected_target(tmp_path:
     request = "Use qCoder to review proposed changes to selected.py before modifying the source."
     proposal = proposal_for(request)
     proposal["transaction_kind"] = "review_before_source_modification"
+    proposal["source_delivery"] = {"mode": "workspace_file", "target": "selected.py"}
     first = binding_payload(
         tmp_path,
         request=request,

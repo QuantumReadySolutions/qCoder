@@ -15,7 +15,7 @@
         {
           "attribution": "connected_assistant_recommendation",
           "label": "Recommended interpretation",
-          "value": "Create a concrete three-qubit Qiskit GHZ preparation and measurement program only after the customer confirms the displayed plan."
+          "value": "Create a minimal two-qubit Qiskit program that prepares |Φ+> = (|00> + |11>)/sqrt(2), measures both qubits in the computational basis, and produces readable Python only after the customer confirms the plan."
         },
         {
           "attribution": "connected_assistant_recommendation",
@@ -45,22 +45,27 @@
         {
           "attribution": "connected_assistant_recommendation",
           "label": "Implementation recommendation 2",
-          "value": "Three qubits prepared with one H and a two-CX entangling chain"
+          "value": "Use two qubits and two classical bits."
         },
         {
           "attribution": "connected_assistant_recommendation",
           "label": "Implementation recommendation 3",
-          "value": "QuantumCircuit with H on q0, CX from q0 to q1, CX from q1 to q2, and measurements"
+          "value": "Apply H to q0."
         },
         {
           "attribution": "connected_assistant_recommendation",
           "label": "Implementation recommendation 4",
-          "value": "Measure q0 to c0, q1 to c1, and q2 to c2"
+          "value": "Apply CX from q0 to q1."
         },
         {
           "attribution": "connected_assistant_recommendation",
           "label": "Implementation recommendation 5",
-          "value": "Direct readable Python with explicit quantum and classical registers"
+          "value": "Measure q0 to c0 and q1 to c1."
+        },
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Implementation recommendation 6",
+          "value": "Produce direct readable Python."
         },
         {
           "attribution": "qcoder_deterministic_boundary",
@@ -80,12 +85,17 @@
         {
           "attribution": "connected_assistant_recommendation",
           "label": "Output artifact",
-          "value": "A readable three-qubit GHZ source example in Python"
+          "value": "Readable Python source after confirmation"
         },
         {
           "attribution": "connected_assistant_recommendation",
           "label": "Source delivery",
-          "value": "Inline after confirmation."
+          "value": "Workspace file after confirmation."
+        },
+        {
+          "attribution": "connected_assistant_recommendation",
+          "label": "Proposed source target",
+          "value": "bell.py"
         },
         {
           "attribution": "qcoder_deterministic_boundary",

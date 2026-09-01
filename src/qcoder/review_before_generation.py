@@ -20,7 +20,7 @@ import warnings
 from qcoder.core.share_safe import contains_local_path, contains_token_or_header
 
 
-PROPOSAL_SCHEMA_ID = "qcoder.connected_assistant.review_before_generation_proposal.v2"
+PROPOSAL_SCHEMA_ID = "qcoder.connected_assistant.review_before_generation_proposal.v3"
 SEMANTICS_SCHEMA_ID = "qcoder.current_loop.review_before_generation_semantics.v1"
 FIRST_VALUE_SCHEMA_ID = "qcoder.current_loop.review_before_generation_first_value.v2"
 TRANSACTION_SCHEMA_ID = "qcoder.current_loop.review_before_generation_transaction.v2"
@@ -41,6 +41,7 @@ TRANSACTION_KINDS = (
     "review_before_source_modification",
 )
 EXECUTION_REQUESTS = ("not_requested", "held_for_separate_authorization")
+SOURCE_DELIVERY_MODES = ("inline", "workspace_file")
 
 _PLACEHOLDERS = {
     "tbd",
@@ -529,9 +530,43 @@ def _validated_display_source_target(value: object) -> str | None:
         or any(part in {"", ".", ".."} for part in candidate.parts)
     ):
         raise ReviewBeforeGenerationError("review_displayed_source_target_invalid")
-    if candidate.suffix.casefold() not in {".py", ".pyw", ".qasm"}:
+    if candidate.suffix.casefold() not in {".py", ".pyw"}:
         raise ReviewBeforeGenerationError("review_displayed_source_target_invalid")
     return value
+
+
+def _normalized_source_delivery(
+    exact_request: str,
+    value: object,
+    *,
+    selected_artifact_identities: Sequence[str] = (),
+) -> dict[str, str | None]:
+    """Normalize one inert assistant delivery recommendation.
+
+    Request occurrence and native selected-source identity are anti-invention
+    provenance only. This function deliberately does not interpret surrounding
+    free-form request language and performs no workspace path operation.
+    """
+
+    if not isinstance(value, Mapping) or set(value) - {"mode", "target"}:
+        raise ReviewBeforeGenerationError("review_proposal_source_delivery_invalid")
+    mode = value.get("mode")
+    if mode not in SOURCE_DELIVERY_MODES:
+        raise ReviewBeforeGenerationError("review_proposal_source_delivery_mode_invalid")
+    if mode == "inline":
+        return {"mode": "inline", "target": None}
+    raw_target = value.get("target")
+    try:
+        target = _validated_display_source_target(raw_target)
+    except ReviewBeforeGenerationError:
+        return {"mode": "inline", "target": None}
+    if target is None:
+        return {"mode": "inline", "target": None}
+    grounded_by_request = target in exact_request
+    grounded_by_native_selection = target in set(selected_artifact_identities)
+    if not grounded_by_request and not grounded_by_native_selection:
+        return {"mode": "inline", "target": None}
+    return {"mode": "workspace_file", "target": target}
 
 
 def _execution_request_state(exact_request: str) -> str:
@@ -748,6 +783,7 @@ def validate_connected_assistant_proposal(
         "schema_version",
         "transaction_kind",
         "execution_request",
+        "source_delivery",
         "recommended_interpretation",
         "customer_constraints",
         "implementation_recommendations",
@@ -758,14 +794,21 @@ def validate_connected_assistant_proposal(
         "blocking_clarification",
     }
     _strict_keys(proposal, expected, "review_proposal_schema_invalid")
-    if proposal.get("schema_id") != PROPOSAL_SCHEMA_ID or proposal.get("schema_version") != 2:
+    if proposal.get("schema_id") != PROPOSAL_SCHEMA_ID or proposal.get("schema_version") != 3:
         raise ReviewBeforeGenerationError("review_proposal_contract_invalid")
     transaction_kind = str(proposal.get("transaction_kind") or "")
     execution_request = str(proposal.get("execution_request") or "")
     if transaction_kind not in TRANSACTION_KINDS or execution_request not in EXECUTION_REQUESTS:
         raise ReviewBeforeGenerationError("review_proposal_semantic_mode_invalid")
     validate_review_transaction_kind(exact_request, transaction_kind)
-    displayed_source_target = _validated_display_source_target(displayed_source_target)
+    delivery = _normalized_source_delivery(
+        exact_request,
+        proposal.get("source_delivery"),
+        selected_artifact_identities=selected_artifact_identities,
+    )
+    proposed_source_target = delivery["target"]
+    if displayed_source_target is not None and displayed_source_target != proposed_source_target:
+        raise ReviewBeforeGenerationError("review_displayed_source_target_invalid")
     axes = _semantic_axes(transaction_kind, execution_request)
     if transaction_kind == "review_before_source_modification" and not selected_artifact_identities:
         raise ReviewBeforeGenerationError(
@@ -938,8 +981,20 @@ def validate_connected_assistant_proposal(
 
     output_items: list[dict[str, str]] = []
     add_unique(output_items, _assistant_item("Output artifact", output_artifact))
-    if displayed_source_target is not None:
-        add_unique(output_items, _qcoder_item("Source target", displayed_source_target))
+    add_unique(
+        output_items,
+        _assistant_item(
+            "Source delivery",
+            "Inline after confirmation."
+            if delivery["mode"] == "inline"
+            else "Workspace file after confirmation.",
+        ),
+    )
+    if proposed_source_target is not None:
+        add_unique(
+            output_items,
+            _assistant_item("Proposed source target", proposed_source_target),
+        )
     for item in _authority_items(axes, request_execution_state):
         add_unique(output_items, item)
     for index, value in enumerate(deferred, start=1):
@@ -953,11 +1008,12 @@ def validate_connected_assistant_proposal(
     ]
     normalized = {
         "schema_id": PROPOSAL_SCHEMA_ID,
-        "schema_version": 2,
+        "schema_version": 3,
         "proposal_attribution": PROPOSAL_ATTRIBUTION,
         "exact_request_utf8_sha256": request_digest(exact_request),
         "transaction_kind": transaction_kind,
         "execution_request": execution_request,
+        "source_delivery": delivery,
         "request_execution_state": request_execution_state,
         "semantic_axes": axes,
         "recommended_interpretation": interpretation,
@@ -992,10 +1048,10 @@ def validate_connected_assistant_proposal(
     for group in privacy_projection["review_groups"]:
         for item in group["items"]:
             if (
-                item.get("label") == "Source target"
-                and item.get("attribution") == QCODER_ATTRIBUTION
+                item.get("label") == "Proposed source target"
+                and item.get("attribution") == CONNECTED_ASSISTANT_ATTRIBUTION
             ):
-                item["value"] = "customer-authorized-source-target"
+                item["value"] = "request-grounded-proposed-source-target"
     if _privacy_error(privacy_projection):
         raise ReviewBeforeGenerationError("review_proposal_private_material_rejected")
     return normalized
@@ -1014,6 +1070,7 @@ def build_review_before_generation_semantics(
         selected_artifact_identities=selected_artifact_identities,
         displayed_source_target=displayed_source_target,
     )
+    proposed_target = validated["source_delivery"]["target"]
     result = {
         "schema_id": SEMANTICS_SCHEMA_ID,
         "schema_version": 1,
@@ -1024,8 +1081,8 @@ def build_review_before_generation_semantics(
             for value in sorted(selected_artifact_identities)
         ],
         "displayed_source_target_sha256": (
-            sha256(displayed_source_target.encode("utf-8")).hexdigest()
-            if displayed_source_target is not None
+            sha256(proposed_target.encode("utf-8")).hexdigest()
+            if isinstance(proposed_target, str)
             else None
         ),
         "route": "binding_owned_review_before_generation",
@@ -1056,6 +1113,7 @@ def review_revision(
         selected_artifact_identities=selected_artifact_identities,
         displayed_source_target=displayed_source_target,
     )
+    proposed_target = validated["source_delivery"]["target"]
     return review_revision_from_validated(
         exact_request,
         validated,
@@ -1063,7 +1121,7 @@ def review_revision(
             sha256(value.encode("utf-8")).hexdigest()
             for value in sorted(selected_artifact_identities)
         ],
-        displayed_source_target=displayed_source_target,
+        displayed_source_target=(proposed_target if isinstance(proposed_target, str) else None),
     )
 
 
@@ -1106,7 +1164,7 @@ def _displayed_text_values(
                 continue
             if include_labels:
                 values.append(str(item.get("label") or ""))
-            if include_source_target or item.get("label") != "Source target":
+            if include_source_target or item.get("label") != "Proposed source target":
                 values.append(str(item.get("value") or ""))
     return values
 
@@ -1203,10 +1261,14 @@ def validate_first_value(value: Mapping[str, Any]) -> dict[str, Any]:
             if normalized in normalized_values:
                 raise ReviewBeforeGenerationError("review_first_value_value_duplicate")
             normalized_values.add(normalized)
-            if attribution == QCODER_ATTRIBUTION:
-                if label == "Source target":
-                    _validated_display_source_target(item_value)
-                elif item_value not in _QCODER_ITEM_VALUES.get(label, set()):
+            if label == "Proposed source target":
+                if attribution != CONNECTED_ASSISTANT_ATTRIBUTION:
+                    raise ReviewBeforeGenerationError(
+                        "review_first_value_source_target_attribution_invalid"
+                    )
+                _validated_display_source_target(item_value)
+            elif attribution == QCODER_ATTRIBUTION:
+                if item_value not in _QCODER_ITEM_VALUES.get(label, set()):
                     raise ReviewBeforeGenerationError("review_first_value_qcoder_boundary_invalid")
             else:
                 untrusted_values.extend((label, item_value))
@@ -1274,24 +1336,25 @@ def validate_first_value(value: Mapping[str, Any]) -> dict[str, Any]:
     for group in privacy_projection["initial_decision_groups"]:
         for item in group["items"]:
             if (
-                item.get("label") == "Source target"
-                and item.get("attribution") == QCODER_ATTRIBUTION
+                item.get("label") == "Proposed source target"
+                and item.get("attribution") == CONNECTED_ASSISTANT_ATTRIBUTION
             ):
-                item["value"] = "customer-authorized-source-target"
+                item["value"] = "request-grounded-proposed-source-target"
     if _privacy_error(privacy_projection):
         raise ReviewBeforeGenerationError("review_first_value_private_material_rejected")
     return deepcopy(dict(value))
 
 
 def displayed_source_target(value: Mapping[str, Any]) -> str | None:
-    """Return the sole qCoder-displayed source target, if present."""
+    """Return the sole assistant-proposed displayed source target, if present."""
 
     validated = validate_first_value(value)
     matches = [
         item["value"]
         for group in validated["initial_decision_groups"]
         for item in group["items"]
-        if item["label"] == "Source target" and item["attribution"] == QCODER_ATTRIBUTION
+        if item["label"] == "Proposed source target"
+        and item["attribution"] == CONNECTED_ASSISTANT_ATTRIBUTION
     ]
     if len(matches) > 1:
         raise ReviewBeforeGenerationError("review_first_value_source_target_duplicate")
@@ -1319,7 +1382,7 @@ def build_first_value(
         str(item["value"])
         for group in displayed_groups
         for item in group["items"]
-        if item["label"] != "Source target"
+        if item["label"] != "Proposed source target"
     ]
     result = {
         "proposal_attribution": PROPOSAL_ATTRIBUTION,
@@ -1376,7 +1439,9 @@ def contract_snapshot() -> dict[str, Any]:
         "token_only_action_call_strict": True,
         "execution_request_bound_to_exact_unquoted_request": True,
         "source_transaction_kind_bound_to_exact_unquoted_request": True,
-        "workspace_target_must_be_customer_authorized_and_displayed": True,
+        "review_workspace_target_is_inert_until_displayed_revision_confirmation": True,
+        "review_target_request_presence_is_anti_invention_only": True,
+        "review_free_form_delivery_language_interpreted_by_qcoder": False,
         "inline_review_cannot_gain_workspace_target_on_confirmation": True,
         "model_facing_confirmation_internal_mechanics": False,
         "one_operation_before_useful_review": True,
@@ -1390,7 +1455,7 @@ def contract_snapshot() -> dict[str, Any]:
 
 
 def proposal_input_schema() -> dict[str, Any]:
-    """Return the valid-by-construction v2 proposal schema."""
+    """Return the valid-by-construction v3 proposal schema."""
 
     plain_text = {
         "type": "string",
@@ -1411,7 +1476,7 @@ def proposal_input_schema() -> dict[str, Any]:
         ),
         "properties": {
             "schema_id": {"const": PROPOSAL_SCHEMA_ID},
-            "schema_version": {"const": 2},
+            "schema_version": {"const": 3},
             "transaction_kind": {
                 "type": "string",
                 "enum": list(TRANSACTION_KINDS),
@@ -1427,6 +1492,24 @@ def proposal_input_schema() -> dict[str, Any]:
                     "Use not_requested unless execution was explicitly requested; even then it "
                     "remains held for separate authorization."
                 ),
+            },
+            "source_delivery": {
+                "type": "object",
+                "description": (
+                    "One connected-assistant recommendation, held without source or write "
+                    "authority until the customer confirms the exact displayed revision. Use "
+                    "inline with no target for inline source. Use workspace_file with one safe "
+                    "workspace-relative Python source target only when that exact path text "
+                    "occurs in request_text or is backed by an existing native selected-source "
+                    "workflow. Missing, unsafe, or ungrounded workspace targets converge "
+                    "silently to inline. Do not infer authority from this recommendation."
+                ),
+                "properties": {
+                    "mode": {"type": "string", "enum": list(SOURCE_DELIVERY_MODES)},
+                    "target": {"type": ["string", "null"], "maxLength": 16384},
+                },
+                "required": ["mode"],
+                "additionalProperties": False,
             },
             "recommended_interpretation": {
                 **plain_text,
@@ -1507,6 +1590,7 @@ def proposal_input_schema() -> dict[str, Any]:
             "schema_version",
             "transaction_kind",
             "execution_request",
+            "source_delivery",
             "recommended_interpretation",
             "customer_constraints",
             "implementation_recommendations",

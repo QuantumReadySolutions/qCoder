@@ -366,11 +366,11 @@ def test_duplicate_and_stale_confirmation_preserve_internal_binding(tmp_path: Pa
 
 def test_contract_identity_advances_without_inventory_or_proposal_change() -> None:
     descriptors = binding_tool_descriptors()
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v56"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 55
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v57"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 56
     assert [item["name"] for item in descriptors] == [
         "begin_current_loop",
         "complete_current_step",
     ]
     proposal_schema = descriptors[0]["inputSchema"]["properties"]["connected_assistant_proposal"]
-    assert proposal_schema["properties"]["schema_id"]["const"].endswith(".v2")
+    assert proposal_schema["properties"]["schema_id"]["const"].endswith(".v3")

@@ -188,8 +188,8 @@ EXPECTED_TOOLS = (
     *ALGORITHM_BLUEPRINT_TOOL_NAMES,
 )
 CLIENT_BINDING_SCHEMA_ID = "qcoder.connected_assistant.client_binding"
-CLIENT_BINDING_SCHEMA_VERSION = 55
-CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v56"
+CLIENT_BINDING_SCHEMA_VERSION = 56
+CLIENT_BINDING_CONTRACT_ID = "qcoder.connected_assistant.client_binding.v57"
 CLIENT_BINDING_INLINE_TIER_SCHEMA_ID = "qcoder.connected_assistant.client_binding.inline.v1"
 CLIENT_BINDING_REFERENCE_SCHEMA_ID = "qcoder.connected_assistant.contract_reference.v1"
 CLIENT_ACTIVATION_INSTRUCTIONS = """QCODER ASSISTANT SURFACES
@@ -230,14 +230,13 @@ Concrete D-080 current request: before planning-language or generic single-capab
 classify the exact current customer message through the binding's canonical request-semantics
 contract. A concrete explicit qCoder source, QASM, execution, or selected-file review request uses
 the project-local binding-owned begin_current_loop MCP operation. Pass the exact complete current
-customer message once as request_text. Branch-specific target rules apply: review before generation
-uses request_text plus connected_assistant_proposal and no invented target; qCoder verifies the
-proposal's generation-versus-modification kind against the exact unquoted request before any target
-can be ignored. A target can become later write authority only when one unambiguous unquoted
-customer directive affirmatively selects it and the first review visibly displays it. qCoder
-resolves target occurrences in ordered local directive units: all proven non-authoritative
-occurrences remain target-free, while unresolved wording or conflicting file/inline directives
-clarify without state mutation. Assistant target fields cannot change that result. Direct generation uses
+customer message once as request_text. Branch-specific target rules apply. Review before generation
+uses request_text plus a proposal-v3 source-delivery recommendation: inline, or workspace_file with
+one safe proposed target. qCoder does not infer review write authority from surrounding free-form
+prose. Exact request presence or existing native selected-source provenance is only an anti-invention
+guard. Missing, unsafe, or ungrounded file recommendations converge silently to inline. A grounded
+file recommendation is displayed but remains inert until the customer confirms that exact review.
+Assistant envelope target fields cannot establish authority. Direct generation uses
 one exact customer-authorized intended_artifact_paths entry for every requested role; selected-file
 work uses exact customer-named selected_artifact_paths; active-loop continuation reuses its bound
 target unless the customer names a replacement. Choose names solely from the customer task; do not
@@ -1089,18 +1088,18 @@ REVIEW BEFORE GENERATION
 When the customer explicitly asks to review an interpretation or proposed implementation before
 source generation or source modification, call begin_current_loop once with the exact unchanged
 customer request and one separately attributed connected_assistant_proposal. The connected
-assistant supplies every substantive recommendation. qCoder validates exact request binding,
-authority, privacy, substantiveness, and revision integrity, then returns one display-ready review.
+assistant supplies every substantive recommendation, including exactly one source-delivery
+recommendation. qCoder validates exact request binding, structural safety, privacy, substantiveness,
+and revision integrity, then returns one display-ready review.
 Display its three groups and exact customer actions without adding another qCoder operation. Do not
 generate or modify source until the customer confirms the displayed revision. Confirmation of a
 generation plan never grants execution authority. Review before generation has immediate-interaction
-precedence: future artifact production does not require or authorize an invented source target
-before confirmation. No invented target is permitted. Omit target fields when the customer grants no
-affirmative target authority. qCoder resolves each local target directive as affirmative,
-non-authoritative, or unresolved; uncertainty clarifies and assistant target fields never resolve it.
-If a host nevertheless supplies an irrelevant target, qCoder first verifies the request's
-generation-versus-modification mode, then discards the target before path processing and returns the
-same first review. Any target that can become a later write is displayed in that review. Source
+precedence. Recommend inline when no safe target text occurs in request_text. For workspace_file,
+the exact proposed target text must occur in request_text or have existing native selected-source
+provenance. This anti-invention guard does not interpret surrounding language. Missing, unsafe, or ungrounded file
+recommendations and irrelevant envelope targets are discarded before path processing and converge
+to the same inline review. A grounded recommendation is displayed but inert. Confirmation of that
+exact displayed revision is the first source-delivery and workspace-write authority. Source
 modification still requires its exact native-client-selected source.
 
 ACTIVE-BUILD STRUCTURED ACTIVATION
@@ -1108,8 +1107,8 @@ Call the project-local qcoder-current-loop begin_current_loop operation once wit
 to the exact complete current customer message. For direct generation, supply one exact
 workspace-relative intended_artifact_paths value per requested role, chosen solely from the task.
 For selected-file work, supply only the exact customer-named selected_artifact_paths. For an
-active-loop continuation, use its already bound target. These target requirements do not apply to
-an unconfirmed review-before-generation interaction with no affirmative customer target authority.
+active-loop continuation, use its already bound target. These direct-generation target requirements
+do not apply to an unconfirmed review-before-generation recommendation.
 Never use Read,
 Grep, Glob, listing, scanning, or neighboring-artifact search. The typed required argument makes missing stdin or
 command construction inapplicable. The customer never types the command. Never construct a command

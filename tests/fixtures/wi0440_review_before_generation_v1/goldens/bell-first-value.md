@@ -22,6 +22,7 @@
 ## Output and authority
 
 - **Output artifact:** Readable Python source after confirmation
+- **Source delivery:** Inline after confirmation.
 - **Generation authority:** Python source will be produced after you confirm these choices.
 - **Execution authority:** Execution was not requested and is not authorized.
 - **Authority separation:** Confirming these choices does not authorize execution.

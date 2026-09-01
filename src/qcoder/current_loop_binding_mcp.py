@@ -554,15 +554,14 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "qCoder supplies structure, attribution, authority, revision, and actions. Later "
                 "confirm with only review_action and the opaque prior_result_token; do not replay "
                 "the proposal. Execution authority remains separate. For review before generation, "
-                "future artifact production does not create present target authority: do not invent "
-                "a source path before confirmation. Target fields supplied without an exact "
-                "customer-authorized target are ignored before path processing for this immediate "
-                "review. qCoder resolves each target occurrence in ordered local directive units "
-                "as affirmative, non-authoritative, or unresolved. Exactly one unique affirmative "
-                "customer target can bind; all-non-authoritative occurrences remain target-free; "
-                "unresolved wording or incompatible file/inline directives require clarification. "
-                "Assistant target fields cannot change that result. Any target that can become a later workspace "
-                "write is displayed in the review before confirmation. "
+                "include exactly one proposal-v3 source_delivery recommendation: inline, or "
+                "workspace_file with one safe workspace-relative Python target whose exact text "
+                "occurs in request_text or has existing native selected-source provenance. This "
+                "request-presence check prevents invention; qCoder does not interpret surrounding "
+                "free-form delivery language. Missing, unsafe, or ungrounded file recommendations "
+                "converge silently to inline. A grounded file recommendation is displayed but inert. "
+                "Customer confirmation of that exact displayed revision is the first authority for "
+                "source delivery and workspace write. Assistant envelope target fields cannot grant it. "
                 "For a direct artifact-producing request, supply one exact workspace-relative "
                 "intended_artifact_paths entry for every requested role on a fresh loop. For an "
                 "active-loop replacement, omit the path: qCoder binds the current registered "
@@ -603,14 +602,10 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                         },
                         "additionalProperties": False,
                         "description": (
-                            "Fresh-loop exact workspace-relative targets for direct generation or "
-                            "an exact affirmatively customer-authorized review target. Omit for review "
-                            "before generation when the customer grants no target authority; a supplied "
-                            "target is ignored before path processing for that immediate review. A "
-                            "target is resolved only from ordered local customer directive units. "
-                            "Non-authoritative occurrences remain target-free; unresolved target or "
-                            "file/inline wording clarifies rather than binding or silently choosing inline. "
-                            "Omit for an active-loop "
+                            "Fresh-loop exact workspace-relative targets for direct generation. "
+                            "These envelope fields do not establish authority for review before "
+                            "generation and are ignored before path processing there; use the inert "
+                            "proposal-v3 source_delivery recommendation instead. Omit for an active-loop "
                             "replacement so qCoder reuses the registered current role-head target."
                         ),
                     },
@@ -631,8 +626,9 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                         "description": (
                             "Optional separately attributed, exact-request-bound semantic and "
                             "implementation proposal for review before generation. The connected "
-                            "assistant supplies all substantive recommendations; qCoder validates "
-                            "and projects them deterministically."
+                            "assistant supplies all substantive recommendations, including exactly "
+                            "one inert source-delivery recommendation; qCoder validates and projects "
+                            "them deterministically."
                         ),
                     },
                     "review_action": {
@@ -667,13 +663,13 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                     {
                         "title": "Initial or revised review-before-generation call",
                         "description": (
-                            "Use exact request_text and a substantive proposal. Do not invent a "
-                            "future source target before confirmation. qCoder first verifies that the "
-                            "proposal's generation-versus-modification kind matches the exact unquoted "
-                            "request. Safe target fields already supplied without affirmative customer "
-                            "target authority are absorbed and ignored rather than causing a corrective "
-                            "call. Assistant target fields cannot resolve ambiguous customer language. "
-                            "A material target is displayed before it can become write authority."
+                            "Use exact request_text and a substantive proposal v3. Recommend inline, "
+                            "or workspace_file with one safe target whose exact text occurs in the "
+                            "request (or has native selected-source provenance). qCoder treats that "
+                            "presence only as an anti-invention guard and does not interpret surrounding "
+                            "delivery prose. Safe envelope targets are ignored. A grounded file "
+                            "recommendation is displayed without write authority; exact displayed "
+                            "customer confirmation is the first delivery/write authority."
                         ),
                         "required": ["request_text", "connected_assistant_proposal"],
                         "not": {"required": ["review_action"]},
@@ -705,7 +701,9 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
             },
             "x-qcoder-review-before-generation-happy-path": {
                 "request_text": "<exact review-before-generation customer message>",
-                "connected_assistant_proposal": "<substantive separately attributed proposal>",
+                "connected_assistant_proposal": (
+                    "<substantive proposal v3 with source_delivery mode inline or workspace_file>"
+                ),
             },
             "x-qcoder-selected-file-workflow-happy-path": {
                 "request_text": "<exact selected-file customer message>",
@@ -744,17 +742,14 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "invented_target_required_before_confirmation": False,
                 "irrelevant_target_disposition": "discarded_before_path_processing",
                 "transaction_kind_bound_before_target_discard": True,
-                "target_authority_requires_affirmative_unquoted_request": True,
-                "target_authority_requires_one_unambiguous_directive": True,
-                "nonauthoritative_filename_contexts_fail_target_free": True,
-                "target_authority_directive_units_ordered_and_local": True,
-                "target_authority_states": [
-                    "affirmative",
-                    "non_authoritative",
-                    "unresolved",
-                ],
-                "unknown_target_bearing_directive_disposition": "bounded_clarification",
-                "assistant_target_fields_resolve_customer_ambiguity": False,
+                "proposal_schema": "qcoder.connected_assistant.review_before_generation_proposal.v3",
+                "assistant_source_delivery_modes": ["inline", "workspace_file"],
+                "request_path_presence_is_anti_invention_only": True,
+                "free_form_delivery_language_interpreted_by_qcoder": False,
+                "grounded_file_recommendation_authoritative_before_confirmation": False,
+                "displayed_revision_confirmation_is_first_delivery_authority": True,
+                "assistant_envelope_target_fields_establish_authority": False,
+                "invalid_or_ungrounded_file_recommendation_disposition": "silent_inline",
                 "post_confirmation_write_target_displayed_before_confirmation": True,
                 "target_free_review_remains_target_free_after_confirmation": True,
             },
@@ -1140,7 +1135,7 @@ def _handle_binding_jsonrpc_message(
         current = coordinator.store.read()
         active_state = current
         current_status = current.get("coordinator", {}).get("current_step_status")
-        if current_status == "awaiting_external_client_action":
+        if current_status == "awaiting_external_client_action" and not is_review_action:
             try:
                 checkpoint, _receipt = validate_pending_completion_checkpoint(
                     state=current,
@@ -1230,11 +1225,6 @@ def _handle_binding_jsonrpc_message(
             request_transaction_state = validate_review_transaction_kind(
                 str(request_text), transaction_kind
             )
-            affirmative_request_targets = (
-                _affirmatively_authorized_request_targets(str(request_text))
-                if transaction_kind == "review_before_source_generation"
-                else ()
-            )
         except ReviewBeforeGenerationError as exc:
             return _result(
                 message_id,
@@ -1264,12 +1254,10 @@ def _handle_binding_jsonrpc_message(
     else:
         transaction_kind = None
         request_transaction_state = "not_established"
-        affirmative_request_targets = ()
     ignore_review_targets = bool(
         connected_assistant_proposal is not None
         and transaction_kind == "review_before_source_generation"
         and request_transaction_state != "source_modification"
-        and not affirmative_request_targets
     )
     selected_paths_value = (
         None if ignore_review_targets else arguments.get("selected_artifact_paths")
@@ -1310,11 +1298,6 @@ def _handle_binding_jsonrpc_message(
             selected_identities = [
                 str(item["workspace_relative_path"]) for item in normalized_selected
             ]
-            if transaction_kind == "review_before_source_generation" and any(
-                _request_source_target_authority(str(request_text), identity) != "affirmative"
-                for identity in selected_identities
-            ):
-                raise ArtifactTargetError("review_selected_path_not_named_by_customer")
             intended_value = (
                 None if ignore_review_targets else arguments.get("intended_artifact_paths")
             )
@@ -1323,30 +1306,21 @@ def _handle_binding_jsonrpc_message(
             intended_input = dict(intended_value or {})
             if set(intended_input) - {"source"}:
                 raise ArtifactTargetError("review_source_target_only")
-            if selected_identities and not intended_input:
-                intended_input = {"source": selected_identities[0]}
             if (
-                not intended_input
-                and transaction_kind == "review_before_source_generation"
-                and affirmative_request_targets
+                selected_identities
+                and not intended_input
+                and transaction_kind == "review_before_source_modification"
             ):
-                raise ArtifactTargetError("review_source_target_required")
-            normalized_targets = normalize_intended_artifact_targets(
-                intended_input or None,
-                workspace_root=coordinator.workspace_root,
-                required_roles=("source",) if intended_input else (),
-            )
-            if any(
-                (
-                    transaction_kind == "review_before_source_generation"
-                    and _request_source_target_authority(
-                        str(request_text), str(item["workspace_relative_path"])
-                    )
-                    != "affirmative"
+                intended_input = {"source": selected_identities[0]}
+            normalized_targets = (
+                {}
+                if ignore_review_targets
+                else normalize_intended_artifact_targets(
+                    intended_input or None,
+                    workspace_root=coordinator.workspace_root,
+                    required_roles=("source",) if intended_input else (),
                 )
-                for item in normalized_targets.values()
-            ):
-                raise ArtifactTargetError("review_source_target_not_named_by_customer")
+            )
             payload = coordinator.review_before_generation_transaction(
                 exact_request=str(request_text),
                 connected_assistant_proposal=connected_assistant_proposal,

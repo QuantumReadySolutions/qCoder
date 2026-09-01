@@ -48,6 +48,13 @@ def expected() -> dict[Path, bytes]:
     for index, key in ((1, "construction"), (2, "measurement_mapping"), (3, "output_structure")):
         ghz_proposal["material_choices"][index]["recommendation"] = profile[key]
     ghz_first_value = build_first_value(ghz_request, ghz_proposal)
+    file_request = (
+        "Use qCoder to review the Qiskit Bell plan before generating the source in bell.py."
+    )
+    file_proposal = json.loads(PROPOSAL.read_text(encoding="utf-8"))
+    file_proposal["customer_constraints"] = []
+    file_proposal["source_delivery"] = {"mode": "workspace_file", "target": "bell.py"}
+    file_first_value = build_first_value(file_request, file_proposal)
     return {
         GOLDEN_DIR / "bell-first-value.json": canonical_json(first_value).encode("utf-8"),
         GOLDEN_DIR / "bell-first-value.md": render_first_value_markdown(first_value).encode(
@@ -57,6 +64,12 @@ def expected() -> dict[Path, bytes]:
         GOLDEN_DIR / "ghz-first-value.md": render_first_value_markdown(ghz_first_value).encode(
             "utf-8"
         ),
+        GOLDEN_DIR / "bell-workspace-file-first-value.json": canonical_json(
+            file_first_value
+        ).encode("utf-8"),
+        GOLDEN_DIR / "bell-workspace-file-first-value.md": render_first_value_markdown(
+            file_first_value
+        ).encode("utf-8"),
     }
 
 

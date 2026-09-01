@@ -2,18 +2,18 @@
   "basis_commit": "c98bc5d5f54d4ead32a0387e07a7ca818b4e165e",
   "basis_tree": "e56f14a33a484e07b0b2411562d14dce383e14fe",
   "basis_version": "0.6.0a24",
-  "binding": "qcoder.connected_assistant.client_binding.v56",
-  "binding_descriptor_canonical_bytes": 238216,
-  "binding_descriptor_canonical_sha256": "df61ba96f2bf440f019261d7b38961c7d3b5cdb87f8607082b1688b2190db5ce",
+  "binding": "qcoder.connected_assistant.client_binding.v57",
+  "binding_descriptor_canonical_bytes": 238355,
+  "binding_descriptor_canonical_sha256": "f49e7cfae62129dbab212efe3db5165fbbb0502fc7bf951e6421c6ee35868790",
   "binding_descriptor_coordinator_prefix": [
     "qcoder"
   ],
-  "binding_schema": 55,
+  "binding_schema": 56,
   "identity_kind": "private_unfrozen_development_successor",
   "publication_permitted": false,
   "public_release_record_preserved_in": "release-version.json",
   "public_successor_selected": false,
   "schema_id": "qcoder.private_development_version.v1",
-  "version": "0.6.0a24.post0.dev6+review.before.generation.v4",
+  "version": "0.6.0a24.post0.dev7+review.confirmed.delivery.v1",
   "work_identity": "WI0440_REVIEW_BEFORE_GENERATION_CONVERGENT_FIRST_VALUE_V1"
 }
