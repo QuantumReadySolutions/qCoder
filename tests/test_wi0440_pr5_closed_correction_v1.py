@@ -288,9 +288,10 @@ def test_descriptor_is_self_describing_and_valid_by_construction(tmp_path: Path)
     assert "displayed_review_revision" not in properties
     assert len(schema["oneOf"]) == 3
     result = binding_payload(tmp_path, request=EXACT_REQUEST, proposal=proposal_for())
-    assert result["category"] == "review_before_generation_ready"
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v52"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 51
+    assert result["ok"] is True
+    assert "category" not in result
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v53"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 52
     assert len(EXPECTED_TOOLS) == 12
     assert [item["name"] for item in binding_tool_descriptors()] == [
         "begin_current_loop",
@@ -378,7 +379,8 @@ def test_changed_proposal_requires_old_token_and_issues_new_token(tmp_path: Path
         proposal=changed,
         prior_result_token=first["prior_result_token"],
     )
-    assert revised["category"] == "review_before_generation_revised"
+    assert revised["ok"] is True
+    assert "category" not in revised
     assert revised["prior_result_token"] != first["prior_result_token"]
 
 
@@ -406,11 +408,14 @@ def test_exact_file_confirmation_returns_existing_current_step_contract(tmp_path
     assert confirmed["generation_ready_context"]["execution_authorized"] is False
 
 
-def test_file_request_without_exact_target_fails_without_inventing_name(tmp_path: Path) -> None:
+def test_file_request_without_exact_target_defers_target_without_inventing_name(
+    tmp_path: Path,
+) -> None:
     request = "Use qCoder to review the plan before creating a Python file after I agree."
     result = binding_payload(tmp_path, request=request, proposal=proposal_for(request))
-    assert result["ok"] is False
-    assert result["category"] == "review_source_target_required"
+    assert result["ok"] is True
+    state = CurrentLoopCoordinator(workspace_root=tmp_path).store.read()
+    assert state["coordinator"]["review_before_generation"]["intended_artifact_targets"] == {}
     assert not list(tmp_path.glob("*.py"))
 
 

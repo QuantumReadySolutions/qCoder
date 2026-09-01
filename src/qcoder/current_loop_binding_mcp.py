@@ -8,10 +8,12 @@ a local command, stdin pipeline, receipt, digest, or stage ceiling.
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 import json
 from pathlib import Path
 import re
 import sys
+import time
 from typing import Any, Mapping
 
 from qcoder import __version__
@@ -50,6 +52,13 @@ BEGIN_CURRENT_LOOP_TOOL_NAME = "begin_current_loop"
 COMPLETE_CURRENT_STEP_TOOL_NAME = "complete_current_step"
 MAX_REQUEST_BYTES = 65_536
 MAX_PATH_BYTES = 16_384
+_LAST_BINDING_TIMING: ContextVar[dict[str, Any] | None] = ContextVar(
+    "qcoder_last_binding_timing", default=None
+)
+_SOURCE_TARGET_PATTERN = re.compile(
+    r"(?<![\w./-])(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.(?:py|pyw|qasm)(?![\w/-])",
+    re.IGNORECASE,
+)
 
 
 def _request_explicitly_selects_target(request_text: str, target: str) -> bool:
@@ -58,10 +67,48 @@ def _request_explicitly_selects_target(request_text: str, target: str) -> bool:
     return bool(
         normalized_target
         and re.search(
-            rf"(?<![\w./-]){re.escape(normalized_target)}(?![\w./-])",
+            rf"(?<![\w./-]){re.escape(normalized_target)}(?![\w/-])",
             normalized_request,
         )
     )
+
+
+def _request_names_source_target(request_text: str) -> bool:
+    """Return whether the exact request itself names a bounded source-like target."""
+
+    return _SOURCE_TARGET_PATTERN.search(request_text.replace("\\", "/")) is not None
+
+
+def _unconfirmed_generation_review_has_no_target_authority(
+    request_text: str, proposal: object
+) -> bool:
+    """Give the immediate review interaction precedence over future production."""
+
+    return (
+        isinstance(proposal, Mapping)
+        and proposal.get("transaction_kind") == "review_before_source_generation"
+        and not _request_names_source_target(request_text)
+    )
+
+
+def _quiet_review_success_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Project only review content, its opaque continuation, and authority ceilings."""
+
+    semantics = payload.get("current_request_semantics")
+    axes = semantics.get("semantic_axes") if isinstance(semantics, Mapping) else None
+    generation_authority = axes.get("generation_authority") if isinstance(axes, Mapping) else None
+    execution_authority = axes.get("execution_authority") if isinstance(axes, Mapping) else None
+    return {
+        "ok": True,
+        "review_before_generation": payload["review_before_generation"],
+        "prior_result_token": payload["prior_result_token"],
+        "generation_authority": generation_authority or "held_for_exact_review_confirmation",
+        "execution_authority": execution_authority or "not_requested",
+        "source_or_qasm_created": False,
+        "file_mutation_performed": False,
+        "execution_performed": False,
+        "protected_service_called": False,
+    }
 
 
 def binding_tool_descriptors() -> list[dict[str, Any]]:
@@ -81,8 +128,11 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "qCoder authority text. Customer constraints must be exact request excerpts. "
                 "qCoder supplies structure, attribution, authority, revision, and actions. Later "
                 "confirm with only review_action and the opaque prior_result_token; do not replay "
-                "the proposal. Execution authority remains separate. "
-                "For an artifact-producing request, also supply one exact workspace-relative "
+                "the proposal. Execution authority remains separate. For review before generation, "
+                "future artifact production does not create present target authority: do not invent "
+                "a source path before confirmation. Target fields supplied without an exact "
+                "customer-named target are ignored before path processing for this immediate review. "
+                "For a direct artifact-producing request, supply one exact workspace-relative "
                 "intended_artifact_paths entry for every requested role on a fresh loop. For an "
                 "active-loop replacement, omit the path: qCoder binds the current registered "
                 "role-head target automatically. A different target is accepted only when the "
@@ -122,7 +172,10 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                         },
                         "additionalProperties": False,
                         "description": (
-                            "Fresh-loop exact workspace-relative targets. Omit for an active-loop "
+                            "Fresh-loop exact workspace-relative targets for direct generation or "
+                            "an exact customer-named review target. Omit for review before generation "
+                            "when the customer names no target; a supplied target is ignored before "
+                            "path processing for that immediate review. Omit for an active-loop "
                             "replacement so qCoder reuses the registered current role-head target."
                         ),
                     },
@@ -178,6 +231,12 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                     },
                     {
                         "title": "Initial or revised review-before-generation call",
+                        "description": (
+                            "Use exact request_text and a substantive proposal. Do not invent a "
+                            "future source target before confirmation. Safe target fields already "
+                            "supplied without customer target authority are absorbed and ignored by "
+                            "qCoder rather than causing a corrective call."
+                        ),
                         "required": ["request_text", "connected_assistant_proposal"],
                         "not": {"required": ["review_action"]},
                     },
@@ -202,9 +261,17 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
             },
             "x-qcoder-binding-owned-internal-operation": True,
             "x-qcoder-public-context-bridge-tool": False,
-            "x-qcoder-normal-happy-path": {
+            "x-qcoder-direct-generation-happy-path": {
                 "request_text": "<exact current customer message>",
                 "intended_artifact_paths": {"source": "<exact workspace-relative filename>"},
+            },
+            "x-qcoder-review-before-generation-happy-path": {
+                "request_text": "<exact review-before-generation customer message>",
+                "connected_assistant_proposal": "<substantive separately attributed proposal>",
+            },
+            "x-qcoder-selected-file-workflow-happy-path": {
+                "request_text": "<exact selected-file customer message>",
+                "selected_artifact_paths": ["<exact customer-named relative path>"],
             },
             "x-qcoder-artifact-target-contract": target_contract_snapshot(),
             "x-qcoder-selected-result-control-happy-path": {
@@ -235,6 +302,9 @@ def binding_tool_descriptors() -> list[dict[str, Any]]:
                 "protected_service_called": False,
                 "source_before_confirmation": False,
                 "qcoder_authors_recommendations": False,
+                "immediate_review_precedes_future_artifact_target": True,
+                "invented_target_required_before_confirmation": False,
+                "irrelevant_target_disposition": "discarded_before_path_processing",
             },
             "x-qcoder-active-loop-continuation": {
                 "request_text": "<exact next customer message>",
@@ -354,7 +424,7 @@ def _tool_result(payload: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def handle_binding_jsonrpc_message(
+def _handle_binding_jsonrpc_message(
     message: Mapping[str, Any], *, workspace_root: str | Path
 ) -> dict[str, Any] | None:
     """Handle one MCP request without accepting workspace or authority from the model."""
@@ -702,7 +772,15 @@ def handle_binding_jsonrpc_message(
             }
         )
         return _result(message_id, _tool_result(payload))
-    selected_paths_value = arguments.get("selected_artifact_paths")
+    ignore_review_targets = (
+        connected_assistant_proposal is not None
+        and _unconfirmed_generation_review_has_no_target_authority(
+            str(request_text), connected_assistant_proposal
+        )
+    )
+    selected_paths_value = (
+        None if ignore_review_targets else arguments.get("selected_artifact_paths")
+    )
     if selected_paths_value is not None and (
         not isinstance(selected_paths_value, list)
         or any(not isinstance(item, str) for item in selected_paths_value)
@@ -744,7 +822,9 @@ def handle_binding_jsonrpc_message(
                 for identity in selected_identities
             ):
                 raise ArtifactTargetError("review_selected_path_not_named_by_customer")
-            intended_value = arguments.get("intended_artifact_paths")
+            intended_value = (
+                None if ignore_review_targets else arguments.get("intended_artifact_paths")
+            )
             if intended_value is not None and not isinstance(intended_value, Mapping):
                 raise ArtifactTargetError("exact_intended_artifact_targets_required")
             intended_input = dict(intended_value or {})
@@ -752,10 +832,11 @@ def handle_binding_jsonrpc_message(
                 raise ArtifactTargetError("review_source_target_only")
             if selected_identities and not intended_input:
                 intended_input = {"source": selected_identities[0]}
-            if not intended_input and re.search(
-                r"\b(?:workspace\s+)?file\b|(?<![\w./-])[\w.-]+\.py(?![\w./-])",
-                str(request_text),
-                re.IGNORECASE,
+            if (
+                not intended_input
+                and connected_assistant_proposal.get("transaction_kind")
+                == "review_before_source_generation"
+                and _request_names_source_target(str(request_text))
             ):
                 raise ArtifactTargetError("review_source_target_required")
             normalized_targets = normalize_intended_artifact_targets(
@@ -804,20 +885,7 @@ def handle_binding_jsonrpc_message(
                     }
                 ),
             )
-        payload.setdefault("details", {}).update(
-            {
-                "structured_activation_transport": "project_local_binding_mcp",
-                "request_text_argument_received_once": True,
-                "connected_assistant_proposal_received_once": True,
-                "request_digest_received": False,
-                "shell_or_cli_transport_used": False,
-                "stdin_transport_used": False,
-                "public_context_bridge_tool": False,
-                "workspace_discovery_performed": False,
-                "protected_service_called": False,
-            }
-        )
-        return _result(message_id, _tool_result(payload))
+        return _result(message_id, _tool_result(_quiet_review_success_payload(payload)))
     semantics = classify_current_request(
         request_text,
         active_loop=continuation,
@@ -1110,6 +1178,40 @@ def _record_connection_exchange_best_effort(
         return
 
 
+def handle_binding_jsonrpc_message(
+    message: Mapping[str, Any], *, workspace_root: str | Path
+) -> dict[str, Any] | None:
+    """Handle one MCP request and retain one bounded process-local timing receipt."""
+
+    operation_entry = time.monotonic()
+    response = _handle_binding_jsonrpc_message(message, workspace_root=workspace_root)
+    processing_complete = time.monotonic()
+    result_return_boundary = time.monotonic()
+    _LAST_BINDING_TIMING.set(
+        {
+            "schema_id": "qcoder.current_loop.binding_local_timing.v1",
+            "schema_version": 1,
+            "operation_entry_monotonic_seconds": operation_entry,
+            "processing_complete_monotonic_seconds": processing_complete,
+            "result_return_boundary_monotonic_seconds": result_return_boundary,
+            "processing_seconds": max(0.0, processing_complete - operation_entry),
+            "return_boundary_seconds": max(0.0, result_return_boundary - processing_complete),
+            "total_qcoder_local_seconds": max(0.0, result_return_boundary - operation_entry),
+            "process_and_discard": True,
+            "customer_visible": False,
+        }
+    )
+    return response
+
+
+def consume_last_binding_timing() -> dict[str, Any] | None:
+    """Consume the latest request-local timing receipt without persistent telemetry."""
+
+    value = _LAST_BINDING_TIMING.get()
+    _LAST_BINDING_TIMING.set(None)
+    return dict(value) if isinstance(value, Mapping) else None
+
+
 def serve_binding_mcp_stdio(
     *,
     workspace_root: str | Path,
@@ -1182,6 +1284,7 @@ __all__ = [
     "BINDING_MCP_SCHEMA_ID",
     "BINDING_MCP_SERVER_NAME",
     "binding_tool_descriptors",
+    "consume_last_binding_timing",
     "handle_binding_jsonrpc_message",
     "serve_binding_mcp_stdio",
 ]

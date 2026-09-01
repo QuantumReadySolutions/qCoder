@@ -11,7 +11,10 @@ import tempfile
 import time
 from typing import Any
 
-from qcoder.current_loop_binding_mcp import handle_binding_jsonrpc_message
+from qcoder.current_loop_binding_mcp import (
+    consume_last_binding_timing,
+    handle_binding_jsonrpc_message,
+)
 from qcoder.review_before_generation import build_first_value, render_first_value_markdown
 
 
@@ -59,6 +62,7 @@ D127_SPLIT_VALUES = (
     ["Use", "recommended", "choices"],
     ["Review", "or change", "choices"],
 )
+LOCAL_TIMING_RECEIPTS: list[dict[str, Any]] = []
 
 
 def _load(name: str) -> dict[str, Any]:
@@ -107,6 +111,10 @@ def _binding_payload(
     )
     if response is None:
         raise RuntimeError("binding_response_missing")
+    timing = consume_last_binding_timing()
+    if timing is None:
+        raise RuntimeError("binding_timing_receipt_missing")
+    LOCAL_TIMING_RECEIPTS.append(timing)
     return response["result"]["structuredContent"]
 
 
@@ -159,6 +167,7 @@ def main() -> int:
     combined: list[float] = []
     transition: list[float] = []
     unsafe_rejection: list[float] = []
+    irrelevant_target_convergence: list[float] = []
     tokens: set[str] = set()
     scenario_counts = {
         "review_first_value": 0,
@@ -176,6 +185,7 @@ def main() -> int:
         "execution_authority_binding": 0,
         "empty_customer_constraints": 0,
         "material_customer_constraints": 0,
+        "irrelevant_target_convergence": 0,
     }
     for _ in range(args.repetitions):
         for request, algorithm in cases:
@@ -210,12 +220,50 @@ def main() -> int:
             started = time.monotonic()
             duplicate = _binding_call(workspace, EXACT_REQUEST, deepcopy(proposal))
             duplicate_elapsed = time.monotonic() - started
-        if duplicate.get("category") != "review_before_generation_duplicate":
+        if duplicate != first:
             raise RuntimeError("duplicate_call_not_idempotent")
         initial.append(duplicate_elapsed)
         rendering.append(0.0)
         combined.append(duplicate_elapsed)
         scenario_counts["duplicate_call"] += 1
+
+        converged_review: dict[str, Any] | None = None
+        target_variants = (
+            {},
+            {"intended_artifact_paths": {"source": "invented/bell.py"}},
+            {"selected_artifact_paths": ["invented/bell.py"]},
+            {
+                "intended_artifact_paths": {"source": "invented/first.py"},
+                "selected_artifact_paths": ["invented/second.py"],
+            },
+        )
+        for target_arguments in target_variants:
+            with tempfile.TemporaryDirectory(prefix="qcoder-wi0440-convergence-") as directory:
+                workspace = Path(directory)
+                started = time.monotonic()
+                converged = _binding_call(
+                    workspace,
+                    EXACT_REQUEST,
+                    deepcopy(proposal),
+                    **target_arguments,
+                )
+                elapsed = time.monotonic() - started
+                state = json.loads(
+                    (workspace / ".qcoder/current-loop/state.json").read_text(encoding="utf-8")
+                )
+            if state["coordinator"]["review_before_generation"]["intended_artifact_targets"]:
+                raise RuntimeError("irrelevant_target_entered_authoritative_state")
+            semantic = deepcopy(converged)
+            semantic.pop("prior_result_token", None)
+            if converged_review is None:
+                converged_review = semantic
+            elif semantic != converged_review:
+                raise RuntimeError("irrelevant_target_review_did_not_converge")
+            initial.append(elapsed)
+            rendering.append(0.0)
+            combined.append(elapsed)
+            irrelevant_target_convergence.append(elapsed)
+            scenario_counts["irrelevant_target_convergence"] += 1
 
         generic = _proposal(EXACT_REQUEST)
         generic["implementation_recommendations"] = ["A concrete option will be used."]
@@ -410,6 +458,16 @@ def main() -> int:
     combined_summary = _summary(combined)
     transition_summary = _summary(transition)
     unsafe_rejection_summary = _summary(unsafe_rejection)
+    irrelevant_target_summary = _summary(irrelevant_target_convergence)
+    processing_summary = _summary(
+        [float(item["processing_seconds"]) for item in LOCAL_TIMING_RECEIPTS]
+    )
+    return_boundary_summary = _summary(
+        [float(item["return_boundary_seconds"]) for item in LOCAL_TIMING_RECEIPTS]
+    )
+    total_boundary_summary = _summary(
+        [float(item["total_qcoder_local_seconds"]) for item in LOCAL_TIMING_RECEIPTS]
+    )
     first_budget = (
         combined_summary["median_seconds"] <= 10
         and combined_summary["p95_seconds"] <= 20
@@ -425,12 +483,16 @@ def main() -> int:
         "connected_assistant_model": "not_measured_fixture_driven_automation",
         "qcoder_local_initial_transaction": initial_summary,
         "qcoder_local_confirmation_transaction": confirmation_summary,
+        "qcoder_operation_processing_boundary": processing_summary,
+        "qcoder_result_return_boundary": return_boundary_summary,
+        "qcoder_total_local_boundary": total_boundary_summary,
         "protected_service_calls": 0,
         "protected_service_seconds": 0,
         "projection_and_rendering": rendering_summary,
         "combined_local_first_value": combined_summary,
         "generation_ready_transition": transition_summary,
         "unsafe_content_rejection": unsafe_rejection_summary,
+        "irrelevant_target_convergence": irrelevant_target_summary,
         "first_useful_interpretation_budget_pass": first_budget,
         "first_material_decision_budget_pass": (
             combined_summary["median_seconds"] <= 15

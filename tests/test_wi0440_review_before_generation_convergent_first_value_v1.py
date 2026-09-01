@@ -229,9 +229,9 @@ def test_binding_returns_complete_bell_review_in_one_operation(tmp_path: Path) -
     result = binding_call(tmp_path, EXACT_BELL_REQUEST, bell_proposal())
     review = result["review_before_generation"]
     assert result["ok"] is True
-    assert result["category"] == "review_before_generation_ready"
-    assert result["state_mutated"] is True
-    assert result["activation_acknowledgement"] == ("qCoder is ready to review the proposed plan.")
+    assert "category" not in result
+    assert "state_mutated" not in result
+    assert "activation_acknowledgement" not in result
     assert review["initial_decision_group_count"] == 3
     assert [group["label"] for group in review["initial_decision_groups"]] == [
         "Goal and scope",
@@ -249,10 +249,10 @@ def test_binding_returns_complete_bell_review_in_one_operation(tmp_path: Path) -
 def test_duplicate_first_call_is_same_review_without_reactivation(tmp_path: Path) -> None:
     first = binding_call(tmp_path, EXACT_BELL_REQUEST, bell_proposal())
     duplicate = binding_call(tmp_path, EXACT_BELL_REQUEST, bell_proposal())
-    assert duplicate["category"] == "review_before_generation_duplicate"
-    assert duplicate["state_mutated"] is False
-    assert duplicate["duplicate_call_idempotent"] is True
-    assert duplicate["activation_acknowledgement"] is None
+    assert "category" not in duplicate
+    assert "state_mutated" not in duplicate
+    assert "duplicate_call_idempotent" not in duplicate
+    assert "activation_acknowledgement" not in duplicate
     assert duplicate["review_before_generation"] == first["review_before_generation"]
     state = CurrentLoopCoordinator(workspace_root=tmp_path).store.read()
     assert state["coordinator"]["bootstrap_count"] == 1
@@ -314,8 +314,8 @@ def test_changed_material_choice_creates_new_revision(tmp_path: Path) -> None:
         changed,
         prior_result_token=first["prior_result_token"],
     )
-    assert revised["category"] == "review_before_generation_revised"
-    assert revised["prior_result_token_invalidated"] is True
+    assert "category" not in revised
+    assert "prior_result_token_invalidated" not in revised
     assert revised["prior_result_token"] != first["prior_result_token"]
     stale = binding_call(
         tmp_path,
@@ -461,10 +461,10 @@ def test_source_modification_preserves_explicit_selected_identity_without_mutati
         selected_artifact_paths=["selected.py"],
     )
     assert result["ok"] is True
-    assert result["current_request_semantics"]["semantic_axes"]["review_object"] == (
-        "proposed_changes"
-    )
-    assert result["current_request_semantics"]["selected_artifact_identity_sha256"]
+    state = CurrentLoopCoordinator(workspace_root=tmp_path).store.read()
+    stored = state["coordinator"]["review_before_generation"]["connected_assistant_proposal"]
+    assert stored["semantic_axes"]["review_object"] == "proposed_changes"
+    assert state["coordinator"]["review_before_generation"]["selected_artifact_identity_sha256"]
     assert selected.read_text(encoding="utf-8") == "ORIGINAL\n"
     assert list(tmp_path.glob("*.py")) == [selected]
 
@@ -603,8 +603,8 @@ def test_binding_descriptor_is_additive_and_inventory_remains_exact_12_plus_2() 
     descriptor = build_client_binding_descriptor(coordinator_prefix=["qcoder"])[
         "client_binding_contract"
     ]
-    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v52"
-    assert CLIENT_BINDING_SCHEMA_VERSION == 51
+    assert CLIENT_BINDING_CONTRACT_ID == "qcoder.connected_assistant.client_binding.v53"
+    assert CLIENT_BINDING_SCHEMA_VERSION == 52
     assert descriptor["review_before_generation_contract"]["new_public_tool"] is False
     assert descriptor["review_before_generation_contract"]["new_private_operation"] is False
     assert len(EXPECTED_TOOLS) == 12
@@ -654,8 +654,8 @@ def test_local_timing_acceptance_population_passes_without_network() -> None:
         text=True,
     )
     result = json.loads(completed.stdout)
-    assert result["population_cases"] == 56
-    assert result["samples"] == 56
+    assert result["population_cases"] == 60
+    assert result["samples"] == 60
     assert result["scenario_counts"] == {
         "review_first_value": 20,
         "confirmation_without_replay": 1,
@@ -670,6 +670,7 @@ def test_local_timing_acceptance_population_passes_without_network() -> None:
         "execution_authority_binding": 4,
         "fake_action_rejection": 2,
         "material_customer_constraints": 1,
+        "irrelevant_target_convergence": 4,
         "quiet_projection": 1,
         "split_source_rejection": 3,
     }

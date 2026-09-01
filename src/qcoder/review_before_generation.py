@@ -832,11 +832,9 @@ def validate_connected_assistant_proposal(
             implementation_items,
             _assistant_item(f"Implementation recommendation {index}", value),
         )
-    for item in choices:
-        add_unique(
-            implementation_items,
-            _assistant_item(f"Material choice: {item['choice']}", item["recommendation"]),
-        )
+    # The compact first view presents each recommendation once. The complete,
+    # editable material-choice inventory remains available only through the
+    # token-bound "Review or change choices" action.
     add_unique(
         implementation_items,
         _qcoder_item("Dependency version", "No dependency version was selected silently."),
