@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from copy import deepcopy
 import hashlib
+from importlib import import_module
 import json
 import ntpath
 import os
@@ -30,7 +31,7 @@ from qcoder.context_bridge_profiles import (
     platform_storage_capability,
     safe_profile_error,
 )
-from qcoder.algorithm_blueprint import (
+from qcoder.algorithm_blueprint_public_oss import (
     ALGORITHM_BLUEPRINT_ARTIFACT_DISCRIMINATORS,
     ALGORITHM_BLUEPRINT_TOOL_INPUT_FIELDS,
     ALGORITHM_BLUEPRINT_TOOL_NAMES,
@@ -46,14 +47,14 @@ from qcoder.algorithm_blueprint_first_value import (
     build_first_value_dialogue,
     first_value_dialogue_contract_snapshot,
 )
-from qcoder.algorithm_intent_recovery import (
+from qcoder.algorithm_intent_recovery_public_oss import (
     ClarificationRecoveryError,
     RECOVERY_INPUT_FIELD,
     build_atomic_clarification_continuation,
     clarification_recovery_contract_snapshot,
     prepare_clarification_recovery,
 )
-from qcoder.blueprint_decisions import (
+from qcoder.blueprint_decisions_public_oss import (
     ACTION_IDS,
     CONSTRUCTION_POLICY_PATTERNS,
     DECISION_LOOP_DISABLED,
@@ -70,7 +71,7 @@ from qcoder.blueprint_decisions import (
     catalog_entries,
     unpack_decision_record_set,
 )
-from qcoder.context_loop import (
+from qcoder.context_loop_public_oss import (
     CONTEXT_LOOP_DISABLED,
     CONTEXT_LOOP_GATE,
     DEVELOPMENT_STAGES,
@@ -88,14 +89,14 @@ from qcoder.context_loop import (
     portable_current_build_context_error,
     share_safe_request_baseline,
 )
-from qcoder.current_loop_coordinator import coordinator_contract_snapshot
+from qcoder.current_loop_coordinator_contract import coordinator_contract_snapshot
 from qcoder.current_loop_invocation import (
     invocation_contract_snapshot,
     operation_transport_inventory,
 )
 from qcoder.current_loop_request_semantics import semantics_contract_snapshot
 from qcoder.current_loop_bounded_control import bounded_control_contract_snapshot
-from qcoder.current_loop_adaptive_intent import (
+from qcoder.current_loop_adaptive_intent_public_oss import (
     adaptive_intent_completeness_matrix,
     adaptive_intent_contract_snapshot,
 )
@@ -157,7 +158,7 @@ from qcoder.development_evidence import (
     EVIDENCE_CONFIDENCE_LABELS as DECISION_EVIDENCE_CONFIDENCE_LABELS,
     RELATIONSHIP_DECLARATION_STATES,
 )
-from qcoder.d079_workflows import d079_orchestration_contract_snapshot
+from qcoder.d079_workflows_public_oss import d079_orchestration_contract_snapshot
 
 DEFAULT_BASE_URL = "https://preview-api.qcoder.ai"
 ROUTE_PATH = "/v0/internal/hosted-mcp/context"
@@ -1862,9 +1863,8 @@ def _canonical_tool_name(tool_name: str) -> str:
 
 
 def _customer_managed_connection_contract() -> dict[str, Any]:
-    from qcoder.context_bridge_setup import setup_contract_snapshot
-
-    return setup_contract_snapshot()
+    setup = import_module("qcoder.context_bridge_setup")
+    return setup.setup_contract_snapshot()
 
 
 def _client_visible_tool_payload(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -4875,13 +4875,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 0
     if args.context_bridge_command == "setup":
-        from qcoder.context_bridge_setup import (
-            ContextBridgeSetupError,
-            configure_cursor_workspace,
-        )
+        setup = import_module("qcoder.context_bridge_setup")
 
         try:
-            result = configure_cursor_workspace(
+            result = setup.configure_cursor_workspace(
                 workspace_root=args.workspace,
                 profile=args.profile,
                 client_context=args.client,
@@ -4889,7 +4886,7 @@ def main(argv: list[str] | None = None) -> int:
                 executable=sys.executable,
                 base_url=args.base_url,
             )
-        except (ContextBridgeSetupError, CredentialProfileError) as exc:
+        except (setup.ContextBridgeSetupError, CredentialProfileError) as exc:
             category = str(getattr(exc, "category", exc))
             print(
                 json.dumps(

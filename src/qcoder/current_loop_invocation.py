@@ -15,7 +15,7 @@ import shlex
 import subprocess
 from typing import Any, Mapping, Sequence
 
-from qcoder.current_loop_adaptive_intent import (
+from qcoder.current_loop_adaptive_intent_public_oss import (
     ADAPTIVE_INTENT_DOCUMENT_SCHEMA_ID,
     ADAPTIVE_INTENT_DOCUMENT_SCHEMA_VERSION,
     ADAPTIVE_INTENT_INPUT_SCHEMA_ID,

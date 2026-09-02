@@ -1,0 +1,63 @@
+{
+  "schema_id": "qcoder.protected_decision.boundary_contract_manifest.v1",
+  "request_contract_id": "qcoder.protected_decision.request.v1",
+  "response_contract_id": "qcoder.protected_decision.response.v1",
+  "proposal_contract_id": "qcoder.protected_decision.proposal.v1",
+  "contract_version": 1,
+  "request_keys": [
+    "contract_id",
+    "contract_version",
+    "expires_at",
+    "intent",
+    "nonce",
+    "privacy_assertions",
+    "request_digest",
+    "semantic_revision_digest"
+  ],
+  "intent_keys": [
+    "artifact_kind",
+    "customer_visible_constraint_categories",
+    "framework_category",
+    "objective_category",
+    "operation_intent_categories",
+    "unresolved_choice_ids"
+  ],
+  "response_required_keys": [
+    "contract_id",
+    "contract_version",
+    "expires_at",
+    "outcome",
+    "request_digest",
+    "response_digest"
+  ],
+  "proposal_keys": [
+    "authority",
+    "groups",
+    "limitations",
+    "proposal_digest",
+    "schema_id",
+    "unresolved_choice_ids"
+  ],
+  "outcomes": [
+    "protected_capability_completed",
+    "protected_capability_unavailable",
+    "protected_capability_unauthorized",
+    "protected_capability_expired",
+    "protected_capability_quota_limited",
+    "protected_capability_unsupported_contract"
+  ],
+  "limits": {
+    "canonical_bytes": 16384,
+    "depth": 8,
+    "list_items": 32,
+    "map_items": 32,
+    "string_bytes": 512
+  },
+  "privacy": {
+    "bounded_customer_visible_intent_only": true,
+    "contains_customer_payload": false,
+    "contains_source_or_evidence": false
+  },
+  "local_authority_from_service": false,
+  "historical_policy_fallback": false
+}

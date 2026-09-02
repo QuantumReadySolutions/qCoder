@@ -13,7 +13,7 @@ from copy import deepcopy
 from hashlib import sha256
 from typing import Any
 
-from qcoder.algorithm_intent_recovery import build_atomic_clarification_continuation
+from qcoder.algorithm_intent_recovery_public_oss import build_atomic_clarification_continuation
 
 CLIENT_CONFORMANCE_CONTRACT_SCHEMA_ID = "qcoder.connected_assistant.client_neutral_conformance.v1"
 CLIENT_CONFORMANCE_CONTRACT_SCHEMA_VERSION = 1

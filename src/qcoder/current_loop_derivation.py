@@ -11,11 +11,9 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-from qcoder.algorithm_blueprint import (
-    extract_selected_python_file_evidence,
-    with_artifact_digest,
-)
-from qcoder.context_loop import build_circuit_manifestation, build_result_manifestation
+from qcoder.algorithm_blueprint_contract import with_artifact_digest
+from qcoder.algorithm_blueprint_public_oss import extract_selected_python_file_evidence
+from qcoder.context_loop_public_oss import build_circuit_manifestation, build_result_manifestation
 from qcoder.current_loop import (
     MAX_LOCAL_FILE_BYTES,
     CurrentLoopError,

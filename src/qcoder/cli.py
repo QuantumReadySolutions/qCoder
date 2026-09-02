@@ -15,7 +15,7 @@ from qcoder.core.share_safe import (
     render_share_safe_provenance,
 )
 from qcoder.tools.batch import analyze_qasm_dir_to_jsonl
-from qcoder.algorithm_blueprint import (
+from qcoder.algorithm_blueprint_public_oss import (
     extract_selected_python_file_evidence,
     extract_selected_python_source_evidence,
 )
@@ -1088,12 +1088,12 @@ def _cmd_current_loop(argv: list[str]) -> int:
         SelectedCredential,
         safe_profile_error,
     )
-    from qcoder.current_loop_coordinator import (
+    from qcoder.current_loop_coordinator_public_kernel import (
         ContextBridgeTransport,
         CurrentLoopCoordinator,
     )
     from qcoder.current_loop import CurrentLoopError
-    from qcoder.d079_workflows import D079WorkflowError
+    from qcoder.d079_workflows_public_oss import D079WorkflowError
 
     parser = argparse.ArgumentParser(
         prog="qcoder current-loop",

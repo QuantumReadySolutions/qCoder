@@ -8,8 +8,8 @@ from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any
 
-from qcoder.algorithm_blueprint import with_artifact_digest
-from qcoder.context_loop import (
+from qcoder.algorithm_blueprint_contract import with_artifact_digest
+from qcoder.context_loop_public_oss import (
     CIRCUIT_DISCLOSURE_CEILING,
     CIRCUIT_MANIFESTATION_SCHEMA_ID,
     build_stage_identity,

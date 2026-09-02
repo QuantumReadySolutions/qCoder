@@ -27,7 +27,7 @@ from typing import Any
 
 from qcoder.current_loop import CurrentLoopError, canonical_bytes
 from qcoder.current_loop_binding_mcp import BINDING_MCP_SERVER_NAME
-from qcoder.current_loop_coordinator import CurrentLoopCoordinator
+from qcoder.current_loop_coordinator_contract import CurrentLoopCoordinator
 from qcoder.current_loop_evidence_processing import registration_format_outcome
 
 CURSOR_POST_WRITE_HOOK_SCHEMA_ID = "qcoder.current_loop.cursor_native_edit_broker.v4"

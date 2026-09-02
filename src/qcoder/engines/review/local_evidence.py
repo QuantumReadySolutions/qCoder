@@ -16,8 +16,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from qcoder.algorithm_blueprint import artifact_digest_matches
-from qcoder.context_loop import (
+from qcoder.algorithm_blueprint_contract import artifact_digest_matches
+from qcoder.context_loop_public_oss import (
     CIRCUIT_MANIFESTATION_SCHEMA_ID,
     RESULT_MANIFESTATION_SCHEMA_ID,
     build_circuit_manifestation,

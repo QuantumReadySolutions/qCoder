@@ -11,8 +11,8 @@ from hashlib import sha256
 import json
 from typing import Any, Mapping, Sequence
 
-from qcoder.algorithm_blueprint import PROFILE_DEFINITIONS, PROFILE_IDS
-from qcoder.blueprint_decisions import ACTION_IDS, CONTROL_TREATMENTS, catalog_entries
+from qcoder.algorithm_blueprint_public_oss import PROFILE_DEFINITIONS, PROFILE_IDS
+from qcoder.blueprint_decisions_public_oss import ACTION_IDS, CONTROL_TREATMENTS, catalog_entries
 from qcoder.current_loop import CurrentLoopError, canonical_bytes
 
 CHECKPOINT_INPUT_SCHEMA_ID = "qcoder.current_loop.checkpoint_input.v3"

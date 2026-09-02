@@ -954,7 +954,7 @@ def launch_sidecar_process(
 
 
 def _serve(*, workspace: Path, idle_timeout_seconds: int, parent_pid: int) -> int:
-    from qcoder.current_loop_coordinator import CurrentLoopCoordinator
+    from qcoder.current_loop_coordinator_contract import CurrentLoopCoordinator
 
     coordinator = CurrentLoopCoordinator(
         workspace_root=workspace,

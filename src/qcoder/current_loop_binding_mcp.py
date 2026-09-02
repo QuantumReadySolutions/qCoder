@@ -16,7 +16,7 @@ from typing import Any, Mapping
 
 from qcoder import __version__
 from qcoder.context_bridge_connection import record_server_exchange
-from qcoder.current_loop_coordinator import CurrentLoopCoordinator
+from qcoder.current_loop_coordinator_contract import CurrentLoopCoordinator
 from qcoder.current_loop_artifact_targets import (
     ArtifactTargetError,
     MAX_TARGET_PATH_BYTES,

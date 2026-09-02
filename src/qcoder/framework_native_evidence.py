@@ -9,8 +9,8 @@ import json
 import math
 from typing import Any
 
-from qcoder.algorithm_blueprint import with_artifact_digest
-from qcoder.context_loop import build_result_manifestation
+from qcoder.algorithm_blueprint_contract import with_artifact_digest
+from qcoder.context_loop_public_oss import build_result_manifestation
 from qcoder.current_loop_evidence_reconciler import reconcile_current_evidence
 from qcoder.current_loop_result_manifest import normalize_strict_result_manifest
 from qcoder.current_loop_run_summary import build_run_summary

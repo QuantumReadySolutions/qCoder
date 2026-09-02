@@ -13,8 +13,8 @@ from pathlib import Path
 import re
 from typing import Any, Mapping, Sequence
 
-from qcoder.algorithm_blueprint import artifact_digest_matches
-from qcoder.blueprint_decisions import decision_record_error, unpack_decision_record_set
+from qcoder.algorithm_blueprint_contract import artifact_digest_matches
+from qcoder.blueprint_decisions_public_oss import decision_record_error, unpack_decision_record_set
 from qcoder.core.share_safe import contains_local_path, contains_token_or_header, redact_local_paths
 from qcoder.engines.review.local_evidence import (
     build_local_evidence_review,

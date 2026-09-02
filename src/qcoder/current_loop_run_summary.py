@@ -13,7 +13,7 @@ import json
 import math
 from typing import Any, Mapping, Sequence
 
-from qcoder.algorithm_blueprint import artifact_digest_matches, with_artifact_digest
+from qcoder.algorithm_blueprint_contract import artifact_digest_matches, with_artifact_digest
 from qcoder.current_loop_contract import permits, validate_contract
 from qcoder.engines.review.counts_v0 import normalize_counts_v0
 

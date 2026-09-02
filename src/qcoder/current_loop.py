@@ -7,19 +7,32 @@ references, or infer user authority from conversation.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from copy import deepcopy
 import hashlib
 import json
 import os
-from pathlib import Path
 import re
 import secrets
 import tempfile
 import threading
 import time
+from contextlib import contextmanager
+from copy import deepcopy
+from importlib import import_module
+from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
+from qcoder.algorithm_blueprint_contract import (
+    artifact_digest_matches,
+    with_artifact_digest,
+)
+from qcoder.blueprint_decisions_public_oss import (
+    PROFILE_DECISION_CATALOG_ID,
+    PROFILE_DECISION_CATALOG_VERSION,
+    catalog_entries,
+    consistency_digest,
+    decision_record_error,
+    unpack_decision_record_set,
+)
 from qcoder.current_loop_contract import (
     CONTRACT_SCHEMA_ID,
     contract_error,
@@ -28,19 +41,6 @@ from qcoder.current_loop_contract import (
     new_contract,
 )
 from qcoder.current_loop_iteration import parent_digest_failure_details
-
-from qcoder.algorithm_blueprint import (
-    artifact_digest_matches,
-    with_artifact_digest,
-)
-from qcoder.blueprint_decisions import (
-    PROFILE_DECISION_CATALOG_ID,
-    PROFILE_DECISION_CATALOG_VERSION,
-    catalog_entries,
-    consistency_digest,
-    decision_record_error,
-    unpack_decision_record_set,
-)
 
 LOOP_INSTANCE_RECORD_SCHEMA_ID = "qcoder.loop_instance_record.v1"
 NEXT_LOOP_SEED_SCHEMA_ID = "qcoder.next_loop_seed.v1"
@@ -142,6 +142,13 @@ _CANONICAL_ARTIFACT_ROLES = {
     "unchanged_continuation",
     "next_loop_seed",
 }
+
+
+def _registration_contract() -> Any:
+    """Load the registration layer only at the local operation boundary."""
+
+    return import_module("qcoder.current_loop_registration")
+
 
 _STALE_RECOVERY = {
     "selected_file_changed": {
@@ -1547,10 +1554,8 @@ def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
         migrated["iteration_authority_receipts"] = []
         migrated["latest_iteration_authority_receipt"] = None
     if schema_id == QUIET_ITERATION_CURRENT_LOOP_STATE_SCHEMA_ID:
-        from qcoder.current_loop_registration import migrate_v8_evidence_registry
-
         try:
-            evidence = migrate_v8_evidence_registry(migrated)
+            evidence = _registration_contract().migrate_v8_evidence_registry(migrated)
         except CurrentLoopError as exc:
             preserved = store.state_path.with_name(
                 f"state.v8-preserved-{state['state_digest'][:16]}.json"
@@ -1576,9 +1581,7 @@ def migrate_current_loop_state(store: CurrentLoopStore) -> dict[str, Any]:
         migrated["run_summary_index"] = {}
         migrated["latest_run_summary_reference"] = None
     else:
-        from qcoder.current_loop_registration import new_evidence_registry
-
-        migrated["evidence_registry"] = new_evidence_registry()
+        migrated["evidence_registry"] = _registration_contract().new_evidence_registry()
         migrated["registered_pending_derivation"] = None
         migrated["current_evidence_status"] = "pending"
     return store.replace(migrated, expected_revision=int(state["state_revision"]))
@@ -1789,9 +1792,9 @@ def current_loop_state_error(value: object) -> str | None:
         latest_iteration = value.get("latest_iteration_authority_receipt")
         if latest_iteration is not None and not isinstance(latest_iteration, Mapping):
             return "current_loop_iteration_authority_receipt_invalid"
-        from qcoder.current_loop_registration import evidence_registry_error
-
-        registry_error = evidence_registry_error(value.get("evidence_registry"))
+        registry_error = _registration_contract().evidence_registry_error(
+            value.get("evidence_registry")
+        )
         if registry_error:
             return registry_error
         pending = value.get("registered_pending_derivation")
@@ -1940,8 +1943,6 @@ def activate_current_loop(
             canonical_bytes(record),
             maximum_bytes=LOOP_INSTANCE_RECORD_MAX_BYTES,
         )
-    from qcoder.current_loop_registration import new_evidence_registry
-
     state: dict[str, Any] = {
         "schema_id": CURRENT_LOOP_STATE_SCHEMA_ID,
         "schema_version": CURRENT_LOOP_STATE_SCHEMA_VERSION,
@@ -1998,7 +1999,7 @@ def activate_current_loop(
         "quiet_iteration_status": "not_ready",
         "iteration_authority_receipts": [],
         "latest_iteration_authority_receipt": None,
-        "evidence_registry": new_evidence_registry(),
+        "evidence_registry": _registration_contract().new_evidence_registry(),
         "registered_pending_derivation": None,
         "current_evidence_status": "pending",
         "directory_scan_performed": False,

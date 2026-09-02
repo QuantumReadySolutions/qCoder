@@ -42,13 +42,32 @@ qcoder = "qcoder.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
-exclude = ["qcoder.pro_v0", "qcoder.pro_v0.*"]
+packages = [
+    "qcoder",
+    "qcoder.contracts",
+    "qcoder.core",
+    "qcoder.core.qasm2",
+    "qcoder.engines.context",
+    "qcoder.engines.feature_extraction",
+    "qcoder.engines.feature_extraction.adapters",
+    "qcoder.engines.feature_extraction.features",
+    "qcoder.engines.feature_extraction.parsers",
+    "qcoder.engines.feature_extraction.reps",
+    "qcoder.engines.guidance",
+    "qcoder.engines.profiles",
+    "qcoder.engines.review",
+    "qcoder.explorer",
+    "qcoder.model_packs",
+    "qcoder.pipelines",
+    "qcoder.pro_preview",
+    "qcoder.tools",
+]
 
 [tool.setuptools.package-data]
-qcoder = ["model_packs/*.json"]
+qcoder = [
+    "contracts/protected_decision_contract_v1.json",
+    "model_packs/resource_guidance_local_v0.json",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
