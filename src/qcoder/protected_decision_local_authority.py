@@ -6,6 +6,10 @@ import hmac
 from typing import Any, Mapping
 
 from qcoder.protected_decision_validation import validate_proposal
+from qcoder import protected_blueprint_contract as blueprint
+import copy
+import secrets
+import threading
 
 
 def inert_proposal_projection(
@@ -42,12 +46,96 @@ def confirm_inert_proposal(
         revision, displayed_semantic_revision_digest
     ):
         raise ValueError("protected_confirmation_revision_stale")
-    return {
-        "confirmed_proposal_digest": displayed_proposal_digest,
-        "confirmed_semantic_revision_digest": displayed_semantic_revision_digest,
-        "customer_confirmation_exact": True,
-        "protected_proposal_authority": "confirmed_for_local_evaluation_only",
-        "execution_authorized": False,
-        "write_authorized": False,
-        "continuation_authorized": False,
-    }
+    # Historical foundation callers supplied two strings, not a customer action.
+    # Keep import compatibility and stale diagnostics, but never attest consent.
+    raise ValueError("protected_customer_action_required")
+
+
+class BlueprintReview:
+    """Ephemeral native-client review; no write/run/retention authority.
+
+    State is read from the actual local consumer at every boundary, not accepted
+    as confirmation arguments. Closing/restarting loses review eligibility.
+    Native confirmation is a terminal customer action, never an MCP/service flag.
+    """
+
+    def __init__(self, client, *, current_state, clock=blueprint.now_utc):
+        self.client, self.current_state, self.clock = client, current_state, clock
+        self._lock = threading.Lock()
+        self._display = None
+        self._used = False
+
+    def prepare(self, intent):
+        with self._lock:
+            self._state = copy.deepcopy(self.current_state())
+            self._request = blueprint.make_request(
+                intent, secrets.token_urlsafe(24), 1, self.clock()
+            )
+            self._display, self._used = None, False
+            return copy.deepcopy(self._request)
+
+    def acquire(self, *, bearer, caller_token=""):
+        with self._lock:
+            if self.current_state() != self._state or self._used or self._display is not None:
+                raise blueprint.ContractError("local_state_changed")
+            response = self.client.recommend(
+                self._request, bearer=bearer, caller_token=caller_token
+            )
+            self._validate_current(response)
+            if response["outcome"] != "completed":
+                raise blueprint.ContractError(response["outcome"])
+            self._response = copy.deepcopy(response)
+            self._display = blueprint.encode(response)
+            return self._display.decode("ascii")
+
+    def _validate_current(self, response):
+        if self.current_state() != self._state:
+            raise blueprint.ContractError("local_state_changed")
+        blueprint.validate_response(response, self._request, self.client.release, self.clock())
+        # Deferrals are local ceilings, never service-granted authority.
+        deferred = set(self._state.get("deferred_decisions", []))
+        unresolved = set(self._request["intent"]["unresolved"])
+        deferred |= unresolved & {"framework", "measurement"}
+        if unresolved & {"objective", "problem_size"}:
+            deferred.add("formulation")
+        for group in (response.get("proposal") or {}).get("groups", []):
+            if group["id"] in deferred and group["recommended"] is not None:
+                raise blueprint.ContractError("local_deferral")
+            explicit = self._request["intent"].get(group["id"])
+            if (
+                explicit
+                and explicit != "unspecified"
+                and group["recommended"] not in (None, explicit)
+            ):
+                raise blueprint.ContractError("explicit_intent_conflict")
+
+    def confirm_native(self, input_stream, output_stream):
+        with self._lock:
+            if not input_stream.isatty() or not output_stream.isatty():
+                raise blueprint.ContractError("customer_terminal_required")
+            if self._display is None or self._used:
+                raise blueprint.ContractError("display_required_or_consumed")
+            self._validate_current(self._response)
+            if blueprint.encode(self._response) != self._display:
+                raise blueprint.ContractError("display_modified")
+            # Re-display the exact validated envelope at the confirmation surface.
+            output_stream.write(self._display.decode("ascii") + "\n")
+            marker = "CONFIRM " + self._response["response_digest"]
+            output_stream.write("For local evaluation only, type " + marker + "\n")
+            output_stream.flush()
+            answer = input_stream.readline(128)
+            self._validate_current(self._response)
+            if answer != marker + "\n":
+                raise blueprint.ContractError("customer_confirmation_required")
+            self._used = True
+            return {
+                "customer_confirmation_exact": True,
+                "confirmed_response_digest": self._response["response_digest"],
+                "authority": "confirmed_for_local_evaluation_only",
+                "write_authorized": False,
+                "execution_authorized": False,
+                "retention_authorized": False,
+                "evidence_acceptance_authorized": False,
+                "selection_authorized": False,
+                "continuation_authorized": False,
+            }

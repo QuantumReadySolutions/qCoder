@@ -216,15 +216,12 @@ def test_valid_synthetic_proposal_is_inert_until_exact_local_confirmation() -> N
     assert projection["local_effect_performed"] is False
     assert projection["write_authorized"] is False
     assert projection["execution_authorized"] is False
-    confirmation = confirm_inert_proposal(
-        projection,
-        displayed_proposal_digest=proposal["proposal_digest"],
-        displayed_semantic_revision_digest="b" * 64,
-    )
-    assert confirmation["customer_confirmation_exact"] is True
-    assert confirmation["write_authorized"] is False
-    assert confirmation["execution_authorized"] is False
-    assert confirmation["continuation_authorized"] is False
+    with pytest.raises(ValueError, match="customer_action_required"):
+        confirm_inert_proposal(
+            projection,
+            displayed_proposal_digest=proposal["proposal_digest"],
+            displayed_semantic_revision_digest="b" * 64,
+        )
 
 
 def test_stale_proposal_or_revision_fails_closed() -> None:

@@ -22,6 +22,7 @@ include src/qcoder/context_bridge_setup.py
 include src/qcoder/context_loop.py
 include src/qcoder/context_loop_public_oss.py
 include src/qcoder/contracts/__init__.py
+include src/qcoder/contracts/protected_blueprint_contract_v1.json
 include src/qcoder/contracts/protected_decision_contract_v1.json
 include src/qcoder/core/__init__.py
 include src/qcoder/core/context.py
@@ -123,6 +124,8 @@ include src/qcoder/pro_preview/config.py
 include src/qcoder/pro_preview/errors.py
 include src/qcoder/pro_preview/manifest.py
 include src/qcoder/protected_capability.py
+include src/qcoder/protected_blueprint_contract.py
+include src/qcoder/protected_blueprint_native.py
 include src/qcoder/protected_decision_client.py
 include src/qcoder/protected_decision_contract.py
 include src/qcoder/protected_decision_local_authority.py

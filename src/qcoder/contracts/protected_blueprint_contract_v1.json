@@ -1,0 +1,101 @@
+{
+  "authority": "proposal_only_no_write_no_run",
+  "choices": {
+    "formulation": [
+      "amplitude_amplification",
+      "state_preparation",
+      "variational"
+    ],
+    "framework": [
+      "cirq",
+      "qiskit"
+    ],
+    "measurement": [
+      "computational_basis",
+      "expectation"
+    ]
+  },
+  "limits": {
+    "alternatives": 2,
+    "bytes": 16384,
+    "container": 32,
+    "depth": 8,
+    "groups": 3,
+    "revisions": 5
+  },
+  "proposal_keys": [
+    "authority",
+    "groups",
+    "limitations",
+    "semantic_digest",
+    "unresolved"
+  ],
+  "request_keys": [
+    "expires_at",
+    "intent",
+    "nonce",
+    "privacy",
+    "request_digest",
+    "revision",
+    "schema",
+    "version"
+  ],
+  "request_schema": "qcoder.protected.blueprint_decision_request.v1",
+  "response_keys": [
+    "expires_at",
+    "nonce",
+    "outcome",
+    "proposal",
+    "release",
+    "request_digest",
+    "response_digest",
+    "revision",
+    "schema",
+    "version"
+  ],
+  "response_schema": "qcoder.protected.blueprint_decision_response.v1",
+  "route": "/v1/blueprint/decision-recommendation",
+  "scalar_intent": {
+    "framework": [
+      "cirq",
+      "qiskit",
+      "unspecified"
+    ],
+    "measurement": [
+      "computational_basis",
+      "expectation",
+      "unspecified"
+    ],
+    "objective": [
+      "entanglement",
+      "optimization",
+      "search",
+      "unspecified"
+    ],
+    "problem_size": [
+      "customer_defined",
+      "small_demonstration",
+      "unspecified"
+    ]
+  },
+  "schema": "qcoder.protected.blueprint_manifest.v1",
+  "set_intent": {
+    "constraints": [
+      "no_backend_selection",
+      "no_execution",
+      "no_generation",
+      "portable"
+    ],
+    "non_goals": [
+      "hardware_execution",
+      "performance_claim",
+      "source_generation"
+    ],
+    "unresolved": [
+      "framework",
+      "measurement",
+      "objective",
+      "problem_size"
+    ]
+  }
+}

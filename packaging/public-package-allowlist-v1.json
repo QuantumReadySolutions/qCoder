@@ -13,6 +13,8 @@
     "pyproject.toml"
   ],
   "allowed_python_sources": [
+    "src/qcoder/protected_blueprint_contract.py",
+    "src/qcoder/protected_blueprint_native.py",
     "src/qcoder/__init__.py",
     "src/qcoder/__main__.py",
     "src/qcoder/algorithm_blueprint.py",
@@ -140,6 +142,7 @@
     "src/qcoder/tools/batch.py"
   ],
   "allowed_package_data_filenames": [
+    "src/qcoder/contracts/protected_blueprint_contract_v1.json",
     "src/qcoder/contracts/protected_decision_contract_v1.json",
     "src/qcoder/model_packs/resource_guidance_local_v0.json"
   ],

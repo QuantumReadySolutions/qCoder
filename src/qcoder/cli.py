@@ -2741,6 +2741,12 @@ def _cmd_blueprint(argv: list[str]) -> int:
         description="Create deterministic machine-local Algorithm Blueprint evidence.",
     )
     subparsers = parser.add_subparsers(dest="blueprint_command")
+    recommend_parser = subparsers.add_parser(
+        "recommend", help="Inspect typed intent and review one inert protected recommendation."
+    )
+    recommend_parser.add_argument("--intent-file", required=True)
+    recommend_parser.add_argument("--endpoint", required=True)
+    recommend_parser.add_argument("--release", required=True)
     source_parser = subparsers.add_parser(
         "source-evidence",
         help="Extract compact static evidence from one selected Python file or bounded stdin.",
@@ -2784,6 +2790,22 @@ def _cmd_blueprint(argv: list[str]) -> int:
     args = parser.parse_args(argv)
     if args.blueprint_command is None:
         parser.print_help()
+        return 0
+    if args.blueprint_command == "recommend":
+        from qcoder.protected_blueprint_native import native_review
+        from qcoder.protected_blueprint_contract import ContractError
+
+        try:
+            native_review(
+                intent_path=args.intent_file,
+                endpoint=args.endpoint,
+                release=args.release,
+                input_stream=sys.stdin,
+                output_stream=sys.stdout,
+            )
+        except (ContractError, OSError, EOFError):
+            print('{"outcome":"protected_recommendation_not_confirmed","local_effect":false}')
+            return 1
         return 0
     if (args.start_line is None) != (args.end_line is None):
         print(
