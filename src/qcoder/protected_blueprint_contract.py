@@ -69,7 +69,7 @@ class ContractError(ValueError):
 
 
 def fail(category):
-    raise ContractError(category)
+    raise ContractError(category) from None
 
 
 def bounded(value, depth=0):
@@ -100,7 +100,9 @@ def encode(value):
         raw = json.dumps(
             value, ensure_ascii=True, sort_keys=True, separators=(",", ":"), allow_nan=False
         ).encode("ascii")
-    except (UnicodeError, RecursionError, OverflowError):
+    except ContractError:
+        raise
+    except (ValueError, UnicodeError, RecursionError, OverflowError):
         fail("encoding")
     if len(raw) > MAX_BYTES:
         fail("size")
@@ -123,7 +125,9 @@ def decode(raw):
         obj = json.loads(
             raw.decode("utf-8"), object_pairs_hook=pairs, parse_constant=lambda _: fail("nonfinite")
         )
-    except (UnicodeError, json.JSONDecodeError, RecursionError):
+    except ContractError:
+        raise
+    except (ValueError, UnicodeError, json.JSONDecodeError, RecursionError):
         fail("json")
     if type(obj) is not dict:
         fail("shape")

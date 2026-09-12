@@ -181,6 +181,11 @@ def test_wire_negatives(raw):
         c.decode(raw)
 
 
+def test_integer_parser_limit_is_a_finite_contract_error():
+    with pytest.raises(c.ContractError, match="json"):
+        c.decode(b'{"a":' + b"9" * 5000 + b"}")
+
+
 @pytest.mark.parametrize("field", list(c.SCALARS) + list(c.SETS))
 def test_prohibited_value_inside_allowed_field(field):
     obj = intent()
