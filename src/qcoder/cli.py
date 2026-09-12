@@ -2744,7 +2744,10 @@ def _cmd_blueprint(argv: list[str]) -> int:
     recommend_parser = subparsers.add_parser(
         "recommend", help="Inspect typed intent and review one inert protected recommendation."
     )
-    recommend_parser.add_argument("--intent-file", required=True)
+    recommend_parser.add_argument(
+        "--intent-file",
+        help="Optional canonical typed intent; otherwise use the attended finite form.",
+    )
     recommend_parser.add_argument("--endpoint", required=True)
     recommend_parser.add_argument("--release", required=True)
     source_parser = subparsers.add_parser(

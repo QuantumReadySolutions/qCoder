@@ -267,6 +267,13 @@ def test_invalid_current_loop_is_finite_before_hidden_input(monkeypatch, tmp_pat
     from qcoder import cli
     from qcoder import protected_blueprint_native as native
     from qcoder.current_loop import CurrentLoopStore
+    from qcoder import protected_decision_client as client_module
+
+    monkeypatch.setattr(
+        client_module,
+        "APPROVED_NATIVE_BLUEPRINT_DESTINATIONS",
+        frozenset({("https://internal.invalid" + c.ROUTE, RELEASE)}),
+    )
 
     monkeypatch.chdir(tmp_path)
     path = tmp_path / "intent.json"
@@ -328,6 +335,13 @@ def test_actual_native_cli_has_inspection_hidden_input_and_no_effect(
     transport, server = socket_transport
     from qcoder import cli
     from qcoder import protected_blueprint_native as native
+    from qcoder import protected_decision_client as client_module
+
+    monkeypatch.setattr(
+        client_module,
+        "APPROVED_NATIVE_BLUEPRINT_DESTINATIONS",
+        frozenset({("https://internal.invalid" + c.ROUTE, RELEASE)}),
+    )
 
     # Test-side clock and socket substitution only; actual CLI/codec/acceptance run.
     monkeypatch.setattr(BlueprintHTTPTransport, "_connection", lambda _: transport._connection())
@@ -347,7 +361,7 @@ def test_actual_native_cli_has_inspection_hidden_input_and_no_effect(
         ),
     )
     tokens = iter(["synthetic_token", ""])
-    monkeypatch.setattr(native.getpass, "getpass", lambda _: next(tokens))
+    monkeypatch.setattr(native, "read_private_from_tty", lambda *a, **k: next(tokens))
     path = tmp_path / "intent.json"
     path.write_bytes(c.encode(intent()))
     monkeypatch.chdir(tmp_path)

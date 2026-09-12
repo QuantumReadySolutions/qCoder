@@ -68,11 +68,18 @@ class BlueprintReview:
     def prepare(self, intent):
         with self._lock:
             self._state = copy.deepcopy(self.current_state())
+            if self._state.get("intent", intent) != intent:
+                raise blueprint.ContractError("local_state_changed")
             self._request = blueprint.make_request(
                 intent, secrets.token_urlsafe(24), 1, self.clock()
             )
             self._display, self._used = None, False
             return copy.deepcopy(self._request)
+
+    def check_before_transmission(self):
+        if self.current_state() != self._state:
+            raise blueprint.ContractError("local_state_changed")
+        blueprint.validate_request(self._request, self.clock())
 
     def acquire(self, *, bearer, caller_token=""):
         with self._lock:
@@ -94,6 +101,8 @@ class BlueprintReview:
         blueprint.validate_response(response, self._request, self.client.release, self.clock())
         # Deferrals are local ceilings, never service-granted authority.
         deferred = set(self._state.get("deferred_decisions", []))
+        authority = self._state.get("authority", {})
+        deferred.update(authority.get("deferred", []))
         unresolved = set(self._request["intent"]["unresolved"])
         deferred |= unresolved & {"framework", "measurement"}
         if unresolved & {"objective", "problem_size"}:
@@ -101,6 +110,9 @@ class BlueprintReview:
         for group in (response.get("proposal") or {}).get("groups", []):
             if group["id"] in deferred and group["recommended"] is not None:
                 raise blueprint.ContractError("local_deferral")
+            required = authority.get("required", {}).get(group["id"])
+            if required is not None and group["recommended"] not in (None, required):
+                raise blueprint.ContractError("local_choice_conflict")
             explicit = self._request["intent"].get(group["id"])
             if (
                 explicit
@@ -120,6 +132,25 @@ class BlueprintReview:
                 raise blueprint.ContractError("display_modified")
             # Re-display the exact validated envelope at the confirmation surface.
             output_stream.write(self._display.decode("ascii") + "\n")
+            for group in self._response["proposal"]["groups"]:
+                output_stream.write(
+                    group["id"].capitalize()
+                    + ": "
+                    + (group["recommended"] or "unresolved")
+                    + "; alternatives (unranked): "
+                    + (", ".join(group["alternatives"]) or "none")
+                    + "; basis: "
+                    + group["basis"]
+                    + "\n"
+                )
+            output_stream.write(
+                "Limitations: " + ", ".join(self._response["proposal"]["limitations"]) + "\n"
+            )
+            output_stream.write(
+                "Unresolved: "
+                + (", ".join(self._response["proposal"]["unresolved"]) or "none")
+                + "\n"
+            )
             marker = "CONFIRM " + self._response["response_digest"]
             output_stream.write("For local evaluation only, type " + marker + "\n")
             output_stream.flush()

@@ -20,6 +20,17 @@ from qcoder.protected_decision_validation import validate_request, validate_resp
 
 Transport = Callable[[Mapping[str, Any]], Mapping[str, Any]]
 
+# Operational credential admission is not generic HTTPS syntax validation.
+# No Stage D candidate destination has yet been authenticated/staged. Keep this
+# exact (endpoint, release) set empty until that distinct source-bound step.
+# Never populate it from CLI/environment input or a service response.
+APPROVED_NATIVE_BLUEPRINT_DESTINATIONS: frozenset[tuple[str, str]] = frozenset()
+
+
+def require_native_blueprint_destination(endpoint: str, release: str) -> None:
+    if (endpoint, release) not in APPROVED_NATIVE_BLUEPRINT_DESTINATIONS:
+        raise blueprint.ContractError("destination_not_admitted")
+
 
 class ProtectedDecisionClient:
     """Validate one fixed contract; never select a fallback or grant local authority."""
