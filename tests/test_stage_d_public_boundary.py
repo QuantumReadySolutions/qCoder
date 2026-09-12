@@ -69,7 +69,7 @@ def socket_transport(monkeypatch):
             body = state.get("body", c.encode(state["mutate"](response(req))))
             self.send_response(state["status"])
             self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Content-Length", state.get("length", str(len(body))))
             self.send_header("Cache-Control", "no-store")
             for k, v in state["headers"]:
                 self.send_header(k, v)
@@ -240,6 +240,69 @@ def test_http_failure_no_retry_no_raw_echo(socket_transport, status, body, heade
     with pytest.raises(c.ContractError) as err:
         transport.exchange(c.make_request(intent(), "n" * 32, 1, NOW), bearer="synthetic_token")
     assert "PRIVATE_MARKER" not in str(err.value) and state["calls"] == 1
+
+
+def test_excessive_length_header_is_finite(socket_transport):
+    transport, state = socket_transport
+    state.update(length="9" * 5000, body=b"{}")
+    with pytest.raises(c.ContractError, match="response_size"):
+        transport.exchange(c.make_request(intent(), "n" * 32, 1, NOW), bearer="synthetic_token")
+    assert state["calls"] == 1
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "https://internal.invalid:SENSITIVE_MARKER" + c.ROUTE,
+        "https://[SENSITIVE_MARKER" + c.ROUTE,
+    ],
+)
+def test_destination_parser_error_is_finite(endpoint):
+    with pytest.raises(c.ContractError, match="^destination$") as err:
+        BlueprintHTTPTransport(endpoint)
+    assert "SENSITIVE_MARKER" not in str(err.value)
+
+
+def test_invalid_current_loop_is_finite_before_hidden_input(monkeypatch, tmp_path):
+    from qcoder import cli
+    from qcoder import protected_blueprint_native as native
+    from qcoder.current_loop import CurrentLoopStore
+
+    monkeypatch.chdir(tmp_path)
+    path = tmp_path / "intent.json"
+    path.write_bytes(c.encode(intent()))
+    store = CurrentLoopStore.for_workspace(tmp_path)
+    store.state_path.parent.mkdir(parents=True)
+    raw = b'{"SENSITIVE_MARKER":"untrusted-local-state"}'
+    store.state_path.write_bytes(raw)
+    monkeypatch.setattr(native.getpass, "getpass", lambda _: pytest.fail("private input entered"))
+
+    class Terminal(io.StringIO):
+        def isatty(self):
+            return True
+
+    terminal = Terminal()
+    monkeypatch.setattr(cli.sys, "stdin", terminal)
+    monkeypatch.setattr(cli.sys, "stdout", terminal)
+    assert (
+        cli._cmd_blueprint(
+            [
+                "recommend",
+                "--intent-file",
+                str(path),
+                "--endpoint",
+                "https://internal.invalid" + c.ROUTE,
+                "--release",
+                RELEASE,
+            ]
+        )
+        == 1
+    )
+    assert (
+        terminal.getvalue()
+        == '{"outcome":"protected_recommendation_not_confirmed","local_effect":false}\n'
+    )
+    assert store.state_path.read_bytes() == raw
 
 
 def test_production_guard_offline_and_inventory():

@@ -54,7 +54,11 @@ class BlueprintHTTPTransport:
     """
 
     def __init__(self, endpoint: str, *, timeout: float = 10.0):
-        url = urlsplit(endpoint)
+        try:
+            url = urlsplit(endpoint)
+            port = url.port
+        except ValueError:
+            raise blueprint.ContractError("destination") from None
         if (
             url.scheme != "https"
             or not url.hostname
@@ -63,7 +67,7 @@ class BlueprintHTTPTransport:
             or url.query
             or url.fragment
             or url.path != blueprint.ROUTE
-            or url.port not in (None, 443)
+            or port not in (None, 443)
             or not 0 < timeout <= 10
         ):
             raise blueprint.ContractError("destination")
@@ -108,7 +112,8 @@ class BlueprintHTTPTransport:
                 raise blueprint.ContractError("response_headers")
             length = fields.get("content-length", "")
             if (
-                not length.isascii()
+                not 1 <= len(length) <= len(str(blueprint.MAX_BYTES))
+                or not length.isascii()
                 or not length.isdecimal()
                 or not 0 < int(length) <= blueprint.MAX_BYTES
             ):

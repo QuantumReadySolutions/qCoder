@@ -13,7 +13,7 @@ from pathlib import Path
 from qcoder import protected_blueprint_contract as c
 from qcoder.protected_decision_client import BlueprintClient, BlueprintHTTPTransport
 from qcoder.protected_decision_local_authority import BlueprintReview
-from qcoder.current_loop import CurrentLoopStore
+from qcoder.current_loop import CurrentLoopError, CurrentLoopStore
 
 
 def native_review(*, intent_path, endpoint, release, input_stream, output_stream):
@@ -31,7 +31,10 @@ def native_review(*, intent_path, endpoint, release, input_stream, output_stream
             intent = c.decode(handle.read(c.MAX_BYTES + 1))
         # Current Loop data remains LOCAL and is not hashed into a wire field.
         # A concurrently created/changed/deleted loop invalidates review too.
-        local_loop = store.read() if store.state_path.exists() else None
+        try:
+            local_loop = store.read() if store.state_path.exists() else None
+        except CurrentLoopError:
+            raise c.ContractError("local_state_invalid") from None
         return {
             "intent": c.validate_intent(intent),
             "deferred_decisions": intent["unresolved"],
