@@ -30,9 +30,12 @@ from qcoder.executors.aer_stabilizer_v1 import (
 from qcoder.focused_loop import applicability as ap
 from qcoder.focused_loop import fixtures as fx
 from qcoder.focused_loop import identities as ids
-from qcoder.focused_loop import manifest_adapter as ma
 from qcoder.focused_loop import mps_floor as mf
 from qcoder.focused_loop import privacy, result_protocol as rp, reuse
+from qcoder.focused_loop.attempt_join import (
+    join_attempt_records,
+    rebind_receipt_result_manifest_digest,
+)
 from qcoder.focused_loop.authority import build_execution_authority
 from qcoder.focused_loop.canonical import FocusedLoopError
 from qcoder.focused_loop.contracts import (
@@ -40,6 +43,12 @@ from qcoder.focused_loop.contracts import (
     build_synthetic_resource_receipt,
 )
 from qcoder.focused_loop.plan import build_execution_plan
+from tests.focused_loop_manifest_v3_test_support import (
+    build_strict_result_manifest_payload,
+    circuit_artifact_revisions,
+    join_receipt_to_strict_result_manifest,
+    normalize_through_strict_manifest_v3,
+)
 
 CIRCUIT_PATH = "circuits/fx_clif_accept_01.qasm"
 ATTEMPT = "execution-attempt-phase-a-integrated-1"
@@ -275,13 +284,35 @@ def test_bounded_execution_produces_conforming_receipt(vertical: Vertical) -> No
     assert (vertical.root / CIRCUIT_PATH).read_text(encoding="utf-8") == qasm_before
 
 
-def test_receipt_joins_real_strict_result_manifest_v3(vertical: Vertical) -> None:
-    """P14: the sibling receipt composes with the real, unmodified v3 validator."""
+def test_generic_attempt_join_is_production_and_v3_independent(vertical: Vertical) -> None:
+    """The plan/authority/receipt join is production logic and needs no manifest."""
     outcome = vertical.execute()
-    revisions = ma.circuit_artifact_revisions(
+    joined = join_attempt_records(
+        plan=vertical.plan,
+        authority=vertical.authority(),
+        receipt=outcome.receipt,
+        planned_runtime_versions=RUNTIME_VERSIONS,
+    )
+    assert joined["plan_digest"] == vertical.plan["plan_digest"]
+    assert joined["attempt_identity"] == ATTEMPT
+    assert joined["deviation"]["detected"] is False
+    assert joined["independent_verification_claimed"] is False
+    assert joined["plan_match_verified_in_process"] is True
+    for required_join in ("plan_digest", "authority_plan_digest", "authority_digest"):
+        assert required_join in joined["joins_verified"]
+
+
+def test_receipt_joins_real_strict_result_manifest_v3(vertical: Vertical) -> None:
+    """P14: the sibling receipt composes with the real, unmodified v3 validator.
+
+    This is compatibility evidence gathered from test support, not production
+    integration; the Phase A production substrate imports no current-loop module.
+    """
+    outcome = vertical.execute()
+    revisions = circuit_artifact_revisions(
         artifact_revision_id="rev-1", circuit_digest=vertical.material["qasm_digest"]
     )
-    payload = ma.build_strict_result_manifest_payload(
+    payload = build_strict_result_manifest_payload(
         receipt=outcome.receipt,
         counts=outcome.counts,
         circuit_artifact_revision_id="rev-1",
@@ -292,7 +323,7 @@ def test_receipt_joins_real_strict_result_manifest_v3(vertical: Vertical) -> Non
         bit_order=BIT_ORDER,
         register_order=REGISTER_ORDER,
     )
-    normalized = ma.normalize_through_strict_manifest_v3(payload, artifact_revisions=revisions)
+    normalized = normalize_through_strict_manifest_v3(payload, artifact_revisions=revisions)
 
     assert normalized["schema_id"] == ids.STRICT_RESULT_MANIFEST_SCHEMA_ID
     assert normalized["observed_shots"] == ids.FIXED_SHOTS
@@ -302,10 +333,10 @@ def test_receipt_joins_real_strict_result_manifest_v3(vertical: Vertical) -> Non
     assert normalized["execution_observation"]["qcoder_independently_verified_execution"] is False
     assert outcome.receipt["plan_match_verified_in_process"] is True
 
-    bound = ma.bind_receipt_to_result_manifest(
-        receipt=outcome.receipt, manifest_digest=normalized["manifest_digest"]
+    bound = rebind_receipt_result_manifest_digest(
+        receipt=outcome.receipt, result_manifest_digest=normalized["manifest_digest"]
     )
-    join = ma.join_receipt_to_strict_result_manifest(
+    join = join_receipt_to_strict_result_manifest(
         plan=vertical.plan,
         authority=vertical.authority(),
         receipt=bound,

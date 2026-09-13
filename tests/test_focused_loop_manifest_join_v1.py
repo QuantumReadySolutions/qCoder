@@ -14,18 +14,10 @@ from qcoder.current_loop_result_manifest import (
     STRICT_RESULT_MANIFEST_SCHEMA_ID,
     STRICT_RESULT_MANIFEST_SCHEMA_VERSION,
 )
+from qcoder.focused_loop.attempt_join import rebind_receipt_result_manifest_digest
 from qcoder.focused_loop.authority import build_execution_authority
 from qcoder.focused_loop.canonical import FocusedLoopError, canonical_digest
 from qcoder.focused_loop.identities import FIXED_SHOTS
-from qcoder.focused_loop.manifest_adapter import (
-    MANIFEST_LIMITATION_VERIFICATION_SCOPE,
-    MANIFEST_NON_CLAIM_INDEPENDENT_VERIFICATION,
-    bind_receipt_to_result_manifest,
-    build_strict_result_manifest_payload,
-    circuit_artifact_revisions,
-    join_receipt_to_strict_result_manifest,
-    normalize_through_strict_manifest_v3,
-)
 from qcoder.focused_loop.plan import PLAN_DIGEST_FIELD, build_execution_plan
 from qcoder.focused_loop.receipt import (
     RECEIPT_DIGEST_FIELD,
@@ -35,6 +27,14 @@ from qcoder.focused_loop.receipt import (
     censored_timing,
     observed_timing,
     unmeasured_resource_observation,
+)
+from tests.focused_loop_manifest_v3_test_support import (
+    MANIFEST_LIMITATION_VERIFICATION_SCOPE,
+    MANIFEST_NON_CLAIM_INDEPENDENT_VERIFICATION,
+    build_strict_result_manifest_payload,
+    circuit_artifact_revisions,
+    join_receipt_to_strict_result_manifest,
+    normalize_through_strict_manifest_v3,
 )
 
 OBJECTIVE_DIGEST = "1" * 64
@@ -140,8 +140,8 @@ def bound_case() -> tuple[dict[str, Any], ...]:
     payload = make_payload(provisional)
     revisions = make_revisions()
     manifest = normalize_through_strict_manifest_v3(payload, artifact_revisions=revisions)
-    receipt = bind_receipt_to_result_manifest(
-        receipt=provisional, manifest_digest=manifest["manifest_digest"]
+    receipt = rebind_receipt_result_manifest_digest(
+        receipt=provisional, result_manifest_digest=manifest["manifest_digest"]
     )
     return plan, authority, provisional, payload, revisions, manifest, receipt
 
@@ -263,7 +263,7 @@ def test_join_fails_for_an_authority_granted_over_a_different_plan() -> None:
             artifact_revisions=revisions,
             planned_runtime_versions=PLANNED_VERSIONS,
         )
-    assert excinfo.value.category == "manifest_join_authority_plan_digest_mismatch"
+    assert excinfo.value.category == "attempt_join_authority_plan_digest_mismatch"
 
 
 def test_join_fails_when_the_manifest_circuit_lineage_points_elsewhere() -> None:
@@ -275,8 +275,8 @@ def test_join_fails_when_the_manifest_circuit_lineage_points_elsewhere() -> None
         circuit_digest=OTHER_CIRCUIT_DIGEST,
     )
     manifest = normalize_through_strict_manifest_v3(payload, artifact_revisions=revisions)
-    receipt = bind_receipt_to_result_manifest(
-        receipt=provisional, manifest_digest=manifest["manifest_digest"]
+    receipt = rebind_receipt_result_manifest_digest(
+        receipt=provisional, result_manifest_digest=manifest["manifest_digest"]
     )
     with pytest.raises(FocusedLoopError) as excinfo:
         join_receipt_to_strict_result_manifest(
@@ -299,8 +299,8 @@ def test_join_fails_when_the_receipt_deviates_from_the_plan() -> None:
     payload = make_payload(provisional)
     revisions = make_revisions()
     manifest = normalize_through_strict_manifest_v3(payload, artifact_revisions=revisions)
-    receipt = bind_receipt_to_result_manifest(
-        receipt=provisional, manifest_digest=manifest["manifest_digest"]
+    receipt = rebind_receipt_result_manifest_digest(
+        receipt=provisional, result_manifest_digest=manifest["manifest_digest"]
     )
     with pytest.raises(FocusedLoopError) as excinfo:
         join_receipt_to_strict_result_manifest(
@@ -311,7 +311,7 @@ def test_join_fails_when_the_receipt_deviates_from_the_plan() -> None:
             artifact_revisions=revisions,
             planned_runtime_versions=PLANNED_VERSIONS,
         )
-    assert excinfo.value.category == "manifest_join_plan_deviation_detected"
+    assert excinfo.value.category == "attempt_join_plan_deviation_detected"
 
 
 def test_join_refuses_a_non_enrollable_receipt() -> None:
@@ -335,7 +335,7 @@ def test_join_refuses_a_non_enrollable_receipt() -> None:
             artifact_revisions=make_revisions(),
             planned_runtime_versions=PLANNED_VERSIONS,
         )
-    assert join_error.value.category == "manifest_join_receipt_not_enrollable"
+    assert join_error.value.category == "attempt_join_receipt_not_enrollable"
 
     with pytest.raises(FocusedLoopError) as payload_error:
         make_payload(timed_out)
