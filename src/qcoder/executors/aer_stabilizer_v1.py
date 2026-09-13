@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
+from hashlib import sha256
 from pathlib import Path, PurePosixPath
 import time
 from typing import Any
@@ -71,12 +72,18 @@ class ExecutorBackendUnavailable(FocusedLoopError):
 
 
 def compute_circuit_digest(qasm_text: str) -> str:
-    """Digest of the exact QASM text, in the house canonical form.
+    """Digest of the exact QASM text: SHA-256 over its UTF-8 bytes.
 
     The executor recomputes this over the bytes it actually loaded and compares it to
     the digest frozen in the plan. Filename, path, and adjacency are never evidence.
+
+    This is deliberately the same convention the fixture manifest publishes as the
+    circuit artifact digest, so a plan can bind directly to a materialized fixture
+    without a second translation step.
     """
-    return canonical_digest({"qasm_text": qasm_text})
+    if not isinstance(qasm_text, str) or not qasm_text:
+        raise FocusedLoopError("executor_circuit_text_invalid")
+    return sha256(qasm_text.encode("utf-8")).hexdigest()
 
 
 @dataclass
