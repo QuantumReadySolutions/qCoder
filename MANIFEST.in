@@ -111,6 +111,7 @@ include src/qcoder/engines/review/qiskit_counts.py
 include src/qcoder/evidence_usability.py
 include src/qcoder/explorer/__init__.py
 include src/qcoder/explorer/derived_evidence.py
+include src/qcoder/explorer/focused_loop_coordinator.py
 include src/qcoder/executors/__init__.py
 include src/qcoder/executors/aer_stabilizer_v1.py
 include src/qcoder/focused_loop/__init__.py

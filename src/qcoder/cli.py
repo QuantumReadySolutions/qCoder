@@ -963,6 +963,9 @@ def _run_student_evidence_check(
 
 
 def _cmd_explorer(argv: list[str], *, compatibility_alias: bool = False) -> int:
+    if not compatibility_alias and argv[:1] == ["focused"]:
+        from qcoder.explorer.focused_loop_coordinator import main as focused_main
+        return focused_main(argv[1:])
     prog = "qcoder student" if compatibility_alias else "qcoder explorer"
     p = argparse.ArgumentParser(
         prog=prog,
@@ -977,6 +980,9 @@ def _cmd_explorer(argv: list[str], *, compatibility_alias: bool = False) -> int:
         ),
     )
     sub = p.add_subparsers(dest="explorer_command")
+
+    if not compatibility_alias:
+        sub.add_parser("focused", help="Local frozen D-143 prepare/run/repeat/status/explain.")
 
     p_status = sub.add_parser(
         "status",

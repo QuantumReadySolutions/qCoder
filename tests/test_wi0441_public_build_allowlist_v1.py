@@ -55,7 +55,7 @@ def test_repository_source_allowlist_is_exact_and_has_no_broad_glob() -> None:
     for cache in (ROOT / "src/qcoder").rglob("__pycache__"):
         shutil.rmtree(cache)
     result = VERIFY.verify_source_tree(ROOT)
-    assert result["member_count"] == 146
+    assert result["member_count"] == 147
     manifest = json.loads((ROOT / "packaging/public-package-allowlist-v1.json").read_text())
     assert manifest["allowed_package_data_filenames"] == [
         "src/qcoder/contracts/protected_blueprint_contract_v1.json",

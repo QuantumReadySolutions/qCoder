@@ -121,6 +121,7 @@
     "src/qcoder/evidence_usability.py",
     "src/qcoder/explorer/__init__.py",
     "src/qcoder/explorer/derived_evidence.py",
+    "src/qcoder/explorer/focused_loop_coordinator.py",
     "src/qcoder/framework_native_evidence.py",
     "src/qcoder/model_packs/__init__.py",
     "src/qcoder/pipelines/analyze.py",
