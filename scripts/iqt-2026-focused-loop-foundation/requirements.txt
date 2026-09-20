@@ -1,0 +1,4 @@
+# Exact conference engineering proof dependencies.
+# These pins match the existing qCoder prepared natural-client rehearsal environment.
+qiskit==2.5.2
+qiskit-aer==0.17.2

@@ -607,7 +607,6 @@ def test_unavailable_aer_is_reported_not_substituted(workspace: Path) -> None:
     assert outcome.receipt["timing"]["censored"] is True
     assert outcome.receipt["result_manifest_digest"] is None
     assert receipt_is_enrollable_as_current_evidence(outcome.receipt) is False
-    assert "qiskit_aer" not in sys.modules
 
 
 def backend_request() -> BackendRequest:
@@ -621,10 +620,6 @@ def backend_request() -> BackendRequest:
         max_memory_bytes=2 * 1024**3,
         cancellation=CooperativeCancellation(),
     )
-
-
-def test_qiskit_aer_is_absent_in_this_environment() -> None:
-    assert importlib.util.find_spec("qiskit_aer") is None
 
 
 @pytest.mark.skipif(

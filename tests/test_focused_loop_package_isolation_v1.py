@@ -1,20 +1,21 @@
-"""Static isolation proof for the Phase A focused-loop source.
+"""Conference-branch isolation and provisional package-closure proof.
 
-These checks are deliberately independent of the focused-loop implementation: they
-parse the new source files and assert structural properties rather than calling the
-code. They stand in for the packaging half of P26 while the final post-WI-0441 import
-graph and package allowlist remain unaccepted.
+The D-143 Phase A source-isolation invariants remain controlling: no focused-loop
+production module may import Current Loop production integration or protected policy,
+and the bounded executor remains incapable of shell, package installation, arbitrary
+customer Python, or network-provider execution.
 
-What is proven here: source isolation, no protected-tier leakage, no current-loop
-imports in new production source, and an unchanged production build allowlist. What is
-deliberately NOT proven and NOT claimed: wheel or sdist inclusion of the new package,
-which is recorded as ``DEFERRED_POST_WI0441_PACKAGE_ALLOWLIST_INTEGRATION``. Phase A
-imports and tests the new source through pytest's existing ``src`` path only.
+This conference branch additionally prototypes the smallest source-package closure
+needed for an unpublished local wheel: only qcoder.focused_loop and qcoder.executors
+and their exact Python files are added to the existing public package allowlist. This
+does not claim post-WI-0441 production integration, installed-wheel acceptance, release
+authority, or public-demo authority.
 """
 
 from __future__ import annotations
 
 import ast
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -71,7 +72,7 @@ PROHIBITED_INTEGRATION_MODULES = frozenset(
 PROHIBITED_INTEGRATION_PREFIXES = ("qcoder.current_loop",)
 
 #: Evidence wording for the one known, intentional Phase B consequence.
-PACKAGE_ALLOWLIST_STATUS = "DEFERRED_POST_WI0441_PACKAGE_ALLOWLIST_INTEGRATION"
+PACKAGE_ALLOWLIST_STATUS = "CONFERENCE_PROVISIONAL_SOURCE_PACKAGE_CLOSURE"
 
 
 def _source_files() -> list[Path]:
@@ -228,15 +229,29 @@ def test_v3_compatibility_proof_lives_in_test_support_and_uses_the_real_validato
             assert node.id != "monkeypatch", "the real validator must not be monkeypatched"
 
 
-def test_production_package_allowlist_unchanged_and_inclusion_not_claimed() -> None:
-    """Phase A must not speculatively add itself to the packaging allowlist.
+def test_conference_package_allowlist_closes_only_the_focused_source_packages() -> None:
+    """The prototype package delta is exactly the two D-143 source packages.
 
-    Source isolation, absent protected leakage and an unchanged allowlist are all
-    genuinely proven. Wheel/sdist inclusion of the new package is NOT claimed: it is
-    recorded as ``DEFERRED_POST_WI0441_PACKAGE_ALLOWLIST_INTEGRATION`` and remains the
-    expected, intentional consequence of leaving the allowlist frozen.
+    This proves source/package inventory closure only. It is not an installed-wheel
+    acceptance or a production-integration claim.
     """
     pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert '"qcoder.focused_loop"' not in pyproject
-    assert '"qcoder.executors"' not in pyproject
-    assert PACKAGE_ALLOWLIST_STATUS == "DEFERRED_POST_WI0441_PACKAGE_ALLOWLIST_INTEGRATION"
+    assert '"qcoder.focused_loop"' in pyproject
+    assert '"qcoder.executors"' in pyproject
+
+    allowlist = json.loads(
+        (REPO_ROOT / "packaging" / "public-package-allowlist-v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert "qcoder.focused_loop" in allowlist["allowed_packages"]
+    assert "qcoder.executors" in allowlist["allowed_packages"]
+
+    allowed_sources = set(allowlist["allowed_python_sources"])
+    manifest = (REPO_ROOT / "MANIFEST.in").read_text(encoding="utf-8")
+    for path in _source_files():
+        relative = path.relative_to(REPO_ROOT).as_posix()
+        assert relative in allowed_sources
+        assert f"include {relative}" in manifest
+
+    assert PACKAGE_ALLOWLIST_STATUS == "CONFERENCE_PROVISIONAL_SOURCE_PACKAGE_CLOSURE"

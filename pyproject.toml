@@ -57,6 +57,8 @@ packages = [
     "qcoder.engines.profiles",
     "qcoder.engines.review",
     "qcoder.explorer",
+    "qcoder.executors",
+    "qcoder.focused_loop",
     "qcoder.model_packs",
     "qcoder.pipelines",
     "qcoder.pro_preview",

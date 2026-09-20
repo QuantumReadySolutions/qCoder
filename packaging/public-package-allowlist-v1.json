@@ -139,7 +139,23 @@
     "src/qcoder/protected_decision_validation.py",
     "src/qcoder/public_motif_allowlist.py",
     "src/qcoder/source_evidence_depth.py",
-    "src/qcoder/tools/batch.py"
+    "src/qcoder/tools/batch.py",
+    "src/qcoder/executors/__init__.py",
+    "src/qcoder/executors/aer_stabilizer_v1.py",
+    "src/qcoder/focused_loop/__init__.py",
+    "src/qcoder/focused_loop/applicability.py",
+    "src/qcoder/focused_loop/attempt_join.py",
+    "src/qcoder/focused_loop/authority.py",
+    "src/qcoder/focused_loop/canonical.py",
+    "src/qcoder/focused_loop/contracts.py",
+    "src/qcoder/focused_loop/fixtures.py",
+    "src/qcoder/focused_loop/identities.py",
+    "src/qcoder/focused_loop/mps_floor.py",
+    "src/qcoder/focused_loop/plan.py",
+    "src/qcoder/focused_loop/privacy.py",
+    "src/qcoder/focused_loop/receipt.py",
+    "src/qcoder/focused_loop/result_protocol.py",
+    "src/qcoder/focused_loop/reuse.py"
   ],
   "allowed_package_data_filenames": [
     "src/qcoder/contracts/protected_blueprint_contract_v1.json",
@@ -164,7 +180,9 @@
     "qcoder.model_packs",
     "qcoder.pipelines",
     "qcoder.pro_preview",
-    "qcoder.tools"
+    "qcoder.tools",
+    "qcoder.executors",
+    "qcoder.focused_loop"
   ],
   "forbidden_member_classes": [
     "absolute",

@@ -6,14 +6,16 @@ separate authority, bounded executor, sibling receipt, strict-manifest join, reu
 asserts the acceptance predicates that only appear when the parts are wired together:
 P11, P12, P13, P18, P19, P20, P21, P22, P23 and P24.
 
-The executor runs through an injected fake backend. ``qiskit_aer`` is absent from this
-environment, so no real Aer execution occurs anywhere in this file.
+The executor runs through an explicitly injected fake backend in this file. That remains
+intentional Phase A compatibility evidence even when Aer is installed for the conference
+proof; real Aer execution is proven separately by the conference real-Aer test module.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
+import inspect
 from typing import Any
 
 import pytest
@@ -22,7 +24,6 @@ from qcoder.executors.aer_stabilizer_v1 import (
     AttemptLedger,
     BackendRequest,
     BackendSample,
-    ExecutorBackendUnavailable,
     InvocationCounter,
     compute_circuit_digest,
     execute_focused_plan,
@@ -543,23 +544,11 @@ def test_model_and_protected_projections_withhold_raw_evidence(vertical: Vertica
         privacy.assert_no_prohibited_keys(projected, destination=destination)
 
 
-def test_real_aer_backend_is_absent_and_never_substituted() -> None:
-    """Phase A performed no real Aer execution; the adapter refuses instead."""
-    import importlib.util
+def test_phase_a_harness_keeps_fake_backend_explicit() -> None:
+    """Phase A's historical composition proof remains explicitly fake-backed.
 
-    assert importlib.util.find_spec("qiskit_aer") is None
-    request = BackendRequest(
-        qasm_text='OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[1];\ncreg c[1];\n',
-        method_id=ids.METHOD_STABILIZER,
-        shots=ids.FIXED_SHOTS,
-        noise="none",
-        seed=None,
-        max_wall_seconds=5.0,
-        max_memory_bytes=2 * 1024**3,
-        cancellation=None,
-    )
-    from qcoder.executors.aer_stabilizer_v1 import aer_stabilizer_backend
-
-    with pytest.raises(ExecutorBackendUnavailable) as caught:
-        aer_stabilizer_backend(request)
-    assert caught.value.category == "executor_backend_unavailable"
+    Aer availability in the conference environment must not retroactively turn this
+    file into real-execution evidence.
+    """
+    source = inspect.getsource(Vertical.execute)
+    assert "backend_factory=_fake_backend(counts) if backend is None else backend" in source
