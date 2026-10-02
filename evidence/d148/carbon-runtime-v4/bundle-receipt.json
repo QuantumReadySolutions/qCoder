@@ -1,0 +1,25 @@
+{
+  "schema": "d148.carbon_correction_bundle_receipt.v1",
+  "name": "d148-dev7-carbon-correction.tar.gz",
+  "bytes": 1393178,
+  "sha256": "9d0dd0c9715b7a92953738d043f678856182cd5740879cdc2ae6a73d0b89fdd1",
+  "members": [
+    "d148-dev7-carbon-correction/CARBON-UPDATE.txt",
+    "d148-dev7-carbon-correction/SHA256SUMS",
+    "d148-dev7-carbon-correction/dependencies.lock.txt",
+    "d148-dev7-carbon-correction/frozen/baseline-checkpoint.json",
+    "d148-dev7-carbon-correction/frozen/candidate-checkpoint.json",
+    "d148-dev7-carbon-correction/manifest.json",
+    "d148-dev7-carbon-correction/qcoder-0.6.0a24.post0.dev7+iqt.d148.runtime.v4-py3-none-any.whl",
+    "d148-dev7-carbon-correction/qcoder-0.6.0a24.post0.dev7+iqt.d148.runtime.v4.tar.gz",
+    "d148-dev7-carbon-correction/reseal-proof.json",
+    "d148-dev7-carbon-correction/verify-update.py"
+  ],
+  "payload_verified": true,
+  "manifest_sha256": "74b606637d1eb0369761c253362eef39ced8dead33338f646cbd4c9ed5d0e93e",
+  "checksums_sha256": "bfe9ffa04bbe0a3437791c6dfb554ff65d12ed210213a86662c89778d74c18a6",
+  "contains_dependency_wheels": false,
+  "contains_authority_result_or_database": false,
+  "new_canonical_science": 0,
+  "carbon_installation": "pending; locally clean-installed and update-sequence proven"
+}

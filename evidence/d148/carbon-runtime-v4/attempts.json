@@ -1,0 +1,9 @@
+[
+  {
+    "operation": "installed Carbon verifier first run",
+    "outcome": "failed safely before checkpoint verification or state mutation",
+    "reason": "verifier excluded pip while exact 99-distribution lock includes pip==24.3.1; observed count was 98",
+    "correction": "include pip in full lock comparison; production scientific and execution runtime exclusions unchanged",
+    "new_canonical_science": 0
+  }
+]

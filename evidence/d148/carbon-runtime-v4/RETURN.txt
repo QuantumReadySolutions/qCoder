@@ -1,0 +1,73 @@
+D148_CARBON_RUNTIME_PORTABILITY_CORRECTED__MINIMAL_UPDATE_READY__NO_NEW_SCIENCE
+
+Branch: conference/iqt-2026-ml-research-successor-v1
+Basis HEAD: 3a54fc6502b183374853f59cfc3c6bd588c44202
+Basis tree: a770619d23ad65916f73425efeca752a705e3495
+Artifact source HEAD: c428cb972386c183610c8f90adb1c2c598718156
+Artifact source tree: ff4316da5f351c6f3e4ad406565c95e63652a5f5
+Artifact source parent: 3a54fc6502b183374853f59cfc3c6bd588c44202
+Final evidence HEAD/tree/parent are returned in the handoff; this file cannot contain its own Git commit.
+
+Runtime correction: d148.scientific_runtime.v2 -> d148.scientific_runtime.v3.
+The only removed field is platform, formerly platform.platform():
+Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.35.
+The composite OS/kernel/libc display string belongs to exact execution provenance, not the portable training contract. No replacement heuristic or mismatch exception is used. Retained fields are Python 3.12.9, cpython, machine x86_64, all 37 exact scientific dependency-closure versions, the seven exact scientific root pins, CPU, float64, one Torch thread and deterministic algorithms true. The numerical execution policy remains enforced by unchanged model code. The opaque platform field is removed as a whole; this is not a general qualification claim for arbitrary OS/ABI combinations.
+Full d148.runtime.v1 remains byte-for-byte unchanged and records the actual local platform, machine, Python and full dependency environment. Plan identities/currentness still require exact equality; a kernel change stales an existing plan before authority or scientific entry.
+Checkpoint validation is unchanged and continues strict full equality. Old checkpoints remain stale; only the explicit bounded reseal creates fresh provenance. The scientific source identity changes truthfully because runtime.py is itself covered. Models, fixture, training, contracts, execution/approval, CLI, tracker, and canonical primitive bytes are unchanged.
+Old scientific-runtime digest: de68c03c467346b9ae62a354b63169e18df78afb6097145449736dff1f4518af
+New scientific-runtime digest: 6f1cd1664f02b3baaa9eff522a5fbabd9e0323a024a11e57a9d0f64cf13027c9
+Old scientific-code digest: e0e569030e7559f7e48070011fdc3a07a2c5f2d0901dcab012070b858575fdf2
+New scientific-code digest: 1442839f37306983280c95fdca9fb0a0bd86b8ca77ff0a32ad806cd86ea3398f
+
+Reseal compatibility: PASS. scripts/d148_reseal_v4.py binds committed v3 inputs and all prior source files. It compares the entire runtime module AST after only the declared schema, field-removal and docstring edits. The old scientific profile projected into v3 exactly equals the installed profile. Every nonprovenance field has identical canonical JSON bytes. No training, reconstruction, inference, evaluation or MLflow operation is invoked by the reseal. Complete proofs and file SHA-256 values are in reseal-proof.json.
+
+baseline:
+  old checkpoint digest: 821199f89772f3614462401a6ec0b8820c3c67cbaf175118662f98e62eba67ff
+  new checkpoint digest: d356e509f56b1376fb3a4bc5053d1153dfd999c23d387f73b6c129a49b2268b7
+  numeric state SHA-256, old = new: 652f9f41b1474b697bf781e279912d9cca3786e7fc77d053043d87811d4eb268
+  complete history SHA-256, old = new: bb1f7bd7cb35e9a7e148135f7f4c531623ebab78dc4c33b14eae01d906700a1e
+  history: 80 epochs; selected epoch: 80; validation BCE: 0.21865491103578596
+
+candidate:
+  old checkpoint digest: 2b6a5e672af2f7d1312289cef02079e6962a15d708e6253e4e993e33fdd870db
+  new checkpoint digest: c1cc3ea694effd2601a549bf37dee290970f6d280c92b9910cd52e66f4316c26
+  numeric state SHA-256, old = new: 500fa4637e1b092c6c1352f89bded3943948f98e99be847abbc43de3f3afb3d1
+  complete history SHA-256, old = new: 2cac24ebcb1c89cadc737aeb9f7a556d693a86920d93364724dc2f9bc026405a
+  history: 80 epochs; selected epoch: 80; validation BCE: 0.28894970554781835
+
+Fixture, train/validation/test partitions, preprocessing, recipes, seeds and all history/numeric bytes are preserved. Prior dev6 files are never overwritten.
+
+Artifacts (unpublished; built from Git archive with pinned build tools and SOURCE_DATE_EPOCH=1790870400; canonical sdist normalizer):
+qcoder-0.6.0a24.post0.dev7+iqt.d148.runtime.v4-py3-none-any.whl
+  bytes: 726703
+  SHA-256: 0d7e4e1b3870fefaa0a84e81022403bca550f6eb9fb48408c11cde55c9c9f9e1
+qcoder-0.6.0a24.post0.dev7+iqt.d148.runtime.v4.tar.gz
+  bytes: 664503
+  SHA-256: 662abea88b866fb396488fbfd9a1c39912e6bc4000125075b15c24bcfc6eb807
+d148-dev7-carbon-correction.tar.gz
+  bytes: 1393178
+  SHA-256: 9d0dd0c9715b7a92953738d043f678856182cd5740879cdc2ae6a73d0b89fdd1
+
+Minimal bundle location: artifacts/d148/carbon-correction-v4/d148-dev7-carbon-correction.tar.gz
+Transfer copy: /home/rob/projects/qcoder-iqt-2026-ml-successor-v1-transfer/d148-dev7-carbon-correction.tar.gz
+Exactly 10 files: wheel, preservation sdist, two resealed checkpoints, reseal proof, unchanged dependency lock, read-only verifier, short update instructions, manifest and SHA256SUMS. No dependency wheelhouse, Precision approval, entry, plan, result, consumed authority or mutable MLflow database. The existing five fixture/recipe inputs are reused only after exact hash verification.
+
+Validation:
+- Focused portability matrix: 12 passed in 12.05s.
+- Appropriate full source suite: 191 passed, 19 existing forkpty deprecation warnings, 121.36s.
+- Clean-installed scientific/authority/identity/portability suite: 81 passed, same 19 warnings, 118.42s; cwd /tmp, isolated interpreter, no repository config. All 19 real PTY cases pass.
+- Package proof: 156 payload files exactly equal across Git archive/source, wheel, canonical sdist and installed site-packages. Wheel RECORD, exact archive allowlist and package isolation pass. Lazy imports pass.
+- Fresh venv: /tmp/d148-installed-proof-v4/venv; offline exact lock install, then wheel --no-deps; pip check passes. All 99 locked distributions including pip match exactly (100 including qCoder).
+- Offline dev6 -> dev7 sequence subsequently proven in that isolated environment: dev6 preflight_pass, qCoder-only update, dev7 installed_update_pass, all payload and checkpoint checks pass; final pip check passes.
+- Matrix proves kernel-only checkpoint portability, Python/architecture/root-and-transitive dependency invalidation, implementation/device/dtype/thread/determinism mismatch refusal, stale old-schema refusal, and exact execution-plan currentness. Existing synthetic real-model/MLflow tests preserve authority, no-retry, result reuse, assessment delivery-only retry, duplicate delivery and read-back checks.
+- Local update verifier initial failure: excluded pip although lock includes it; corrected in transfer-only script. Production runtime semantics untouched; failed check recorded in attempts.json. Final verifier is SHA-sealed in bundle. This script-only correction is in the later evidence commit; packaged bytes remain exactly those from artifact-source HEAD.
+
+Commands:
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q tests/ml_research tests/test_release_version_consistency.py tests/test_focused_loop_contracts_v1.py tests/test_focused_loop_package_isolation_v1.py tests/test_public_package_metadata.py
+cd /tmp; /tmp/d148-installed-proof-v4/venv/bin/python -I -B -m pytest -q -c /dev/null /tmp/d148-installed-proof-v4/tests
+
+Preservation: all 254 prior evidence/artifact/state files match pre-correction SHA-256 values, including dev6, the full prior Carbon packet, and Precision canonical state. No canonical workspace command was run. Historical Precision remains candidate 37/40 vs baseline 37/40, delta 0.0; it is not asserted current under dev7. No new canonical science, training, MLflow record, plan, approval, entry, result or refinement was created. Automated scientific evaluation and tracker records occurred only on isolated synthetic test data.
+D-147 ref remains 6eb17cbc68752cf0ed4d29b0d67e4544d6efd8f8; fallback wheel SHA-256 remains 73f9c7d0f8e396338a62cfb964df0244a179c5cf4352d5773f0da95b0ac5138c. Tactical_38/WI-0441 untouched.
+Blockers for this correction: none. Actual Carbon update and natural-client acceptance remain unperformed by this worker; bundle is ready. No new campaign authorization is requested.
+
+Exact changed paths from supplied evidence HEAD are in changed-files.txt.

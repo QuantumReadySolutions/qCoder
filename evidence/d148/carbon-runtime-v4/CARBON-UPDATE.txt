@@ -1,0 +1,60 @@
+D-148 Carbon dev6 -> dev7 contained runtime correction
+
+Unpublished version: 0.6.0a24.post0.dev7+iqt.d148.runtime.v4
+Artifact source: c428cb972386c183610c8f90adb1c2c598718156
+Tree: ff4316da5f351c6f3e4ad406565c95e63652a5f5
+Parent: 3a54fc6502b183374853f59cfc3c6bd588c44202
+
+Use the already installed Carbon Python 3.12.9 successor venv. Keep the
+existing dev6 packet and old frozen inputs intact. This bundle contains no
+dependency wheels: the same exact 99-distribution dependency lock is required.
+The two newly sealed checkpoints preserve all numeric/history bytes. Only
+scientific provenance changes; no training or evaluation is part of this update.
+
+1. Verify the archive SHA-256 against its supplied receipt before extraction
+   into a new directory. From the extracted d148-dev7-carbon-correction directory:
+
+   sha256sum -c SHA256SUMS
+
+2. Set these absolute paths for your Carbon installation (do not use Precision
+   paths). OLD_FROZEN is the frozen-inputs directory from your original dev6
+   packet, containing fixture.json, train.json, validation.json, test.json,
+   and recipes.json. CARBON_PYTHON is your existing dev6 venv's bin/python.
+
+   export CARBON_PYTHON=/absolute/path/to/carbon-successor-venv/bin/python
+   export OLD_FROZEN=/absolute/path/to/dev6-packet/frozen-inputs
+   export CORRECTION="$PWD"
+
+   "$CARBON_PYTHON" -I -B "$CORRECTION/verify-update.py" --bundle "$CORRECTION" --frozen "$OLD_FROZEN" --preflight
+
+   Require preflight_pass. This checks exact dependencies and all preserved
+   fixture/recipe hashes, permitting only the declared platform-field removal.
+   Any other mismatch is a blocker; do not install around it or retrain.
+
+3. Replace only qCoder in this successor venv; dependency resolution is disabled:
+
+   uv pip install --python "$CARBON_PYTHON" --no-index --no-deps "$CORRECTION/qcoder-0.6.0a24.post0.dev7+iqt.d148.runtime.v4-py3-none-any.whl"
+   uv pip check --python "$CARBON_PYTHON"
+   "$CARBON_PYTHON" -I -B "$CORRECTION/verify-update.py" --bundle "$CORRECTION" --frozen "$OLD_FROZEN"
+
+   Require installed_update_pass. Save its stdout as the Carbon runtime receipt.
+   It verifies all 156 installed package payload files against the wheel, the
+   exact 99 dependencies, fixture hashes, corrected runtime and both checkpoints.
+   It records the actual Carbon execution platform separately. pip users may
+   substitute "$CARBON_PYTHON" -I -B -m pip install --no-index --no-deps WHEEL
+   and "$CARBON_PYTHON" -I -B -m pip check for the two uv commands.
+
+4. Stage inputs in a NEW directory; mkdir must fail if the destination exists:
+
+   export NEW_FROZEN=/absolute/path/to/carbon-frozen-v4
+   mkdir "$NEW_FROZEN"
+   for name in fixture train validation test recipes; do cp "$OLD_FROZEN/$name.json" "$NEW_FROZEN/"; done
+   cp "$CORRECTION/frozen/"*-checkpoint.json "$NEW_FROZEN/"
+
+Stop here for this correction handoff. These commands create no MLflow source
+record, plan, approval, entry or result, and execute no scientific job. Later
+Phase E preparation must create Carbon-local tracker records and a fresh exact
+plan using the v4 checkpoints and actual Carbon runtime. Existing Precision
+37/40 vs 37/40 remains historical Precision evidence; it is not a Carbon result.
+No Precision authority, result or mutable database is included or transferable.
+Do not modify D-147 or Tactical_38/WI-0441. The sdist is preservation-only.

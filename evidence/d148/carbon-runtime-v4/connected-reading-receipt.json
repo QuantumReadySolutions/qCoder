@@ -1,0 +1,18 @@
+{
+  "repository": "QuantumReadySolutions/qcoder-internal",
+  "branch": "ops/tactical-conference-1-continuity-20260920",
+  "reads": [
+    {
+      "path": "docs/private-notes/tactical-conference-coordination/iqt-2026-d148-carbon-scientific-runtime-portability-defect-20261002.md",
+      "ref": "131b95a90a3f2c18752be0aa22bd599584bc72ef",
+      "blob": "bc5734174c927aba44d87b275ddf8f8de8980b3f"
+    },
+    {
+      "path": "docs/continuity/current/TACTICAL_CONFERENCE.md",
+      "ref": "ops/tactical-conference-1-continuity-20260920",
+      "blob": "8f8c7e375425dddc234a21e51c3567aa5f7b6149"
+    }
+  ],
+  "mechanism": "connected GitHub fetch_file",
+  "new_authorization_requested": false
+}

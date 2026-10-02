@@ -1,0 +1,58 @@
+{
+  "schema": "d148.carbon_minimal_update.v1",
+  "version": "0.6.0a24.post0.dev7+iqt.d148.runtime.v4",
+  "artifact_source_head": "c428cb972386c183610c8f90adb1c2c598718156",
+  "artifact_source_tree": "ff4316da5f351c6f3e4ad406565c95e63652a5f5",
+  "basis_commit": "3a54fc6502b183374853f59cfc3c6bd588c44202",
+  "requires_existing_fixture_hashes": {
+    "fixture.json": "4383d24248a74755909dec0039ad76c62fbbdf646804f4d03a93b8965bf217b6",
+    "recipes.json": "cb784495843f4c61b0a321a020f89477e2398c55de3b21259be75d708c2ef79a",
+    "test.json": "b7db1000286d88e96448b56ef35933f56ee2db1eebdf33e59383b8c1d67ddc46",
+    "train.json": "819a590e1b26db9b10bb13a959ed68b908332004fad3510130f136a9e4d844ce",
+    "validation.json": "a97746162c446505c3e4d5dafd3afa1f413cdb1ab2f24bfb4148932ee1062295"
+  },
+  "new_canonical_science": 0,
+  "contains_authority_result_or_database": false,
+  "members": [
+    {
+      "path": "CARBON-UPDATE.txt",
+      "bytes": 3378,
+      "sha256": "f2016978f4cefc89a3e46da9732531d602c749c9e66f0bad60905e88c0c8b9f3"
+    },
+    {
+      "path": "dependencies.lock.txt",
+      "bytes": 1751,
+      "sha256": "030734f988a6cc989a2b8c4719b7bd20ee88061a8414f441829df361a5c96d27"
+    },
+    {
+      "path": "frozen/baseline-checkpoint.json",
+      "bytes": 9781,
+      "sha256": "e3a762010c9b06f201dd2dc0b15cc2ae1bee48b7bd85f0351d7d77856ba2b45c"
+    },
+    {
+      "path": "frozen/candidate-checkpoint.json",
+      "bytes": 9962,
+      "sha256": "ac90930beef212f32d76fe89a04cfa86ffeb9e2a0ddb8201fc1ad902b9c46878"
+    },
+    {
+      "path": "qcoder-0.6.0a24.post0.dev7+iqt.d148.runtime.v4-py3-none-any.whl",
+      "bytes": 726703,
+      "sha256": "0d7e4e1b3870fefaa0a84e81022403bca550f6eb9fb48408c11cde55c9c9f9e1"
+    },
+    {
+      "path": "qcoder-0.6.0a24.post0.dev7+iqt.d148.runtime.v4.tar.gz",
+      "bytes": 664503,
+      "sha256": "662abea88b866fb396488fbfd9a1c39912e6bc4000125075b15c24bcfc6eb807"
+    },
+    {
+      "path": "reseal-proof.json",
+      "bytes": 6724,
+      "sha256": "60fab70fd3495dd7cf5d273a79e5b63400d98c4a13deb3b45c5288a8c41cc422"
+    },
+    {
+      "path": "verify-update.py",
+      "bytes": 3634,
+      "sha256": "fb371d726ad2a3fc35d41145ce4894c51e797c13a98f7fbd230c1186aea47d40"
+    }
+  ]
+}

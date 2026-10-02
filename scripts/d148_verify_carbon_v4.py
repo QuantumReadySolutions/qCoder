@@ -35,7 +35,7 @@ def main():
             name, version = line.split("==")
             expected_dependencies[name.lower().replace("_", "-")] = version
     observed = {d.metadata["Name"].lower().replace("_", "-"): d.version for d in distributions()
-                if d.metadata["Name"].lower() not in {"qcoder", "pip"}}
+                if d.metadata["Name"].lower() != "qcoder"}
     assert len(expected_dependencies) == 99 and observed == expected_dependencies, "dependency lock mismatch"
     assert "site-packages" in str(Path(qcoder.__file__).resolve()), "installed package required"
     if args.preflight:
