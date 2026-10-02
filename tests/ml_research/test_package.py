@@ -31,7 +31,7 @@ def test_source_package_inventory_and_version():
     assert report['member_count'] == len(module.expected_source_payload(module.load_allowlist()))
     p=tomllib.loads((ROOT/'pyproject.toml').read_text())
     d=json.loads((ROOT/'development-version.json').read_text())
-    assert p['project']['version']==d['version']=='0.6.0a24.post0.dev5+iqt.d148.ml.tty.v2'
+    assert p['project']['version']==d['version']=='0.6.0a24.post0.dev6+iqt.d148.human.v3'
     assert d['publication_permitted'] is False
     assert all('==' in pin for pin in p['project']['optional-dependencies']['ml-research'])
 

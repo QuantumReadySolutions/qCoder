@@ -51,7 +51,7 @@ def prepared(tmp_path):
 
 def approval_seam(root, plan, **updates):
     # Only test code can mint this seam. Production CLI requires real terminal input.
-    record = seal({"schema": "d148.approval.v1", "origin": "local_foreground_tty_user", "plan_digest": plan["digest"], "attempt_id": plan["attempt_id"], "challenge": plan["challenge"], "approved_at": now(), "uid": os.getuid(), "tty": "/dev/test-seam", "confirmation_digest": canonical_digest("APPROVE " + plan["digest"] + " " + plan["challenge"]), **updates})
+    record = seal({"schema": "d148.approval.v2", "origin": "local_foreground_tty_user", "plan_digest": plan["digest"], "job_id": plan["job_id"], "attempt_id": plan["attempt_id"], "event_nonce": "a"*32, "approval_surface_digest": plan["identities"]["approval_surface"]["digest"], "displayed_summary_digest": canonical_digest(job._approval_summary(plan)), "decision": "approve", "approved_at": now(), "uid": os.getuid(), "tty": "/dev/test-seam", "confirmation_digest": canonical_digest("y"), **updates})
     write_new(root / "approval.json", record)
 
 
@@ -254,7 +254,7 @@ def test_lazy_import():
     result = subprocess.run([sys.executable, "-c", "import qcoder, qcoder.ml_research; import sys; assert not any(n in sys.modules for n in ('torch','pennylane','mlflow'))"], env=env, capture_output=True)
     assert result.returncode == 0, result.stderr
 
-@pytest.mark.parametrize("answer", ["exact", "fragmented", "generic", "digest_only", "wrong_challenge", "oversized", "eof", "changed_plan"])
+@pytest.mark.parametrize("answer", ["exact", "fragmented", "default", "n", "prose", "generic", "digest_only", "assistant_token", "oversized", "eof", "changed_plan", "changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "environment_file", "repeated", "run_without_approval"])
 def test_real_nonseekable_tty_approval(prepared, answer):
     """Real controlling PTY; automated test-only input, never canonical authority."""
     import errno
@@ -291,10 +291,26 @@ else:
 from qcoder.ml_research.__main__ import main
 main()
 """
+    if answer == "changed_before":
+        replace(root / "plan.json", reseal(plan, shots=598))
+    elif answer == "stale":
+        value = read(root / "candidate-checkpoint.json")
+        replace(root / "candidate-checkpoint.json", reseal(value, changed=True))
+    elif answer == "repeated":
+        approval_seam(root, plan)
+    elif answer in ("outside_assent", "environment_file"):
+        (root / "chat.txt").write_text("Okay, go ahead.")
+        (root / "approved").write_text("approved")
+    if answer == "redirected":
+        script = script.replace("from qcoder.ml_research.__main__", "r, w = os.pipe(); os.write(w, b'y\\n'); os.close(w); os.dup2(r, 0); os.close(r)\nfrom qcoder.ml_research.__main__")
+    if answer == "environment_file":
+        script = script.replace("from qcoder.ml_research.__main__", "os.environ['QCODER_APPROVED'] = 'y'; os.environ['APPROVAL_DIGEST'] = '" + plan["digest"] + "'\nfrom qcoder.ml_research.__main__")
+    command = "run" if answer in ("outside_assent", "run_without_approval") else "approve"
+    extra = ["--digest", plan["digest"]] if answer == "assistant_flag" else []
     pid, master = pty.fork()
     if pid == 0:
         os.execv(sys.executable, [sys.executable, "-I", "-c", script,
-                 str(Path(job.__file__).resolve().parents[2]), "--workspace", str(root), "approve"])
+                 str(Path(job.__file__).resolve().parents[2]), "--workspace", str(root), command, *extra])
     output = bytearray()
     sent = False
     status = None
@@ -312,17 +328,17 @@ main()
                 if not part:
                     break
                 output.extend(part)
-                if not sent and b"\n> " in output:
-                    exact = "APPROVE " + plan["digest"] + " " + plan["challenge"]
+                if not sent and b"[y/N] " in output:
                     if answer == "changed_plan":
                         replace(root / "plan.json", reseal(plan, challenge="0" * 32))
-                    response = {"generic": "Okay, go ahead.", "digest_only": plan["digest"],
-                                "wrong_challenge": "APPROVE " + plan["digest"] + " wrong",
-                                "oversized": "x" * 300}.get(answer, exact)
+                    response = {"default": "", "n": "n", "prose": "please approve",
+                                "generic": "Okay, go ahead.", "digest_only": plan["digest"],
+                                "assistant_token": "APPROVE " + plan["digest"] + " " + plan["challenge"],
+                                "environment_file": "", "oversized": "x" * 300}.get(answer, "y")
                     raw = b"\x04" if answer == "eof" else (response + "\n").encode()
                     if answer == "fragmented":
-                        os.write(master, raw[:17])
-                        os.write(master, raw[17:])
+                        os.write(master, raw[:1])
+                        os.write(master, raw[1:])
                     else:
                         os.write(master, raw)
                     sent = True
@@ -342,18 +358,20 @@ main()
             os.kill(pid, signal.SIGKILL)
             os.waitpid(pid, 0)
     assert b"OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY" in output
-    assert sent
+    assert sent == (answer not in ("changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "repeated", "run_without_approval"))
     if answer in ("exact", "fragmented"):
         assert os.waitstatus_to_exitcode(status) == 0, output.decode(errors="replace")
         record = job.valid_approval(root, plan)
         assert record["origin"] == "local_foreground_tty_user"
-        assert record["confirmation_digest"] == canonical_digest("APPROVE " + plan["digest"] + " " + plan["challenge"])
+        assert record["confirmation_digest"] == canonical_digest("y")
+        for text in ("40 held-out", "no automatic retry", "No training or retraining", "default.qubit", "shots not applicable", "exactly one research-job attempt", plan["selected"]["candidate"]["run_id"], plan["selected"]["baseline"]["run_id"]):
+            assert text.encode() in output
         # A second ceremony is refused by production code before any input.
         with pytest.raises(Refusal, match="approval_already_exists"):
             job.approve(root)
     else:
         assert os.waitstatus_to_exitcode(status) != 0, output.decode(errors="replace")
-        assert not (root / "approval.json").exists()
+        assert (root / "approval.json").exists() == (answer == "repeated")
     assert all(not (root / name).exists() for name in ("entered.json", "receipt.json", "result.json"))
 
 

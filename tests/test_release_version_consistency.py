@@ -24,7 +24,7 @@ def _verifier():
 
 def test_private_development_identity_preserves_public_a24_release_truth() -> None:
     verifier = _verifier()
-    development_version = "0.6.0a24.post0.dev5+iqt.d148.ml.tty.v2"
+    development_version = "0.6.0a24.post0.dev6+iqt.d148.human.v3"
     assert __version__ == development_version
     assert verifier.source_versions(ROOT) == {
         "pyproject": development_version,

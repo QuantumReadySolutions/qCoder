@@ -11,7 +11,7 @@ from . import FAMILY
 from .contracts import checked, file_digest, locked, metric, now, read, reference_metric, require, seal, write_new, conclusion
 from .fixture import manifest, partition, selection_data, standardized
 from .models import ARCHITECTURES, reconstruct, validate_checkpoint
-from .runtime import code_identity, runtime
+from .runtime import approval_identity, code_identity, runtime, scientific_identity, scientific_runtime
 from . import tracker
 
 INPUT_FILES = ("fixture.json", "train.json", "validation.json", "test.json", "recipes.json", "candidate-checkpoint.json", "baseline-checkpoint.json", "candidate-run.json", "baseline-run.json")
@@ -32,7 +32,7 @@ def identities(root):
         for index, row, label in zip(record["ids"], record["features"], record["labels"], strict=True):
             features[index], labels[index] = row, label
     require(canonical_digest(features) == fixture["data_digest"] and canonical_digest(labels) == fixture["labels_digest"], "dataset_digest")
-    return {"fixture_digest": fixture["digest"], "data_digest": fixture["data_digest"], "labels_digest": fixture["labels_digest"], "split_digest": fixture["split_digest"], "preprocessing_digest": fixture["preprocessing"]["digest"], "file_sha256": {name: file_digest(Path(root) / name) for name in INPUT_FILES}, "code": code_identity(), "runtime": runtime()}
+    return {"fixture_digest": fixture["digest"], "data_digest": fixture["data_digest"], "labels_digest": fixture["labels_digest"], "split_digest": fixture["split_digest"], "preprocessing_digest": fixture["preprocessing"]["digest"], "file_sha256": {name: file_digest(Path(root) / name) for name in INPUT_FILES}, "execution_code": code_identity(), "runtime": runtime(), "scientific_code": scientific_identity(), "scientific_runtime": scientific_runtime(), "approval_surface": approval_identity()}
 
 
 def prepare(root, candidate_id, baseline_id):
@@ -41,7 +41,7 @@ def prepare(root, candidate_id, baseline_id):
         selected = tracker.selected(root, candidate_id, baseline_id)
         inputs = identities(root)
         output = tracker.reserve_assessment(root)
-        plan = seal({"schema": "d148.plan.v1", "family": FAMILY, "job_id": uuid.uuid4().hex, "attempt_id": uuid.uuid4().hex, "challenge": uuid.uuid4().hex, "created_at": now(), "selected": selected, "identities": inputs, "architecture": ARCHITECTURES, "evaluator": "qcoder.ml_research.job.evaluate/v1", "protocol": PROTOCOL, "device": "default.qubit", "method": "analytic-statevector", "shots": None, "budget": {"timeout_seconds": 60, "research_jobs": 1, "candidate_model_invocations": 40, "baseline_model_invocations": 40, "qnode_invocations": 40}, "tracker": tracker.configuration(root), "assessment_run_id": output})
+        plan = seal({"schema": "d148.plan.v2", "family": FAMILY, "job_id": uuid.uuid4().hex, "attempt_id": uuid.uuid4().hex, "challenge": uuid.uuid4().hex, "created_at": now(), "selected": selected, "identities": inputs, "architecture": ARCHITECTURES, "evaluator": "qcoder.ml_research.job.evaluate/v1", "protocol": PROTOCOL, "device": "default.qubit", "method": "analytic-statevector", "shots": None, "budget": {"timeout_seconds": 60, "research_jobs": 1, "candidate_model_invocations": 40, "baseline_model_invocations": 40, "qnode_invocations": 40}, "tracker": tracker.configuration(root), "assessment_run_id": output})
         write_new(root / "plan.json", plan)
         return plan
 
@@ -49,7 +49,7 @@ def prepare(root, candidate_id, baseline_id):
 def current(root):
     root = Path(root)
     plan = read(root / "plan.json")
-    checked(plan, "d148.plan.v1", ["family", "job_id", "attempt_id", "challenge", "created_at", "selected", "identities", "architecture", "evaluator", "protocol", "device", "method", "shots", "budget", "tracker", "assessment_run_id"])
+    checked(plan, "d148.plan.v2", ["family", "job_id", "attempt_id", "challenge", "created_at", "selected", "identities", "architecture", "evaluator", "protocol", "device", "method", "shots", "budget", "tracker", "assessment_run_id"])
     require(plan["family"] == FAMILY and plan["architecture"] == ARCHITECTURES and plan["protocol"] == PROTOCOL, "plan_science")
     require(plan["shots"] is None and plan["device"] == "default.qubit" and plan["method"] == "analytic-statevector" and plan["evaluator"] == "qcoder.ml_research.job.evaluate/v1", "plan_evaluator")
     require(plan["budget"] == {"timeout_seconds": 60, "research_jobs": 1, "candidate_model_invocations": 40, "baseline_model_invocations": 40, "qnode_invocations": 40}, "plan_budget")
@@ -59,6 +59,23 @@ def current(root):
     require(plan["assessment_run_id"] == read(root / "assessment-run.json")["run_id"], "assessment_id_changed")
     tracker.exact_run(root, plan["assessment_run_id"])
     return plan
+
+
+def _approval_summary(plan):
+    """Consequences come only from a fully validated, exact current plan."""
+    return (
+        "D-148 frozen-model research evaluation\n"
+        "Candidate: frozen two-qubit PennyLane hybrid classifier (two entangling layers).\n"
+        "Baseline: frozen classical 2-4-1 ReLU classifier.\n"
+        "Candidate MLflow source: " + plan["selected"]["candidate"]["run_id"] + "\n"
+        "Baseline MLflow source: " + plan["selected"]["baseline"]["run_id"] + "\n"
+        "Evaluate both on the same 40 held-out examples.\n"
+        "Local analytic default.qubit; shots not applicable. No training or retraining.\n"
+        "Authorize exactly one research-job attempt; no automatic retry.\n"
+        "After successful science: local MLflow assessment delivery/read-back.\n"
+        "Plan audit digest: " + plan["digest"] + "\n"
+        "Approve this exact displayed research job? [y/N] "
+    )
 
 
 def approve(root):
@@ -79,8 +96,7 @@ def approve(root):
         try:
             require(stat.S_ISCHR(os.fstat(fd).st_mode) and os.isatty(fd), "character_tty_required")
             require(os.tcgetpgrp(fd) == os.getpgrp(), "foreground_tty_required")
-            prompt = "APPROVE " + plan["digest"] + " " + plan["challenge"]
-            message = ("D-148: authorize ONE held-out research job (40 examples/model).\nPlan: " + plan["digest"] + "\nAttempt: " + plan["attempt_id"] + "\nType this exact line yourself:\n" + prompt + "\n> ").encode("ascii")
+            message = _approval_summary(plan).encode("ascii")
             require(len(message) <= 2048, "approval_prompt_too_large")
             offset = 0
             while offset < len(message):
@@ -96,10 +112,10 @@ def approve(root):
                 response.extend(part)
             else:
                 require(False, "approval_input_too_large")
-            require(response == prompt.encode("ascii"), "exact_user_confirmation_required")
+            require(bytes(response) in (b"y", b"Y"), "deliberate_tty_affirmative_required")
             require(os.tcgetpgrp(fd) == os.getpgrp(), "foreground_tty_required")
             require(current(root) == plan, "plan_changed_during_approval")
-            record = seal({"schema": "d148.approval.v1", "origin": "local_foreground_tty_user", "plan_digest": plan["digest"], "attempt_id": plan["attempt_id"], "challenge": plan["challenge"], "approved_at": now(), "uid": os.getuid(), "tty": os.ttyname(fd), "confirmation_digest": canonical_digest(response.decode("ascii"))})
+            record = seal({"schema": "d148.approval.v2", "origin": "local_foreground_tty_user", "plan_digest": plan["digest"], "job_id": plan["job_id"], "attempt_id": plan["attempt_id"], "event_nonce": uuid.uuid4().hex, "approval_surface_digest": plan["identities"]["approval_surface"]["digest"], "displayed_summary_digest": canonical_digest(_approval_summary(plan)), "decision": "approve", "approved_at": now(), "uid": os.getuid(), "tty": os.ttyname(fd), "confirmation_digest": canonical_digest(response.decode("ascii"))})
             write_new(root / "approval.json", record)
             return record
         finally:
@@ -108,14 +124,17 @@ def approve(root):
 
 def valid_approval(root, plan, *, completed=False):
     approval = read(Path(root) / "approval.json")
-    checked(approval, "d148.approval.v1", ["origin", "plan_digest", "attempt_id", "challenge", "approved_at", "uid", "tty", "confirmation_digest"])
+    checked(approval, "d148.approval.v2", ["origin", "plan_digest", "job_id", "attempt_id", "event_nonce", "approval_surface_digest", "displayed_summary_digest", "decision", "approved_at", "uid", "tty", "confirmation_digest"])
     require(approval["origin"] == "local_foreground_tty_user" and approval["uid"] == os.getuid(), "user_origin_required")
-    require(approval["plan_digest"] == plan["digest"] and approval["attempt_id"] == plan["attempt_id"] and approval["challenge"] == plan["challenge"], "approval_stale")
+    require(approval["plan_digest"] == plan["digest"] and approval["attempt_id"] == plan["attempt_id"] and approval["job_id"] == plan["job_id"], "approval_stale")
     require(isinstance(approval["tty"], str) and approval["tty"].startswith("/dev/"), "approval_tty")
     require(type(approval["approved_at"]) in (float, int) and plan["created_at"] <= approval["approved_at"] <= now(), "approval_time")
     if not completed:
         require(now() - approval["approved_at"] < 86400, "approval_expired")
-    require(approval["confirmation_digest"] == canonical_digest("APPROVE " + plan["digest"] + " " + plan["challenge"]), "confirmation_mismatch")
+    require(approval["approval_surface_digest"] == approval_identity()["digest"] == plan["identities"]["approval_surface"]["digest"], "approval_implementation_stale")
+    require(approval["displayed_summary_digest"] == canonical_digest(_approval_summary(plan)), "displayed_summary_stale")
+    require(approval["decision"] == "approve" and approval["confirmation_digest"] in (canonical_digest("y"), canonical_digest("Y")), "confirmation_mismatch")
+    require(isinstance(approval["event_nonce"], str) and len(approval["event_nonce"]) == 32 and all(c in "0123456789abcdef" for c in approval["event_nonce"]), "approval_event_nonce")
     return approval
 
 

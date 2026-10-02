@@ -122,6 +122,77 @@
       "old_v_new_numeric_state_and_history_bytes_equal": true,
       "evidence": "recut-v2/deterministic-comparison.json",
       "canonical_heldout_jobs": 0
+    },
+    {
+      "stage": "v3_reseal_first_launch",
+      "result": "failed_before_preparation",
+      "reason": "Standalone source script lacked PYTHONPATH=src; import refused. Corrected source invocation; no canonical checkpoint or science created.",
+      "id": 14,
+      "canonical_heldout_jobs": 0
+    },
+    {
+      "stage": "v3_preliminary_provenance_reseal",
+      "result": "superseded_before_plan",
+      "reason": "Added explicit existing gast==0.6.0 and astunparse==1.6.3 scientific import support pins; dependency metadata closure alone omits those PennyLane import requirements.",
+      "evidence": "recut-v3/reseal-preliminary-superseded.json",
+      "preserved_workspace": "artifacts/d148/canonical-v3-preliminary",
+      "id": 15,
+      "canonical_heldout_jobs": 0
+    },
+    {
+      "stage": "v3_targeted_authority_and_PTY",
+      "result": "passed",
+      "passed": 30,
+      "deselected": 27,
+      "real_PTY_cases": 19,
+      "seconds": 86.96,
+      "id": 16,
+      "canonical_heldout_jobs": 0
+    },
+    {
+      "stage": "v3_initial_identity_domains",
+      "result": "passed",
+      "passed": 12,
+      "seconds": 5.01,
+      "id": 17,
+      "canonical_heldout_jobs": 0
+    },
+    {
+      "id": 18,
+      "stage": "v3_source_tests_during_profile_correction",
+      "result": "failed_currentness_as_designed",
+      "passed": 166,
+      "failed": 13,
+      "seconds": 80.82,
+      "reason": "Scientific dependency identity was edited while the test parent retained its earlier runtime module. Synthetic checkpoint/plan currentness refused in-flight mismatch and fresh PTY children refused stale test checkpoints. No canonical science. Rerun against the frozen corrected source required.",
+      "canonical_heldout_jobs": 0
+    },
+    {
+      "stage": "v3_frozen_source_validation",
+      "result": "passed",
+      "passed": 179,
+      "warnings": 19,
+      "seconds": 127.06,
+      "command": "PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q tests/ml_research tests/test_release_version_consistency.py tests/test_focused_loop_contracts_v1.py tests/test_focused_loop_package_isolation_v1.py tests/test_public_package_metadata.py",
+      "id": 19,
+      "canonical_heldout_jobs": 0
+    },
+    {
+      "stage": "v3_strengthened_identity_domain_validation",
+      "result": "passed",
+      "passed": 12,
+      "seconds": 6.01,
+      "id": 20,
+      "canonical_heldout_jobs": 0
+    },
+    {
+      "stage": "v3_checkpoint_reseal_and_new_inert_plan",
+      "result": "prepared_without_training_or_evaluation",
+      "evidence": "recut-v3/reseal-proof.json",
+      "numeric_states_and_histories_unchanged": true,
+      "plan_digest": "3ac1d897fded0ae589fb5a92f1ccd8ec5c70122d4d1daea90275867b1b9c1b3b",
+      "id": 21,
+      "canonical_heldout_jobs": 0
     }
   ],
   "canonical_heldout_jobs": 0

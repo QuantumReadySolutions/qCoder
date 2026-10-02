@@ -1,0 +1,1960 @@
+.................................F.FFFFFFFFFFF.....F.................... [ 40%]
+........................................................................ [ 80%]
+...................................                                      [100%]
+=================================== FAILURES ===================================
+_________ test_real_science_delivery_failure_retry_duplicate_readback __________
+
+prepared = (PosixPath('/tmp/pytest-of-rob/pytest-46/test_real_science_delivery_fai0'), {'architecture': {'baseline': {'architectu...ine_model_invocations': 40, 'candidate_model_invocations': 40, 'qnode_invocations': 40, 'research_jobs': 1, ...}, ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f0e57d46180>
+
+    def test_real_science_delivery_failure_retry_duplicate_readback(prepared, monkeypatch):
+        root, plan = prepared
+        approval_seam(root, plan)
+        response = job.run(root)  # Real native evaluation ONLY on synthetic sin/cos data.
+        result = response["result"]
+        assert not response["reused"]
+        assert result["accounting"]["qnode_invocations"] == 40
+        assert result["accounting"]["pennylane_tracker"]["simulations"] == 40
+        assert result["accounting"]["pennylane_tracker"]["executions"] == 40
+        def forbidden(*args): raise AssertionError("repeat science")
+        monkeypatch.setattr(job, "evaluate", forbidden)
+        assert job.run(root)["reused"]
+        c = tracker.client(root)
+        original = c.log_param
+        def fail(*args, **kwargs): raise RuntimeError("synthetic tracker failure")
+        monkeypatch.setattr(c, "log_param", fail)
+        monkeypatch.setattr(tracker, "client", lambda root: c)
+>       with pytest.raises(RuntimeError, match="tracker failure"): tracker.deliver(root)
+
+tests/ml_research/test_d148.py:239: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/qcoder/ml_research/tracker.py:128: in deliver
+    plan, result = verify_completed(root)
+src/qcoder/ml_research/job.py:177: in verify_completed
+    plan = current(root)
+src/qcoder/ml_research/job.py:56: in current
+    require(plan["identities"] == identities(root), "inputs_or_runtime_stale")
+src/qcoder/ml_research/job.py:24: in identities
+    validate_checkpoint(read(Path(root) / f"{role}-checkpoint.json"), role, fixture)
+src/qcoder/ml_research/models.py:65: in validate_checkpoint
+    require(record["scientific_identity"] == scientific_identity() and record["scientific_runtime"] == scientific_runtime(), "checkpoint_code_runtime")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+condition = False, reason = 'checkpoint_code_runtime'
+
+    def require(condition, reason):
+        if not condition:
+>           raise Refusal(reason)
+E           qcoder.ml_research.contracts.Refusal: checkpoint_code_runtime
+
+src/qcoder/ml_research/contracts.py:20: Refusal
+---------------------------- Captured stderr setup -----------------------------
+2026/10/02 07:45:48 INFO mlflow.store.db.utils: Creating initial MLflow database tables...
+2026/10/02 07:45:48 INFO mlflow.store.db.utils: Updating database tables
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 451aebb31d03, add metric step
+INFO  [alembic.runtime.migration] Running upgrade 451aebb31d03 -> 90e64c465722, migrate user column to tags
+INFO  [alembic.runtime.migration] Running upgrade 90e64c465722 -> 181f10493468, allow nulls for metric values
+INFO  [alembic.runtime.migration] Running upgrade 181f10493468 -> df50e92ffc5e, Add Experiment Tags Table
+INFO  [alembic.runtime.migration] Running upgrade df50e92ffc5e -> 7ac759974ad8, Update run tags with larger limit
+INFO  [alembic.runtime.migration] Running upgrade 7ac759974ad8 -> 89d4b8295536, create latest metrics table
+INFO  [89d4b8295536_create_latest_metrics_table_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 89d4b8295536 -> 2b4d017a5e9b, add model registry tables to db
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Adding registered_models and model_versions tables to database.
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 2b4d017a5e9b -> cfd24bdc0731, Update run status constraint with killed
+INFO  [alembic.runtime.migration] Running upgrade cfd24bdc0731 -> 0a8213491aaa, drop_duplicate_killed_constraint
+INFO  [alembic.runtime.migration] Running upgrade 0a8213491aaa -> 728d730b5ebd, add registered model tags table
+INFO  [alembic.runtime.migration] Running upgrade 728d730b5ebd -> 27a6a02d2cf1, add model version tags table
+INFO  [alembic.runtime.migration] Running upgrade 27a6a02d2cf1 -> 84291f40a231, add run_link to model_version
+INFO  [alembic.runtime.migration] Running upgrade 84291f40a231 -> a8c4a736bde6, allow nulls for run_id
+INFO  [alembic.runtime.migration] Running upgrade a8c4a736bde6 -> 39d1c3be5f05, add_is_nan_constraint_for_metrics_tables_if_necessary
+INFO  [alembic.runtime.migration] Running upgrade 39d1c3be5f05 -> c48cb773bb87, reset_default_value_for_is_nan_in_metrics_table_for_mysql
+INFO  [alembic.runtime.migration] Running upgrade c48cb773bb87 -> bd07f7e963c5, create index on run_uuid
+INFO  [alembic.runtime.migration] Running upgrade bd07f7e963c5 -> 0c779009ac13, add deleted_time field to runs table
+INFO  [alembic.runtime.migration] Running upgrade 0c779009ac13 -> cc1f77228345, change param value length to 500
+INFO  [alembic.runtime.migration] Running upgrade cc1f77228345 -> 97727af70f4d, Add creation_time and last_update_time to experiments table
+INFO  [alembic.runtime.migration] Running upgrade 97727af70f4d -> 3500859a5d39, Add Model Aliases table
+INFO  [alembic.runtime.migration] Running upgrade 3500859a5d39 -> 7f2a7d5fae7d, add datasets inputs input_tags tables
+INFO  [alembic.runtime.migration] Running upgrade 7f2a7d5fae7d -> 2d6e25af4d3e, increase max param val length from 500 to 8000
+INFO  [alembic.runtime.migration] Running upgrade 2d6e25af4d3e -> acf3f17fdcc7, add storage location field to model versions
+INFO  [alembic.runtime.migration] Running upgrade acf3f17fdcc7 -> 867495a8f9d4, add trace tables
+INFO  [alembic.runtime.migration] Running upgrade 867495a8f9d4 -> 5b0e9adcef9c, add cascade deletion to trace tables foreign keys
+INFO  [alembic.runtime.migration] Running upgrade 5b0e9adcef9c -> 4465047574b1, increase max dataset schema size
+INFO  [alembic.runtime.migration] Running upgrade 4465047574b1 -> f5a4f2784254, increase run tag value limit to 8000
+INFO  [alembic.runtime.migration] Running upgrade f5a4f2784254 -> 0584bdc529eb, add cascading deletion to datasets from experiments
+INFO  [alembic.runtime.migration] Running upgrade 0584bdc529eb -> 400f98739977, add logged model tables
+INFO  [alembic.runtime.migration] Running upgrade 400f98739977 -> 6953534de441, add step to inputs table
+INFO  [alembic.runtime.migration] Running upgrade 6953534de441 -> bda7b8c39065, increase_model_version_tag_value_limit
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+__________________ test_real_nonseekable_tty_approval[exact] ___________________
+
+prepared = (PosixPath('/tmp/pytest-of-rob/pytest-46/test_real_nonseekable_tty_appr0'), {'architecture': {'baseline': {'architectu...ine_model_invocations': 40, 'candidate_model_invocations': 40, 'qnode_invocations': 40, 'research_jobs': 1, ...}, ...})
+answer = 'exact'
+
+    @pytest.mark.parametrize("answer", ["exact", "fragmented", "default", "n", "prose", "generic", "digest_only", "assistant_token", "oversized", "eof", "changed_plan", "changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "environment_file", "repeated", "run_without_approval"])
+    def test_real_nonseekable_tty_approval(prepared, answer):
+        """Real controlling PTY; automated test-only input, never canonical authority."""
+        import errno
+        import pty
+        import select
+        import signal
+        import time
+        root, plan = prepared
+        # Child exec avoids using inherited ML library/thread state after fork.
+        # The production CLI and /dev/tty open/read/write path are not mocked.
+        script = r"""
+    import errno, io, os, stat, sys
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, sys.argv.pop(1))
+    fd = os.open('/dev/tty', os.O_RDWR | os.O_NOCTTY)
+    try:
+        assert stat.S_ISCHR(os.fstat(fd).st_mode) and os.isatty(fd)
+        assert os.tcgetpgrp(fd) == os.getpgrp()
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+        except OSError as exc:
+            assert exc.errno == errno.ESPIPE
+        else:
+            raise AssertionError('PTY unexpectedly seekable')
+    finally:
+        os.close(fd)
+    try:
+        with open('/dev/tty', 'r+', encoding='utf-8', buffering=1):
+            pass
+    except io.UnsupportedOperation:
+        print('OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY', flush=True)
+    else:
+        raise AssertionError('old text-update defect was not reproduced')
+    from qcoder.ml_research.__main__ import main
+    main()
+    """
+        if answer == "changed_before":
+            replace(root / "plan.json", reseal(plan, shots=598))
+        elif answer == "stale":
+            value = read(root / "candidate-checkpoint.json")
+            replace(root / "candidate-checkpoint.json", reseal(value, changed=True))
+        elif answer == "repeated":
+            approval_seam(root, plan)
+        elif answer in ("outside_assent", "environment_file"):
+            (root / "chat.txt").write_text("Okay, go ahead.")
+            (root / "approved").write_text("approved")
+        if answer == "redirected":
+            script = script.replace("from qcoder.ml_research.__main__", "r, w = os.pipe(); os.write(w, b'y\\n'); os.close(w); os.dup2(r, 0); os.close(r)\nfrom qcoder.ml_research.__main__")
+        if answer == "environment_file":
+            script = script.replace("from qcoder.ml_research.__main__", "os.environ['QCODER_APPROVED'] = 'y'; os.environ['APPROVAL_DIGEST'] = '" + plan["digest"] + "'\nfrom qcoder.ml_research.__main__")
+        command = "run" if answer in ("outside_assent", "run_without_approval") else "approve"
+        extra = ["--digest", plan["digest"]] if answer == "assistant_flag" else []
+        pid, master = pty.fork()
+        if pid == 0:
+            os.execv(sys.executable, [sys.executable, "-I", "-c", script,
+                     str(Path(job.__file__).resolve().parents[2]), "--workspace", str(root), command, *extra])
+        output = bytearray()
+        sent = False
+        status = None
+        deadline = time.monotonic() + 30
+        try:
+            while time.monotonic() < deadline:
+                ready, _, _ = select.select([master], [], [], 0.1)
+                if ready:
+                    try:
+                        part = os.read(master, 4096)
+                    except OSError as exc:
+                        if exc.errno != errno.EIO:
+                            raise
+                        break
+                    if not part:
+                        break
+                    output.extend(part)
+                    if not sent and b"[y/N] " in output:
+                        if answer == "changed_plan":
+                            replace(root / "plan.json", reseal(plan, challenge="0" * 32))
+                        response = {"default": "", "n": "n", "prose": "please approve",
+                                    "generic": "Okay, go ahead.", "digest_only": plan["digest"],
+                                    "assistant_token": "APPROVE " + plan["digest"] + " " + plan["challenge"],
+                                    "environment_file": "", "oversized": "x" * 300}.get(answer, "y")
+                        raw = b"\x04" if answer == "eof" else (response + "\n").encode()
+                        if answer == "fragmented":
+                            os.write(master, raw[:1])
+                            os.write(master, raw[1:])
+                        else:
+                            os.write(master, raw)
+                        sent = True
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                    break
+            if pid is not None:
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                else:
+                    raise AssertionError("TTY child did not finish: " + output.decode(errors="replace"))
+        finally:
+            os.close(master)
+            if pid is not None:
+                os.kill(pid, signal.SIGKILL)
+                os.waitpid(pid, 0)
+        assert b"OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY" in output
+>       assert sent == (answer not in ("changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "repeated", "run_without_approval"))
+E       AssertionError: assert False == ('exact' not in ('changed_before', 'stale', 'redirected', 'outside_assent', 'assistant_flag', 'repeated', ...))
+
+tests/ml_research/test_d148.py:361: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+2026/10/02 07:45:51 INFO mlflow.store.db.utils: Creating initial MLflow database tables...
+2026/10/02 07:45:51 INFO mlflow.store.db.utils: Updating database tables
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 451aebb31d03, add metric step
+INFO  [alembic.runtime.migration] Running upgrade 451aebb31d03 -> 90e64c465722, migrate user column to tags
+INFO  [alembic.runtime.migration] Running upgrade 90e64c465722 -> 181f10493468, allow nulls for metric values
+INFO  [alembic.runtime.migration] Running upgrade 181f10493468 -> df50e92ffc5e, Add Experiment Tags Table
+INFO  [alembic.runtime.migration] Running upgrade df50e92ffc5e -> 7ac759974ad8, Update run tags with larger limit
+INFO  [alembic.runtime.migration] Running upgrade 7ac759974ad8 -> 89d4b8295536, create latest metrics table
+INFO  [89d4b8295536_create_latest_metrics_table_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 89d4b8295536 -> 2b4d017a5e9b, add model registry tables to db
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Adding registered_models and model_versions tables to database.
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 2b4d017a5e9b -> cfd24bdc0731, Update run status constraint with killed
+INFO  [alembic.runtime.migration] Running upgrade cfd24bdc0731 -> 0a8213491aaa, drop_duplicate_killed_constraint
+INFO  [alembic.runtime.migration] Running upgrade 0a8213491aaa -> 728d730b5ebd, add registered model tags table
+INFO  [alembic.runtime.migration] Running upgrade 728d730b5ebd -> 27a6a02d2cf1, add model version tags table
+INFO  [alembic.runtime.migration] Running upgrade 27a6a02d2cf1 -> 84291f40a231, add run_link to model_version
+INFO  [alembic.runtime.migration] Running upgrade 84291f40a231 -> a8c4a736bde6, allow nulls for run_id
+INFO  [alembic.runtime.migration] Running upgrade a8c4a736bde6 -> 39d1c3be5f05, add_is_nan_constraint_for_metrics_tables_if_necessary
+INFO  [alembic.runtime.migration] Running upgrade 39d1c3be5f05 -> c48cb773bb87, reset_default_value_for_is_nan_in_metrics_table_for_mysql
+INFO  [alembic.runtime.migration] Running upgrade c48cb773bb87 -> bd07f7e963c5, create index on run_uuid
+INFO  [alembic.runtime.migration] Running upgrade bd07f7e963c5 -> 0c779009ac13, add deleted_time field to runs table
+INFO  [alembic.runtime.migration] Running upgrade 0c779009ac13 -> cc1f77228345, change param value length to 500
+INFO  [alembic.runtime.migration] Running upgrade cc1f77228345 -> 97727af70f4d, Add creation_time and last_update_time to experiments table
+INFO  [alembic.runtime.migration] Running upgrade 97727af70f4d -> 3500859a5d39, Add Model Aliases table
+INFO  [alembic.runtime.migration] Running upgrade 3500859a5d39 -> 7f2a7d5fae7d, add datasets inputs input_tags tables
+INFO  [alembic.runtime.migration] Running upgrade 7f2a7d5fae7d -> 2d6e25af4d3e, increase max param val length from 500 to 8000
+INFO  [alembic.runtime.migration] Running upgrade 2d6e25af4d3e -> acf3f17fdcc7, add storage location field to model versions
+INFO  [alembic.runtime.migration] Running upgrade acf3f17fdcc7 -> 867495a8f9d4, add trace tables
+INFO  [alembic.runtime.migration] Running upgrade 867495a8f9d4 -> 5b0e9adcef9c, add cascade deletion to trace tables foreign keys
+INFO  [alembic.runtime.migration] Running upgrade 5b0e9adcef9c -> 4465047574b1, increase max dataset schema size
+INFO  [alembic.runtime.migration] Running upgrade 4465047574b1 -> f5a4f2784254, increase run tag value limit to 8000
+INFO  [alembic.runtime.migration] Running upgrade f5a4f2784254 -> 0584bdc529eb, add cascading deletion to datasets from experiments
+INFO  [alembic.runtime.migration] Running upgrade 0584bdc529eb -> 400f98739977, add logged model tables
+INFO  [alembic.runtime.migration] Running upgrade 400f98739977 -> 6953534de441, add step to inputs table
+INFO  [alembic.runtime.migration] Running upgrade 6953534de441 -> bda7b8c39065, increase_model_version_tag_value_limit
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+________________ test_real_nonseekable_tty_approval[fragmented] ________________
+
+prepared = (PosixPath('/tmp/pytest-of-rob/pytest-46/test_real_nonseekable_tty_appr1'), {'architecture': {'baseline': {'architectu...ine_model_invocations': 40, 'candidate_model_invocations': 40, 'qnode_invocations': 40, 'research_jobs': 1, ...}, ...})
+answer = 'fragmented'
+
+    @pytest.mark.parametrize("answer", ["exact", "fragmented", "default", "n", "prose", "generic", "digest_only", "assistant_token", "oversized", "eof", "changed_plan", "changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "environment_file", "repeated", "run_without_approval"])
+    def test_real_nonseekable_tty_approval(prepared, answer):
+        """Real controlling PTY; automated test-only input, never canonical authority."""
+        import errno
+        import pty
+        import select
+        import signal
+        import time
+        root, plan = prepared
+        # Child exec avoids using inherited ML library/thread state after fork.
+        # The production CLI and /dev/tty open/read/write path are not mocked.
+        script = r"""
+    import errno, io, os, stat, sys
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, sys.argv.pop(1))
+    fd = os.open('/dev/tty', os.O_RDWR | os.O_NOCTTY)
+    try:
+        assert stat.S_ISCHR(os.fstat(fd).st_mode) and os.isatty(fd)
+        assert os.tcgetpgrp(fd) == os.getpgrp()
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+        except OSError as exc:
+            assert exc.errno == errno.ESPIPE
+        else:
+            raise AssertionError('PTY unexpectedly seekable')
+    finally:
+        os.close(fd)
+    try:
+        with open('/dev/tty', 'r+', encoding='utf-8', buffering=1):
+            pass
+    except io.UnsupportedOperation:
+        print('OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY', flush=True)
+    else:
+        raise AssertionError('old text-update defect was not reproduced')
+    from qcoder.ml_research.__main__ import main
+    main()
+    """
+        if answer == "changed_before":
+            replace(root / "plan.json", reseal(plan, shots=598))
+        elif answer == "stale":
+            value = read(root / "candidate-checkpoint.json")
+            replace(root / "candidate-checkpoint.json", reseal(value, changed=True))
+        elif answer == "repeated":
+            approval_seam(root, plan)
+        elif answer in ("outside_assent", "environment_file"):
+            (root / "chat.txt").write_text("Okay, go ahead.")
+            (root / "approved").write_text("approved")
+        if answer == "redirected":
+            script = script.replace("from qcoder.ml_research.__main__", "r, w = os.pipe(); os.write(w, b'y\\n'); os.close(w); os.dup2(r, 0); os.close(r)\nfrom qcoder.ml_research.__main__")
+        if answer == "environment_file":
+            script = script.replace("from qcoder.ml_research.__main__", "os.environ['QCODER_APPROVED'] = 'y'; os.environ['APPROVAL_DIGEST'] = '" + plan["digest"] + "'\nfrom qcoder.ml_research.__main__")
+        command = "run" if answer in ("outside_assent", "run_without_approval") else "approve"
+        extra = ["--digest", plan["digest"]] if answer == "assistant_flag" else []
+        pid, master = pty.fork()
+        if pid == 0:
+            os.execv(sys.executable, [sys.executable, "-I", "-c", script,
+                     str(Path(job.__file__).resolve().parents[2]), "--workspace", str(root), command, *extra])
+        output = bytearray()
+        sent = False
+        status = None
+        deadline = time.monotonic() + 30
+        try:
+            while time.monotonic() < deadline:
+                ready, _, _ = select.select([master], [], [], 0.1)
+                if ready:
+                    try:
+                        part = os.read(master, 4096)
+                    except OSError as exc:
+                        if exc.errno != errno.EIO:
+                            raise
+                        break
+                    if not part:
+                        break
+                    output.extend(part)
+                    if not sent and b"[y/N] " in output:
+                        if answer == "changed_plan":
+                            replace(root / "plan.json", reseal(plan, challenge="0" * 32))
+                        response = {"default": "", "n": "n", "prose": "please approve",
+                                    "generic": "Okay, go ahead.", "digest_only": plan["digest"],
+                                    "assistant_token": "APPROVE " + plan["digest"] + " " + plan["challenge"],
+                                    "environment_file": "", "oversized": "x" * 300}.get(answer, "y")
+                        raw = b"\x04" if answer == "eof" else (response + "\n").encode()
+                        if answer == "fragmented":
+                            os.write(master, raw[:1])
+                            os.write(master, raw[1:])
+                        else:
+                            os.write(master, raw)
+                        sent = True
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                    break
+            if pid is not None:
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                else:
+                    raise AssertionError("TTY child did not finish: " + output.decode(errors="replace"))
+        finally:
+            os.close(master)
+            if pid is not None:
+                os.kill(pid, signal.SIGKILL)
+                os.waitpid(pid, 0)
+        assert b"OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY" in output
+>       assert sent == (answer not in ("changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "repeated", "run_without_approval"))
+E       AssertionError: assert False == ('fragmented' not in ('changed_before', 'stale', 'redirected', 'outside_assent', 'assistant_flag', 'repeated', ...))
+
+tests/ml_research/test_d148.py:361: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+2026/10/02 07:45:53 INFO mlflow.store.db.utils: Creating initial MLflow database tables...
+2026/10/02 07:45:53 INFO mlflow.store.db.utils: Updating database tables
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 451aebb31d03, add metric step
+INFO  [alembic.runtime.migration] Running upgrade 451aebb31d03 -> 90e64c465722, migrate user column to tags
+INFO  [alembic.runtime.migration] Running upgrade 90e64c465722 -> 181f10493468, allow nulls for metric values
+INFO  [alembic.runtime.migration] Running upgrade 181f10493468 -> df50e92ffc5e, Add Experiment Tags Table
+INFO  [alembic.runtime.migration] Running upgrade df50e92ffc5e -> 7ac759974ad8, Update run tags with larger limit
+INFO  [alembic.runtime.migration] Running upgrade 7ac759974ad8 -> 89d4b8295536, create latest metrics table
+INFO  [89d4b8295536_create_latest_metrics_table_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 89d4b8295536 -> 2b4d017a5e9b, add model registry tables to db
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Adding registered_models and model_versions tables to database.
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 2b4d017a5e9b -> cfd24bdc0731, Update run status constraint with killed
+INFO  [alembic.runtime.migration] Running upgrade cfd24bdc0731 -> 0a8213491aaa, drop_duplicate_killed_constraint
+INFO  [alembic.runtime.migration] Running upgrade 0a8213491aaa -> 728d730b5ebd, add registered model tags table
+INFO  [alembic.runtime.migration] Running upgrade 728d730b5ebd -> 27a6a02d2cf1, add model version tags table
+INFO  [alembic.runtime.migration] Running upgrade 27a6a02d2cf1 -> 84291f40a231, add run_link to model_version
+INFO  [alembic.runtime.migration] Running upgrade 84291f40a231 -> a8c4a736bde6, allow nulls for run_id
+INFO  [alembic.runtime.migration] Running upgrade a8c4a736bde6 -> 39d1c3be5f05, add_is_nan_constraint_for_metrics_tables_if_necessary
+INFO  [alembic.runtime.migration] Running upgrade 39d1c3be5f05 -> c48cb773bb87, reset_default_value_for_is_nan_in_metrics_table_for_mysql
+INFO  [alembic.runtime.migration] Running upgrade c48cb773bb87 -> bd07f7e963c5, create index on run_uuid
+INFO  [alembic.runtime.migration] Running upgrade bd07f7e963c5 -> 0c779009ac13, add deleted_time field to runs table
+INFO  [alembic.runtime.migration] Running upgrade 0c779009ac13 -> cc1f77228345, change param value length to 500
+INFO  [alembic.runtime.migration] Running upgrade cc1f77228345 -> 97727af70f4d, Add creation_time and last_update_time to experiments table
+INFO  [alembic.runtime.migration] Running upgrade 97727af70f4d -> 3500859a5d39, Add Model Aliases table
+INFO  [alembic.runtime.migration] Running upgrade 3500859a5d39 -> 7f2a7d5fae7d, add datasets inputs input_tags tables
+INFO  [alembic.runtime.migration] Running upgrade 7f2a7d5fae7d -> 2d6e25af4d3e, increase max param val length from 500 to 8000
+INFO  [alembic.runtime.migration] Running upgrade 2d6e25af4d3e -> acf3f17fdcc7, add storage location field to model versions
+INFO  [alembic.runtime.migration] Running upgrade acf3f17fdcc7 -> 867495a8f9d4, add trace tables
+INFO  [alembic.runtime.migration] Running upgrade 867495a8f9d4 -> 5b0e9adcef9c, add cascade deletion to trace tables foreign keys
+INFO  [alembic.runtime.migration] Running upgrade 5b0e9adcef9c -> 4465047574b1, increase max dataset schema size
+INFO  [alembic.runtime.migration] Running upgrade 4465047574b1 -> f5a4f2784254, increase run tag value limit to 8000
+INFO  [alembic.runtime.migration] Running upgrade f5a4f2784254 -> 0584bdc529eb, add cascading deletion to datasets from experiments
+INFO  [alembic.runtime.migration] Running upgrade 0584bdc529eb -> 400f98739977, add logged model tables
+INFO  [alembic.runtime.migration] Running upgrade 400f98739977 -> 6953534de441, add step to inputs table
+INFO  [alembic.runtime.migration] Running upgrade 6953534de441 -> bda7b8c39065, increase_model_version_tag_value_limit
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+_________________ test_real_nonseekable_tty_approval[default] __________________
+
+prepared = (PosixPath('/tmp/pytest-of-rob/pytest-46/test_real_nonseekable_tty_appr2'), {'architecture': {'baseline': {'architectu...ine_model_invocations': 40, 'candidate_model_invocations': 40, 'qnode_invocations': 40, 'research_jobs': 1, ...}, ...})
+answer = 'default'
+
+    @pytest.mark.parametrize("answer", ["exact", "fragmented", "default", "n", "prose", "generic", "digest_only", "assistant_token", "oversized", "eof", "changed_plan", "changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "environment_file", "repeated", "run_without_approval"])
+    def test_real_nonseekable_tty_approval(prepared, answer):
+        """Real controlling PTY; automated test-only input, never canonical authority."""
+        import errno
+        import pty
+        import select
+        import signal
+        import time
+        root, plan = prepared
+        # Child exec avoids using inherited ML library/thread state after fork.
+        # The production CLI and /dev/tty open/read/write path are not mocked.
+        script = r"""
+    import errno, io, os, stat, sys
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, sys.argv.pop(1))
+    fd = os.open('/dev/tty', os.O_RDWR | os.O_NOCTTY)
+    try:
+        assert stat.S_ISCHR(os.fstat(fd).st_mode) and os.isatty(fd)
+        assert os.tcgetpgrp(fd) == os.getpgrp()
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+        except OSError as exc:
+            assert exc.errno == errno.ESPIPE
+        else:
+            raise AssertionError('PTY unexpectedly seekable')
+    finally:
+        os.close(fd)
+    try:
+        with open('/dev/tty', 'r+', encoding='utf-8', buffering=1):
+            pass
+    except io.UnsupportedOperation:
+        print('OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY', flush=True)
+    else:
+        raise AssertionError('old text-update defect was not reproduced')
+    from qcoder.ml_research.__main__ import main
+    main()
+    """
+        if answer == "changed_before":
+            replace(root / "plan.json", reseal(plan, shots=598))
+        elif answer == "stale":
+            value = read(root / "candidate-checkpoint.json")
+            replace(root / "candidate-checkpoint.json", reseal(value, changed=True))
+        elif answer == "repeated":
+            approval_seam(root, plan)
+        elif answer in ("outside_assent", "environment_file"):
+            (root / "chat.txt").write_text("Okay, go ahead.")
+            (root / "approved").write_text("approved")
+        if answer == "redirected":
+            script = script.replace("from qcoder.ml_research.__main__", "r, w = os.pipe(); os.write(w, b'y\\n'); os.close(w); os.dup2(r, 0); os.close(r)\nfrom qcoder.ml_research.__main__")
+        if answer == "environment_file":
+            script = script.replace("from qcoder.ml_research.__main__", "os.environ['QCODER_APPROVED'] = 'y'; os.environ['APPROVAL_DIGEST'] = '" + plan["digest"] + "'\nfrom qcoder.ml_research.__main__")
+        command = "run" if answer in ("outside_assent", "run_without_approval") else "approve"
+        extra = ["--digest", plan["digest"]] if answer == "assistant_flag" else []
+        pid, master = pty.fork()
+        if pid == 0:
+            os.execv(sys.executable, [sys.executable, "-I", "-c", script,
+                     str(Path(job.__file__).resolve().parents[2]), "--workspace", str(root), command, *extra])
+        output = bytearray()
+        sent = False
+        status = None
+        deadline = time.monotonic() + 30
+        try:
+            while time.monotonic() < deadline:
+                ready, _, _ = select.select([master], [], [], 0.1)
+                if ready:
+                    try:
+                        part = os.read(master, 4096)
+                    except OSError as exc:
+                        if exc.errno != errno.EIO:
+                            raise
+                        break
+                    if not part:
+                        break
+                    output.extend(part)
+                    if not sent and b"[y/N] " in output:
+                        if answer == "changed_plan":
+                            replace(root / "plan.json", reseal(plan, challenge="0" * 32))
+                        response = {"default": "", "n": "n", "prose": "please approve",
+                                    "generic": "Okay, go ahead.", "digest_only": plan["digest"],
+                                    "assistant_token": "APPROVE " + plan["digest"] + " " + plan["challenge"],
+                                    "environment_file": "", "oversized": "x" * 300}.get(answer, "y")
+                        raw = b"\x04" if answer == "eof" else (response + "\n").encode()
+                        if answer == "fragmented":
+                            os.write(master, raw[:1])
+                            os.write(master, raw[1:])
+                        else:
+                            os.write(master, raw)
+                        sent = True
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                    break
+            if pid is not None:
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                else:
+                    raise AssertionError("TTY child did not finish: " + output.decode(errors="replace"))
+        finally:
+            os.close(master)
+            if pid is not None:
+                os.kill(pid, signal.SIGKILL)
+                os.waitpid(pid, 0)
+        assert b"OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY" in output
+>       assert sent == (answer not in ("changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "repeated", "run_without_approval"))
+E       AssertionError: assert False == ('default' not in ('changed_before', 'stale', 'redirected', 'outside_assent', 'assistant_flag', 'repeated', ...))
+
+tests/ml_research/test_d148.py:361: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+2026/10/02 07:45:55 INFO mlflow.store.db.utils: Creating initial MLflow database tables...
+2026/10/02 07:45:55 INFO mlflow.store.db.utils: Updating database tables
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 451aebb31d03, add metric step
+INFO  [alembic.runtime.migration] Running upgrade 451aebb31d03 -> 90e64c465722, migrate user column to tags
+INFO  [alembic.runtime.migration] Running upgrade 90e64c465722 -> 181f10493468, allow nulls for metric values
+INFO  [alembic.runtime.migration] Running upgrade 181f10493468 -> df50e92ffc5e, Add Experiment Tags Table
+INFO  [alembic.runtime.migration] Running upgrade df50e92ffc5e -> 7ac759974ad8, Update run tags with larger limit
+INFO  [alembic.runtime.migration] Running upgrade 7ac759974ad8 -> 89d4b8295536, create latest metrics table
+INFO  [89d4b8295536_create_latest_metrics_table_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 89d4b8295536 -> 2b4d017a5e9b, add model registry tables to db
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Adding registered_models and model_versions tables to database.
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 2b4d017a5e9b -> cfd24bdc0731, Update run status constraint with killed
+INFO  [alembic.runtime.migration] Running upgrade cfd24bdc0731 -> 0a8213491aaa, drop_duplicate_killed_constraint
+INFO  [alembic.runtime.migration] Running upgrade 0a8213491aaa -> 728d730b5ebd, add registered model tags table
+INFO  [alembic.runtime.migration] Running upgrade 728d730b5ebd -> 27a6a02d2cf1, add model version tags table
+INFO  [alembic.runtime.migration] Running upgrade 27a6a02d2cf1 -> 84291f40a231, add run_link to model_version
+INFO  [alembic.runtime.migration] Running upgrade 84291f40a231 -> a8c4a736bde6, allow nulls for run_id
+INFO  [alembic.runtime.migration] Running upgrade a8c4a736bde6 -> 39d1c3be5f05, add_is_nan_constraint_for_metrics_tables_if_necessary
+INFO  [alembic.runtime.migration] Running upgrade 39d1c3be5f05 -> c48cb773bb87, reset_default_value_for_is_nan_in_metrics_table_for_mysql
+INFO  [alembic.runtime.migration] Running upgrade c48cb773bb87 -> bd07f7e963c5, create index on run_uuid
+INFO  [alembic.runtime.migration] Running upgrade bd07f7e963c5 -> 0c779009ac13, add deleted_time field to runs table
+INFO  [alembic.runtime.migration] Running upgrade 0c779009ac13 -> cc1f77228345, change param value length to 500
+INFO  [alembic.runtime.migration] Running upgrade cc1f77228345 -> 97727af70f4d, Add creation_time and last_update_time to experiments table
+INFO  [alembic.runtime.migration] Running upgrade 97727af70f4d -> 3500859a5d39, Add Model Aliases table
+INFO  [alembic.runtime.migration] Running upgrade 3500859a5d39 -> 7f2a7d5fae7d, add datasets inputs input_tags tables
+INFO  [alembic.runtime.migration] Running upgrade 7f2a7d5fae7d -> 2d6e25af4d3e, increase max param val length from 500 to 8000
+INFO  [alembic.runtime.migration] Running upgrade 2d6e25af4d3e -> acf3f17fdcc7, add storage location field to model versions
+INFO  [alembic.runtime.migration] Running upgrade acf3f17fdcc7 -> 867495a8f9d4, add trace tables
+INFO  [alembic.runtime.migration] Running upgrade 867495a8f9d4 -> 5b0e9adcef9c, add cascade deletion to trace tables foreign keys
+INFO  [alembic.runtime.migration] Running upgrade 5b0e9adcef9c -> 4465047574b1, increase max dataset schema size
+INFO  [alembic.runtime.migration] Running upgrade 4465047574b1 -> f5a4f2784254, increase run tag value limit to 8000
+INFO  [alembic.runtime.migration] Running upgrade f5a4f2784254 -> 0584bdc529eb, add cascading deletion to datasets from experiments
+INFO  [alembic.runtime.migration] Running upgrade 0584bdc529eb -> 400f98739977, add logged model tables
+INFO  [alembic.runtime.migration] Running upgrade 400f98739977 -> 6953534de441, add step to inputs table
+INFO  [alembic.runtime.migration] Running upgrade 6953534de441 -> bda7b8c39065, increase_model_version_tag_value_limit
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+____________________ test_real_nonseekable_tty_approval[n] _____________________
+
+prepared = (PosixPath('/tmp/pytest-of-rob/pytest-46/test_real_nonseekable_tty_appr3'), {'architecture': {'baseline': {'architectu...ine_model_invocations': 40, 'candidate_model_invocations': 40, 'qnode_invocations': 40, 'research_jobs': 1, ...}, ...})
+answer = 'n'
+
+    @pytest.mark.parametrize("answer", ["exact", "fragmented", "default", "n", "prose", "generic", "digest_only", "assistant_token", "oversized", "eof", "changed_plan", "changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "environment_file", "repeated", "run_without_approval"])
+    def test_real_nonseekable_tty_approval(prepared, answer):
+        """Real controlling PTY; automated test-only input, never canonical authority."""
+        import errno
+        import pty
+        import select
+        import signal
+        import time
+        root, plan = prepared
+        # Child exec avoids using inherited ML library/thread state after fork.
+        # The production CLI and /dev/tty open/read/write path are not mocked.
+        script = r"""
+    import errno, io, os, stat, sys
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, sys.argv.pop(1))
+    fd = os.open('/dev/tty', os.O_RDWR | os.O_NOCTTY)
+    try:
+        assert stat.S_ISCHR(os.fstat(fd).st_mode) and os.isatty(fd)
+        assert os.tcgetpgrp(fd) == os.getpgrp()
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+        except OSError as exc:
+            assert exc.errno == errno.ESPIPE
+        else:
+            raise AssertionError('PTY unexpectedly seekable')
+    finally:
+        os.close(fd)
+    try:
+        with open('/dev/tty', 'r+', encoding='utf-8', buffering=1):
+            pass
+    except io.UnsupportedOperation:
+        print('OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY', flush=True)
+    else:
+        raise AssertionError('old text-update defect was not reproduced')
+    from qcoder.ml_research.__main__ import main
+    main()
+    """
+        if answer == "changed_before":
+            replace(root / "plan.json", reseal(plan, shots=598))
+        elif answer == "stale":
+            value = read(root / "candidate-checkpoint.json")
+            replace(root / "candidate-checkpoint.json", reseal(value, changed=True))
+        elif answer == "repeated":
+            approval_seam(root, plan)
+        elif answer in ("outside_assent", "environment_file"):
+            (root / "chat.txt").write_text("Okay, go ahead.")
+            (root / "approved").write_text("approved")
+        if answer == "redirected":
+            script = script.replace("from qcoder.ml_research.__main__", "r, w = os.pipe(); os.write(w, b'y\\n'); os.close(w); os.dup2(r, 0); os.close(r)\nfrom qcoder.ml_research.__main__")
+        if answer == "environment_file":
+            script = script.replace("from qcoder.ml_research.__main__", "os.environ['QCODER_APPROVED'] = 'y'; os.environ['APPROVAL_DIGEST'] = '" + plan["digest"] + "'\nfrom qcoder.ml_research.__main__")
+        command = "run" if answer in ("outside_assent", "run_without_approval") else "approve"
+        extra = ["--digest", plan["digest"]] if answer == "assistant_flag" else []
+        pid, master = pty.fork()
+        if pid == 0:
+            os.execv(sys.executable, [sys.executable, "-I", "-c", script,
+                     str(Path(job.__file__).resolve().parents[2]), "--workspace", str(root), command, *extra])
+        output = bytearray()
+        sent = False
+        status = None
+        deadline = time.monotonic() + 30
+        try:
+            while time.monotonic() < deadline:
+                ready, _, _ = select.select([master], [], [], 0.1)
+                if ready:
+                    try:
+                        part = os.read(master, 4096)
+                    except OSError as exc:
+                        if exc.errno != errno.EIO:
+                            raise
+                        break
+                    if not part:
+                        break
+                    output.extend(part)
+                    if not sent and b"[y/N] " in output:
+                        if answer == "changed_plan":
+                            replace(root / "plan.json", reseal(plan, challenge="0" * 32))
+                        response = {"default": "", "n": "n", "prose": "please approve",
+                                    "generic": "Okay, go ahead.", "digest_only": plan["digest"],
+                                    "assistant_token": "APPROVE " + plan["digest"] + " " + plan["challenge"],
+                                    "environment_file": "", "oversized": "x" * 300}.get(answer, "y")
+                        raw = b"\x04" if answer == "eof" else (response + "\n").encode()
+                        if answer == "fragmented":
+                            os.write(master, raw[:1])
+                            os.write(master, raw[1:])
+                        else:
+                            os.write(master, raw)
+                        sent = True
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                    break
+            if pid is not None:
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                else:
+                    raise AssertionError("TTY child did not finish: " + output.decode(errors="replace"))
+        finally:
+            os.close(master)
+            if pid is not None:
+                os.kill(pid, signal.SIGKILL)
+                os.waitpid(pid, 0)
+        assert b"OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY" in output
+>       assert sent == (answer not in ("changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "repeated", "run_without_approval"))
+E       AssertionError: assert False == ('n' not in ('changed_before', 'stale', 'redirected', 'outside_assent', 'assistant_flag', 'repeated', ...))
+
+tests/ml_research/test_d148.py:361: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+2026/10/02 07:45:56 INFO mlflow.store.db.utils: Creating initial MLflow database tables...
+2026/10/02 07:45:56 INFO mlflow.store.db.utils: Updating database tables
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 451aebb31d03, add metric step
+INFO  [alembic.runtime.migration] Running upgrade 451aebb31d03 -> 90e64c465722, migrate user column to tags
+INFO  [alembic.runtime.migration] Running upgrade 90e64c465722 -> 181f10493468, allow nulls for metric values
+INFO  [alembic.runtime.migration] Running upgrade 181f10493468 -> df50e92ffc5e, Add Experiment Tags Table
+INFO  [alembic.runtime.migration] Running upgrade df50e92ffc5e -> 7ac759974ad8, Update run tags with larger limit
+INFO  [alembic.runtime.migration] Running upgrade 7ac759974ad8 -> 89d4b8295536, create latest metrics table
+INFO  [89d4b8295536_create_latest_metrics_table_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 89d4b8295536 -> 2b4d017a5e9b, add model registry tables to db
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Adding registered_models and model_versions tables to database.
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 2b4d017a5e9b -> cfd24bdc0731, Update run status constraint with killed
+INFO  [alembic.runtime.migration] Running upgrade cfd24bdc0731 -> 0a8213491aaa, drop_duplicate_killed_constraint
+INFO  [alembic.runtime.migration] Running upgrade 0a8213491aaa -> 728d730b5ebd, add registered model tags table
+INFO  [alembic.runtime.migration] Running upgrade 728d730b5ebd -> 27a6a02d2cf1, add model version tags table
+INFO  [alembic.runtime.migration] Running upgrade 27a6a02d2cf1 -> 84291f40a231, add run_link to model_version
+INFO  [alembic.runtime.migration] Running upgrade 84291f40a231 -> a8c4a736bde6, allow nulls for run_id
+INFO  [alembic.runtime.migration] Running upgrade a8c4a736bde6 -> 39d1c3be5f05, add_is_nan_constraint_for_metrics_tables_if_necessary
+INFO  [alembic.runtime.migration] Running upgrade 39d1c3be5f05 -> c48cb773bb87, reset_default_value_for_is_nan_in_metrics_table_for_mysql
+INFO  [alembic.runtime.migration] Running upgrade c48cb773bb87 -> bd07f7e963c5, create index on run_uuid
+INFO  [alembic.runtime.migration] Running upgrade bd07f7e963c5 -> 0c779009ac13, add deleted_time field to runs table
+INFO  [alembic.runtime.migration] Running upgrade 0c779009ac13 -> cc1f77228345, change param value length to 500
+INFO  [alembic.runtime.migration] Running upgrade cc1f77228345 -> 97727af70f4d, Add creation_time and last_update_time to experiments table
+INFO  [alembic.runtime.migration] Running upgrade 97727af70f4d -> 3500859a5d39, Add Model Aliases table
+INFO  [alembic.runtime.migration] Running upgrade 3500859a5d39 -> 7f2a7d5fae7d, add datasets inputs input_tags tables
+INFO  [alembic.runtime.migration] Running upgrade 7f2a7d5fae7d -> 2d6e25af4d3e, increase max param val length from 500 to 8000
+INFO  [alembic.runtime.migration] Running upgrade 2d6e25af4d3e -> acf3f17fdcc7, add storage location field to model versions
+INFO  [alembic.runtime.migration] Running upgrade acf3f17fdcc7 -> 867495a8f9d4, add trace tables
+INFO  [alembic.runtime.migration] Running upgrade 867495a8f9d4 -> 5b0e9adcef9c, add cascade deletion to trace tables foreign keys
+INFO  [alembic.runtime.migration] Running upgrade 5b0e9adcef9c -> 4465047574b1, increase max dataset schema size
+INFO  [alembic.runtime.migration] Running upgrade 4465047574b1 -> f5a4f2784254, increase run tag value limit to 8000
+INFO  [alembic.runtime.migration] Running upgrade f5a4f2784254 -> 0584bdc529eb, add cascading deletion to datasets from experiments
+INFO  [alembic.runtime.migration] Running upgrade 0584bdc529eb -> 400f98739977, add logged model tables
+INFO  [alembic.runtime.migration] Running upgrade 400f98739977 -> 6953534de441, add step to inputs table
+INFO  [alembic.runtime.migration] Running upgrade 6953534de441 -> bda7b8c39065, increase_model_version_tag_value_limit
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+__________________ test_real_nonseekable_tty_approval[prose] ___________________
+
+prepared = (PosixPath('/tmp/pytest-of-rob/pytest-46/test_real_nonseekable_tty_appr4'), {'architecture': {'baseline': {'architectu...ine_model_invocations': 40, 'candidate_model_invocations': 40, 'qnode_invocations': 40, 'research_jobs': 1, ...}, ...})
+answer = 'prose'
+
+    @pytest.mark.parametrize("answer", ["exact", "fragmented", "default", "n", "prose", "generic", "digest_only", "assistant_token", "oversized", "eof", "changed_plan", "changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "environment_file", "repeated", "run_without_approval"])
+    def test_real_nonseekable_tty_approval(prepared, answer):
+        """Real controlling PTY; automated test-only input, never canonical authority."""
+        import errno
+        import pty
+        import select
+        import signal
+        import time
+        root, plan = prepared
+        # Child exec avoids using inherited ML library/thread state after fork.
+        # The production CLI and /dev/tty open/read/write path are not mocked.
+        script = r"""
+    import errno, io, os, stat, sys
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, sys.argv.pop(1))
+    fd = os.open('/dev/tty', os.O_RDWR | os.O_NOCTTY)
+    try:
+        assert stat.S_ISCHR(os.fstat(fd).st_mode) and os.isatty(fd)
+        assert os.tcgetpgrp(fd) == os.getpgrp()
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+        except OSError as exc:
+            assert exc.errno == errno.ESPIPE
+        else:
+            raise AssertionError('PTY unexpectedly seekable')
+    finally:
+        os.close(fd)
+    try:
+        with open('/dev/tty', 'r+', encoding='utf-8', buffering=1):
+            pass
+    except io.UnsupportedOperation:
+        print('OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY', flush=True)
+    else:
+        raise AssertionError('old text-update defect was not reproduced')
+    from qcoder.ml_research.__main__ import main
+    main()
+    """
+        if answer == "changed_before":
+            replace(root / "plan.json", reseal(plan, shots=598))
+        elif answer == "stale":
+            value = read(root / "candidate-checkpoint.json")
+            replace(root / "candidate-checkpoint.json", reseal(value, changed=True))
+        elif answer == "repeated":
+            approval_seam(root, plan)
+        elif answer in ("outside_assent", "environment_file"):
+            (root / "chat.txt").write_text("Okay, go ahead.")
+            (root / "approved").write_text("approved")
+        if answer == "redirected":
+            script = script.replace("from qcoder.ml_research.__main__", "r, w = os.pipe(); os.write(w, b'y\\n'); os.close(w); os.dup2(r, 0); os.close(r)\nfrom qcoder.ml_research.__main__")
+        if answer == "environment_file":
+            script = script.replace("from qcoder.ml_research.__main__", "os.environ['QCODER_APPROVED'] = 'y'; os.environ['APPROVAL_DIGEST'] = '" + plan["digest"] + "'\nfrom qcoder.ml_research.__main__")
+        command = "run" if answer in ("outside_assent", "run_without_approval") else "approve"
+        extra = ["--digest", plan["digest"]] if answer == "assistant_flag" else []
+        pid, master = pty.fork()
+        if pid == 0:
+            os.execv(sys.executable, [sys.executable, "-I", "-c", script,
+                     str(Path(job.__file__).resolve().parents[2]), "--workspace", str(root), command, *extra])
+        output = bytearray()
+        sent = False
+        status = None
+        deadline = time.monotonic() + 30
+        try:
+            while time.monotonic() < deadline:
+                ready, _, _ = select.select([master], [], [], 0.1)
+                if ready:
+                    try:
+                        part = os.read(master, 4096)
+                    except OSError as exc:
+                        if exc.errno != errno.EIO:
+                            raise
+                        break
+                    if not part:
+                        break
+                    output.extend(part)
+                    if not sent and b"[y/N] " in output:
+                        if answer == "changed_plan":
+                            replace(root / "plan.json", reseal(plan, challenge="0" * 32))
+                        response = {"default": "", "n": "n", "prose": "please approve",
+                                    "generic": "Okay, go ahead.", "digest_only": plan["digest"],
+                                    "assistant_token": "APPROVE " + plan["digest"] + " " + plan["challenge"],
+                                    "environment_file": "", "oversized": "x" * 300}.get(answer, "y")
+                        raw = b"\x04" if answer == "eof" else (response + "\n").encode()
+                        if answer == "fragmented":
+                            os.write(master, raw[:1])
+                            os.write(master, raw[1:])
+                        else:
+                            os.write(master, raw)
+                        sent = True
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                    break
+            if pid is not None:
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                else:
+                    raise AssertionError("TTY child did not finish: " + output.decode(errors="replace"))
+        finally:
+            os.close(master)
+            if pid is not None:
+                os.kill(pid, signal.SIGKILL)
+                os.waitpid(pid, 0)
+        assert b"OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY" in output
+>       assert sent == (answer not in ("changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "repeated", "run_without_approval"))
+E       AssertionError: assert False == ('prose' not in ('changed_before', 'stale', 'redirected', 'outside_assent', 'assistant_flag', 'repeated', ...))
+
+tests/ml_research/test_d148.py:361: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+2026/10/02 07:45:58 INFO mlflow.store.db.utils: Creating initial MLflow database tables...
+2026/10/02 07:45:58 INFO mlflow.store.db.utils: Updating database tables
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 451aebb31d03, add metric step
+INFO  [alembic.runtime.migration] Running upgrade 451aebb31d03 -> 90e64c465722, migrate user column to tags
+INFO  [alembic.runtime.migration] Running upgrade 90e64c465722 -> 181f10493468, allow nulls for metric values
+INFO  [alembic.runtime.migration] Running upgrade 181f10493468 -> df50e92ffc5e, Add Experiment Tags Table
+INFO  [alembic.runtime.migration] Running upgrade df50e92ffc5e -> 7ac759974ad8, Update run tags with larger limit
+INFO  [alembic.runtime.migration] Running upgrade 7ac759974ad8 -> 89d4b8295536, create latest metrics table
+INFO  [89d4b8295536_create_latest_metrics_table_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 89d4b8295536 -> 2b4d017a5e9b, add model registry tables to db
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Adding registered_models and model_versions tables to database.
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 2b4d017a5e9b -> cfd24bdc0731, Update run status constraint with killed
+INFO  [alembic.runtime.migration] Running upgrade cfd24bdc0731 -> 0a8213491aaa, drop_duplicate_killed_constraint
+INFO  [alembic.runtime.migration] Running upgrade 0a8213491aaa -> 728d730b5ebd, add registered model tags table
+INFO  [alembic.runtime.migration] Running upgrade 728d730b5ebd -> 27a6a02d2cf1, add model version tags table
+INFO  [alembic.runtime.migration] Running upgrade 27a6a02d2cf1 -> 84291f40a231, add run_link to model_version
+INFO  [alembic.runtime.migration] Running upgrade 84291f40a231 -> a8c4a736bde6, allow nulls for run_id
+INFO  [alembic.runtime.migration] Running upgrade a8c4a736bde6 -> 39d1c3be5f05, add_is_nan_constraint_for_metrics_tables_if_necessary
+INFO  [alembic.runtime.migration] Running upgrade 39d1c3be5f05 -> c48cb773bb87, reset_default_value_for_is_nan_in_metrics_table_for_mysql
+INFO  [alembic.runtime.migration] Running upgrade c48cb773bb87 -> bd07f7e963c5, create index on run_uuid
+INFO  [alembic.runtime.migration] Running upgrade bd07f7e963c5 -> 0c779009ac13, add deleted_time field to runs table
+INFO  [alembic.runtime.migration] Running upgrade 0c779009ac13 -> cc1f77228345, change param value length to 500
+INFO  [alembic.runtime.migration] Running upgrade cc1f77228345 -> 97727af70f4d, Add creation_time and last_update_time to experiments table
+INFO  [alembic.runtime.migration] Running upgrade 97727af70f4d -> 3500859a5d39, Add Model Aliases table
+INFO  [alembic.runtime.migration] Running upgrade 3500859a5d39 -> 7f2a7d5fae7d, add datasets inputs input_tags tables
+INFO  [alembic.runtime.migration] Running upgrade 7f2a7d5fae7d -> 2d6e25af4d3e, increase max param val length from 500 to 8000
+INFO  [alembic.runtime.migration] Running upgrade 2d6e25af4d3e -> acf3f17fdcc7, add storage location field to model versions
+INFO  [alembic.runtime.migration] Running upgrade acf3f17fdcc7 -> 867495a8f9d4, add trace tables
+INFO  [alembic.runtime.migration] Running upgrade 867495a8f9d4 -> 5b0e9adcef9c, add cascade deletion to trace tables foreign keys
+INFO  [alembic.runtime.migration] Running upgrade 5b0e9adcef9c -> 4465047574b1, increase max dataset schema size
+INFO  [alembic.runtime.migration] Running upgrade 4465047574b1 -> f5a4f2784254, increase run tag value limit to 8000
+INFO  [alembic.runtime.migration] Running upgrade f5a4f2784254 -> 0584bdc529eb, add cascading deletion to datasets from experiments
+INFO  [alembic.runtime.migration] Running upgrade 0584bdc529eb -> 400f98739977, add logged model tables
+INFO  [alembic.runtime.migration] Running upgrade 400f98739977 -> 6953534de441, add step to inputs table
+INFO  [alembic.runtime.migration] Running upgrade 6953534de441 -> bda7b8c39065, increase_model_version_tag_value_limit
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+_________________ test_real_nonseekable_tty_approval[generic] __________________
+
+prepared = (PosixPath('/tmp/pytest-of-rob/pytest-46/test_real_nonseekable_tty_appr5'), {'architecture': {'baseline': {'architectu...ine_model_invocations': 40, 'candidate_model_invocations': 40, 'qnode_invocations': 40, 'research_jobs': 1, ...}, ...})
+answer = 'generic'
+
+    @pytest.mark.parametrize("answer", ["exact", "fragmented", "default", "n", "prose", "generic", "digest_only", "assistant_token", "oversized", "eof", "changed_plan", "changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "environment_file", "repeated", "run_without_approval"])
+    def test_real_nonseekable_tty_approval(prepared, answer):
+        """Real controlling PTY; automated test-only input, never canonical authority."""
+        import errno
+        import pty
+        import select
+        import signal
+        import time
+        root, plan = prepared
+        # Child exec avoids using inherited ML library/thread state after fork.
+        # The production CLI and /dev/tty open/read/write path are not mocked.
+        script = r"""
+    import errno, io, os, stat, sys
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, sys.argv.pop(1))
+    fd = os.open('/dev/tty', os.O_RDWR | os.O_NOCTTY)
+    try:
+        assert stat.S_ISCHR(os.fstat(fd).st_mode) and os.isatty(fd)
+        assert os.tcgetpgrp(fd) == os.getpgrp()
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+        except OSError as exc:
+            assert exc.errno == errno.ESPIPE
+        else:
+            raise AssertionError('PTY unexpectedly seekable')
+    finally:
+        os.close(fd)
+    try:
+        with open('/dev/tty', 'r+', encoding='utf-8', buffering=1):
+            pass
+    except io.UnsupportedOperation:
+        print('OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY', flush=True)
+    else:
+        raise AssertionError('old text-update defect was not reproduced')
+    from qcoder.ml_research.__main__ import main
+    main()
+    """
+        if answer == "changed_before":
+            replace(root / "plan.json", reseal(plan, shots=598))
+        elif answer == "stale":
+            value = read(root / "candidate-checkpoint.json")
+            replace(root / "candidate-checkpoint.json", reseal(value, changed=True))
+        elif answer == "repeated":
+            approval_seam(root, plan)
+        elif answer in ("outside_assent", "environment_file"):
+            (root / "chat.txt").write_text("Okay, go ahead.")
+            (root / "approved").write_text("approved")
+        if answer == "redirected":
+            script = script.replace("from qcoder.ml_research.__main__", "r, w = os.pipe(); os.write(w, b'y\\n'); os.close(w); os.dup2(r, 0); os.close(r)\nfrom qcoder.ml_research.__main__")
+        if answer == "environment_file":
+            script = script.replace("from qcoder.ml_research.__main__", "os.environ['QCODER_APPROVED'] = 'y'; os.environ['APPROVAL_DIGEST'] = '" + plan["digest"] + "'\nfrom qcoder.ml_research.__main__")
+        command = "run" if answer in ("outside_assent", "run_without_approval") else "approve"
+        extra = ["--digest", plan["digest"]] if answer == "assistant_flag" else []
+        pid, master = pty.fork()
+        if pid == 0:
+            os.execv(sys.executable, [sys.executable, "-I", "-c", script,
+                     str(Path(job.__file__).resolve().parents[2]), "--workspace", str(root), command, *extra])
+        output = bytearray()
+        sent = False
+        status = None
+        deadline = time.monotonic() + 30
+        try:
+            while time.monotonic() < deadline:
+                ready, _, _ = select.select([master], [], [], 0.1)
+                if ready:
+                    try:
+                        part = os.read(master, 4096)
+                    except OSError as exc:
+                        if exc.errno != errno.EIO:
+                            raise
+                        break
+                    if not part:
+                        break
+                    output.extend(part)
+                    if not sent and b"[y/N] " in output:
+                        if answer == "changed_plan":
+                            replace(root / "plan.json", reseal(plan, challenge="0" * 32))
+                        response = {"default": "", "n": "n", "prose": "please approve",
+                                    "generic": "Okay, go ahead.", "digest_only": plan["digest"],
+                                    "assistant_token": "APPROVE " + plan["digest"] + " " + plan["challenge"],
+                                    "environment_file": "", "oversized": "x" * 300}.get(answer, "y")
+                        raw = b"\x04" if answer == "eof" else (response + "\n").encode()
+                        if answer == "fragmented":
+                            os.write(master, raw[:1])
+                            os.write(master, raw[1:])
+                        else:
+                            os.write(master, raw)
+                        sent = True
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                    break
+            if pid is not None:
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                else:
+                    raise AssertionError("TTY child did not finish: " + output.decode(errors="replace"))
+        finally:
+            os.close(master)
+            if pid is not None:
+                os.kill(pid, signal.SIGKILL)
+                os.waitpid(pid, 0)
+        assert b"OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY" in output
+>       assert sent == (answer not in ("changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "repeated", "run_without_approval"))
+E       AssertionError: assert False == ('generic' not in ('changed_before', 'stale', 'redirected', 'outside_assent', 'assistant_flag', 'repeated', ...))
+
+tests/ml_research/test_d148.py:361: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+2026/10/02 07:46:00 INFO mlflow.store.db.utils: Creating initial MLflow database tables...
+2026/10/02 07:46:00 INFO mlflow.store.db.utils: Updating database tables
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 451aebb31d03, add metric step
+INFO  [alembic.runtime.migration] Running upgrade 451aebb31d03 -> 90e64c465722, migrate user column to tags
+INFO  [alembic.runtime.migration] Running upgrade 90e64c465722 -> 181f10493468, allow nulls for metric values
+INFO  [alembic.runtime.migration] Running upgrade 181f10493468 -> df50e92ffc5e, Add Experiment Tags Table
+INFO  [alembic.runtime.migration] Running upgrade df50e92ffc5e -> 7ac759974ad8, Update run tags with larger limit
+INFO  [alembic.runtime.migration] Running upgrade 7ac759974ad8 -> 89d4b8295536, create latest metrics table
+INFO  [89d4b8295536_create_latest_metrics_table_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 89d4b8295536 -> 2b4d017a5e9b, add model registry tables to db
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Adding registered_models and model_versions tables to database.
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 2b4d017a5e9b -> cfd24bdc0731, Update run status constraint with killed
+INFO  [alembic.runtime.migration] Running upgrade cfd24bdc0731 -> 0a8213491aaa, drop_duplicate_killed_constraint
+INFO  [alembic.runtime.migration] Running upgrade 0a8213491aaa -> 728d730b5ebd, add registered model tags table
+INFO  [alembic.runtime.migration] Running upgrade 728d730b5ebd -> 27a6a02d2cf1, add model version tags table
+INFO  [alembic.runtime.migration] Running upgrade 27a6a02d2cf1 -> 84291f40a231, add run_link to model_version
+INFO  [alembic.runtime.migration] Running upgrade 84291f40a231 -> a8c4a736bde6, allow nulls for run_id
+INFO  [alembic.runtime.migration] Running upgrade a8c4a736bde6 -> 39d1c3be5f05, add_is_nan_constraint_for_metrics_tables_if_necessary
+INFO  [alembic.runtime.migration] Running upgrade 39d1c3be5f05 -> c48cb773bb87, reset_default_value_for_is_nan_in_metrics_table_for_mysql
+INFO  [alembic.runtime.migration] Running upgrade c48cb773bb87 -> bd07f7e963c5, create index on run_uuid
+INFO  [alembic.runtime.migration] Running upgrade bd07f7e963c5 -> 0c779009ac13, add deleted_time field to runs table
+INFO  [alembic.runtime.migration] Running upgrade 0c779009ac13 -> cc1f77228345, change param value length to 500
+INFO  [alembic.runtime.migration] Running upgrade cc1f77228345 -> 97727af70f4d, Add creation_time and last_update_time to experiments table
+INFO  [alembic.runtime.migration] Running upgrade 97727af70f4d -> 3500859a5d39, Add Model Aliases table
+INFO  [alembic.runtime.migration] Running upgrade 3500859a5d39 -> 7f2a7d5fae7d, add datasets inputs input_tags tables
+INFO  [alembic.runtime.migration] Running upgrade 7f2a7d5fae7d -> 2d6e25af4d3e, increase max param val length from 500 to 8000
+INFO  [alembic.runtime.migration] Running upgrade 2d6e25af4d3e -> acf3f17fdcc7, add storage location field to model versions
+INFO  [alembic.runtime.migration] Running upgrade acf3f17fdcc7 -> 867495a8f9d4, add trace tables
+INFO  [alembic.runtime.migration] Running upgrade 867495a8f9d4 -> 5b0e9adcef9c, add cascade deletion to trace tables foreign keys
+INFO  [alembic.runtime.migration] Running upgrade 5b0e9adcef9c -> 4465047574b1, increase max dataset schema size
+INFO  [alembic.runtime.migration] Running upgrade 4465047574b1 -> f5a4f2784254, increase run tag value limit to 8000
+INFO  [alembic.runtime.migration] Running upgrade f5a4f2784254 -> 0584bdc529eb, add cascading deletion to datasets from experiments
+INFO  [alembic.runtime.migration] Running upgrade 0584bdc529eb -> 400f98739977, add logged model tables
+INFO  [alembic.runtime.migration] Running upgrade 400f98739977 -> 6953534de441, add step to inputs table
+INFO  [alembic.runtime.migration] Running upgrade 6953534de441 -> bda7b8c39065, increase_model_version_tag_value_limit
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+_______________ test_real_nonseekable_tty_approval[digest_only] ________________
+
+prepared = (PosixPath('/tmp/pytest-of-rob/pytest-46/test_real_nonseekable_tty_appr6'), {'architecture': {'baseline': {'architectu...ine_model_invocations': 40, 'candidate_model_invocations': 40, 'qnode_invocations': 40, 'research_jobs': 1, ...}, ...})
+answer = 'digest_only'
+
+    @pytest.mark.parametrize("answer", ["exact", "fragmented", "default", "n", "prose", "generic", "digest_only", "assistant_token", "oversized", "eof", "changed_plan", "changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "environment_file", "repeated", "run_without_approval"])
+    def test_real_nonseekable_tty_approval(prepared, answer):
+        """Real controlling PTY; automated test-only input, never canonical authority."""
+        import errno
+        import pty
+        import select
+        import signal
+        import time
+        root, plan = prepared
+        # Child exec avoids using inherited ML library/thread state after fork.
+        # The production CLI and /dev/tty open/read/write path are not mocked.
+        script = r"""
+    import errno, io, os, stat, sys
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, sys.argv.pop(1))
+    fd = os.open('/dev/tty', os.O_RDWR | os.O_NOCTTY)
+    try:
+        assert stat.S_ISCHR(os.fstat(fd).st_mode) and os.isatty(fd)
+        assert os.tcgetpgrp(fd) == os.getpgrp()
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+        except OSError as exc:
+            assert exc.errno == errno.ESPIPE
+        else:
+            raise AssertionError('PTY unexpectedly seekable')
+    finally:
+        os.close(fd)
+    try:
+        with open('/dev/tty', 'r+', encoding='utf-8', buffering=1):
+            pass
+    except io.UnsupportedOperation:
+        print('OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY', flush=True)
+    else:
+        raise AssertionError('old text-update defect was not reproduced')
+    from qcoder.ml_research.__main__ import main
+    main()
+    """
+        if answer == "changed_before":
+            replace(root / "plan.json", reseal(plan, shots=598))
+        elif answer == "stale":
+            value = read(root / "candidate-checkpoint.json")
+            replace(root / "candidate-checkpoint.json", reseal(value, changed=True))
+        elif answer == "repeated":
+            approval_seam(root, plan)
+        elif answer in ("outside_assent", "environment_file"):
+            (root / "chat.txt").write_text("Okay, go ahead.")
+            (root / "approved").write_text("approved")
+        if answer == "redirected":
+            script = script.replace("from qcoder.ml_research.__main__", "r, w = os.pipe(); os.write(w, b'y\\n'); os.close(w); os.dup2(r, 0); os.close(r)\nfrom qcoder.ml_research.__main__")
+        if answer == "environment_file":
+            script = script.replace("from qcoder.ml_research.__main__", "os.environ['QCODER_APPROVED'] = 'y'; os.environ['APPROVAL_DIGEST'] = '" + plan["digest"] + "'\nfrom qcoder.ml_research.__main__")
+        command = "run" if answer in ("outside_assent", "run_without_approval") else "approve"
+        extra = ["--digest", plan["digest"]] if answer == "assistant_flag" else []
+        pid, master = pty.fork()
+        if pid == 0:
+            os.execv(sys.executable, [sys.executable, "-I", "-c", script,
+                     str(Path(job.__file__).resolve().parents[2]), "--workspace", str(root), command, *extra])
+        output = bytearray()
+        sent = False
+        status = None
+        deadline = time.monotonic() + 30
+        try:
+            while time.monotonic() < deadline:
+                ready, _, _ = select.select([master], [], [], 0.1)
+                if ready:
+                    try:
+                        part = os.read(master, 4096)
+                    except OSError as exc:
+                        if exc.errno != errno.EIO:
+                            raise
+                        break
+                    if not part:
+                        break
+                    output.extend(part)
+                    if not sent and b"[y/N] " in output:
+                        if answer == "changed_plan":
+                            replace(root / "plan.json", reseal(plan, challenge="0" * 32))
+                        response = {"default": "", "n": "n", "prose": "please approve",
+                                    "generic": "Okay, go ahead.", "digest_only": plan["digest"],
+                                    "assistant_token": "APPROVE " + plan["digest"] + " " + plan["challenge"],
+                                    "environment_file": "", "oversized": "x" * 300}.get(answer, "y")
+                        raw = b"\x04" if answer == "eof" else (response + "\n").encode()
+                        if answer == "fragmented":
+                            os.write(master, raw[:1])
+                            os.write(master, raw[1:])
+                        else:
+                            os.write(master, raw)
+                        sent = True
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                    break
+            if pid is not None:
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                else:
+                    raise AssertionError("TTY child did not finish: " + output.decode(errors="replace"))
+        finally:
+            os.close(master)
+            if pid is not None:
+                os.kill(pid, signal.SIGKILL)
+                os.waitpid(pid, 0)
+        assert b"OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY" in output
+>       assert sent == (answer not in ("changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "repeated", "run_without_approval"))
+E       AssertionError: assert False == ('digest_only' not in ('changed_before', 'stale', 'redirected', 'outside_assent', 'assistant_flag', 'repeated', ...))
+
+tests/ml_research/test_d148.py:361: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+2026/10/02 07:46:02 INFO mlflow.store.db.utils: Creating initial MLflow database tables...
+2026/10/02 07:46:02 INFO mlflow.store.db.utils: Updating database tables
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 451aebb31d03, add metric step
+INFO  [alembic.runtime.migration] Running upgrade 451aebb31d03 -> 90e64c465722, migrate user column to tags
+INFO  [alembic.runtime.migration] Running upgrade 90e64c465722 -> 181f10493468, allow nulls for metric values
+INFO  [alembic.runtime.migration] Running upgrade 181f10493468 -> df50e92ffc5e, Add Experiment Tags Table
+INFO  [alembic.runtime.migration] Running upgrade df50e92ffc5e -> 7ac759974ad8, Update run tags with larger limit
+INFO  [alembic.runtime.migration] Running upgrade 7ac759974ad8 -> 89d4b8295536, create latest metrics table
+INFO  [89d4b8295536_create_latest_metrics_table_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 89d4b8295536 -> 2b4d017a5e9b, add model registry tables to db
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Adding registered_models and model_versions tables to database.
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 2b4d017a5e9b -> cfd24bdc0731, Update run status constraint with killed
+INFO  [alembic.runtime.migration] Running upgrade cfd24bdc0731 -> 0a8213491aaa, drop_duplicate_killed_constraint
+INFO  [alembic.runtime.migration] Running upgrade 0a8213491aaa -> 728d730b5ebd, add registered model tags table
+INFO  [alembic.runtime.migration] Running upgrade 728d730b5ebd -> 27a6a02d2cf1, add model version tags table
+INFO  [alembic.runtime.migration] Running upgrade 27a6a02d2cf1 -> 84291f40a231, add run_link to model_version
+INFO  [alembic.runtime.migration] Running upgrade 84291f40a231 -> a8c4a736bde6, allow nulls for run_id
+INFO  [alembic.runtime.migration] Running upgrade a8c4a736bde6 -> 39d1c3be5f05, add_is_nan_constraint_for_metrics_tables_if_necessary
+INFO  [alembic.runtime.migration] Running upgrade 39d1c3be5f05 -> c48cb773bb87, reset_default_value_for_is_nan_in_metrics_table_for_mysql
+INFO  [alembic.runtime.migration] Running upgrade c48cb773bb87 -> bd07f7e963c5, create index on run_uuid
+INFO  [alembic.runtime.migration] Running upgrade bd07f7e963c5 -> 0c779009ac13, add deleted_time field to runs table
+INFO  [alembic.runtime.migration] Running upgrade 0c779009ac13 -> cc1f77228345, change param value length to 500
+INFO  [alembic.runtime.migration] Running upgrade cc1f77228345 -> 97727af70f4d, Add creation_time and last_update_time to experiments table
+INFO  [alembic.runtime.migration] Running upgrade 97727af70f4d -> 3500859a5d39, Add Model Aliases table
+INFO  [alembic.runtime.migration] Running upgrade 3500859a5d39 -> 7f2a7d5fae7d, add datasets inputs input_tags tables
+INFO  [alembic.runtime.migration] Running upgrade 7f2a7d5fae7d -> 2d6e25af4d3e, increase max param val length from 500 to 8000
+INFO  [alembic.runtime.migration] Running upgrade 2d6e25af4d3e -> acf3f17fdcc7, add storage location field to model versions
+INFO  [alembic.runtime.migration] Running upgrade acf3f17fdcc7 -> 867495a8f9d4, add trace tables
+INFO  [alembic.runtime.migration] Running upgrade 867495a8f9d4 -> 5b0e9adcef9c, add cascade deletion to trace tables foreign keys
+INFO  [alembic.runtime.migration] Running upgrade 5b0e9adcef9c -> 4465047574b1, increase max dataset schema size
+INFO  [alembic.runtime.migration] Running upgrade 4465047574b1 -> f5a4f2784254, increase run tag value limit to 8000
+INFO  [alembic.runtime.migration] Running upgrade f5a4f2784254 -> 0584bdc529eb, add cascading deletion to datasets from experiments
+INFO  [alembic.runtime.migration] Running upgrade 0584bdc529eb -> 400f98739977, add logged model tables
+INFO  [alembic.runtime.migration] Running upgrade 400f98739977 -> 6953534de441, add step to inputs table
+INFO  [alembic.runtime.migration] Running upgrade 6953534de441 -> bda7b8c39065, increase_model_version_tag_value_limit
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+_____________ test_real_nonseekable_tty_approval[assistant_token] ______________
+
+prepared = (PosixPath('/tmp/pytest-of-rob/pytest-46/test_real_nonseekable_tty_appr7'), {'architecture': {'baseline': {'architectu...ine_model_invocations': 40, 'candidate_model_invocations': 40, 'qnode_invocations': 40, 'research_jobs': 1, ...}, ...})
+answer = 'assistant_token'
+
+    @pytest.mark.parametrize("answer", ["exact", "fragmented", "default", "n", "prose", "generic", "digest_only", "assistant_token", "oversized", "eof", "changed_plan", "changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "environment_file", "repeated", "run_without_approval"])
+    def test_real_nonseekable_tty_approval(prepared, answer):
+        """Real controlling PTY; automated test-only input, never canonical authority."""
+        import errno
+        import pty
+        import select
+        import signal
+        import time
+        root, plan = prepared
+        # Child exec avoids using inherited ML library/thread state after fork.
+        # The production CLI and /dev/tty open/read/write path are not mocked.
+        script = r"""
+    import errno, io, os, stat, sys
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, sys.argv.pop(1))
+    fd = os.open('/dev/tty', os.O_RDWR | os.O_NOCTTY)
+    try:
+        assert stat.S_ISCHR(os.fstat(fd).st_mode) and os.isatty(fd)
+        assert os.tcgetpgrp(fd) == os.getpgrp()
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+        except OSError as exc:
+            assert exc.errno == errno.ESPIPE
+        else:
+            raise AssertionError('PTY unexpectedly seekable')
+    finally:
+        os.close(fd)
+    try:
+        with open('/dev/tty', 'r+', encoding='utf-8', buffering=1):
+            pass
+    except io.UnsupportedOperation:
+        print('OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY', flush=True)
+    else:
+        raise AssertionError('old text-update defect was not reproduced')
+    from qcoder.ml_research.__main__ import main
+    main()
+    """
+        if answer == "changed_before":
+            replace(root / "plan.json", reseal(plan, shots=598))
+        elif answer == "stale":
+            value = read(root / "candidate-checkpoint.json")
+            replace(root / "candidate-checkpoint.json", reseal(value, changed=True))
+        elif answer == "repeated":
+            approval_seam(root, plan)
+        elif answer in ("outside_assent", "environment_file"):
+            (root / "chat.txt").write_text("Okay, go ahead.")
+            (root / "approved").write_text("approved")
+        if answer == "redirected":
+            script = script.replace("from qcoder.ml_research.__main__", "r, w = os.pipe(); os.write(w, b'y\\n'); os.close(w); os.dup2(r, 0); os.close(r)\nfrom qcoder.ml_research.__main__")
+        if answer == "environment_file":
+            script = script.replace("from qcoder.ml_research.__main__", "os.environ['QCODER_APPROVED'] = 'y'; os.environ['APPROVAL_DIGEST'] = '" + plan["digest"] + "'\nfrom qcoder.ml_research.__main__")
+        command = "run" if answer in ("outside_assent", "run_without_approval") else "approve"
+        extra = ["--digest", plan["digest"]] if answer == "assistant_flag" else []
+        pid, master = pty.fork()
+        if pid == 0:
+            os.execv(sys.executable, [sys.executable, "-I", "-c", script,
+                     str(Path(job.__file__).resolve().parents[2]), "--workspace", str(root), command, *extra])
+        output = bytearray()
+        sent = False
+        status = None
+        deadline = time.monotonic() + 30
+        try:
+            while time.monotonic() < deadline:
+                ready, _, _ = select.select([master], [], [], 0.1)
+                if ready:
+                    try:
+                        part = os.read(master, 4096)
+                    except OSError as exc:
+                        if exc.errno != errno.EIO:
+                            raise
+                        break
+                    if not part:
+                        break
+                    output.extend(part)
+                    if not sent and b"[y/N] " in output:
+                        if answer == "changed_plan":
+                            replace(root / "plan.json", reseal(plan, challenge="0" * 32))
+                        response = {"default": "", "n": "n", "prose": "please approve",
+                                    "generic": "Okay, go ahead.", "digest_only": plan["digest"],
+                                    "assistant_token": "APPROVE " + plan["digest"] + " " + plan["challenge"],
+                                    "environment_file": "", "oversized": "x" * 300}.get(answer, "y")
+                        raw = b"\x04" if answer == "eof" else (response + "\n").encode()
+                        if answer == "fragmented":
+                            os.write(master, raw[:1])
+                            os.write(master, raw[1:])
+                        else:
+                            os.write(master, raw)
+                        sent = True
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                    break
+            if pid is not None:
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                else:
+                    raise AssertionError("TTY child did not finish: " + output.decode(errors="replace"))
+        finally:
+            os.close(master)
+            if pid is not None:
+                os.kill(pid, signal.SIGKILL)
+                os.waitpid(pid, 0)
+        assert b"OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY" in output
+>       assert sent == (answer not in ("changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "repeated", "run_without_approval"))
+E       AssertionError: assert False == ('assistant_token' not in ('changed_before', 'stale', 'redirected', 'outside_assent', 'assistant_flag', 'repeated', ...))
+
+tests/ml_research/test_d148.py:361: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+2026/10/02 07:46:04 INFO mlflow.store.db.utils: Creating initial MLflow database tables...
+2026/10/02 07:46:04 INFO mlflow.store.db.utils: Updating database tables
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 451aebb31d03, add metric step
+INFO  [alembic.runtime.migration] Running upgrade 451aebb31d03 -> 90e64c465722, migrate user column to tags
+INFO  [alembic.runtime.migration] Running upgrade 90e64c465722 -> 181f10493468, allow nulls for metric values
+INFO  [alembic.runtime.migration] Running upgrade 181f10493468 -> df50e92ffc5e, Add Experiment Tags Table
+INFO  [alembic.runtime.migration] Running upgrade df50e92ffc5e -> 7ac759974ad8, Update run tags with larger limit
+INFO  [alembic.runtime.migration] Running upgrade 7ac759974ad8 -> 89d4b8295536, create latest metrics table
+INFO  [89d4b8295536_create_latest_metrics_table_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 89d4b8295536 -> 2b4d017a5e9b, add model registry tables to db
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Adding registered_models and model_versions tables to database.
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 2b4d017a5e9b -> cfd24bdc0731, Update run status constraint with killed
+INFO  [alembic.runtime.migration] Running upgrade cfd24bdc0731 -> 0a8213491aaa, drop_duplicate_killed_constraint
+INFO  [alembic.runtime.migration] Running upgrade 0a8213491aaa -> 728d730b5ebd, add registered model tags table
+INFO  [alembic.runtime.migration] Running upgrade 728d730b5ebd -> 27a6a02d2cf1, add model version tags table
+INFO  [alembic.runtime.migration] Running upgrade 27a6a02d2cf1 -> 84291f40a231, add run_link to model_version
+INFO  [alembic.runtime.migration] Running upgrade 84291f40a231 -> a8c4a736bde6, allow nulls for run_id
+INFO  [alembic.runtime.migration] Running upgrade a8c4a736bde6 -> 39d1c3be5f05, add_is_nan_constraint_for_metrics_tables_if_necessary
+INFO  [alembic.runtime.migration] Running upgrade 39d1c3be5f05 -> c48cb773bb87, reset_default_value_for_is_nan_in_metrics_table_for_mysql
+INFO  [alembic.runtime.migration] Running upgrade c48cb773bb87 -> bd07f7e963c5, create index on run_uuid
+INFO  [alembic.runtime.migration] Running upgrade bd07f7e963c5 -> 0c779009ac13, add deleted_time field to runs table
+INFO  [alembic.runtime.migration] Running upgrade 0c779009ac13 -> cc1f77228345, change param value length to 500
+INFO  [alembic.runtime.migration] Running upgrade cc1f77228345 -> 97727af70f4d, Add creation_time and last_update_time to experiments table
+INFO  [alembic.runtime.migration] Running upgrade 97727af70f4d -> 3500859a5d39, Add Model Aliases table
+INFO  [alembic.runtime.migration] Running upgrade 3500859a5d39 -> 7f2a7d5fae7d, add datasets inputs input_tags tables
+INFO  [alembic.runtime.migration] Running upgrade 7f2a7d5fae7d -> 2d6e25af4d3e, increase max param val length from 500 to 8000
+INFO  [alembic.runtime.migration] Running upgrade 2d6e25af4d3e -> acf3f17fdcc7, add storage location field to model versions
+INFO  [alembic.runtime.migration] Running upgrade acf3f17fdcc7 -> 867495a8f9d4, add trace tables
+INFO  [alembic.runtime.migration] Running upgrade 867495a8f9d4 -> 5b0e9adcef9c, add cascade deletion to trace tables foreign keys
+INFO  [alembic.runtime.migration] Running upgrade 5b0e9adcef9c -> 4465047574b1, increase max dataset schema size
+INFO  [alembic.runtime.migration] Running upgrade 4465047574b1 -> f5a4f2784254, increase run tag value limit to 8000
+INFO  [alembic.runtime.migration] Running upgrade f5a4f2784254 -> 0584bdc529eb, add cascading deletion to datasets from experiments
+INFO  [alembic.runtime.migration] Running upgrade 0584bdc529eb -> 400f98739977, add logged model tables
+INFO  [alembic.runtime.migration] Running upgrade 400f98739977 -> 6953534de441, add step to inputs table
+INFO  [alembic.runtime.migration] Running upgrade 6953534de441 -> bda7b8c39065, increase_model_version_tag_value_limit
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+________________ test_real_nonseekable_tty_approval[oversized] _________________
+
+prepared = (PosixPath('/tmp/pytest-of-rob/pytest-46/test_real_nonseekable_tty_appr8'), {'architecture': {'baseline': {'architectu...ine_model_invocations': 40, 'candidate_model_invocations': 40, 'qnode_invocations': 40, 'research_jobs': 1, ...}, ...})
+answer = 'oversized'
+
+    @pytest.mark.parametrize("answer", ["exact", "fragmented", "default", "n", "prose", "generic", "digest_only", "assistant_token", "oversized", "eof", "changed_plan", "changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "environment_file", "repeated", "run_without_approval"])
+    def test_real_nonseekable_tty_approval(prepared, answer):
+        """Real controlling PTY; automated test-only input, never canonical authority."""
+        import errno
+        import pty
+        import select
+        import signal
+        import time
+        root, plan = prepared
+        # Child exec avoids using inherited ML library/thread state after fork.
+        # The production CLI and /dev/tty open/read/write path are not mocked.
+        script = r"""
+    import errno, io, os, stat, sys
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, sys.argv.pop(1))
+    fd = os.open('/dev/tty', os.O_RDWR | os.O_NOCTTY)
+    try:
+        assert stat.S_ISCHR(os.fstat(fd).st_mode) and os.isatty(fd)
+        assert os.tcgetpgrp(fd) == os.getpgrp()
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+        except OSError as exc:
+            assert exc.errno == errno.ESPIPE
+        else:
+            raise AssertionError('PTY unexpectedly seekable')
+    finally:
+        os.close(fd)
+    try:
+        with open('/dev/tty', 'r+', encoding='utf-8', buffering=1):
+            pass
+    except io.UnsupportedOperation:
+        print('OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY', flush=True)
+    else:
+        raise AssertionError('old text-update defect was not reproduced')
+    from qcoder.ml_research.__main__ import main
+    main()
+    """
+        if answer == "changed_before":
+            replace(root / "plan.json", reseal(plan, shots=598))
+        elif answer == "stale":
+            value = read(root / "candidate-checkpoint.json")
+            replace(root / "candidate-checkpoint.json", reseal(value, changed=True))
+        elif answer == "repeated":
+            approval_seam(root, plan)
+        elif answer in ("outside_assent", "environment_file"):
+            (root / "chat.txt").write_text("Okay, go ahead.")
+            (root / "approved").write_text("approved")
+        if answer == "redirected":
+            script = script.replace("from qcoder.ml_research.__main__", "r, w = os.pipe(); os.write(w, b'y\\n'); os.close(w); os.dup2(r, 0); os.close(r)\nfrom qcoder.ml_research.__main__")
+        if answer == "environment_file":
+            script = script.replace("from qcoder.ml_research.__main__", "os.environ['QCODER_APPROVED'] = 'y'; os.environ['APPROVAL_DIGEST'] = '" + plan["digest"] + "'\nfrom qcoder.ml_research.__main__")
+        command = "run" if answer in ("outside_assent", "run_without_approval") else "approve"
+        extra = ["--digest", plan["digest"]] if answer == "assistant_flag" else []
+        pid, master = pty.fork()
+        if pid == 0:
+            os.execv(sys.executable, [sys.executable, "-I", "-c", script,
+                     str(Path(job.__file__).resolve().parents[2]), "--workspace", str(root), command, *extra])
+        output = bytearray()
+        sent = False
+        status = None
+        deadline = time.monotonic() + 30
+        try:
+            while time.monotonic() < deadline:
+                ready, _, _ = select.select([master], [], [], 0.1)
+                if ready:
+                    try:
+                        part = os.read(master, 4096)
+                    except OSError as exc:
+                        if exc.errno != errno.EIO:
+                            raise
+                        break
+                    if not part:
+                        break
+                    output.extend(part)
+                    if not sent and b"[y/N] " in output:
+                        if answer == "changed_plan":
+                            replace(root / "plan.json", reseal(plan, challenge="0" * 32))
+                        response = {"default": "", "n": "n", "prose": "please approve",
+                                    "generic": "Okay, go ahead.", "digest_only": plan["digest"],
+                                    "assistant_token": "APPROVE " + plan["digest"] + " " + plan["challenge"],
+                                    "environment_file": "", "oversized": "x" * 300}.get(answer, "y")
+                        raw = b"\x04" if answer == "eof" else (response + "\n").encode()
+                        if answer == "fragmented":
+                            os.write(master, raw[:1])
+                            os.write(master, raw[1:])
+                        else:
+                            os.write(master, raw)
+                        sent = True
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                    break
+            if pid is not None:
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                else:
+                    raise AssertionError("TTY child did not finish: " + output.decode(errors="replace"))
+        finally:
+            os.close(master)
+            if pid is not None:
+                os.kill(pid, signal.SIGKILL)
+                os.waitpid(pid, 0)
+        assert b"OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY" in output
+>       assert sent == (answer not in ("changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "repeated", "run_without_approval"))
+E       AssertionError: assert False == ('oversized' not in ('changed_before', 'stale', 'redirected', 'outside_assent', 'assistant_flag', 'repeated', ...))
+
+tests/ml_research/test_d148.py:361: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+2026/10/02 07:46:05 INFO mlflow.store.db.utils: Creating initial MLflow database tables...
+2026/10/02 07:46:05 INFO mlflow.store.db.utils: Updating database tables
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 451aebb31d03, add metric step
+INFO  [alembic.runtime.migration] Running upgrade 451aebb31d03 -> 90e64c465722, migrate user column to tags
+INFO  [alembic.runtime.migration] Running upgrade 90e64c465722 -> 181f10493468, allow nulls for metric values
+INFO  [alembic.runtime.migration] Running upgrade 181f10493468 -> df50e92ffc5e, Add Experiment Tags Table
+INFO  [alembic.runtime.migration] Running upgrade df50e92ffc5e -> 7ac759974ad8, Update run tags with larger limit
+INFO  [alembic.runtime.migration] Running upgrade 7ac759974ad8 -> 89d4b8295536, create latest metrics table
+INFO  [89d4b8295536_create_latest_metrics_table_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 89d4b8295536 -> 2b4d017a5e9b, add model registry tables to db
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Adding registered_models and model_versions tables to database.
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 2b4d017a5e9b -> cfd24bdc0731, Update run status constraint with killed
+INFO  [alembic.runtime.migration] Running upgrade cfd24bdc0731 -> 0a8213491aaa, drop_duplicate_killed_constraint
+INFO  [alembic.runtime.migration] Running upgrade 0a8213491aaa -> 728d730b5ebd, add registered model tags table
+INFO  [alembic.runtime.migration] Running upgrade 728d730b5ebd -> 27a6a02d2cf1, add model version tags table
+INFO  [alembic.runtime.migration] Running upgrade 27a6a02d2cf1 -> 84291f40a231, add run_link to model_version
+INFO  [alembic.runtime.migration] Running upgrade 84291f40a231 -> a8c4a736bde6, allow nulls for run_id
+INFO  [alembic.runtime.migration] Running upgrade a8c4a736bde6 -> 39d1c3be5f05, add_is_nan_constraint_for_metrics_tables_if_necessary
+INFO  [alembic.runtime.migration] Running upgrade 39d1c3be5f05 -> c48cb773bb87, reset_default_value_for_is_nan_in_metrics_table_for_mysql
+INFO  [alembic.runtime.migration] Running upgrade c48cb773bb87 -> bd07f7e963c5, create index on run_uuid
+INFO  [alembic.runtime.migration] Running upgrade bd07f7e963c5 -> 0c779009ac13, add deleted_time field to runs table
+INFO  [alembic.runtime.migration] Running upgrade 0c779009ac13 -> cc1f77228345, change param value length to 500
+INFO  [alembic.runtime.migration] Running upgrade cc1f77228345 -> 97727af70f4d, Add creation_time and last_update_time to experiments table
+INFO  [alembic.runtime.migration] Running upgrade 97727af70f4d -> 3500859a5d39, Add Model Aliases table
+INFO  [alembic.runtime.migration] Running upgrade 3500859a5d39 -> 7f2a7d5fae7d, add datasets inputs input_tags tables
+INFO  [alembic.runtime.migration] Running upgrade 7f2a7d5fae7d -> 2d6e25af4d3e, increase max param val length from 500 to 8000
+INFO  [alembic.runtime.migration] Running upgrade 2d6e25af4d3e -> acf3f17fdcc7, add storage location field to model versions
+INFO  [alembic.runtime.migration] Running upgrade acf3f17fdcc7 -> 867495a8f9d4, add trace tables
+INFO  [alembic.runtime.migration] Running upgrade 867495a8f9d4 -> 5b0e9adcef9c, add cascade deletion to trace tables foreign keys
+INFO  [alembic.runtime.migration] Running upgrade 5b0e9adcef9c -> 4465047574b1, increase max dataset schema size
+INFO  [alembic.runtime.migration] Running upgrade 4465047574b1 -> f5a4f2784254, increase run tag value limit to 8000
+INFO  [alembic.runtime.migration] Running upgrade f5a4f2784254 -> 0584bdc529eb, add cascading deletion to datasets from experiments
+INFO  [alembic.runtime.migration] Running upgrade 0584bdc529eb -> 400f98739977, add logged model tables
+INFO  [alembic.runtime.migration] Running upgrade 400f98739977 -> 6953534de441, add step to inputs table
+INFO  [alembic.runtime.migration] Running upgrade 6953534de441 -> bda7b8c39065, increase_model_version_tag_value_limit
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+___________________ test_real_nonseekable_tty_approval[eof] ____________________
+
+prepared = (PosixPath('/tmp/pytest-of-rob/pytest-46/test_real_nonseekable_tty_appr9'), {'architecture': {'baseline': {'architectu...ine_model_invocations': 40, 'candidate_model_invocations': 40, 'qnode_invocations': 40, 'research_jobs': 1, ...}, ...})
+answer = 'eof'
+
+    @pytest.mark.parametrize("answer", ["exact", "fragmented", "default", "n", "prose", "generic", "digest_only", "assistant_token", "oversized", "eof", "changed_plan", "changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "environment_file", "repeated", "run_without_approval"])
+    def test_real_nonseekable_tty_approval(prepared, answer):
+        """Real controlling PTY; automated test-only input, never canonical authority."""
+        import errno
+        import pty
+        import select
+        import signal
+        import time
+        root, plan = prepared
+        # Child exec avoids using inherited ML library/thread state after fork.
+        # The production CLI and /dev/tty open/read/write path are not mocked.
+        script = r"""
+    import errno, io, os, stat, sys
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, sys.argv.pop(1))
+    fd = os.open('/dev/tty', os.O_RDWR | os.O_NOCTTY)
+    try:
+        assert stat.S_ISCHR(os.fstat(fd).st_mode) and os.isatty(fd)
+        assert os.tcgetpgrp(fd) == os.getpgrp()
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+        except OSError as exc:
+            assert exc.errno == errno.ESPIPE
+        else:
+            raise AssertionError('PTY unexpectedly seekable')
+    finally:
+        os.close(fd)
+    try:
+        with open('/dev/tty', 'r+', encoding='utf-8', buffering=1):
+            pass
+    except io.UnsupportedOperation:
+        print('OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY', flush=True)
+    else:
+        raise AssertionError('old text-update defect was not reproduced')
+    from qcoder.ml_research.__main__ import main
+    main()
+    """
+        if answer == "changed_before":
+            replace(root / "plan.json", reseal(plan, shots=598))
+        elif answer == "stale":
+            value = read(root / "candidate-checkpoint.json")
+            replace(root / "candidate-checkpoint.json", reseal(value, changed=True))
+        elif answer == "repeated":
+            approval_seam(root, plan)
+        elif answer in ("outside_assent", "environment_file"):
+            (root / "chat.txt").write_text("Okay, go ahead.")
+            (root / "approved").write_text("approved")
+        if answer == "redirected":
+            script = script.replace("from qcoder.ml_research.__main__", "r, w = os.pipe(); os.write(w, b'y\\n'); os.close(w); os.dup2(r, 0); os.close(r)\nfrom qcoder.ml_research.__main__")
+        if answer == "environment_file":
+            script = script.replace("from qcoder.ml_research.__main__", "os.environ['QCODER_APPROVED'] = 'y'; os.environ['APPROVAL_DIGEST'] = '" + plan["digest"] + "'\nfrom qcoder.ml_research.__main__")
+        command = "run" if answer in ("outside_assent", "run_without_approval") else "approve"
+        extra = ["--digest", plan["digest"]] if answer == "assistant_flag" else []
+        pid, master = pty.fork()
+        if pid == 0:
+            os.execv(sys.executable, [sys.executable, "-I", "-c", script,
+                     str(Path(job.__file__).resolve().parents[2]), "--workspace", str(root), command, *extra])
+        output = bytearray()
+        sent = False
+        status = None
+        deadline = time.monotonic() + 30
+        try:
+            while time.monotonic() < deadline:
+                ready, _, _ = select.select([master], [], [], 0.1)
+                if ready:
+                    try:
+                        part = os.read(master, 4096)
+                    except OSError as exc:
+                        if exc.errno != errno.EIO:
+                            raise
+                        break
+                    if not part:
+                        break
+                    output.extend(part)
+                    if not sent and b"[y/N] " in output:
+                        if answer == "changed_plan":
+                            replace(root / "plan.json", reseal(plan, challenge="0" * 32))
+                        response = {"default": "", "n": "n", "prose": "please approve",
+                                    "generic": "Okay, go ahead.", "digest_only": plan["digest"],
+                                    "assistant_token": "APPROVE " + plan["digest"] + " " + plan["challenge"],
+                                    "environment_file": "", "oversized": "x" * 300}.get(answer, "y")
+                        raw = b"\x04" if answer == "eof" else (response + "\n").encode()
+                        if answer == "fragmented":
+                            os.write(master, raw[:1])
+                            os.write(master, raw[1:])
+                        else:
+                            os.write(master, raw)
+                        sent = True
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                    break
+            if pid is not None:
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                else:
+                    raise AssertionError("TTY child did not finish: " + output.decode(errors="replace"))
+        finally:
+            os.close(master)
+            if pid is not None:
+                os.kill(pid, signal.SIGKILL)
+                os.waitpid(pid, 0)
+        assert b"OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY" in output
+>       assert sent == (answer not in ("changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "repeated", "run_without_approval"))
+E       AssertionError: assert False == ('eof' not in ('changed_before', 'stale', 'redirected', 'outside_assent', 'assistant_flag', 'repeated', ...))
+
+tests/ml_research/test_d148.py:361: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+2026/10/02 07:46:07 INFO mlflow.store.db.utils: Creating initial MLflow database tables...
+2026/10/02 07:46:07 INFO mlflow.store.db.utils: Updating database tables
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 451aebb31d03, add metric step
+INFO  [alembic.runtime.migration] Running upgrade 451aebb31d03 -> 90e64c465722, migrate user column to tags
+INFO  [alembic.runtime.migration] Running upgrade 90e64c465722 -> 181f10493468, allow nulls for metric values
+INFO  [alembic.runtime.migration] Running upgrade 181f10493468 -> df50e92ffc5e, Add Experiment Tags Table
+INFO  [alembic.runtime.migration] Running upgrade df50e92ffc5e -> 7ac759974ad8, Update run tags with larger limit
+INFO  [alembic.runtime.migration] Running upgrade 7ac759974ad8 -> 89d4b8295536, create latest metrics table
+INFO  [89d4b8295536_create_latest_metrics_table_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 89d4b8295536 -> 2b4d017a5e9b, add model registry tables to db
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Adding registered_models and model_versions tables to database.
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 2b4d017a5e9b -> cfd24bdc0731, Update run status constraint with killed
+INFO  [alembic.runtime.migration] Running upgrade cfd24bdc0731 -> 0a8213491aaa, drop_duplicate_killed_constraint
+INFO  [alembic.runtime.migration] Running upgrade 0a8213491aaa -> 728d730b5ebd, add registered model tags table
+INFO  [alembic.runtime.migration] Running upgrade 728d730b5ebd -> 27a6a02d2cf1, add model version tags table
+INFO  [alembic.runtime.migration] Running upgrade 27a6a02d2cf1 -> 84291f40a231, add run_link to model_version
+INFO  [alembic.runtime.migration] Running upgrade 84291f40a231 -> a8c4a736bde6, allow nulls for run_id
+INFO  [alembic.runtime.migration] Running upgrade a8c4a736bde6 -> 39d1c3be5f05, add_is_nan_constraint_for_metrics_tables_if_necessary
+INFO  [alembic.runtime.migration] Running upgrade 39d1c3be5f05 -> c48cb773bb87, reset_default_value_for_is_nan_in_metrics_table_for_mysql
+INFO  [alembic.runtime.migration] Running upgrade c48cb773bb87 -> bd07f7e963c5, create index on run_uuid
+INFO  [alembic.runtime.migration] Running upgrade bd07f7e963c5 -> 0c779009ac13, add deleted_time field to runs table
+INFO  [alembic.runtime.migration] Running upgrade 0c779009ac13 -> cc1f77228345, change param value length to 500
+INFO  [alembic.runtime.migration] Running upgrade cc1f77228345 -> 97727af70f4d, Add creation_time and last_update_time to experiments table
+INFO  [alembic.runtime.migration] Running upgrade 97727af70f4d -> 3500859a5d39, Add Model Aliases table
+INFO  [alembic.runtime.migration] Running upgrade 3500859a5d39 -> 7f2a7d5fae7d, add datasets inputs input_tags tables
+INFO  [alembic.runtime.migration] Running upgrade 7f2a7d5fae7d -> 2d6e25af4d3e, increase max param val length from 500 to 8000
+INFO  [alembic.runtime.migration] Running upgrade 2d6e25af4d3e -> acf3f17fdcc7, add storage location field to model versions
+INFO  [alembic.runtime.migration] Running upgrade acf3f17fdcc7 -> 867495a8f9d4, add trace tables
+INFO  [alembic.runtime.migration] Running upgrade 867495a8f9d4 -> 5b0e9adcef9c, add cascade deletion to trace tables foreign keys
+INFO  [alembic.runtime.migration] Running upgrade 5b0e9adcef9c -> 4465047574b1, increase max dataset schema size
+INFO  [alembic.runtime.migration] Running upgrade 4465047574b1 -> f5a4f2784254, increase run tag value limit to 8000
+INFO  [alembic.runtime.migration] Running upgrade f5a4f2784254 -> 0584bdc529eb, add cascading deletion to datasets from experiments
+INFO  [alembic.runtime.migration] Running upgrade 0584bdc529eb -> 400f98739977, add logged model tables
+INFO  [alembic.runtime.migration] Running upgrade 400f98739977 -> 6953534de441, add step to inputs table
+INFO  [alembic.runtime.migration] Running upgrade 6953534de441 -> bda7b8c39065, increase_model_version_tag_value_limit
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+_______________ test_real_nonseekable_tty_approval[changed_plan] _______________
+
+prepared = (PosixPath('/tmp/pytest-of-rob/pytest-46/test_real_nonseekable_tty_appr10'), {'architecture': {'baseline': {'architect...ine_model_invocations': 40, 'candidate_model_invocations': 40, 'qnode_invocations': 40, 'research_jobs': 1, ...}, ...})
+answer = 'changed_plan'
+
+    @pytest.mark.parametrize("answer", ["exact", "fragmented", "default", "n", "prose", "generic", "digest_only", "assistant_token", "oversized", "eof", "changed_plan", "changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "environment_file", "repeated", "run_without_approval"])
+    def test_real_nonseekable_tty_approval(prepared, answer):
+        """Real controlling PTY; automated test-only input, never canonical authority."""
+        import errno
+        import pty
+        import select
+        import signal
+        import time
+        root, plan = prepared
+        # Child exec avoids using inherited ML library/thread state after fork.
+        # The production CLI and /dev/tty open/read/write path are not mocked.
+        script = r"""
+    import errno, io, os, stat, sys
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, sys.argv.pop(1))
+    fd = os.open('/dev/tty', os.O_RDWR | os.O_NOCTTY)
+    try:
+        assert stat.S_ISCHR(os.fstat(fd).st_mode) and os.isatty(fd)
+        assert os.tcgetpgrp(fd) == os.getpgrp()
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+        except OSError as exc:
+            assert exc.errno == errno.ESPIPE
+        else:
+            raise AssertionError('PTY unexpectedly seekable')
+    finally:
+        os.close(fd)
+    try:
+        with open('/dev/tty', 'r+', encoding='utf-8', buffering=1):
+            pass
+    except io.UnsupportedOperation:
+        print('OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY', flush=True)
+    else:
+        raise AssertionError('old text-update defect was not reproduced')
+    from qcoder.ml_research.__main__ import main
+    main()
+    """
+        if answer == "changed_before":
+            replace(root / "plan.json", reseal(plan, shots=598))
+        elif answer == "stale":
+            value = read(root / "candidate-checkpoint.json")
+            replace(root / "candidate-checkpoint.json", reseal(value, changed=True))
+        elif answer == "repeated":
+            approval_seam(root, plan)
+        elif answer in ("outside_assent", "environment_file"):
+            (root / "chat.txt").write_text("Okay, go ahead.")
+            (root / "approved").write_text("approved")
+        if answer == "redirected":
+            script = script.replace("from qcoder.ml_research.__main__", "r, w = os.pipe(); os.write(w, b'y\\n'); os.close(w); os.dup2(r, 0); os.close(r)\nfrom qcoder.ml_research.__main__")
+        if answer == "environment_file":
+            script = script.replace("from qcoder.ml_research.__main__", "os.environ['QCODER_APPROVED'] = 'y'; os.environ['APPROVAL_DIGEST'] = '" + plan["digest"] + "'\nfrom qcoder.ml_research.__main__")
+        command = "run" if answer in ("outside_assent", "run_without_approval") else "approve"
+        extra = ["--digest", plan["digest"]] if answer == "assistant_flag" else []
+        pid, master = pty.fork()
+        if pid == 0:
+            os.execv(sys.executable, [sys.executable, "-I", "-c", script,
+                     str(Path(job.__file__).resolve().parents[2]), "--workspace", str(root), command, *extra])
+        output = bytearray()
+        sent = False
+        status = None
+        deadline = time.monotonic() + 30
+        try:
+            while time.monotonic() < deadline:
+                ready, _, _ = select.select([master], [], [], 0.1)
+                if ready:
+                    try:
+                        part = os.read(master, 4096)
+                    except OSError as exc:
+                        if exc.errno != errno.EIO:
+                            raise
+                        break
+                    if not part:
+                        break
+                    output.extend(part)
+                    if not sent and b"[y/N] " in output:
+                        if answer == "changed_plan":
+                            replace(root / "plan.json", reseal(plan, challenge="0" * 32))
+                        response = {"default": "", "n": "n", "prose": "please approve",
+                                    "generic": "Okay, go ahead.", "digest_only": plan["digest"],
+                                    "assistant_token": "APPROVE " + plan["digest"] + " " + plan["challenge"],
+                                    "environment_file": "", "oversized": "x" * 300}.get(answer, "y")
+                        raw = b"\x04" if answer == "eof" else (response + "\n").encode()
+                        if answer == "fragmented":
+                            os.write(master, raw[:1])
+                            os.write(master, raw[1:])
+                        else:
+                            os.write(master, raw)
+                        sent = True
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                    break
+            if pid is not None:
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                else:
+                    raise AssertionError("TTY child did not finish: " + output.decode(errors="replace"))
+        finally:
+            os.close(master)
+            if pid is not None:
+                os.kill(pid, signal.SIGKILL)
+                os.waitpid(pid, 0)
+        assert b"OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY" in output
+>       assert sent == (answer not in ("changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "repeated", "run_without_approval"))
+E       AssertionError: assert False == ('changed_plan' not in ('changed_before', 'stale', 'redirected', 'outside_assent', 'assistant_flag', 'repeated', ...))
+
+tests/ml_research/test_d148.py:361: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+2026/10/02 07:46:09 INFO mlflow.store.db.utils: Creating initial MLflow database tables...
+2026/10/02 07:46:09 INFO mlflow.store.db.utils: Updating database tables
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 451aebb31d03, add metric step
+INFO  [alembic.runtime.migration] Running upgrade 451aebb31d03 -> 90e64c465722, migrate user column to tags
+INFO  [alembic.runtime.migration] Running upgrade 90e64c465722 -> 181f10493468, allow nulls for metric values
+INFO  [alembic.runtime.migration] Running upgrade 181f10493468 -> df50e92ffc5e, Add Experiment Tags Table
+INFO  [alembic.runtime.migration] Running upgrade df50e92ffc5e -> 7ac759974ad8, Update run tags with larger limit
+INFO  [alembic.runtime.migration] Running upgrade 7ac759974ad8 -> 89d4b8295536, create latest metrics table
+INFO  [89d4b8295536_create_latest_metrics_table_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 89d4b8295536 -> 2b4d017a5e9b, add model registry tables to db
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Adding registered_models and model_versions tables to database.
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 2b4d017a5e9b -> cfd24bdc0731, Update run status constraint with killed
+INFO  [alembic.runtime.migration] Running upgrade cfd24bdc0731 -> 0a8213491aaa, drop_duplicate_killed_constraint
+INFO  [alembic.runtime.migration] Running upgrade 0a8213491aaa -> 728d730b5ebd, add registered model tags table
+INFO  [alembic.runtime.migration] Running upgrade 728d730b5ebd -> 27a6a02d2cf1, add model version tags table
+INFO  [alembic.runtime.migration] Running upgrade 27a6a02d2cf1 -> 84291f40a231, add run_link to model_version
+INFO  [alembic.runtime.migration] Running upgrade 84291f40a231 -> a8c4a736bde6, allow nulls for run_id
+INFO  [alembic.runtime.migration] Running upgrade a8c4a736bde6 -> 39d1c3be5f05, add_is_nan_constraint_for_metrics_tables_if_necessary
+INFO  [alembic.runtime.migration] Running upgrade 39d1c3be5f05 -> c48cb773bb87, reset_default_value_for_is_nan_in_metrics_table_for_mysql
+INFO  [alembic.runtime.migration] Running upgrade c48cb773bb87 -> bd07f7e963c5, create index on run_uuid
+INFO  [alembic.runtime.migration] Running upgrade bd07f7e963c5 -> 0c779009ac13, add deleted_time field to runs table
+INFO  [alembic.runtime.migration] Running upgrade 0c779009ac13 -> cc1f77228345, change param value length to 500
+INFO  [alembic.runtime.migration] Running upgrade cc1f77228345 -> 97727af70f4d, Add creation_time and last_update_time to experiments table
+INFO  [alembic.runtime.migration] Running upgrade 97727af70f4d -> 3500859a5d39, Add Model Aliases table
+INFO  [alembic.runtime.migration] Running upgrade 3500859a5d39 -> 7f2a7d5fae7d, add datasets inputs input_tags tables
+INFO  [alembic.runtime.migration] Running upgrade 7f2a7d5fae7d -> 2d6e25af4d3e, increase max param val length from 500 to 8000
+INFO  [alembic.runtime.migration] Running upgrade 2d6e25af4d3e -> acf3f17fdcc7, add storage location field to model versions
+INFO  [alembic.runtime.migration] Running upgrade acf3f17fdcc7 -> 867495a8f9d4, add trace tables
+INFO  [alembic.runtime.migration] Running upgrade 867495a8f9d4 -> 5b0e9adcef9c, add cascade deletion to trace tables foreign keys
+INFO  [alembic.runtime.migration] Running upgrade 5b0e9adcef9c -> 4465047574b1, increase max dataset schema size
+INFO  [alembic.runtime.migration] Running upgrade 4465047574b1 -> f5a4f2784254, increase run tag value limit to 8000
+INFO  [alembic.runtime.migration] Running upgrade f5a4f2784254 -> 0584bdc529eb, add cascading deletion to datasets from experiments
+INFO  [alembic.runtime.migration] Running upgrade 0584bdc529eb -> 400f98739977, add logged model tables
+INFO  [alembic.runtime.migration] Running upgrade 400f98739977 -> 6953534de441, add step to inputs table
+INFO  [alembic.runtime.migration] Running upgrade 6953534de441 -> bda7b8c39065, increase_model_version_tag_value_limit
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+_____________ test_real_nonseekable_tty_approval[environment_file] _____________
+
+prepared = (PosixPath('/tmp/pytest-of-rob/pytest-46/test_real_nonseekable_tty_appr16'), {'architecture': {'baseline': {'architect...ine_model_invocations': 40, 'candidate_model_invocations': 40, 'qnode_invocations': 40, 'research_jobs': 1, ...}, ...})
+answer = 'environment_file'
+
+    @pytest.mark.parametrize("answer", ["exact", "fragmented", "default", "n", "prose", "generic", "digest_only", "assistant_token", "oversized", "eof", "changed_plan", "changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "environment_file", "repeated", "run_without_approval"])
+    def test_real_nonseekable_tty_approval(prepared, answer):
+        """Real controlling PTY; automated test-only input, never canonical authority."""
+        import errno
+        import pty
+        import select
+        import signal
+        import time
+        root, plan = prepared
+        # Child exec avoids using inherited ML library/thread state after fork.
+        # The production CLI and /dev/tty open/read/write path are not mocked.
+        script = r"""
+    import errno, io, os, stat, sys
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, sys.argv.pop(1))
+    fd = os.open('/dev/tty', os.O_RDWR | os.O_NOCTTY)
+    try:
+        assert stat.S_ISCHR(os.fstat(fd).st_mode) and os.isatty(fd)
+        assert os.tcgetpgrp(fd) == os.getpgrp()
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+        except OSError as exc:
+            assert exc.errno == errno.ESPIPE
+        else:
+            raise AssertionError('PTY unexpectedly seekable')
+    finally:
+        os.close(fd)
+    try:
+        with open('/dev/tty', 'r+', encoding='utf-8', buffering=1):
+            pass
+    except io.UnsupportedOperation:
+        print('OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY', flush=True)
+    else:
+        raise AssertionError('old text-update defect was not reproduced')
+    from qcoder.ml_research.__main__ import main
+    main()
+    """
+        if answer == "changed_before":
+            replace(root / "plan.json", reseal(plan, shots=598))
+        elif answer == "stale":
+            value = read(root / "candidate-checkpoint.json")
+            replace(root / "candidate-checkpoint.json", reseal(value, changed=True))
+        elif answer == "repeated":
+            approval_seam(root, plan)
+        elif answer in ("outside_assent", "environment_file"):
+            (root / "chat.txt").write_text("Okay, go ahead.")
+            (root / "approved").write_text("approved")
+        if answer == "redirected":
+            script = script.replace("from qcoder.ml_research.__main__", "r, w = os.pipe(); os.write(w, b'y\\n'); os.close(w); os.dup2(r, 0); os.close(r)\nfrom qcoder.ml_research.__main__")
+        if answer == "environment_file":
+            script = script.replace("from qcoder.ml_research.__main__", "os.environ['QCODER_APPROVED'] = 'y'; os.environ['APPROVAL_DIGEST'] = '" + plan["digest"] + "'\nfrom qcoder.ml_research.__main__")
+        command = "run" if answer in ("outside_assent", "run_without_approval") else "approve"
+        extra = ["--digest", plan["digest"]] if answer == "assistant_flag" else []
+        pid, master = pty.fork()
+        if pid == 0:
+            os.execv(sys.executable, [sys.executable, "-I", "-c", script,
+                     str(Path(job.__file__).resolve().parents[2]), "--workspace", str(root), command, *extra])
+        output = bytearray()
+        sent = False
+        status = None
+        deadline = time.monotonic() + 30
+        try:
+            while time.monotonic() < deadline:
+                ready, _, _ = select.select([master], [], [], 0.1)
+                if ready:
+                    try:
+                        part = os.read(master, 4096)
+                    except OSError as exc:
+                        if exc.errno != errno.EIO:
+                            raise
+                        break
+                    if not part:
+                        break
+                    output.extend(part)
+                    if not sent and b"[y/N] " in output:
+                        if answer == "changed_plan":
+                            replace(root / "plan.json", reseal(plan, challenge="0" * 32))
+                        response = {"default": "", "n": "n", "prose": "please approve",
+                                    "generic": "Okay, go ahead.", "digest_only": plan["digest"],
+                                    "assistant_token": "APPROVE " + plan["digest"] + " " + plan["challenge"],
+                                    "environment_file": "", "oversized": "x" * 300}.get(answer, "y")
+                        raw = b"\x04" if answer == "eof" else (response + "\n").encode()
+                        if answer == "fragmented":
+                            os.write(master, raw[:1])
+                            os.write(master, raw[1:])
+                        else:
+                            os.write(master, raw)
+                        sent = True
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                    break
+            if pid is not None:
+                waited, status = os.waitpid(pid, os.WNOHANG)
+                if waited:
+                    pid = None
+                else:
+                    raise AssertionError("TTY child did not finish: " + output.decode(errors="replace"))
+        finally:
+            os.close(master)
+            if pid is not None:
+                os.kill(pid, signal.SIGKILL)
+                os.waitpid(pid, 0)
+        assert b"OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY" in output
+>       assert sent == (answer not in ("changed_before", "stale", "redirected", "outside_assent", "assistant_flag", "repeated", "run_without_approval"))
+E       AssertionError: assert False == ('environment_file' not in ('changed_before', 'stale', 'redirected', 'outside_assent', 'assistant_flag', 'repeated', ...))
+
+tests/ml_research/test_d148.py:361: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+2026/10/02 07:46:18 INFO mlflow.store.db.utils: Creating initial MLflow database tables...
+2026/10/02 07:46:18 INFO mlflow.store.db.utils: Updating database tables
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 451aebb31d03, add metric step
+INFO  [alembic.runtime.migration] Running upgrade 451aebb31d03 -> 90e64c465722, migrate user column to tags
+INFO  [alembic.runtime.migration] Running upgrade 90e64c465722 -> 181f10493468, allow nulls for metric values
+INFO  [alembic.runtime.migration] Running upgrade 181f10493468 -> df50e92ffc5e, Add Experiment Tags Table
+INFO  [alembic.runtime.migration] Running upgrade df50e92ffc5e -> 7ac759974ad8, Update run tags with larger limit
+INFO  [alembic.runtime.migration] Running upgrade 7ac759974ad8 -> 89d4b8295536, create latest metrics table
+INFO  [89d4b8295536_create_latest_metrics_table_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 89d4b8295536 -> 2b4d017a5e9b, add model registry tables to db
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Adding registered_models and model_versions tables to database.
+INFO  [2b4d017a5e9b_add_model_registry_tables_to_db_py] Migration complete!
+INFO  [alembic.runtime.migration] Running upgrade 2b4d017a5e9b -> cfd24bdc0731, Update run status constraint with killed
+INFO  [alembic.runtime.migration] Running upgrade cfd24bdc0731 -> 0a8213491aaa, drop_duplicate_killed_constraint
+INFO  [alembic.runtime.migration] Running upgrade 0a8213491aaa -> 728d730b5ebd, add registered model tags table
+INFO  [alembic.runtime.migration] Running upgrade 728d730b5ebd -> 27a6a02d2cf1, add model version tags table
+INFO  [alembic.runtime.migration] Running upgrade 27a6a02d2cf1 -> 84291f40a231, add run_link to model_version
+INFO  [alembic.runtime.migration] Running upgrade 84291f40a231 -> a8c4a736bde6, allow nulls for run_id
+INFO  [alembic.runtime.migration] Running upgrade a8c4a736bde6 -> 39d1c3be5f05, add_is_nan_constraint_for_metrics_tables_if_necessary
+INFO  [alembic.runtime.migration] Running upgrade 39d1c3be5f05 -> c48cb773bb87, reset_default_value_for_is_nan_in_metrics_table_for_mysql
+INFO  [alembic.runtime.migration] Running upgrade c48cb773bb87 -> bd07f7e963c5, create index on run_uuid
+INFO  [alembic.runtime.migration] Running upgrade bd07f7e963c5 -> 0c779009ac13, add deleted_time field to runs table
+INFO  [alembic.runtime.migration] Running upgrade 0c779009ac13 -> cc1f77228345, change param value length to 500
+INFO  [alembic.runtime.migration] Running upgrade cc1f77228345 -> 97727af70f4d, Add creation_time and last_update_time to experiments table
+INFO  [alembic.runtime.migration] Running upgrade 97727af70f4d -> 3500859a5d39, Add Model Aliases table
+INFO  [alembic.runtime.migration] Running upgrade 3500859a5d39 -> 7f2a7d5fae7d, add datasets inputs input_tags tables
+INFO  [alembic.runtime.migration] Running upgrade 7f2a7d5fae7d -> 2d6e25af4d3e, increase max param val length from 500 to 8000
+INFO  [alembic.runtime.migration] Running upgrade 2d6e25af4d3e -> acf3f17fdcc7, add storage location field to model versions
+INFO  [alembic.runtime.migration] Running upgrade acf3f17fdcc7 -> 867495a8f9d4, add trace tables
+INFO  [alembic.runtime.migration] Running upgrade 867495a8f9d4 -> 5b0e9adcef9c, add cascade deletion to trace tables foreign keys
+INFO  [alembic.runtime.migration] Running upgrade 5b0e9adcef9c -> 4465047574b1, increase max dataset schema size
+INFO  [alembic.runtime.migration] Running upgrade 4465047574b1 -> f5a4f2784254, increase run tag value limit to 8000
+INFO  [alembic.runtime.migration] Running upgrade f5a4f2784254 -> 0584bdc529eb, add cascading deletion to datasets from experiments
+INFO  [alembic.runtime.migration] Running upgrade 0584bdc529eb -> 400f98739977, add logged model tables
+INFO  [alembic.runtime.migration] Running upgrade 400f98739977 -> 6953534de441, add step to inputs table
+INFO  [alembic.runtime.migration] Running upgrade 6953534de441 -> bda7b8c39065, increase_model_version_tag_value_limit
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+=============================== warnings summary ===============================
+tests/ml_research/test_d148.py: 19 warnings
+  /usr/lib/python3.12/pty.py:95: DeprecationWarning: This process (pid=3) is multi-threaded, use of forkpty() may lead to deadlocks in the child.
+    pid, fd = os.forkpty()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/ml_research/test_d148.py::test_real_science_delivery_failure_retry_duplicate_readback
+FAILED tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[exact]
+FAILED tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[fragmented]
+FAILED tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[default]
+FAILED tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[n]
+FAILED tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[prose]
+FAILED tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[generic]
+FAILED tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[digest_only]
+FAILED tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[assistant_token]
+FAILED tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[oversized]
+FAILED tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[eof]
+FAILED tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[changed_plan]
+FAILED tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[environment_file]
+13 failed, 166 passed, 19 warnings in 80.82s (0:01:20)

@@ -55,14 +55,14 @@ def build(role):
 
 
 def checkpoint(role, model, fixture, history, epoch):
-    from .runtime import code_identity, runtime
-    return seal({"schema": "d148.checkpoint.v1", "role": role, "training_code": code_identity(), "training_runtime": runtime(), "architecture": ARCHITECTURES[role], "recipe": RECIPES[role], "fixture_digest": fixture["digest"], "split_digest": fixture["split_digest"], "preprocessing_digest": fixture["preprocessing"]["digest"], "epoch": epoch, "selection_history": history, "selection_partitions": ["train", "validation"], "heldout_evaluations_before_freeze": 0, "state": {key: value.detach().tolist() for key, value in model.state_dict().items()}})
+    from .runtime import scientific_identity, scientific_runtime
+    return seal({"schema": "d148.checkpoint.v2", "role": role, "scientific_identity": scientific_identity(), "scientific_runtime": scientific_runtime(), "architecture": ARCHITECTURES[role], "recipe": RECIPES[role], "fixture_digest": fixture["digest"], "split_digest": fixture["split_digest"], "preprocessing_digest": fixture["preprocessing"]["digest"], "epoch": epoch, "selection_history": history, "selection_partitions": ["train", "validation"], "heldout_evaluations_before_freeze": 0, "state": {key: value.detach().tolist() for key, value in model.state_dict().items()}})
 
 
 def validate_checkpoint(record, role, fixture):
-    checked(record, "d148.checkpoint.v1", ["role", "training_code", "training_runtime", "architecture", "recipe", "fixture_digest", "split_digest", "preprocessing_digest", "epoch", "selection_history", "selection_partitions", "heldout_evaluations_before_freeze", "state"])
-    from .runtime import code_identity, runtime
-    require(record["training_code"] == code_identity() and record["training_runtime"] == runtime(), "checkpoint_code_runtime")
+    checked(record, "d148.checkpoint.v2", ["role", "scientific_identity", "scientific_runtime", "architecture", "recipe", "fixture_digest", "split_digest", "preprocessing_digest", "epoch", "selection_history", "selection_partitions", "heldout_evaluations_before_freeze", "state"])
+    from .runtime import scientific_identity, scientific_runtime
+    require(record["scientific_identity"] == scientific_identity() and record["scientific_runtime"] == scientific_runtime(), "checkpoint_code_runtime")
     require(record["role"] == role and record["architecture"] == ARCHITECTURES[role] and record["recipe"] == RECIPES[role], "checkpoint_architecture_recipe")
     require(record["fixture_digest"] == fixture["digest"] and record["split_digest"] == fixture["split_digest"] and record["preprocessing_digest"] == fixture["preprocessing"]["digest"], "checkpoint_fixture")
     require(record["selection_partitions"] == ["train", "validation"] and type(record["heldout_evaluations_before_freeze"]) is int and record["heldout_evaluations_before_freeze"] == 0, "heldout_selection")

@@ -1,0 +1,10 @@
+........................................................................ [ 40%]
+........................................................................ [ 80%]
+...................................                                      [100%]
+=============================== warnings summary ===============================
+tests/ml_research/test_d148.py: 19 warnings
+  /usr/lib/python3.12/pty.py:95: DeprecationWarning: This process (pid=5) is multi-threaded, use of forkpty() may lead to deadlocks in the child.
+    pid, fd = os.forkpty()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+179 passed, 19 warnings in 127.06s (0:02:07)
