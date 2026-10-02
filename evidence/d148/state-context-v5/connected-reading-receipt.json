@@ -1,0 +1,24 @@
+{
+  "repository": "QuantumReadySolutions/qcoder-internal",
+  "branch": "ops/tactical-conference-1-continuity-20260920",
+  "records": [
+    {
+      "path": "docs/private-notes/tactical-conference-coordination/iqt-2026-d148-e13-state-router-finding-20261002.md",
+      "commit": "193a4acd29376ecb8984eab42d82486ea2391ba0",
+      "blob": "fab16c1efeccbc299383d179277fd90d4f9ce1f3"
+    },
+    {
+      "path": "docs/continuity/current/TACTICAL_CONFERENCE.md",
+      "blob": "ff2c4221f11092ffb24f2c4a7116ae9055c928bf"
+    },
+    {
+      "path": "docs/private-notes/tactical-conference-coordination/iqt-2026-d148-phase-e-natural-client-findings-20261002.md",
+      "blob": "b1cfeaaef3f45a39c646bb3554f24455c31c01c4"
+    },
+    {
+      "path": "docs/private-notes/tactical-conference-coordination/iqt-2026-d148-multi-assistant-provenance-coverage-mapping-20261002.md",
+      "blob": "762b08c141abf0003eac88ee4fb5e319d2f24bf8"
+    }
+  ],
+  "read_completely": true
+}

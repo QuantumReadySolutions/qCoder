@@ -1,0 +1,20 @@
+{
+  "bytes": 1404563,
+  "member_count": 10,
+  "members": [
+    "CARBON-UPDATE.txt",
+    "CLIENT-BINDING.txt",
+    "CONTEXT-SCHEMA.txt",
+    "SHA256SUMS",
+    "d148_client_context.py",
+    "dependencies.lock.txt",
+    "qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5-py3-none-any.whl",
+    "qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5.tar.gz",
+    "transfer-manifest.json",
+    "verify-update.py"
+  ],
+  "name": "d148-dev8-carbon-correction.tar.gz",
+  "no_dependency_wheelhouse": true,
+  "no_scientific_state": true,
+  "sha256": "11dc63cea755f657a14f1699f41164fce7a2e994df52eb0b2cb94526174e4498"
+}

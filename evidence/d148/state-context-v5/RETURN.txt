@@ -1,0 +1,166 @@
+D148_STATE_AWARE_CLIENT_CONTEXT_READY__NO_NEW_SCIENCE
+
+Repository: QuantumReadySolutions/qCoder
+Branch: conference/iqt-2026-ml-research-successor-v1
+Basis evidence HEAD: c3103ea81255455464e8950828155ccb4581831d
+Basis tree: 8684f86b8afbea1152d5e89f3a62d81622ea15c8
+Artifact source HEAD: 49d1800b1e2a5b240aae3f43570c685e88f8b2fb
+Artifact source tree: e9aeef1023a2531c84b16ef6543ad01e5f032f0d
+Artifact source parent: c3103ea81255455464e8950828155ccb4581831d
+Final evidence HEAD/tree/parent are returned in the handoff; this file cannot
+contain its own Git identity. Commits are local; no remote push was performed.
+
+Connected GitHub E13 finding was read at exact commit
+193a4acd29376ecb8984eab42d82486ea2391ba0, together with current continuity,
+Phase E E01-E11/client findings and multi-assistant provenance coverage mapping.
+Exact blob identities are in connected-reading-receipt.json. No new campaign
+planning or Strategic/Roadmap/Tactical/Rob authorization gate was introduced.
+
+Implemented operation:
+  python -I -B -m qcoder.ml_research.client_context --workspace WORKSPACE
+The external scripts/d148_client_context.py launcher calls that same operation.
+The old d148_client_readback.py is now a compatibility alias to it. Current Phase E
+binding is docs/d148-client-context-binding.txt, included in the correction bundle
+as CLIENT-BINDING.txt. All six requested natural read-only questions use the same
+operation, independent of question tense. Execution/reuse/delivery remain their
+existing bounded actions. No public MCP, Context Bridge or protected surface changed.
+
+Exact decision logic:
+- Open the existing research.lock read-only; acquire nonblocking exclusive flock
+  shared with existing lifecycle writers. Never create the lock or workspace.
+- Detect lifecycle record presence with lexists (including broken symlinks).
+  Refuse orphaned later records; require the existing plan and tracker.
+- Read-only SQLite preflight checks existing tables, current schema and at least
+  one experiment, preventing initialization of absent/damaged stores.
+- job.current validates exact plan, scientific inputs, runtime, selected MLflow
+  records and destination. Local recipe digest must match both source records.
+- No approval/later state -> prepared_awaiting_user_authority / not_entered.
+- Valid unexpired exact-plan approval and no entry -> approved_not_entered.
+- Valid consumed approval and joined entry without result ->
+  entered_incomplete_or_unknown. Receipt, if present, must join entry/plan and
+  have a recognized status. Even completed receipt without durable result is
+  incomplete/unknown; retry remains forbidden.
+- Result present -> existing job.verify_completed plus strict entry validation.
+  No assessment and empty reserved remote destination -> completed_not_delivered,
+  science_state=completed, required_next_action=deliver_existing_result_only.
+  Orphaned remote delivery/artifact without local assessment refuses.
+- Assessment present -> exact joins to source IDs, plan, identities, job, result,
+  receipt, metrics, accounting, conclusion, next action and evaluation time;
+  fixed rationale/limitations. Fresh tracker.readback verifies actual MLflow
+  run parameters, metrics and downloaded canonical JSON artifact. It never uses
+  readback.json or chat memory as proof. Success ->
+  completed_delivered_verified_readback / completed / consumed_no_retry.
+- Recheck exact current plan before returning. Any error or unavailable evidence
+  returns refused/inconsistent_or_unverifiable with no partial claims or raw
+  exception text. It never falls back to pre-execution status or says pending.
+  Partial delivery with an unverified assessment also refuses; it does not retry.
+
+Schema and examples:
+- Complete field/type/decision documentation: docs/d148-client-context-schema.txt.
+- prepared-projection-example.json: pre-execution projection, no metrics or
+  result-derived conclusion; selected IDs, compatibility, inert summary,
+  awaiting authority, missing held-out comparison, approval needed only to execute.
+- completed-projection-example.json: science_state=completed, readback_verified=true,
+  source IDs, 37/40 vs 37/40, delta 0, 1/40/40/40 job/model/QNode accounting,
+  bounded_refinement_candidate, consider_one_predeclared_quantum_refinement,
+  limitations, exact currentness and all four provenance classes.
+These examples are SYNTHETIC isolated sin/cos fixture states with deliberately
+constructed outcomes, not Carbon or Precision scientific measurements.
+
+Share-safe allowlist:
+- lifecycle/science/authority states, verified/readback flags and bounded actions;
+- exact 32-hex source/job/assessment IDs and 64-hex plan/result/receipt/assessment/
+  readback/checkpoint/fixture/data/labels/split/preprocessing digests;
+- source role plus allowlisted fixture/split/preprocessing/checkpoint/recipe digests;
+- validated protocol/budget and fixed model/device/method/authority descriptions;
+- scalar finite numeric metrics, counts, times and fixed shots semantics;
+- deterministic conclusion/action, fixed rationale/limitations/nonclaims;
+- qcoder_established, external_reported, assistant_inference=[], not_established;
+- zero new jobs, approval_created=false, plan_mutated=false, projection digest.
+Explicit exclusions: local workspace/tracker/artifact/download paths, rows,
+labels, predictions, weights, source text, UID/TTY, arbitrary tracker parameters,
+tags/free text, raw environment/runtime descriptions, exception text and full
+scientific/authority records. Another assistant's statements remain external and
+untrusted; they are not accepted as operation inputs or substitutes for evidence.
+The accepted MLflow read path can download a temporary artifact copy; no science,
+plan, authority, result, assessment or tracker record is created by context.
+
+Identity preservation:
+- Every existing ml_research source byte is unchanged; client_context.py is new
+  presentation code, packaged and independently identified by the dev8 artifact.
+- 155 previous package payload files are byte-identical; only qcoder/__init__.py
+  changes version and one new module is added (157 total).
+- execution identity: 9c455d229c0bfd66e50298956d1ce8cb03417112e31fc87c357ffcc5051a0553
+- scientific identity: 1442839f37306983280c95fdca9fb0a0bd86b8ca77ff0a32ad806cd86ea3398f
+- approval identity: 5b860bbe27ba8ec7893fe1baab71a3d77c5b4c7c965e490c44846b8a81fc4cba
+- scientific runtime: 6f1cd1664f02b3baaa9eff522a5fbabd9e0323a024a11e57a9d0f64cf13027c9
+No identity exception, checkpoint reseal, runtime weakening or replanning is needed.
+
+Required proof mapping (all PASS):
+1-4. Seven-state lifecycle matrix proves prepared/completed routing, no pending
+     science for completed results, and no fabricated pre-execution metrics.
+5. External assertion/tag/free-text test ignores approval, split and result claims;
+   mismatched/missing structured split parameters still refuse.
+6-7. Privacy assertions inspect every successful and refused projection; injected
+     path/free-text sentinels do not escape. CLI error arguments are sanitized.
+8-10. Mutation/science guards forbid approval/prepare/run/evaluate/train/delivery/
+      assessment factories and tracker mutators. Entire workspace byte snapshots
+      remain unchanged, including absent authority and the exact existing plan.
+11. Fresh real local MLflow read-back passes with a poisoned cached readback file;
+    unavailable read-back, changed run metrics and tampered stored artifacts refuse.
+12. Existing scientific, authority, PTY, identity, no-retry, delivery-failure,
+    duplicate-delivery and exact-result-reuse regressions pass source/installed.
+Additional negatives: missing/empty/outdated/damaged tracker schema, orphan state,
+broken symlink, stale inputs/authority, busy lock and orphaned remote delivery.
+
+Validation:
+- Broad source suite: 223 passed, 19 existing PTY deprecation warnings, 196.77s.
+- Final source router suite after orphan-delivery hardening: 33 passed, 82.67s.
+- Exact dev7 identity source test: 1 passed, 0.20s (also in final suite).
+- Clean installed final suite: 114 passed, 19 existing PTY warnings, 204.63s.
+  Cwd /tmp, -I -B, -c /dev/null, copied tests, installed site-packages only.
+- Fresh offline venv has exact 99 dependency distributions plus qCoder; pip check PASS.
+- Exact 157-member source/Git-archive/wheel/canonical-sdist/installed-byte proof PASS.
+- dev7 -> dev8 simulation PASS: construct two isolated synthetic states with dev7,
+  install only the dev8 wheel, project both using installed dev8, fresh real MLflow
+  read-back, exact reuse new jobs=0, all workspace bytes/identity domains unchanged.
+- Bundle dev7 preflight and dev8 postflight PASS; no tracker access by verifier.
+- Extracted bundle membership and every SHA256SUMS entry PASS.
+- All 302 prior evidence/artifact files retain their original SHA-256 values.
+- Initial router test failure was a test targeting MLflow's temporary downloaded
+  copy rather than its stored artifact. Corrected to mutate the stored synthetic
+  artifact; final refusal proved. Initial log preserved; no scientific workaround.
+
+Commands:
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q tests/ml_research tests/test_release_version_consistency.py tests/test_focused_loop_contracts_v1.py tests/test_focused_loop_package_isolation_v1.py tests/test_public_package_metadata.py
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q tests/ml_research/test_client_context.py
+cd /tmp; /tmp/d148-installed-proof-v5/venv/bin/python -I -B -m pytest -q -c /dev/null /tmp/d148-installed-proof-v5/tests
+
+Unpublished successor: 0.6.0a24.post0.dev8+iqt.d148.context.v5
+Built from exact Git archive; SOURCE_DATE_EPOCH=1790870400; canonical sdist.
+Wheel: qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5-py3-none-any.whl
+  bytes: 731491
+  SHA-256: 36818af120efa83b32cd6b1cf9101f06e308974b3a43a92ae16f2a23f49d7016
+Sdist: qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5.tar.gz
+  bytes: 667943
+  SHA-256: fdb700b4cb78d580c3739f8837beb80542627bb6a776dd05c0cc691a629f2641
+Minimal Carbon bundle: d148-dev8-carbon-correction.tar.gz
+  location: artifacts/d148/carbon-correction-v5/d148-dev8-carbon-correction.tar.gz
+  bytes: 1404563
+  SHA-256: 11dc63cea755f657a14f1699f41164fce7a2e994df52eb0b2cb94526174e4498
+Exactly ten members: wheel, sdist, launcher, read-only update verifier, current
+binding, schema documentation, unchanged dependency lock, transfer manifest,
+update instructions, SHA256SUMS. No wheelhouse, checkpoints or scientific state.
+
+No canonical Precision or Carbon science ran. No canonical workspace operation,
+training, approval, plan, entry, evaluation, assessment or refinement was created.
+Synthetic tests use isolated states; existing model tests use their isolated test
+fixtures. No live Carbon access, installation or fresh Cursor acceptance is claimed.
+Dev7 evidence is untouched; D-147 and Tactical_38/WI-0441 are untouched.
+Blockers for this contained correction: none. Ready for qCoder-only Carbon update
+and read-only fresh-Agent acceptance using the existing completed Carbon workspace.
+No new campaign authorization is required.
+
+Exact changed paths are in changed-files.txt. Projection examples and proof logs
+are preserved in this evidence directory; the binary bundle is local and ignored
+by Git, following the existing artifact convention.

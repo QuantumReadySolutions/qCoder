@@ -1,0 +1,87 @@
+{
+  "approval_created": false,
+  "assistant_inference": [],
+  "authority_state": "awaiting_user_authority",
+  "digest": "c3ad318ad74da13afd1ad3cad2420471ba5ff423f131c0c04d5b25ddf103016d",
+  "external_reported": {
+    "baseline": {
+      "checkpoint_digest": "4eba623e9faf35a089f3f9ac9d0d54aab68cfecbf44337ca612eb016391d0d6b",
+      "fixture_digest": "f217c058853090e19553c6781ec9235ae854a890868d55d6c24aec8a3ea6dee5",
+      "preprocessing_digest": "78443e4dc636793681b856559a06b26a4386b5d63591f23c52b1ef64b9c186ba",
+      "recipe_digest": "05d320b20011f00fce3b4e824057b45e25395a76786e9345e309fee52997937b",
+      "role": "baseline",
+      "split_digest": "7289b9f8c757ac81da69f4f1e2f43351b6983794f4c3d9f0c6bd1d142fa39315"
+    },
+    "candidate": {
+      "checkpoint_digest": "965bf3b693e33fe9cb61801c653e1dac55ec22df7323d91af0161cf3dde2d325",
+      "fixture_digest": "f217c058853090e19553c6781ec9235ae854a890868d55d6c24aec8a3ea6dee5",
+      "preprocessing_digest": "78443e4dc636793681b856559a06b26a4386b5d63591f23c52b1ef64b9c186ba",
+      "recipe_digest": "05d320b20011f00fce3b4e824057b45e25395a76786e9345e309fee52997937b",
+      "role": "candidate",
+      "split_digest": "7289b9f8c757ac81da69f4f1e2f43351b6983794f4c3d9f0c6bd1d142fa39315"
+    }
+  },
+  "lifecycle_state": "prepared_awaiting_user_authority",
+  "new_scientific_jobs": 0,
+  "not_established": [
+    "held-out performance comparison",
+    "result-derived next action",
+    "quantum advantage",
+    "population/general performance",
+    "refinement outcome",
+    "authorship or test basis of excluded tracker free text",
+    "another assistant's assertions are external/untrusted, not qCoder evidence"
+  ],
+  "plan_mutated": false,
+  "qcoder_established": {
+    "checkpoint_digests": {
+      "baseline": "4eba623e9faf35a089f3f9ac9d0d54aab68cfecbf44337ca612eb016391d0d6b",
+      "candidate": "965bf3b693e33fe9cb61801c653e1dac55ec22df7323d91af0161cf3dde2d325"
+    },
+    "compatibility_basis": "local canonical inputs, split, preprocessing and checkpoints independently checked against exact selected MLflow parameters",
+    "compatible": true,
+    "currentness": "exact_inputs_verified",
+    "inert_job_summary": {
+      "after_success": "local MLflow assessment delivery and verified read-back",
+      "automatic_retry": false,
+      "baseline": "frozen classical 2-4-1 ReLU classifier",
+      "budget": {
+        "baseline_model_invocations": 40,
+        "candidate_model_invocations": 40,
+        "qnode_invocations": 40,
+        "research_jobs": 1,
+        "timeout_seconds": 60
+      },
+      "candidate": "frozen two-qubit PennyLane hybrid classifier; two entangling layers",
+      "device": "default.qubit",
+      "method": "analytic-statevector",
+      "protocol": {
+        "candidate_min_correct": 26,
+        "heldout_count": 40,
+        "id": "d148.result.v1",
+        "maximum_baseline_advantage_correct": 4,
+        "metric": "accuracy@logit>=0",
+        "shots": null
+      },
+      "training": false
+    },
+    "job_id": "18d09127b04f46ff9a386e9680a58db8",
+    "plan_digest": "6636f2073498b9b174ddea3f947c16faacaa688ac3ec5bbb836747d6c2126d53",
+    "scientific_digests": {
+      "data_digest": "cae46aa2cd021a4189cb7f126e9ac7e5d2ff9f8a3e5a7dfb086b54dbaa46021c",
+      "fixture_digest": "f217c058853090e19553c6781ec9235ae854a890868d55d6c24aec8a3ea6dee5",
+      "labels_digest": "bc0364c9325947ca3930319609f45d9376a8685b823d8683b20f0c98da197d94",
+      "preprocessing_digest": "78443e4dc636793681b856559a06b26a4386b5d63591f23c52b1ef64b9c186ba",
+      "split_digest": "7289b9f8c757ac81da69f4f1e2f43351b6983794f4c3d9f0c6bd1d142fa39315"
+    },
+    "source_run_ids": {
+      "baseline": "726454f1f2594765978f9c85bb267562",
+      "candidate": "54b34870869245fabf3ef036e561f746"
+    }
+  },
+  "readback_verified": false,
+  "required_next_action": "user_origin_approval_required_for_execution_only",
+  "schema": "d148.client_context.v1",
+  "science_state": "not_entered",
+  "status": "verified"
+}

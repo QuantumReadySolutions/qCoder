@@ -1,0 +1,108 @@
+{
+  "approval_created": false,
+  "assistant_inference": [],
+  "authority_state": "consumed_no_retry",
+  "digest": "7c6ab96cf22d11f69b7d045674c96be75137ec31945a5a1f913806b9fceed00a",
+  "external_reported": {
+    "baseline": {
+      "checkpoint_digest": "4eba623e9faf35a089f3f9ac9d0d54aab68cfecbf44337ca612eb016391d0d6b",
+      "fixture_digest": "f217c058853090e19553c6781ec9235ae854a890868d55d6c24aec8a3ea6dee5",
+      "preprocessing_digest": "78443e4dc636793681b856559a06b26a4386b5d63591f23c52b1ef64b9c186ba",
+      "recipe_digest": "05d320b20011f00fce3b4e824057b45e25395a76786e9345e309fee52997937b",
+      "role": "baseline",
+      "split_digest": "7289b9f8c757ac81da69f4f1e2f43351b6983794f4c3d9f0c6bd1d142fa39315"
+    },
+    "candidate": {
+      "checkpoint_digest": "965bf3b693e33fe9cb61801c653e1dac55ec22df7323d91af0161cf3dde2d325",
+      "fixture_digest": "f217c058853090e19553c6781ec9235ae854a890868d55d6c24aec8a3ea6dee5",
+      "preprocessing_digest": "78443e4dc636793681b856559a06b26a4386b5d63591f23c52b1ef64b9c186ba",
+      "recipe_digest": "05d320b20011f00fce3b4e824057b45e25395a76786e9345e309fee52997937b",
+      "role": "candidate",
+      "split_digest": "7289b9f8c757ac81da69f4f1e2f43351b6983794f4c3d9f0c6bd1d142fa39315"
+    }
+  },
+  "lifecycle_state": "completed_delivered_verified_readback",
+  "new_scientific_jobs": 0,
+  "not_established": [
+    "quantum advantage",
+    "population/general performance",
+    "refinement outcome",
+    "authorship or test basis of excluded tracker free text",
+    "another assistant's assertions are external/untrusted, not qCoder evidence"
+  ],
+  "plan_mutated": false,
+  "qcoder_established": {
+    "accounting": {
+      "baseline_model_invocations": 40,
+      "candidate_model_invocations": 40,
+      "heldout_examples_per_model": 40,
+      "heldout_examples_unique": 40,
+      "heldout_model_example_pairs": 80,
+      "pennylane_tracker": {
+        "batches": 40,
+        "executions": 40,
+        "simulations": 40
+      },
+      "qnode_invocations": 40,
+      "research_job_attempts": 1,
+      "shots": null,
+      "shots_semantics": "not_applicable"
+    },
+    "assessment_digest": "c02a47bbff8f8ca96cb8aa73df51b5a54404cb4ba66ce73c6dc0c7406b0046e8",
+    "assessment_run_id": "cd9f8ddcd3ca4fb1aa415fedfdf7850a",
+    "checkpoint_digests": {
+      "baseline": "4eba623e9faf35a089f3f9ac9d0d54aab68cfecbf44337ca612eb016391d0d6b",
+      "candidate": "965bf3b693e33fe9cb61801c653e1dac55ec22df7323d91af0161cf3dde2d325"
+    },
+    "compatibility_basis": "local canonical inputs, split, preprocessing and checkpoints independently checked against exact selected MLflow parameters",
+    "compatible": true,
+    "currentness": "exact_inputs_verified",
+    "evaluation_state": "evaluation_complete",
+    "evaluation_time": 1790971628.158592,
+    "evidence_conclusion": "bounded_refinement_candidate",
+    "job_id": "c2eaf53f90f34f2aac9b2481f16c6ff6",
+    "limitations": [
+      "40 held-out examples",
+      "one fixed recipe per model",
+      "no advantage, generalization or QPU claim",
+      "no automatic refinement"
+    ],
+    "metrics": {
+      "baseline": {
+        "accuracy": 0.925,
+        "correct": 37,
+        "count": 40
+      },
+      "candidate": {
+        "accuracy": 0.925,
+        "correct": 37,
+        "count": 40
+      },
+      "delta": 0.0
+    },
+    "next_action": "consider_one_predeclared_quantum_refinement",
+    "plan_digest": "914d3e727066ab067a91f81e735afa1144c4a69fd42502c4237344b0b093a0ba",
+    "rationale": "Predeclared accuracy >=26/40 and baseline advantage <=4/40; descriptive comparison only.",
+    "readback_digest": "48f611a509e9cd921000a07ff8809883a621eef47c1c872fdcd82c4fda8be96e",
+    "readback_verified_at": 1790971797.4779158,
+    "receipt_digest": "94dff49eaea94460b737ce029c5198f46b85c1374b28f75426a6c878b3324790",
+    "result_digest": "c10274ae679277086920ad880ca975989e6dd58bd65f1bbfeb0a09cc678a90cc",
+    "scientific_digests": {
+      "data_digest": "cae46aa2cd021a4189cb7f126e9ac7e5d2ff9f8a3e5a7dfb086b54dbaa46021c",
+      "fixture_digest": "f217c058853090e19553c6781ec9235ae854a890868d55d6c24aec8a3ea6dee5",
+      "labels_digest": "bc0364c9325947ca3930319609f45d9376a8685b823d8683b20f0c98da197d94",
+      "preprocessing_digest": "78443e4dc636793681b856559a06b26a4386b5d63591f23c52b1ef64b9c186ba",
+      "split_digest": "7289b9f8c757ac81da69f4f1e2f43351b6983794f4c3d9f0c6bd1d142fa39315"
+    },
+    "source_run_ids": {
+      "baseline": "d123faed54bb48e8a84142a7ce9c3235",
+      "candidate": "3322b676c7474c278eaf7a0c1ef37ac6"
+    },
+    "tracker_write_time": 1790971628.6130724
+  },
+  "readback_verified": true,
+  "required_next_action": "consider_one_predeclared_quantum_refinement",
+  "schema": "d148.client_context.v1",
+  "science_state": "completed",
+  "status": "verified"
+}

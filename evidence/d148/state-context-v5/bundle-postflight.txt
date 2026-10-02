@@ -1,0 +1,9 @@
+{
+  "exact_dependencies": 99,
+  "identity_domains_preserved": true,
+  "new_canonical_science": 0,
+  "status": "installed_update_pass",
+  "tracker_access": false,
+  "verified_payload_files": 157,
+  "version": "0.6.0a24.post0.dev8+iqt.d148.context.v5"
+}

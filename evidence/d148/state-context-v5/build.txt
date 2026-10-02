@@ -1,0 +1,819 @@
+* Getting build dependencies for sdist...
+running egg_info
+creating src/qcoder.egg-info
+writing src/qcoder.egg-info/PKG-INFO
+writing dependency_links to src/qcoder.egg-info/dependency_links.txt
+writing entry points to src/qcoder.egg-info/entry_points.txt
+writing requirements to src/qcoder.egg-info/requires.txt
+writing top-level names to src/qcoder.egg-info/top_level.txt
+writing manifest file 'src/qcoder.egg-info/SOURCES.txt'
+reading manifest file 'src/qcoder.egg-info/SOURCES.txt'
+reading manifest template 'MANIFEST.in'
+no previously-included directories found matching 'docs'
+no previously-included directories found matching 'packaging'
+no previously-included directories found matching 'scripts'
+no previously-included directories found matching 'src/qcoder/pro_v0'
+warning: no previously-included files found matching 'docs/pro-v0-install.md'
+warning: no previously-included files found matching 'docs/private-alpha-quickstart.md'
+warning: no previously-included files found matching 'docs/private-alpha-release-candidate-validation.md'
+adding license file 'LICENSE'
+adding license file 'NOTICE'
+writing manifest file 'src/qcoder.egg-info/SOURCES.txt'
+* Building sdist...
+running sdist
+running egg_info
+writing src/qcoder.egg-info/PKG-INFO
+writing dependency_links to src/qcoder.egg-info/dependency_links.txt
+writing entry points to src/qcoder.egg-info/entry_points.txt
+writing requirements to src/qcoder.egg-info/requires.txt
+writing top-level names to src/qcoder.egg-info/top_level.txt
+reading manifest file 'src/qcoder.egg-info/SOURCES.txt'
+reading manifest template 'MANIFEST.in'
+no previously-included directories found matching 'docs'
+no previously-included directories found matching 'packaging'
+no previously-included directories found matching 'scripts'
+no previously-included directories found matching 'src/qcoder/pro_v0'
+warning: no previously-included files found matching 'docs/pro-v0-install.md'
+warning: no previously-included files found matching 'docs/private-alpha-quickstart.md'
+warning: no previously-included files found matching 'docs/private-alpha-release-candidate-validation.md'
+adding license file 'LICENSE'
+adding license file 'NOTICE'
+writing manifest file 'src/qcoder.egg-info/SOURCES.txt'
+running check
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder.egg-info
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/contracts
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/core
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/core/qasm2
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/context
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/adapters
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/features
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/parsers
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/reps
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/guidance
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/profiles
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/review
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/executors
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/explorer
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/focused_loop
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/ml_research
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/model_packs
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/pipelines
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/pro_preview
+creating qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/tools
+copying files to qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5...
+copying CHANGELOG.md -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5
+copying LICENSE -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5
+copying MANIFEST.in -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5
+copying NOTICE -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5
+copying README.md -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5
+copying pyproject.toml -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5
+copying src/qcoder/__init__.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/__main__.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/algorithm_blueprint.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/algorithm_blueprint_contract.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/algorithm_blueprint_first_value.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/algorithm_blueprint_public_oss.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/algorithm_intent_recovery.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/algorithm_intent_recovery_public_oss.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/blueprint_decisions.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/blueprint_decisions_public_oss.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/cli.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/connected_assistant_conformance.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/context_bridge_connection.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/context_bridge_mcp.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/context_bridge_profiles.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/context_bridge_setup.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/context_loop.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/context_loop_public_oss.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_adaptive_intent.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_adaptive_intent_public_oss.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_artifact_satisfaction.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_artifact_targets.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_binding_mcp.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_bootstrap.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_bounded_control.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_checkpoint_input.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_contract.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_contract_management.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_contract_sidecar.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_coordinator.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_coordinator_contract.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_coordinator_public_kernel.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_derivation.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_event_receipts.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_evidence_processing.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_evidence_reconciler.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_freshness.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_invocation.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_iteration.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_pending_completion.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_quiet_workflow.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_recovery.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_registration.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_request_semantics.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_result_controls.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_result_envelope.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_result_manifest.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_retention.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_run_summary.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_loop_vocabulary.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/current_step_contract.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/cursor_post_write_hook.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/d079_workflows.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/d079_workflows_public_oss.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/development_evidence.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/evidence_usability.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/framework_native_evidence.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/protected_blueprint_contract.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/protected_blueprint_native.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/protected_capability.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/protected_decision_client.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/protected_decision_contract.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/protected_decision_local_authority.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/protected_decision_validation.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/public_motif_allowlist.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder/source_evidence_depth.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder
+copying src/qcoder.egg-info/PKG-INFO -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder.egg-info
+copying src/qcoder.egg-info/SOURCES.txt -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder.egg-info
+copying src/qcoder.egg-info/dependency_links.txt -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder.egg-info
+copying src/qcoder.egg-info/entry_points.txt -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder.egg-info
+copying src/qcoder.egg-info/requires.txt -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder.egg-info
+copying src/qcoder.egg-info/top_level.txt -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder.egg-info
+copying src/qcoder/contracts/__init__.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/contracts
+copying src/qcoder/contracts/protected_blueprint_contract_v1.json -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/contracts
+copying src/qcoder/contracts/protected_decision_contract_v1.json -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/contracts
+copying src/qcoder/core/__init__.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/core
+copying src/qcoder/core/context.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/core
+copying src/qcoder/core/run_config.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/core
+copying src/qcoder/core/schema.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/core
+copying src/qcoder/core/share_safe.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/core
+copying src/qcoder/core/qasm2/__init__.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/core/qasm2
+copying src/qcoder/core/qasm2/adjoint_eligibility.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/core/qasm2
+copying src/qcoder/core/qasm2/mirror_build.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/core/qasm2
+copying src/qcoder/engines/context/__init__.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/context
+copying src/qcoder/engines/context/bundle.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/context
+copying src/qcoder/engines/context/markdown.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/context
+copying src/qcoder/engines/feature_extraction/extractor.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction
+copying src/qcoder/engines/feature_extraction/ir.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction
+copying src/qcoder/engines/feature_extraction/labeling.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction
+copying src/qcoder/engines/feature_extraction/openqasm3_bounded_parser.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction
+copying src/qcoder/engines/feature_extraction/openqasm3_static_evidence.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction
+copying src/qcoder/engines/feature_extraction/qasm2_regex_parser.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction
+copying src/qcoder/engines/feature_extraction/adapters/__init__.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/adapters
+copying src/qcoder/engines/feature_extraction/adapters/cirq_intake.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/adapters
+copying src/qcoder/engines/feature_extraction/adapters/pennylane_intake.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/adapters
+copying src/qcoder/engines/feature_extraction/adapters/qiskit_intake.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/adapters
+copying src/qcoder/engines/feature_extraction/features/compute_v0.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/features
+copying src/qcoder/engines/feature_extraction/features/glossary_v0.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/features
+copying src/qcoder/engines/feature_extraction/features/schema_v0.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/features
+copying src/qcoder/engines/feature_extraction/parsers/__init__.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/parsers
+copying src/qcoder/engines/feature_extraction/reps/cut_profile.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/reps
+copying src/qcoder/engines/feature_extraction/reps/depth.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/reps
+copying src/qcoder/engines/feature_extraction/reps/entangling_layers.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/reps
+copying src/qcoder/engines/feature_extraction/reps/gate_set_stats.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/reps
+copying src/qcoder/engines/feature_extraction/reps/interaction_graph.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/reps
+copying src/qcoder/engines/feature_extraction/reps/interaction_graph_metrics.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/reps
+copying src/qcoder/engines/feature_extraction/reps/spans.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/feature_extraction/reps
+copying src/qcoder/engines/guidance/__init__.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/guidance
+copying src/qcoder/engines/guidance/model_pack.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/guidance
+copying src/qcoder/engines/guidance/resource.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/guidance
+copying src/qcoder/engines/guidance/structural_scores.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/guidance
+copying src/qcoder/engines/profiles/__init__.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/profiles
+copying src/qcoder/engines/profiles/feature_profiles_v0.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/profiles
+copying src/qcoder/engines/review/__init__.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/review
+copying src/qcoder/engines/review/bundle.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/review
+copying src/qcoder/engines/review/counts_v0.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/review
+copying src/qcoder/engines/review/local_evidence.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/review
+copying src/qcoder/engines/review/local_evidence_markdown.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/review
+copying src/qcoder/engines/review/markdown.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/review
+copying src/qcoder/engines/review/openqasm3_manifestation.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/review
+copying src/qcoder/engines/review/qiskit_counts.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/engines/review
+copying src/qcoder/executors/__init__.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/executors
+copying src/qcoder/executors/aer_stabilizer_v1.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/executors
+copying src/qcoder/explorer/__init__.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/explorer
+copying src/qcoder/explorer/derived_evidence.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/explorer
+copying src/qcoder/explorer/focused_loop_coordinator.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/explorer
+copying src/qcoder/focused_loop/__init__.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/focused_loop
+copying src/qcoder/focused_loop/applicability.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/focused_loop
+copying src/qcoder/focused_loop/attempt_join.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/focused_loop
+copying src/qcoder/focused_loop/authority.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/focused_loop
+copying src/qcoder/focused_loop/canonical.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/focused_loop
+copying src/qcoder/focused_loop/contracts.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/focused_loop
+copying src/qcoder/focused_loop/fixtures.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/focused_loop
+copying src/qcoder/focused_loop/identities.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/focused_loop
+copying src/qcoder/focused_loop/mps_floor.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/focused_loop
+copying src/qcoder/focused_loop/plan.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/focused_loop
+copying src/qcoder/focused_loop/privacy.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/focused_loop
+copying src/qcoder/focused_loop/receipt.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/focused_loop
+copying src/qcoder/focused_loop/result_protocol.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/focused_loop
+copying src/qcoder/focused_loop/reuse.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/focused_loop
+copying src/qcoder/ml_research/__init__.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/ml_research
+copying src/qcoder/ml_research/__main__.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/ml_research
+copying src/qcoder/ml_research/client_context.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/ml_research
+copying src/qcoder/ml_research/contracts.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/ml_research
+copying src/qcoder/ml_research/fixture.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/ml_research
+copying src/qcoder/ml_research/job.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/ml_research
+copying src/qcoder/ml_research/models.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/ml_research
+copying src/qcoder/ml_research/runtime.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/ml_research
+copying src/qcoder/ml_research/tracker.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/ml_research
+copying src/qcoder/ml_research/training.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/ml_research
+copying src/qcoder/model_packs/__init__.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/model_packs
+copying src/qcoder/model_packs/resource_guidance_local_v0.json -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/model_packs
+copying src/qcoder/pipelines/analyze.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/pipelines
+copying src/qcoder/pipelines/batch.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/pipelines
+copying src/qcoder/pipelines/context.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/pipelines
+copying src/qcoder/pipelines/review.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/pipelines
+copying src/qcoder/pro_preview/__init__.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/pro_preview
+copying src/qcoder/pro_preview/client.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/pro_preview
+copying src/qcoder/pro_preview/config.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/pro_preview
+copying src/qcoder/pro_preview/errors.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/pro_preview
+copying src/qcoder/pro_preview/manifest.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/pro_preview
+copying src/qcoder/tools/batch.py -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder/tools
+copying src/qcoder.egg-info/SOURCES.txt -> qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/src/qcoder.egg-info
+Writing qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5/setup.cfg
+Creating tar archive
+removing 'qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5' (and everything under it)
+* Building wheel from sdist
+* Getting build dependencies for wheel...
+running egg_info
+writing src/qcoder.egg-info/PKG-INFO
+writing dependency_links to src/qcoder.egg-info/dependency_links.txt
+writing entry points to src/qcoder.egg-info/entry_points.txt
+writing requirements to src/qcoder.egg-info/requires.txt
+writing top-level names to src/qcoder.egg-info/top_level.txt
+reading manifest file 'src/qcoder.egg-info/SOURCES.txt'
+reading manifest template 'MANIFEST.in'
+no previously-included directories found matching 'tests'
+no previously-included directories found matching 'docs'
+no previously-included directories found matching 'packaging'
+no previously-included directories found matching 'scripts'
+no previously-included directories found matching 'src/qcoder/pro_v0'
+warning: no previously-included files found matching 'docs/pro-v0-install.md'
+warning: no previously-included files found matching 'docs/private-alpha-quickstart.md'
+warning: no previously-included files found matching 'docs/private-alpha-release-candidate-validation.md'
+adding license file 'LICENSE'
+adding license file 'NOTICE'
+writing manifest file 'src/qcoder.egg-info/SOURCES.txt'
+* Building wheel...
+running bdist_wheel
+running build
+running build_py
+creating build/lib/qcoder
+copying src/qcoder/cursor_post_write_hook.py -> build/lib/qcoder
+copying src/qcoder/protected_decision_local_authority.py -> build/lib/qcoder
+copying src/qcoder/current_loop_artifact_targets.py -> build/lib/qcoder
+copying src/qcoder/current_loop_result_manifest.py -> build/lib/qcoder
+copying src/qcoder/cli.py -> build/lib/qcoder
+copying src/qcoder/blueprint_decisions.py -> build/lib/qcoder
+copying src/qcoder/current_loop_contract_management.py -> build/lib/qcoder
+copying src/qcoder/current_loop_contract.py -> build/lib/qcoder
+copying src/qcoder/context_loop_public_oss.py -> build/lib/qcoder
+copying src/qcoder/current_loop_freshness.py -> build/lib/qcoder
+copying src/qcoder/blueprint_decisions_public_oss.py -> build/lib/qcoder
+copying src/qcoder/current_loop_invocation.py -> build/lib/qcoder
+copying src/qcoder/algorithm_intent_recovery_public_oss.py -> build/lib/qcoder
+copying src/qcoder/source_evidence_depth.py -> build/lib/qcoder
+copying src/qcoder/d079_workflows.py -> build/lib/qcoder
+copying src/qcoder/protected_capability.py -> build/lib/qcoder
+copying src/qcoder/algorithm_blueprint.py -> build/lib/qcoder
+copying src/qcoder/current_loop_contract_sidecar.py -> build/lib/qcoder
+copying src/qcoder/algorithm_blueprint_public_oss.py -> build/lib/qcoder
+copying src/qcoder/algorithm_intent_recovery.py -> build/lib/qcoder
+copying src/qcoder/public_motif_allowlist.py -> build/lib/qcoder
+copying src/qcoder/protected_decision_client.py -> build/lib/qcoder
+copying src/qcoder/current_loop_coordinator_public_kernel.py -> build/lib/qcoder
+copying src/qcoder/current_loop.py -> build/lib/qcoder
+copying src/qcoder/current_loop_event_receipts.py -> build/lib/qcoder
+copying src/qcoder/protected_decision_validation.py -> build/lib/qcoder
+copying src/qcoder/current_loop_adaptive_intent.py -> build/lib/qcoder
+copying src/qcoder/framework_native_evidence.py -> build/lib/qcoder
+copying src/qcoder/current_loop_request_semantics.py -> build/lib/qcoder
+copying src/qcoder/development_evidence.py -> build/lib/qcoder
+copying src/qcoder/algorithm_blueprint_first_value.py -> build/lib/qcoder
+copying src/qcoder/current_step_contract.py -> build/lib/qcoder
+copying src/qcoder/current_loop_registration.py -> build/lib/qcoder
+copying src/qcoder/context_loop.py -> build/lib/qcoder
+copying src/qcoder/context_bridge_setup.py -> build/lib/qcoder
+copying src/qcoder/current_loop_evidence_processing.py -> build/lib/qcoder
+copying src/qcoder/algorithm_blueprint_contract.py -> build/lib/qcoder
+copying src/qcoder/__init__.py -> build/lib/qcoder
+copying src/qcoder/protected_blueprint_contract.py -> build/lib/qcoder
+copying src/qcoder/current_loop_recovery.py -> build/lib/qcoder
+copying src/qcoder/context_bridge_profiles.py -> build/lib/qcoder
+copying src/qcoder/current_loop_pending_completion.py -> build/lib/qcoder
+copying src/qcoder/context_bridge_mcp.py -> build/lib/qcoder
+copying src/qcoder/current_loop_retention.py -> build/lib/qcoder
+copying src/qcoder/current_loop_evidence_reconciler.py -> build/lib/qcoder
+copying src/qcoder/current_loop_quiet_workflow.py -> build/lib/qcoder
+copying src/qcoder/current_loop_run_summary.py -> build/lib/qcoder
+copying src/qcoder/__main__.py -> build/lib/qcoder
+copying src/qcoder/current_loop_bounded_control.py -> build/lib/qcoder
+copying src/qcoder/evidence_usability.py -> build/lib/qcoder
+copying src/qcoder/protected_blueprint_native.py -> build/lib/qcoder
+copying src/qcoder/current_loop_coordinator.py -> build/lib/qcoder
+copying src/qcoder/context_bridge_connection.py -> build/lib/qcoder
+copying src/qcoder/current_loop_derivation.py -> build/lib/qcoder
+copying src/qcoder/current_loop_checkpoint_input.py -> build/lib/qcoder
+copying src/qcoder/current_loop_bootstrap.py -> build/lib/qcoder
+copying src/qcoder/current_loop_adaptive_intent_public_oss.py -> build/lib/qcoder
+copying src/qcoder/d079_workflows_public_oss.py -> build/lib/qcoder
+copying src/qcoder/current_loop_iteration.py -> build/lib/qcoder
+copying src/qcoder/current_loop_vocabulary.py -> build/lib/qcoder
+copying src/qcoder/protected_decision_contract.py -> build/lib/qcoder
+copying src/qcoder/current_loop_binding_mcp.py -> build/lib/qcoder
+copying src/qcoder/current_loop_coordinator_contract.py -> build/lib/qcoder
+copying src/qcoder/current_loop_result_envelope.py -> build/lib/qcoder
+copying src/qcoder/connected_assistant_conformance.py -> build/lib/qcoder
+copying src/qcoder/current_loop_artifact_satisfaction.py -> build/lib/qcoder
+copying src/qcoder/current_loop_result_controls.py -> build/lib/qcoder
+creating build/lib/qcoder/contracts
+copying src/qcoder/contracts/__init__.py -> build/lib/qcoder/contracts
+creating build/lib/qcoder/core
+copying src/qcoder/core/schema.py -> build/lib/qcoder/core
+copying src/qcoder/core/__init__.py -> build/lib/qcoder/core
+copying src/qcoder/core/run_config.py -> build/lib/qcoder/core
+copying src/qcoder/core/context.py -> build/lib/qcoder/core
+copying src/qcoder/core/share_safe.py -> build/lib/qcoder/core
+creating build/lib/qcoder/core/qasm2
+copying src/qcoder/core/qasm2/mirror_build.py -> build/lib/qcoder/core/qasm2
+copying src/qcoder/core/qasm2/__init__.py -> build/lib/qcoder/core/qasm2
+copying src/qcoder/core/qasm2/adjoint_eligibility.py -> build/lib/qcoder/core/qasm2
+creating build/lib/qcoder/engines/context
+copying src/qcoder/engines/context/bundle.py -> build/lib/qcoder/engines/context
+copying src/qcoder/engines/context/__init__.py -> build/lib/qcoder/engines/context
+copying src/qcoder/engines/context/markdown.py -> build/lib/qcoder/engines/context
+creating build/lib/qcoder/engines/feature_extraction
+copying src/qcoder/engines/feature_extraction/openqasm3_bounded_parser.py -> build/lib/qcoder/engines/feature_extraction
+copying src/qcoder/engines/feature_extraction/qasm2_regex_parser.py -> build/lib/qcoder/engines/feature_extraction
+copying src/qcoder/engines/feature_extraction/labeling.py -> build/lib/qcoder/engines/feature_extraction
+copying src/qcoder/engines/feature_extraction/ir.py -> build/lib/qcoder/engines/feature_extraction
+copying src/qcoder/engines/feature_extraction/openqasm3_static_evidence.py -> build/lib/qcoder/engines/feature_extraction
+copying src/qcoder/engines/feature_extraction/extractor.py -> build/lib/qcoder/engines/feature_extraction
+creating build/lib/qcoder/engines/feature_extraction/adapters
+copying src/qcoder/engines/feature_extraction/adapters/cirq_intake.py -> build/lib/qcoder/engines/feature_extraction/adapters
+copying src/qcoder/engines/feature_extraction/adapters/__init__.py -> build/lib/qcoder/engines/feature_extraction/adapters
+copying src/qcoder/engines/feature_extraction/adapters/qiskit_intake.py -> build/lib/qcoder/engines/feature_extraction/adapters
+copying src/qcoder/engines/feature_extraction/adapters/pennylane_intake.py -> build/lib/qcoder/engines/feature_extraction/adapters
+creating build/lib/qcoder/engines/feature_extraction/features
+copying src/qcoder/engines/feature_extraction/features/compute_v0.py -> build/lib/qcoder/engines/feature_extraction/features
+copying src/qcoder/engines/feature_extraction/features/glossary_v0.py -> build/lib/qcoder/engines/feature_extraction/features
+copying src/qcoder/engines/feature_extraction/features/schema_v0.py -> build/lib/qcoder/engines/feature_extraction/features
+creating build/lib/qcoder/engines/feature_extraction/parsers
+copying src/qcoder/engines/feature_extraction/parsers/__init__.py -> build/lib/qcoder/engines/feature_extraction/parsers
+creating build/lib/qcoder/engines/feature_extraction/reps
+copying src/qcoder/engines/feature_extraction/reps/cut_profile.py -> build/lib/qcoder/engines/feature_extraction/reps
+copying src/qcoder/engines/feature_extraction/reps/entangling_layers.py -> build/lib/qcoder/engines/feature_extraction/reps
+copying src/qcoder/engines/feature_extraction/reps/spans.py -> build/lib/qcoder/engines/feature_extraction/reps
+copying src/qcoder/engines/feature_extraction/reps/gate_set_stats.py -> build/lib/qcoder/engines/feature_extraction/reps
+copying src/qcoder/engines/feature_extraction/reps/interaction_graph.py -> build/lib/qcoder/engines/feature_extraction/reps
+copying src/qcoder/engines/feature_extraction/reps/depth.py -> build/lib/qcoder/engines/feature_extraction/reps
+copying src/qcoder/engines/feature_extraction/reps/interaction_graph_metrics.py -> build/lib/qcoder/engines/feature_extraction/reps
+creating build/lib/qcoder/engines/guidance
+copying src/qcoder/engines/guidance/structural_scores.py -> build/lib/qcoder/engines/guidance
+copying src/qcoder/engines/guidance/__init__.py -> build/lib/qcoder/engines/guidance
+copying src/qcoder/engines/guidance/model_pack.py -> build/lib/qcoder/engines/guidance
+copying src/qcoder/engines/guidance/resource.py -> build/lib/qcoder/engines/guidance
+creating build/lib/qcoder/engines/profiles
+copying src/qcoder/engines/profiles/__init__.py -> build/lib/qcoder/engines/profiles
+copying src/qcoder/engines/profiles/feature_profiles_v0.py -> build/lib/qcoder/engines/profiles
+creating build/lib/qcoder/engines/review
+copying src/qcoder/engines/review/qiskit_counts.py -> build/lib/qcoder/engines/review
+copying src/qcoder/engines/review/bundle.py -> build/lib/qcoder/engines/review
+copying src/qcoder/engines/review/openqasm3_manifestation.py -> build/lib/qcoder/engines/review
+copying src/qcoder/engines/review/counts_v0.py -> build/lib/qcoder/engines/review
+copying src/qcoder/engines/review/__init__.py -> build/lib/qcoder/engines/review
+copying src/qcoder/engines/review/local_evidence.py -> build/lib/qcoder/engines/review
+copying src/qcoder/engines/review/local_evidence_markdown.py -> build/lib/qcoder/engines/review
+copying src/qcoder/engines/review/markdown.py -> build/lib/qcoder/engines/review
+creating build/lib/qcoder/explorer
+copying src/qcoder/explorer/derived_evidence.py -> build/lib/qcoder/explorer
+copying src/qcoder/explorer/__init__.py -> build/lib/qcoder/explorer
+copying src/qcoder/explorer/focused_loop_coordinator.py -> build/lib/qcoder/explorer
+creating build/lib/qcoder/executors
+copying src/qcoder/executors/aer_stabilizer_v1.py -> build/lib/qcoder/executors
+copying src/qcoder/executors/__init__.py -> build/lib/qcoder/executors
+creating build/lib/qcoder/focused_loop
+copying src/qcoder/focused_loop/contracts.py -> build/lib/qcoder/focused_loop
+copying src/qcoder/focused_loop/canonical.py -> build/lib/qcoder/focused_loop
+copying src/qcoder/focused_loop/privacy.py -> build/lib/qcoder/focused_loop
+copying src/qcoder/focused_loop/attempt_join.py -> build/lib/qcoder/focused_loop
+copying src/qcoder/focused_loop/applicability.py -> build/lib/qcoder/focused_loop
+copying src/qcoder/focused_loop/plan.py -> build/lib/qcoder/focused_loop
+copying src/qcoder/focused_loop/identities.py -> build/lib/qcoder/focused_loop
+copying src/qcoder/focused_loop/__init__.py -> build/lib/qcoder/focused_loop
+copying src/qcoder/focused_loop/result_protocol.py -> build/lib/qcoder/focused_loop
+copying src/qcoder/focused_loop/fixtures.py -> build/lib/qcoder/focused_loop
+copying src/qcoder/focused_loop/receipt.py -> build/lib/qcoder/focused_loop
+copying src/qcoder/focused_loop/mps_floor.py -> build/lib/qcoder/focused_loop
+copying src/qcoder/focused_loop/reuse.py -> build/lib/qcoder/focused_loop
+copying src/qcoder/focused_loop/authority.py -> build/lib/qcoder/focused_loop
+creating build/lib/qcoder/ml_research
+copying src/qcoder/ml_research/contracts.py -> build/lib/qcoder/ml_research
+copying src/qcoder/ml_research/runtime.py -> build/lib/qcoder/ml_research
+copying src/qcoder/ml_research/fixture.py -> build/lib/qcoder/ml_research
+copying src/qcoder/ml_research/job.py -> build/lib/qcoder/ml_research
+copying src/qcoder/ml_research/training.py -> build/lib/qcoder/ml_research
+copying src/qcoder/ml_research/__init__.py -> build/lib/qcoder/ml_research
+copying src/qcoder/ml_research/client_context.py -> build/lib/qcoder/ml_research
+copying src/qcoder/ml_research/__main__.py -> build/lib/qcoder/ml_research
+copying src/qcoder/ml_research/models.py -> build/lib/qcoder/ml_research
+copying src/qcoder/ml_research/tracker.py -> build/lib/qcoder/ml_research
+creating build/lib/qcoder/model_packs
+copying src/qcoder/model_packs/__init__.py -> build/lib/qcoder/model_packs
+creating build/lib/qcoder/pipelines
+copying src/qcoder/pipelines/review.py -> build/lib/qcoder/pipelines
+copying src/qcoder/pipelines/batch.py -> build/lib/qcoder/pipelines
+copying src/qcoder/pipelines/context.py -> build/lib/qcoder/pipelines
+copying src/qcoder/pipelines/analyze.py -> build/lib/qcoder/pipelines
+creating build/lib/qcoder/pro_preview
+copying src/qcoder/pro_preview/manifest.py -> build/lib/qcoder/pro_preview
+copying src/qcoder/pro_preview/errors.py -> build/lib/qcoder/pro_preview
+copying src/qcoder/pro_preview/__init__.py -> build/lib/qcoder/pro_preview
+copying src/qcoder/pro_preview/client.py -> build/lib/qcoder/pro_preview
+copying src/qcoder/pro_preview/config.py -> build/lib/qcoder/pro_preview
+creating build/lib/qcoder/tools
+copying src/qcoder/tools/batch.py -> build/lib/qcoder/tools
+running egg_info
+writing src/qcoder.egg-info/PKG-INFO
+writing dependency_links to src/qcoder.egg-info/dependency_links.txt
+writing entry points to src/qcoder.egg-info/entry_points.txt
+writing requirements to src/qcoder.egg-info/requires.txt
+writing top-level names to src/qcoder.egg-info/top_level.txt
+reading manifest file 'src/qcoder.egg-info/SOURCES.txt'
+reading manifest template 'MANIFEST.in'
+no previously-included directories found matching 'tests'
+no previously-included directories found matching 'docs'
+no previously-included directories found matching 'packaging'
+no previously-included directories found matching 'scripts'
+no previously-included directories found matching 'src/qcoder/pro_v0'
+warning: no previously-included files found matching 'docs/pro-v0-install.md'
+warning: no previously-included files found matching 'docs/private-alpha-quickstart.md'
+warning: no previously-included files found matching 'docs/private-alpha-release-candidate-validation.md'
+adding license file 'LICENSE'
+adding license file 'NOTICE'
+writing manifest file 'src/qcoder.egg-info/SOURCES.txt'
+copying src/qcoder/contracts/protected_blueprint_contract_v1.json -> build/lib/qcoder/contracts
+copying src/qcoder/contracts/protected_decision_contract_v1.json -> build/lib/qcoder/contracts
+copying src/qcoder/model_packs/resource_guidance_local_v0.json -> build/lib/qcoder/model_packs
+warning: build_py: byte-compiling is disabled, skipping.
+
+installing to build/bdist.linux-x86_64/wheel
+running install
+running install_lib
+creating build/bdist.linux-x86_64/wheel
+creating build/bdist.linux-x86_64/wheel/qcoder
+copying build/lib/qcoder/cursor_post_write_hook.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/protected_decision_local_authority.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_artifact_targets.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_result_manifest.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/cli.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/blueprint_decisions.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_contract_management.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_contract.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/context_loop_public_oss.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_freshness.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/blueprint_decisions_public_oss.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_invocation.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/algorithm_intent_recovery_public_oss.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/source_evidence_depth.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/d079_workflows.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/protected_capability.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/algorithm_blueprint.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_contract_sidecar.py -> build/bdist.linux-x86_64/wheel/./qcoder
+creating build/bdist.linux-x86_64/wheel/qcoder/contracts
+copying build/lib/qcoder/contracts/protected_decision_contract_v1.json -> build/bdist.linux-x86_64/wheel/./qcoder/contracts
+copying build/lib/qcoder/contracts/__init__.py -> build/bdist.linux-x86_64/wheel/./qcoder/contracts
+copying build/lib/qcoder/contracts/protected_blueprint_contract_v1.json -> build/bdist.linux-x86_64/wheel/./qcoder/contracts
+copying build/lib/qcoder/algorithm_blueprint_public_oss.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/algorithm_intent_recovery.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/public_motif_allowlist.py -> build/bdist.linux-x86_64/wheel/./qcoder
+creating build/bdist.linux-x86_64/wheel/qcoder/engines
+creating build/bdist.linux-x86_64/wheel/qcoder/engines/profiles
+copying build/lib/qcoder/engines/profiles/__init__.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/profiles
+copying build/lib/qcoder/engines/profiles/feature_profiles_v0.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/profiles
+creating build/bdist.linux-x86_64/wheel/qcoder/engines/context
+copying build/lib/qcoder/engines/context/bundle.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/context
+copying build/lib/qcoder/engines/context/__init__.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/context
+copying build/lib/qcoder/engines/context/markdown.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/context
+creating build/bdist.linux-x86_64/wheel/qcoder/engines/review
+copying build/lib/qcoder/engines/review/qiskit_counts.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/review
+copying build/lib/qcoder/engines/review/bundle.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/review
+copying build/lib/qcoder/engines/review/openqasm3_manifestation.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/review
+copying build/lib/qcoder/engines/review/counts_v0.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/review
+copying build/lib/qcoder/engines/review/__init__.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/review
+copying build/lib/qcoder/engines/review/local_evidence.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/review
+copying build/lib/qcoder/engines/review/local_evidence_markdown.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/review
+copying build/lib/qcoder/engines/review/markdown.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/review
+creating build/bdist.linux-x86_64/wheel/qcoder/engines/guidance
+copying build/lib/qcoder/engines/guidance/structural_scores.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/guidance
+copying build/lib/qcoder/engines/guidance/__init__.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/guidance
+copying build/lib/qcoder/engines/guidance/model_pack.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/guidance
+copying build/lib/qcoder/engines/guidance/resource.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/guidance
+creating build/bdist.linux-x86_64/wheel/qcoder/engines/feature_extraction
+creating build/bdist.linux-x86_64/wheel/qcoder/engines/feature_extraction/parsers
+copying build/lib/qcoder/engines/feature_extraction/parsers/__init__.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction/parsers
+copying build/lib/qcoder/engines/feature_extraction/openqasm3_bounded_parser.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction
+creating build/bdist.linux-x86_64/wheel/qcoder/engines/feature_extraction/features
+copying build/lib/qcoder/engines/feature_extraction/features/compute_v0.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction/features
+copying build/lib/qcoder/engines/feature_extraction/features/glossary_v0.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction/features
+copying build/lib/qcoder/engines/feature_extraction/features/schema_v0.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction/features
+copying build/lib/qcoder/engines/feature_extraction/qasm2_regex_parser.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction
+copying build/lib/qcoder/engines/feature_extraction/labeling.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction
+creating build/bdist.linux-x86_64/wheel/qcoder/engines/feature_extraction/adapters
+copying build/lib/qcoder/engines/feature_extraction/adapters/cirq_intake.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction/adapters
+copying build/lib/qcoder/engines/feature_extraction/adapters/__init__.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction/adapters
+copying build/lib/qcoder/engines/feature_extraction/adapters/qiskit_intake.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction/adapters
+copying build/lib/qcoder/engines/feature_extraction/adapters/pennylane_intake.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction/adapters
+copying build/lib/qcoder/engines/feature_extraction/ir.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction
+creating build/bdist.linux-x86_64/wheel/qcoder/engines/feature_extraction/reps
+copying build/lib/qcoder/engines/feature_extraction/reps/cut_profile.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction/reps
+copying build/lib/qcoder/engines/feature_extraction/reps/entangling_layers.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction/reps
+copying build/lib/qcoder/engines/feature_extraction/reps/spans.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction/reps
+copying build/lib/qcoder/engines/feature_extraction/reps/gate_set_stats.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction/reps
+copying build/lib/qcoder/engines/feature_extraction/reps/interaction_graph.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction/reps
+copying build/lib/qcoder/engines/feature_extraction/reps/depth.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction/reps
+copying build/lib/qcoder/engines/feature_extraction/reps/interaction_graph_metrics.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction/reps
+copying build/lib/qcoder/engines/feature_extraction/openqasm3_static_evidence.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction
+copying build/lib/qcoder/engines/feature_extraction/extractor.py -> build/bdist.linux-x86_64/wheel/./qcoder/engines/feature_extraction
+copying build/lib/qcoder/protected_decision_client.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_coordinator_public_kernel.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_event_receipts.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/protected_decision_validation.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_adaptive_intent.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/framework_native_evidence.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_request_semantics.py -> build/bdist.linux-x86_64/wheel/./qcoder
+creating build/bdist.linux-x86_64/wheel/qcoder/pipelines
+copying build/lib/qcoder/pipelines/review.py -> build/bdist.linux-x86_64/wheel/./qcoder/pipelines
+copying build/lib/qcoder/pipelines/batch.py -> build/bdist.linux-x86_64/wheel/./qcoder/pipelines
+copying build/lib/qcoder/pipelines/context.py -> build/bdist.linux-x86_64/wheel/./qcoder/pipelines
+copying build/lib/qcoder/pipelines/analyze.py -> build/bdist.linux-x86_64/wheel/./qcoder/pipelines
+copying build/lib/qcoder/development_evidence.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/algorithm_blueprint_first_value.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_step_contract.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_registration.py -> build/bdist.linux-x86_64/wheel/./qcoder
+creating build/bdist.linux-x86_64/wheel/qcoder/focused_loop
+copying build/lib/qcoder/focused_loop/contracts.py -> build/bdist.linux-x86_64/wheel/./qcoder/focused_loop
+copying build/lib/qcoder/focused_loop/canonical.py -> build/bdist.linux-x86_64/wheel/./qcoder/focused_loop
+copying build/lib/qcoder/focused_loop/privacy.py -> build/bdist.linux-x86_64/wheel/./qcoder/focused_loop
+copying build/lib/qcoder/focused_loop/attempt_join.py -> build/bdist.linux-x86_64/wheel/./qcoder/focused_loop
+copying build/lib/qcoder/focused_loop/applicability.py -> build/bdist.linux-x86_64/wheel/./qcoder/focused_loop
+copying build/lib/qcoder/focused_loop/plan.py -> build/bdist.linux-x86_64/wheel/./qcoder/focused_loop
+copying build/lib/qcoder/focused_loop/identities.py -> build/bdist.linux-x86_64/wheel/./qcoder/focused_loop
+copying build/lib/qcoder/focused_loop/__init__.py -> build/bdist.linux-x86_64/wheel/./qcoder/focused_loop
+copying build/lib/qcoder/focused_loop/result_protocol.py -> build/bdist.linux-x86_64/wheel/./qcoder/focused_loop
+copying build/lib/qcoder/focused_loop/fixtures.py -> build/bdist.linux-x86_64/wheel/./qcoder/focused_loop
+copying build/lib/qcoder/focused_loop/receipt.py -> build/bdist.linux-x86_64/wheel/./qcoder/focused_loop
+copying build/lib/qcoder/focused_loop/mps_floor.py -> build/bdist.linux-x86_64/wheel/./qcoder/focused_loop
+copying build/lib/qcoder/focused_loop/reuse.py -> build/bdist.linux-x86_64/wheel/./qcoder/focused_loop
+copying build/lib/qcoder/focused_loop/authority.py -> build/bdist.linux-x86_64/wheel/./qcoder/focused_loop
+copying build/lib/qcoder/context_loop.py -> build/bdist.linux-x86_64/wheel/./qcoder
+creating build/bdist.linux-x86_64/wheel/qcoder/explorer
+copying build/lib/qcoder/explorer/derived_evidence.py -> build/bdist.linux-x86_64/wheel/./qcoder/explorer
+copying build/lib/qcoder/explorer/__init__.py -> build/bdist.linux-x86_64/wheel/./qcoder/explorer
+copying build/lib/qcoder/explorer/focused_loop_coordinator.py -> build/bdist.linux-x86_64/wheel/./qcoder/explorer
+copying build/lib/qcoder/context_bridge_setup.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_evidence_processing.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/algorithm_blueprint_contract.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/__init__.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/protected_blueprint_contract.py -> build/bdist.linux-x86_64/wheel/./qcoder
+creating build/bdist.linux-x86_64/wheel/qcoder/core
+copying build/lib/qcoder/core/schema.py -> build/bdist.linux-x86_64/wheel/./qcoder/core
+copying build/lib/qcoder/core/__init__.py -> build/bdist.linux-x86_64/wheel/./qcoder/core
+copying build/lib/qcoder/core/run_config.py -> build/bdist.linux-x86_64/wheel/./qcoder/core
+copying build/lib/qcoder/core/context.py -> build/bdist.linux-x86_64/wheel/./qcoder/core
+copying build/lib/qcoder/core/share_safe.py -> build/bdist.linux-x86_64/wheel/./qcoder/core
+creating build/bdist.linux-x86_64/wheel/qcoder/core/qasm2
+copying build/lib/qcoder/core/qasm2/mirror_build.py -> build/bdist.linux-x86_64/wheel/./qcoder/core/qasm2
+copying build/lib/qcoder/core/qasm2/__init__.py -> build/bdist.linux-x86_64/wheel/./qcoder/core/qasm2
+copying build/lib/qcoder/core/qasm2/adjoint_eligibility.py -> build/bdist.linux-x86_64/wheel/./qcoder/core/qasm2
+copying build/lib/qcoder/current_loop_recovery.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/context_bridge_profiles.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_pending_completion.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/context_bridge_mcp.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_retention.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_evidence_reconciler.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_quiet_workflow.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_run_summary.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/__main__.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_bounded_control.py -> build/bdist.linux-x86_64/wheel/./qcoder
+creating build/bdist.linux-x86_64/wheel/qcoder/ml_research
+copying build/lib/qcoder/ml_research/contracts.py -> build/bdist.linux-x86_64/wheel/./qcoder/ml_research
+copying build/lib/qcoder/ml_research/runtime.py -> build/bdist.linux-x86_64/wheel/./qcoder/ml_research
+copying build/lib/qcoder/ml_research/fixture.py -> build/bdist.linux-x86_64/wheel/./qcoder/ml_research
+copying build/lib/qcoder/ml_research/job.py -> build/bdist.linux-x86_64/wheel/./qcoder/ml_research
+copying build/lib/qcoder/ml_research/training.py -> build/bdist.linux-x86_64/wheel/./qcoder/ml_research
+copying build/lib/qcoder/ml_research/__init__.py -> build/bdist.linux-x86_64/wheel/./qcoder/ml_research
+copying build/lib/qcoder/ml_research/client_context.py -> build/bdist.linux-x86_64/wheel/./qcoder/ml_research
+copying build/lib/qcoder/ml_research/__main__.py -> build/bdist.linux-x86_64/wheel/./qcoder/ml_research
+copying build/lib/qcoder/ml_research/models.py -> build/bdist.linux-x86_64/wheel/./qcoder/ml_research
+copying build/lib/qcoder/ml_research/tracker.py -> build/bdist.linux-x86_64/wheel/./qcoder/ml_research
+copying build/lib/qcoder/evidence_usability.py -> build/bdist.linux-x86_64/wheel/./qcoder
+creating build/bdist.linux-x86_64/wheel/qcoder/model_packs
+copying build/lib/qcoder/model_packs/resource_guidance_local_v0.json -> build/bdist.linux-x86_64/wheel/./qcoder/model_packs
+copying build/lib/qcoder/model_packs/__init__.py -> build/bdist.linux-x86_64/wheel/./qcoder/model_packs
+copying build/lib/qcoder/protected_blueprint_native.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_coordinator.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/context_bridge_connection.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_derivation.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_checkpoint_input.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_bootstrap.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_adaptive_intent_public_oss.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/d079_workflows_public_oss.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_iteration.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_vocabulary.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/protected_decision_contract.py -> build/bdist.linux-x86_64/wheel/./qcoder
+creating build/bdist.linux-x86_64/wheel/qcoder/tools
+copying build/lib/qcoder/tools/batch.py -> build/bdist.linux-x86_64/wheel/./qcoder/tools
+copying build/lib/qcoder/current_loop_binding_mcp.py -> build/bdist.linux-x86_64/wheel/./qcoder
+creating build/bdist.linux-x86_64/wheel/qcoder/pro_preview
+copying build/lib/qcoder/pro_preview/manifest.py -> build/bdist.linux-x86_64/wheel/./qcoder/pro_preview
+copying build/lib/qcoder/pro_preview/errors.py -> build/bdist.linux-x86_64/wheel/./qcoder/pro_preview
+copying build/lib/qcoder/pro_preview/__init__.py -> build/bdist.linux-x86_64/wheel/./qcoder/pro_preview
+copying build/lib/qcoder/pro_preview/client.py -> build/bdist.linux-x86_64/wheel/./qcoder/pro_preview
+copying build/lib/qcoder/pro_preview/config.py -> build/bdist.linux-x86_64/wheel/./qcoder/pro_preview
+copying build/lib/qcoder/current_loop_coordinator_contract.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_result_envelope.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/connected_assistant_conformance.py -> build/bdist.linux-x86_64/wheel/./qcoder
+copying build/lib/qcoder/current_loop_artifact_satisfaction.py -> build/bdist.linux-x86_64/wheel/./qcoder
+creating build/bdist.linux-x86_64/wheel/qcoder/executors
+copying build/lib/qcoder/executors/aer_stabilizer_v1.py -> build/bdist.linux-x86_64/wheel/./qcoder/executors
+copying build/lib/qcoder/executors/__init__.py -> build/bdist.linux-x86_64/wheel/./qcoder/executors
+copying build/lib/qcoder/current_loop_result_controls.py -> build/bdist.linux-x86_64/wheel/./qcoder
+warning: install_lib: byte-compiling is disabled, skipping.
+
+running install_egg_info
+Copying src/qcoder.egg-info to build/bdist.linux-x86_64/wheel/./qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5-py3.12.egg-info
+running install_scripts
+creating build/bdist.linux-x86_64/wheel/qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5.dist-info/WHEEL
+creating '/tmp/d148-build-v5/raw/.tmp-t6uuanuz/qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5-py3-none-any.whl' and adding 'build/bdist.linux-x86_64/wheel' to it
+adding 'qcoder/__init__.py'
+adding 'qcoder/__main__.py'
+adding 'qcoder/algorithm_blueprint.py'
+adding 'qcoder/algorithm_blueprint_contract.py'
+adding 'qcoder/algorithm_blueprint_first_value.py'
+adding 'qcoder/algorithm_blueprint_public_oss.py'
+adding 'qcoder/algorithm_intent_recovery.py'
+adding 'qcoder/algorithm_intent_recovery_public_oss.py'
+adding 'qcoder/blueprint_decisions.py'
+adding 'qcoder/blueprint_decisions_public_oss.py'
+adding 'qcoder/cli.py'
+adding 'qcoder/connected_assistant_conformance.py'
+adding 'qcoder/context_bridge_connection.py'
+adding 'qcoder/context_bridge_mcp.py'
+adding 'qcoder/context_bridge_profiles.py'
+adding 'qcoder/context_bridge_setup.py'
+adding 'qcoder/context_loop.py'
+adding 'qcoder/context_loop_public_oss.py'
+adding 'qcoder/current_loop.py'
+adding 'qcoder/current_loop_adaptive_intent.py'
+adding 'qcoder/current_loop_adaptive_intent_public_oss.py'
+adding 'qcoder/current_loop_artifact_satisfaction.py'
+adding 'qcoder/current_loop_artifact_targets.py'
+adding 'qcoder/current_loop_binding_mcp.py'
+adding 'qcoder/current_loop_bootstrap.py'
+adding 'qcoder/current_loop_bounded_control.py'
+adding 'qcoder/current_loop_checkpoint_input.py'
+adding 'qcoder/current_loop_contract.py'
+adding 'qcoder/current_loop_contract_management.py'
+adding 'qcoder/current_loop_contract_sidecar.py'
+adding 'qcoder/current_loop_coordinator.py'
+adding 'qcoder/current_loop_coordinator_contract.py'
+adding 'qcoder/current_loop_coordinator_public_kernel.py'
+adding 'qcoder/current_loop_derivation.py'
+adding 'qcoder/current_loop_event_receipts.py'
+adding 'qcoder/current_loop_evidence_processing.py'
+adding 'qcoder/current_loop_evidence_reconciler.py'
+adding 'qcoder/current_loop_freshness.py'
+adding 'qcoder/current_loop_invocation.py'
+adding 'qcoder/current_loop_iteration.py'
+adding 'qcoder/current_loop_pending_completion.py'
+adding 'qcoder/current_loop_quiet_workflow.py'
+adding 'qcoder/current_loop_recovery.py'
+adding 'qcoder/current_loop_registration.py'
+adding 'qcoder/current_loop_request_semantics.py'
+adding 'qcoder/current_loop_result_controls.py'
+adding 'qcoder/current_loop_result_envelope.py'
+adding 'qcoder/current_loop_result_manifest.py'
+adding 'qcoder/current_loop_retention.py'
+adding 'qcoder/current_loop_run_summary.py'
+adding 'qcoder/current_loop_vocabulary.py'
+adding 'qcoder/current_step_contract.py'
+adding 'qcoder/cursor_post_write_hook.py'
+adding 'qcoder/d079_workflows.py'
+adding 'qcoder/d079_workflows_public_oss.py'
+adding 'qcoder/development_evidence.py'
+adding 'qcoder/evidence_usability.py'
+adding 'qcoder/framework_native_evidence.py'
+adding 'qcoder/protected_blueprint_contract.py'
+adding 'qcoder/protected_blueprint_native.py'
+adding 'qcoder/protected_capability.py'
+adding 'qcoder/protected_decision_client.py'
+adding 'qcoder/protected_decision_contract.py'
+adding 'qcoder/protected_decision_local_authority.py'
+adding 'qcoder/protected_decision_validation.py'
+adding 'qcoder/public_motif_allowlist.py'
+adding 'qcoder/source_evidence_depth.py'
+adding 'qcoder/contracts/__init__.py'
+adding 'qcoder/contracts/protected_blueprint_contract_v1.json'
+adding 'qcoder/contracts/protected_decision_contract_v1.json'
+adding 'qcoder/core/__init__.py'
+adding 'qcoder/core/context.py'
+adding 'qcoder/core/run_config.py'
+adding 'qcoder/core/schema.py'
+adding 'qcoder/core/share_safe.py'
+adding 'qcoder/core/qasm2/__init__.py'
+adding 'qcoder/core/qasm2/adjoint_eligibility.py'
+adding 'qcoder/core/qasm2/mirror_build.py'
+adding 'qcoder/engines/context/__init__.py'
+adding 'qcoder/engines/context/bundle.py'
+adding 'qcoder/engines/context/markdown.py'
+adding 'qcoder/engines/feature_extraction/extractor.py'
+adding 'qcoder/engines/feature_extraction/ir.py'
+adding 'qcoder/engines/feature_extraction/labeling.py'
+adding 'qcoder/engines/feature_extraction/openqasm3_bounded_parser.py'
+adding 'qcoder/engines/feature_extraction/openqasm3_static_evidence.py'
+adding 'qcoder/engines/feature_extraction/qasm2_regex_parser.py'
+adding 'qcoder/engines/feature_extraction/adapters/__init__.py'
+adding 'qcoder/engines/feature_extraction/adapters/cirq_intake.py'
+adding 'qcoder/engines/feature_extraction/adapters/pennylane_intake.py'
+adding 'qcoder/engines/feature_extraction/adapters/qiskit_intake.py'
+adding 'qcoder/engines/feature_extraction/features/compute_v0.py'
+adding 'qcoder/engines/feature_extraction/features/glossary_v0.py'
+adding 'qcoder/engines/feature_extraction/features/schema_v0.py'
+adding 'qcoder/engines/feature_extraction/parsers/__init__.py'
+adding 'qcoder/engines/feature_extraction/reps/cut_profile.py'
+adding 'qcoder/engines/feature_extraction/reps/depth.py'
+adding 'qcoder/engines/feature_extraction/reps/entangling_layers.py'
+adding 'qcoder/engines/feature_extraction/reps/gate_set_stats.py'
+adding 'qcoder/engines/feature_extraction/reps/interaction_graph.py'
+adding 'qcoder/engines/feature_extraction/reps/interaction_graph_metrics.py'
+adding 'qcoder/engines/feature_extraction/reps/spans.py'
+adding 'qcoder/engines/guidance/__init__.py'
+adding 'qcoder/engines/guidance/model_pack.py'
+adding 'qcoder/engines/guidance/resource.py'
+adding 'qcoder/engines/guidance/structural_scores.py'
+adding 'qcoder/engines/profiles/__init__.py'
+adding 'qcoder/engines/profiles/feature_profiles_v0.py'
+adding 'qcoder/engines/review/__init__.py'
+adding 'qcoder/engines/review/bundle.py'
+adding 'qcoder/engines/review/counts_v0.py'
+adding 'qcoder/engines/review/local_evidence.py'
+adding 'qcoder/engines/review/local_evidence_markdown.py'
+adding 'qcoder/engines/review/markdown.py'
+adding 'qcoder/engines/review/openqasm3_manifestation.py'
+adding 'qcoder/engines/review/qiskit_counts.py'
+adding 'qcoder/executors/__init__.py'
+adding 'qcoder/executors/aer_stabilizer_v1.py'
+adding 'qcoder/explorer/__init__.py'
+adding 'qcoder/explorer/derived_evidence.py'
+adding 'qcoder/explorer/focused_loop_coordinator.py'
+adding 'qcoder/focused_loop/__init__.py'
+adding 'qcoder/focused_loop/applicability.py'
+adding 'qcoder/focused_loop/attempt_join.py'
+adding 'qcoder/focused_loop/authority.py'
+adding 'qcoder/focused_loop/canonical.py'
+adding 'qcoder/focused_loop/contracts.py'
+adding 'qcoder/focused_loop/fixtures.py'
+adding 'qcoder/focused_loop/identities.py'
+adding 'qcoder/focused_loop/mps_floor.py'
+adding 'qcoder/focused_loop/plan.py'
+adding 'qcoder/focused_loop/privacy.py'
+adding 'qcoder/focused_loop/receipt.py'
+adding 'qcoder/focused_loop/result_protocol.py'
+adding 'qcoder/focused_loop/reuse.py'
+adding 'qcoder/ml_research/__init__.py'
+adding 'qcoder/ml_research/__main__.py'
+adding 'qcoder/ml_research/client_context.py'
+adding 'qcoder/ml_research/contracts.py'
+adding 'qcoder/ml_research/fixture.py'
+adding 'qcoder/ml_research/job.py'
+adding 'qcoder/ml_research/models.py'
+adding 'qcoder/ml_research/runtime.py'
+adding 'qcoder/ml_research/tracker.py'
+adding 'qcoder/ml_research/training.py'
+adding 'qcoder/model_packs/__init__.py'
+adding 'qcoder/model_packs/resource_guidance_local_v0.json'
+adding 'qcoder/pipelines/analyze.py'
+adding 'qcoder/pipelines/batch.py'
+adding 'qcoder/pipelines/context.py'
+adding 'qcoder/pipelines/review.py'
+adding 'qcoder/pro_preview/__init__.py'
+adding 'qcoder/pro_preview/client.py'
+adding 'qcoder/pro_preview/config.py'
+adding 'qcoder/pro_preview/errors.py'
+adding 'qcoder/pro_preview/manifest.py'
+adding 'qcoder/tools/batch.py'
+adding 'qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5.dist-info/licenses/LICENSE'
+adding 'qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5.dist-info/licenses/NOTICE'
+adding 'qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5.dist-info/METADATA'
+adding 'qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5.dist-info/WHEEL'
+adding 'qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5.dist-info/entry_points.txt'
+adding 'qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5.dist-info/top_level.txt'
+adding 'qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5.dist-info/RECORD'
+removing build/bdist.linux-x86_64/wheel
+Successfully built qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5.tar.gz and qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5-py3-none-any.whl
