@@ -1,14 +1,14 @@
 {
-  "basis_commit": "dca2a276b8b2510b064c0f1d0548201f22d7e82a",
-  "basis_tree": "e5f3b24913c1086e865ebe1909e6fea14c33388d",
+  "basis_commit": "3a54fc6502b183374853f59cfc3c6bd588c44202",
+  "basis_tree": "a770619d23ad65916f73425efeca752a705e3495",
   "basis_version": "0.6.0a24",
   "binding": "qcoder.connected_assistant.client_binding.v48",
   "binding_schema": 47,
   "identity_kind": "unpublished_local_research_successor",
-  "publication_permitted": false,
   "public_release_record_preserved_in": "release-version.json",
   "public_successor_selected": false,
+  "publication_permitted": false,
   "schema_id": "qcoder.private_development_version.v1",
-  "version": "0.6.0a24.post0.dev6+iqt.d148.human.v3",
+  "version": "0.6.0a24.post0.dev7+iqt.d148.runtime.v4",
   "work_identity": "QCODER_IQT_2026_ML_RESEARCH_SUCCESSOR_IMPLEMENTATION_AND_PROOF_V1"
 }

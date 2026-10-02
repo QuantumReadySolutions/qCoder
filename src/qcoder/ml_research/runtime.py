@@ -70,10 +70,11 @@ def _scientific_dependencies():
 
 
 def scientific_runtime():
+    """Portable numerical contract; the full local platform belongs to runtime()."""
     from .contracts import require
     versions = {name: version(name) for name in SCIENTIFIC_PINS}
     require(versions == SCIENTIFIC_PINS, "scientific_runtime_unqualified")
-    return seal({"schema": "d148.scientific_runtime.v2", "python": platform.python_version(), "implementation": sys.implementation.name, "platform": platform.platform(), "machine": platform.machine(), "dependencies": _scientific_dependencies(), "versions": versions, "device": "cpu", "dtype": "float64", "torch_threads": 1, "deterministic_algorithms": True})
+    return seal({"schema": "d148.scientific_runtime.v3", "python": platform.python_version(), "implementation": sys.implementation.name, "machine": platform.machine(), "dependencies": _scientific_dependencies(), "versions": versions, "device": "cpu", "dtype": "float64", "torch_threads": 1, "deterministic_algorithms": True})
 
 
 def scientific_identity():
