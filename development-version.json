@@ -1,6 +1,6 @@
 {
-  "basis_commit": "3a54fc6502b183374853f59cfc3c6bd588c44202",
-  "basis_tree": "a770619d23ad65916f73425efeca752a705e3495",
+  "basis_commit": "c3103ea81255455464e8950828155ccb4581831d",
+  "basis_tree": "8684f86b8afbea1152d5e89f3a62d81622ea15c8",
   "basis_version": "0.6.0a24",
   "binding": "qcoder.connected_assistant.client_binding.v48",
   "binding_schema": 47,
@@ -9,6 +9,6 @@
   "public_successor_selected": false,
   "publication_permitted": false,
   "schema_id": "qcoder.private_development_version.v1",
-  "version": "0.6.0a24.post0.dev7+iqt.d148.runtime.v4",
+  "version": "0.6.0a24.post0.dev8+iqt.d148.context.v5",
   "work_identity": "QCODER_IQT_2026_ML_RESEARCH_SUCCESSOR_IMPLEMENTATION_AND_PROOF_V1"
 }

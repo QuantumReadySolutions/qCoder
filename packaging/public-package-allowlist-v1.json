@@ -165,7 +165,8 @@
     "src/qcoder/ml_research/training.py",
     "src/qcoder/ml_research/runtime.py",
     "src/qcoder/ml_research/job.py",
-    "src/qcoder/ml_research/tracker.py"
+    "src/qcoder/ml_research/tracker.py",
+    "src/qcoder/ml_research/client_context.py"
   ],
   "allowed_package_data_filenames": [
     "src/qcoder/contracts/protected_blueprint_contract_v1.json",

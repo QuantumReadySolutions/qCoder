@@ -167,3 +167,4 @@ include src/qcoder/ml_research/training.py
 include src/qcoder/ml_research/runtime.py
 include src/qcoder/ml_research/job.py
 include src/qcoder/ml_research/tracker.py
+include src/qcoder/ml_research/client_context.py

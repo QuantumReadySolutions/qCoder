@@ -7,7 +7,7 @@ import subprocess
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
-FILES = {'__init__.py','__main__.py','contracts.py','fixture.py','models.py','training.py','runtime.py','job.py','tracker.py'}
+FILES = {'__init__.py','__main__.py','contracts.py','fixture.py','models.py','training.py','runtime.py','job.py','tracker.py','client_context.py'}
 
 
 def test_exact_successor_delta():
@@ -31,7 +31,7 @@ def test_source_package_inventory_and_version():
     assert report['member_count'] == len(module.expected_source_payload(module.load_allowlist()))
     p=tomllib.loads((ROOT/'pyproject.toml').read_text())
     d=json.loads((ROOT/'development-version.json').read_text())
-    assert p['project']['version']==d['version']=='0.6.0a24.post0.dev7+iqt.d148.runtime.v4'
+    assert p['project']['version']==d['version']=='0.6.0a24.post0.dev8+iqt.d148.context.v5'
     assert d['publication_permitted'] is False
     assert all('==' in pin for pin in p['project']['optional-dependencies']['ml-research'])
 

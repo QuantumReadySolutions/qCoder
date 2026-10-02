@@ -1,0 +1,80 @@
+d148.client_context.v1
+
+Single input: existing local workspace (operator binding, never a projected field).
+Output is a self-digesting JSON object. No conversational inputs are accepted.
+
+Top-level fields:
+  schema: d148.client_context.v1
+  status: verified | refused
+  lifecycle_state: prepared_awaiting_user_authority | approved_not_entered |
+    entered_incomplete_or_unknown | completed_not_delivered |
+    completed_delivered_verified_readback | inconsistent_or_unverifiable
+  science_state: not_entered | incomplete_or_unknown | completed | not_established
+  authority_state: awaiting_user_authority | approved_exact_plan |
+    consumed_no_retry | not_established
+  readback_verified: boolean, true only after this call's real MLflow read-back
+  required_next_action: bounded enum, independent of the question's tense
+  qcoder_established: typed allowlist below; empty on refusal
+  external_reported: candidate/baseline allowlisted MLflow source parameters
+  assistant_inference: []
+  not_established: fixed missingness and nonclaims
+  new_scientific_jobs: 0; approval_created: false; plan_mutated: false
+  digest: SHA-256 of canonical body
+
+Always-established successful fields: source_run_ids, job_id, plan_digest,
+scientific_digests (fixture/data/labels/split/preprocessing), checkpoint_digests,
+compatible, currentness, and fixed compatibility_basis.
+External parameters: role and fixture/split/preprocessing/checkpoint/recipe digests.
+Every identifier is constrained to lowercase hex (32 or 64 characters).
+Tracker container presence does not establish authorship or independent test basis.
+
+Before durable completed result: inert_job_summary (fixed model descriptions,
+validated protocol/budget, device/method, training=false, automatic_retry=false,
+fixed after_success). No metrics, result conclusion or result-derived next action.
+Entered states have incomplete_or_unknown science and consumed_no_retry authority;
+a completed receipt without a durable result is incomplete, never retry permission.
+
+Completed local result: result_digest, receipt_digest, metrics (candidate/baseline
+correct/count/accuracy, signed delta), numeric accounting (research job attempts,
+model/QNode invocations, heldout counts, shots=null, shots_semantics, numeric
+PennyLane executions/simulations/batches), conclusion, scientific next_action,
+evaluation_state/time, fixed rationale/limitations. No pending-science language.
+With no assessment, required_next_action=deliver_existing_result_only and
+verified MLflow delivery remains not established. This operation never delivers.
+
+Completed + delivered: all completed fields, assessment_run_id/digest,
+readback_digest, tracker_write_time, readback_verified_at. Existing readback.json
+is not accepted as evidence: tracker.readback must read actual run parameters,
+metrics and the JSON artifact and match the exact verified completed chain.
+
+Decision order under existing nonblocking lifecycle lock, opened read-only:
+1. Check file presence with lexists; reject orphaned/malformed records, missing
+   plan/lock/store, invalid schema or stale runtime/input/selected-run identities.
+   Read-only SQLite preflight refuses missing/incomplete/old/empty tracker stores
+   before MLflow can initialize a database. Existing pinned MLflow read/download
+   behavior is retained; downloads can materialize temporary read-back copies.
+2. job.current establishes exact plan/inputs/selected-record compatibility.
+3. No approval and no later evidence -> prepared_awaiting_user_authority.
+4. Valid unexpired approval, no entry -> approved_not_entered.
+5. Valid consumed approval/entry, no result -> entered_incomplete_or_unknown.
+   Receipt, if present, must join entry/plan and have a recognized status.
+6. Result exists -> job.verify_completed plus entry checks. Missing assessment ->
+   completed_not_delivered. Existing assessment must join all result/plan/source
+   fields and pass fresh real tracker.readback -> completed_delivered_verified_readback.
+7. Recheck exact plan currentness before returning. Any failure (including busy
+   lock, stale approval, partial delivery, corrupt result, missing or unavailable
+   MLflow) -> refused/inconsistent_or_unverifiable; no partial facts or fallback
+   to pre-execution, no reconstruction from chat. Refusal is not a pending job.
+
+Privacy exclusions: local workspace/tracker/artifact/download paths, raw rows,
+labels, predictions, weights, source text, UID/TTY, arbitrary tracker params,
+tags/free text, raw runtime/environment descriptions, exception messages, full
+plan/approval/entry/receipt/checkpoint objects. All nested output is selected
+explicitly and scalar-validated or fixed text. Artifact metadata is not expanded.
+
+This is local read-only presentation, not authority, execution, approval, plan
+mutation, fresh assessment, retry, new science family, LLM integration, public
+MCP/Context Bridge tool or protected behavior. All dev7 identity-covered source
+bytes remain unchanged. New presentation bytes are identified by dev8 artifacts.
+Examples are generated from isolated synthetic states in state-context-v5 evidence;
+their 37/40 construction demonstrates routing only, not scientific acceptance.

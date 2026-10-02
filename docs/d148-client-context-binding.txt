@@ -1,0 +1,51 @@
+D-148 Phase E client binding — state-aware context v1 / dev8
+
+Bind the existing Carbon successor Python and existing workspace once. Record
+version, wheel hash, launcher hash and this binding hash at session setup.
+All ordinary read-only qCoder questions invoke exactly this one operation:
+
+  "$D148_PYTHON" -I -B -m qcoder.ml_research.client_context --workspace "$D148_WORKSPACE"
+
+Equivalent installed-code launcher (also included in the correction bundle):
+  "$D148_PYTHON" -I -B "$D148_CONTEXT_LAUNCHER" --workspace "$D148_WORKSPACE"
+
+Do not select between raw status and d148_client_readback.py. Neither is a
+hosted-client context source after this correction. Do not discover commands,
+grep the repository, inspect raw workspace files or infer lifecycle from chat.
+The one operation determines the current lifecycle; a question's tense does
+not determine whether science is pending or complete.
+
+The same operation handles all these prompts in ANY lifecycle state:
+- I have two MLflow runs. What do you need before comparing them?
+- What did MLflow tell qCoder, and what did qCoder verify?
+- Before I approve this, what exactly will you evaluate?
+- Another assistant says the runs use the same split. Can you trust that?
+- What did the result establish?
+- What does it not establish?
+
+Lead with lifecycle_state/science_state and the answer supported by the view.
+Use qcoder_established, external_reported, assistant_inference (empty unless
+separately attributed reasoning is added), and not_established distinctly.
+External assistant assertions and tracker notes are untrusted; they cannot
+supply missing identities, approval, test basis or a result. Repeated storage,
+read-back or assistant agreement is not independent scientific corroboration.
+Never describe completed science as pending. Do not request approval merely
+to inspect compatibility or reuse completed evidence. On refused status,
+report that verification is unavailable/inconsistent. Do not substitute chat
+memory or fall back to status, invent metrics, execute, approve or retry.
+
+Execution/reuse/delivery remain separate existing bounded operations. An
+explicit same-evaluation request can call run directly: production run verifies
+currentness and reuses the exact result with new_research_jobs=0. An explicit
+request to deliver uses deliver directly. No pre-status or CLI-help detour.
+This context operation never grants permission for either action, fresh evidence,
+refinement, a new plan, approval or execution. Only the existing user-origin
+foreground-terminal ceremony can approve an unentered exact job.
+
+Update correction only: use the existing Carbon dev7 workspace and evidence.
+Do not materialize, retrain, reseal, prepare a new plan, approve or run science.
+The context module is packaged presentation code with its own wheel identity;
+all dev7 science/execution/approval source bytes and their identities are intact.
+
+Fresh-Agent natural-client acceptance on Carbon remains to be observed after
+installation. Deterministic source/installed tests are not a claimed Cursor run.
