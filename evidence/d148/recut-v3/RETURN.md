@@ -115,7 +115,7 @@ cd /tmp
 /tmp/d148-installed-proof-v3/venv/bin/python -I -B -m pytest -q -c /dev/null /tmp/d148-installed-proof-v3/tests
 ```
 
-Preserved contained attempts: standalone reseal initially lacked PYTHONPATH and failed before preparation; the first no-science reseal was superseded to include existing gast/astunparse support pins; an in-flight source suite saw the identity change and refused stale synthetic checkpoints (166 passed/13 failed), then the frozen-source rerun passed 179. These failures were not erased. The original Rob approval r+ UnsupportedOperation remains recorded in the prior ledger, with no fabricated event time or authority. The initial installed run used an isolated interpreter but repository cwd; a second complete run from /tmp provides the final outside-source proof. [Attempt ledger](../attempts.json).
+Preserved contained attempts: standalone reseal initially lacked PYTHONPATH and failed before preparation; the first no-science reseal was superseded to include existing gast/astunparse support pins; an in-flight source suite saw the identity change and refused stale synthetic checkpoints (166 passed/13 failed), then the frozen-source rerun passed 179. These failures were not erased. Three trailing spaces in the raw pytest traceback were normalized for Git diff hygiene; the original log bytes remain in prior committed history, with hashes in [evidence-normalization.json](evidence-normalization.json). The original Rob approval r+ UnsupportedOperation remains recorded in the prior ledger, with no fabricated event time or authority. The initial installed run used an isolated interpreter but repository cwd; a second complete run from /tmp provides the final outside-source proof. [Attempt ledger](../attempts.json).
 
 ## Zero-science boundary, preservation and next action
 
@@ -169,3 +169,4 @@ Production: job.py supplies the readable TTY ceremony and plan bindings; models.
 - tests/ml_research/test_identity_domains.py
 - tests/ml_research/test_package.py
 - tests/test_release_version_consistency.py
+- evidence/d148/recut-v3/evidence-normalization.json

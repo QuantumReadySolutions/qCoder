@@ -227,6 +227,13 @@
       "new_canonical_approval": "absent",
       "id": 24,
       "canonical_heldout_jobs": 0
+    },
+    {
+      "id": 25,
+      "stage": "v3_final_diff_hygiene",
+      "result": "corrected_evidence_presentation_only",
+      "reason": "Final range diff --check found three pytest traceback lines with trailing whitespace; normalize presentation only. Original raw log remains in source commit 4b09635c6512d5f93bd8c186a23652c5e3fe8fc1 and evidence commit d44f54e295b9d4ad8319452aa8573644eb35d6e4. No test/scientific result changed.",
+      "canonical_heldout_jobs": 0
     }
   ],
   "canonical_heldout_jobs": 0

@@ -26,8 +26,8 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f0e57d46180>
         monkeypatch.setattr(tracker, "client", lambda root: c)
 >       with pytest.raises(RuntimeError, match="tracker failure"): tracker.deliver(root)
 
-tests/ml_research/test_d148.py:239: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/ml_research/test_d148.py:239:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 src/qcoder/ml_research/tracker.py:128: in deliver
     plan, result = verify_completed(root)
 src/qcoder/ml_research/job.py:177: in verify_completed
@@ -38,7 +38,7 @@ src/qcoder/ml_research/job.py:24: in identities
     validate_checkpoint(read(Path(root) / f"{role}-checkpoint.json"), role, fixture)
 src/qcoder/ml_research/models.py:65: in validate_checkpoint
     require(record["scientific_identity"] == scientific_identity() and record["scientific_runtime"] == scientific_runtime(), "checkpoint_code_runtime")
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 condition = False, reason = 'checkpoint_code_runtime'
 

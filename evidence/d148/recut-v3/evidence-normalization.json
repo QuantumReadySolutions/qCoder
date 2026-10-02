@@ -1,0 +1,6 @@
+{
+  "reason": "Final range diff --check found three pytest traceback lines with trailing whitespace; normalize presentation only. Original raw log remains in source commit 4b09635c6512d5f93bd8c186a23652c5e3fe8fc1 and evidence commit d44f54e295b9d4ad8319452aa8573644eb35d6e4. No test/scientific result changed.",
+  "original_sha256": "e3d6a32fb46a7eb5c88327ba47ae34d13dd09d56ce5998291317ce34a3a74261",
+  "normalized_sha256": "12f0570a4f8a7e2de950964aa0a722b1ac3f4e364c39b8d6f267780db8c44f89",
+  "trimmed_lines": 3
+}
