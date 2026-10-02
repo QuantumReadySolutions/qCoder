@@ -1,0 +1,7 @@
+#!/bin/sh
+# D148 fixed read-only action. Never accepts arguments or a workspace override.
+if [ "$#" -ne 0 ] || [ "$PWD" != '/home/user/projects/qcoder-iqt-2026-ml-successor-v1/client-v4' ]; then
+    printf '%s\n' 'Read-only context unavailable or inconsistent; no discovery or execution fallback.'
+    exit 2
+fi
+exec /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/client-v4/.d148/runtime.py context 2>/dev/null

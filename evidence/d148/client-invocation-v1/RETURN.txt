@@ -1,0 +1,144 @@
+D148_CLIENT_INVOCATION_CORRECTION_READY__CARBON_ACCEPTANCE_PENDING
+
+Campaign: QCODER_IQT_2026_ML_RESEARCH_SUCCESSOR_IMPLEMENTATION_AND_PROOF_V1
+Repository: QuantumReadySolutions/qCoder
+Branch: conference/iqt-2026-ml-research-successor-v1
+Verified starting HEAD/parent of this correction:
+  4b31734fbaeca42afc5b424d295786100979a055
+Starting tree: 0060bb2ddb34266e6d051e1a39a7ae9dbfcaf91e
+Unchanged dev8 artifact source: 49d1800b1e2a5b240aae3f43570c685e88f8b2fb
+Final HEAD/tree are supplied in the handoff after commit/push/remote verification;
+this file cannot contain its own commit identity. Exact paths: changed-paths.txt.
+
+DIAGNOSIS, WITH EVIDENCE LIMIT
+Connected GitHub controlling records were read at current successor/continuity
+refs and both specified routing finding commits; exact blobs are in the receipt.
+The backend returned correct state-aware completed evidence on Carbon. Historical
+E01 first routing failed (72.2s Fast off, 57.0s Fast on; a separate record says
+59.5s and binding recognition). Those transcripts do not isolate the exact active
+rule per session, root, inherited conflicts or effective attachment. Wrong/inactive
+binding and conflicting/inherited instructions remain possible. Unwanted selection
+after binding recognition is consistent with one observation, not definitive proof
+of deliberate disobedience. None is inferred. No new general authorization asked.
+
+IMPLEMENTED OUTSIDE QCODER
+conference/d148-client contains one replacement project rule, exact argument-free
+./qcoder-context launcher, native hooks.json, guard/runtime, .cursorignore payload,
+157 dev8 package hashes, operator install/verify/rollback, isolated control-fixture
+generator, observation form and Carbon instructions. No package rebuild/change,
+dependency installation, new MCP/server/provider/public surface or second LLM.
+
+Installer checks the exact Carbon client root, existing workspace directory,
+interpreter/path/binary hash, host fingerprint, installed dev8 payloads, relevant
+instruction placement/inheritance and protected mixed-rule conflicts. It records
+the actual operator-observed client version for comparison to subsequent hook
+events. It pins relevant bytes and reports missing/wrong/stale conditions without
+searching other projects, Pythons, transcripts or general settings/credentials.
+Old D148 rules/configuration are archived outside the active client/rule paths;
+only one consolidated rule remains. Rollback restores bytes/modes and refuses
+to overwrite later managed-file edits. No global Cursor or shell settings change.
+
+The rule directs every normal read-only question to the one exact action first,
+using returned lifecycle/provenance; denial/refusal stops without discovery/retry.
+It explains read-only scope for write/execution requests without calling context
+to disguise them, changing modes or creating authority.
+
+NATIVE MECHANISM, REQUIREMENTS AND COVERAGE
+Project hooks schema v1, no matchers, timeout=5 seconds, failClosed=true for
+preToolUse, beforeShellExecution, beforeReadFile, beforeMCPExecution, subagentStart,
+beforeTabFileRead and beforeSubmitPrompt. Guard stdin has its own 3-second deadline.
+preToolUse permits only Shell + exact ./qcoder-context + exact root. It denies all
+other tool names (including unknown ones), shell discovery, argument additions,
+chaining, redirection, substitution, alternate interpreters, raw reads/searches,
+source inspection, writes, outside-root search, MCP and delegated agents. Secondary
+hooks deny reads/delegation/MCP and recheck the exact terminal action. These are
+executable native decisions, not prompt-only or shell-only claims.
+
+beforeSubmitPrompt requires Cursor to report the sole intended rule attachment,
+then binds that observation to conversation/generation/version/rule hash.
+preToolUse independently verifies that receipt. Disk presence alone is never
+reported as active attachment. Hooks log only bounded local operational metadata,
+not prompts, paths, commands, source, tracker contents or exceptions. The launcher
+verifies package/binding integrity, then invokes only the fixed existing operation:
+  PYTHON -I -B -m qcoder.ml_research.client_context --workspace WORKSPACE
+No shell is used by that subprocess. Context timing excludes guard/permission/
+model/synthesis overhead; end-to-end timing must be observed separately.
+
+Official current Cursor documentation and installed Precision CLI
+2026.08.11-e8db854 schema/engine were checked (official-control-basis.txt).
+Installed CLI normalizes Shell working_directory to cwd; both exact spellings
+are checked. No guessed minimum IDE version or invented permission keys.
+Carbon's actual version/schema/attachment behavior remains unobserved. It must
+support all required fields/controls and pass the supplied isolated failure probes.
+If not, the integration is unavailable for that target; no weakened fallback.
+
+Important limits: same-UID control remains trusted. Native hooks cannot govern an
+unbound/wrong-root window or deleted hook registration. UI/team/plugin instructions
+and auto-attached context require client observation; cursorignore supplements,
+but never substitutes for, the native tool boundary. Native schema-valid responses
+without a decision are not necessarily failures; the guard emits explicit decisions
+and preToolUse separately checks attachment. No prompt-only or partial-coverage
+target is labelled enforcement. Hook allow does not approve the terminal action.
+
+DETERMINISTIC PROOF COMPLETED
+- 75 client tests PASS: root/binding/host/interpreter/package negatives; exact
+  action; shell/compound variants; all-tool denial; read/MCP/delegation hooks;
+  missing/stale/extra/inherited rules; missing/symlink launcher; no active attachment
+  inferred from disk; malformed/oversized/duplicate input; actual stdin timeout;
+  launcher argument refusal; safe diagnostics; fixed subprocess; no fallback;
+  installer conflict/rollback/failure recovery; preservation of later edits;
+  generated fixture exercised through real guard subprocesses.
+- 33 unchanged state-context regressions PASS: lifecycle distinctions, share-safe
+  output, completed never pending, real local MLflow read-back, provenance,
+  mutation/science guards and exact scientific/execution/approval identities.
+- 2 clean-installed dev8 external-runtime integration tests PASS: synthetic
+  prepared and completed-delivered workspaces, actual fixed subprocess operation,
+  live MLflow read-back, 157-byte-map verification, workspace byte snapshots equal.
+- Installed Precision native hook-engine COMPONENT proof PASS: native config
+  validation; 42 denial cases (seven events x missing/crash/timeout/empty/malformed/
+  invalid decision), seven positive response controls, and a negative control
+  proving omitted failClosed restores fail-open behavior. No provider/Agent run.
+- Bundle deterministic rebuild, exact 13 regular members and extracted checksum
+  checks PASS. No wheelhouse, wheel, sdist, checkpoint or scientific state included.
+- All 842 pre-existing tracked/source/evidence/artifact files retain their SHA-256.
+
+ACTUALLY OBSERVED IN CURSOR
+Precision CLI --version/--help and installed schema/engine behavior only.
+No fresh model-backed Agent, live effective attachment, Carbon installation,
+Carbon enforcement, E01/E02/E13 observation or latency improvement is claimed.
+Natural success remains pending; eventual correctness/restriction is insufficient.
+
+BUNDLE
+artifacts/d148/client-invocation-v1/d148-client-invocation-correction.tar.gz
+Precision absolute location:
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/client-invocation-v1/d148-client-invocation-correction.tar.gz
+Bytes: 23756
+SHA-256: 9dcbd4113ef6f231ea33b761624de06312a92d828b5af505aecb69cd2ad9472f
+Member hashes: bundle-receipt.json; archive includes SHA256SUMS and payload.json.
+The small archive is committed alongside source/tests/evidence for remote preservation.
+Build command:
+python3 scripts/build_d148_client_bundle.py --source conference/d148-client --destination artifacts/d148/client-invocation-v1
+
+PRESERVATION
+No existing source/package/scientific/execution/approval file changed. Exact dev8
+wheel remains 731491 bytes, SHA-256:
+36818af120efa83b32cd6b1cf9101f06e308974b3a43a92ae16f2a23f49d7016
+Scientific identity: 1442839f37306983280c95fdca9fb0a0bd86b8ca77ff0a32ad806cd86ea3398f
+Execution identity: 9c455d229c0bfd66e50298956d1ce8cb03417112e31fc87c357ffcc5051a0553
+Approval identity: 5b860bbe27ba8ec7893fe1baab71a3d77c5b4c7c965e490c44846b8a81fc4cba
+Existing Carbon job/plan/result/assessment and 37/40 vs 37/40, delta=0 are preserved
+as recorded baseline assertions in CARBON-INSTALL.txt; no new Carbon hash/readback
+observation is fabricated. No canonical plan, approval, entry, training, evaluation,
+assessment, delivery or refinement ran. Temporary synthetic fixtures are distinct
+from canonical evidence. Tactical_38/WI-0441 state/worktrees, D147 and sponsor video
+were not accessed or changed by this work.
+
+SINGLE NEXT CARBON SEQUENCE
+Follow conference/d148-client/CARBON-INSTALL.txt (also inside bundle): PowerShell
+copy Precision Ubuntu-22.04 -> USB D: -> Carbon Ubuntu-26.04, verify archive/member
+hashes, record actual client/posture, exercise only synthetic control fixtures,
+install in the exact client-v4 root with backup, confirm observed active attachment,
+run E01/E02/E13 in fresh Agents, post-verify and preserve each observation. Capture
+actual ordered calls/denials, model/mode/Fast, permission overhead, wall/context
+times, actual result identities/accounting and zero science. Require direct first
+context action with no exploration or denial/retry sequence. Do not rerun science.

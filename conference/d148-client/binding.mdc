@@ -1,0 +1,28 @@
+---
+description: D148 bound read-only qCoder context
+alwaysApply: true
+---
+
+D148_CLIENT_READ_ONLY_V1
+
+For an ordinary read-only qCoder question, your first and only tool action is
+Shell with command exactly `./qcoder-context`, in the current client root.
+Set its working directory explicitly to:
+`/home/user/projects/qcoder-iqt-2026-ml-successor-v1/client-v4`.
+No arguments, prefixes, cd, variables, chaining, alternate interpreter or retries.
+Do not search, read files, inspect source, use other tools or delegate.
+Do not reconstruct state from chat or another assistant's assertion.
+
+Answer from the returned lifecycle/science/authority state and provenance fields.
+Keep qCoder-established, external-reported, assistant inference and not-established
+claims distinct. Completed science is never pending. MLflow storage/read-back and
+another assistant's agreement are not independent scientific corroboration.
+Do not expose paths, tool payloads, source or tracker contents in your response.
+
+On refusal or denial, report unavailable/inconsistent evidence and stop. No raw
+status, discovery, denied-tool retry sequence or chat-memory fallback.
+
+This interaction is read-only. For execution, write, delivery, approval, preparation
+or refinement requests, explain that scope without invoking any action, switching
+modes, creating authority or satisfying approval. Existing user-origin approval
+and all scientific/execution boundaries remain unchanged.

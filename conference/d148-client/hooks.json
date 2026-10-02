@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "command": ".d148/guard preToolUse",
+        "timeout": 5,
+        "failClosed": true
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": ".d148/guard beforeShellExecution",
+        "timeout": 5,
+        "failClosed": true
+      }
+    ],
+    "beforeReadFile": [
+      {
+        "command": ".d148/guard beforeReadFile",
+        "timeout": 5,
+        "failClosed": true
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": ".d148/guard beforeMCPExecution",
+        "timeout": 5,
+        "failClosed": true
+      }
+    ],
+    "subagentStart": [
+      {
+        "command": ".d148/guard subagentStart",
+        "timeout": 5,
+        "failClosed": true
+      }
+    ],
+    "beforeTabFileRead": [
+      {
+        "command": ".d148/guard beforeTabFileRead",
+        "timeout": 5,
+        "failClosed": true
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": ".d148/guard beforeSubmitPrompt",
+        "timeout": 5,
+        "failClosed": true
+      }
+    ]
+  }
+}

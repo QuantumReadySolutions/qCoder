@@ -1,0 +1,52 @@
+Official documentation checked 2026-10-02:
+https://cursor.com/docs/hooks
+https://cursor.com/docs/rules
+https://cursor.com/docs/reference/ignore-file
+
+Selected project hooks.json schema version 1, per-command timeout in seconds,
+failClosed boolean, no matcher (all tools), permission allow/deny; beforeSubmitPrompt
+uses continue boolean. Root-level .cursor/hooks.json runs project commands from
+the project root. preToolUse tool_name/tool_input and common hook_event_name,
+workspace_roots, conversation_id, generation_id, cursor_version are documented.
+beforeSubmitPrompt attachments distinguishes rule from file attachments.
+beforeReadFile and subagentStart provide additional permission checks. Native
+hooks require a trusted workspace. sessionStart is not an enforceable gate.
+No third-party-hook translation, MCP surface, custom provider or invented tool
+permission configuration was used. No allowlist bypasses existing approval.
+
+Installed Precision client examined, without reading credentials or launching a
+provider-backed Agent: CLI 2026.08.11-e8db854. --version and --help observed.
+Executable is the existing local cursor-agent distribution. Hook engine schema
+validator and executor are present. tests/client_invocation/prove_native_hooks.cjs
+loads these unmodified functions in memory, omitting CLI startup, and runs the
+actual native configuration validation, timeout, response parsing, failure and
+default-fail-open logic. Its only substituted dependency is a bounded local shell
+adapter executing new synthetic /tmp scripts. No auth/provider calls or transcript
+inspection. The version-specific webpack loading is a test harness only, never
+part of the shipped client integration. Client build hashes are in its receipt.
+
+The installed CLI Shell adapter emits tool_input={command,cwd,timeout?}, with cwd
+also in the outer event; documentation examples use working_directory. The guard
+accepts these explicit spellings only when each specified root matches. Unknown
+tool fields fail closed; an actual target version with different fields needs
+an observed-schema correction, not a guessed permissive alias.
+
+All seven configured events passed six native failure cases (42): missing script,
+crash, timeout, empty stdout, invalid JSON and invalid decision field type/value.
+Seven positive response controls passed. Removing failClosed from a crash control
+produced the documented fail-open default, proving this check distinguishes it.
+The guard separately returns explicit deny for malformed/oversized/duplicate input,
+bad root/binding/version, missing attachment and all unrecognized tools/commands.
+
+Native schema nuance observed during test construction: a beforeSubmitPrompt
+response with an unrelated permission key can be schema-valid with no continue
+decision. That is not a native failure. The final invalid-decision fixture uses
+continue with the wrong type; the production guard always emits an explicit
+boolean. Native omitted-decision handling is not claimed to enforce attachment;
+preToolUse independently requires the per-generation attachment receipt.
+
+This evidence proves installed Precision native ENGINE behavior, not the full
+CLI tool path, Carbon IDE support, effective live rule attachment, hidden UI/team
+instruction absence, permission overhead, natural first-call routing or latency.
+No numeric minimum IDE version is invented. Carbon must expose and pass the
+specified controls. Unsupported targets remain refused, with acceptance pending.

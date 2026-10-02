@@ -1,0 +1,47 @@
+{
+  "read_date": "2026-10-02",
+  "successor_head": "4b31734fbaeca42afc5b424d295786100979a055",
+  "strategic_authorization": "935af4d9fd3d5cf1e30c45a21757ab4ffb7ffd8d",
+  "records": [
+    {
+      "url": "https://github.com/QuantumReadySolutions/qCoder/blob/conference/iqt-2026-ml-research-successor-v1/docs/d148-client-context-binding.txt",
+      "blob": "8615a49880ea7015f320e246e076fc0b5857705b"
+    },
+    {
+      "url": "https://github.com/QuantumReadySolutions/qCoder/blob/conference/iqt-2026-ml-research-successor-v1/docs/d148-client-context-schema.txt",
+      "blob": "d64642b5ae6f3837f7f1e4510abd678a975c1a74"
+    },
+    {
+      "url": "https://github.com/QuantumReadySolutions/qCoder/blob/conference/iqt-2026-ml-research-successor-v1/evidence/d148/state-context-v5/RETURN.txt",
+      "blob": "28efd4063c47abb2c83f7324dec0361dadc3c9b0"
+    },
+    {
+      "url": "https://github.com/QuantumReadySolutions/qCoder/blob/conference/iqt-2026-ml-research-successor-v1/src/qcoder/ml_research/client_context.py",
+      "blob": "4345d8443a0b17d7268ad84286e1a8be4596dddb"
+    },
+    {
+      "url": "https://github.com/QuantumReadySolutions/qCoder/blob/conference/iqt-2026-ml-research-successor-v1/tests/ml_research/test_client_context.py",
+      "blob": "abf48a0f688446c1fc0980792c6de12e656aea66"
+    },
+    {
+      "url": "https://github.com/QuantumReadySolutions/qcoder-internal/blob/ops/tactical-conference-1-continuity-20260920/docs/continuity/current/TACTICAL_CONFERENCE.md",
+      "blob": "71079dc6376359d5f3599744e502c3d92d279b65"
+    },
+    {
+      "url": "https://github.com/QuantumReadySolutions/qcoder-internal/blob/ops/tactical-conference-1-continuity-20260920/docs/private-notes/tactical-conference-coordination/iqt-2026-d148-dev8-e01-routing-summary-20261002.md",
+      "blob": "3641860bc020f2bf03c7f7306f3db7a93d5d95f9"
+    },
+    {
+      "url": "https://github.com/QuantumReadySolutions/qcoder-internal/blob/ops/tactical-conference-1-continuity-20260920/docs/private-notes/tactical-conference-coordination/iqt-2026-d148-e01-dev8-client-routing-failure-20261002.md",
+      "blob": "efa12361f7042a5b9bf180544124f6c2aaaba3d2"
+    },
+    {
+      "url": "https://github.com/QuantumReadySolutions/qcoder-internal/blob/ops/tactical-conference-1-continuity-20260920/docs/private-notes/tactical-conference-coordination/iqt-2026-d148-multi-assistant-provenance-clarification-20261002.md",
+      "blob": "e2cb4544909b2fc29e03cb31d36d037387f3af35"
+    }
+  ],
+  "exact_recorded_commits": {
+    "553c69a4cf3d5be3a7472b9c663a4038d531a60e": "3641860bc020f2bf03c7f7306f3db7a93d5d95f9",
+    "1ec8dec0dbff364b12394908b550f8121eecb3b2": "efa12361f7042a5b9bf180544124f6c2aaaba3d2"
+  }
+}

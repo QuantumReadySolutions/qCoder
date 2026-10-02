@@ -1,0 +1,15 @@
+#!/bin/sh
+# D148 no caller-selected executable, script, workspace or arbitrary arguments.
+case "$#:$1" in
+  1:preToolUse|1:beforeShellExecution|1:beforeReadFile|1:beforeMCPExecution|1:subagentStart|1:beforeTabFileRead|1:beforeSubmitPrompt) ;;
+  *) printf '%s\n' '{"permission":"deny","user_message":"Read-only context unavailable."}'; exit 2 ;;
+esac
+if /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/client-v4/.d148/runtime.py hook "$1" 2>/dev/null; then
+  exit 0
+fi
+if [ "$1" = beforeSubmitPrompt ]; then
+  printf '%s\n' '{"continue":false,"user_message":"Read-only context unavailable."}'
+else
+  printf '%s\n' '{"permission":"deny","user_message":"Read-only context unavailable."}'
+fi
+exit 2

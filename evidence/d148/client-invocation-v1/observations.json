@@ -1,0 +1,34 @@
+{
+  "diagnosis": {
+    "dev8_completed_context": "verified in prior Carbon records",
+    "historical_first_call_routing": "failed",
+    "exact_rule_attached_to_each_failure": "not established",
+    "wrong_root_or_inactive_binding": "not excluded by supplied records",
+    "conflicting_or_inherited_instructions": "not excluded by supplied records",
+    "effective_binding_then_unwanted_selection": "consistent with one reported binding-recognition observation, not conclusively isolated",
+    "deliberate_disobedience": "not inferred"
+  },
+  "precision": {
+    "cursor_cli_version": "2026.08.11-e8db854",
+    "actual_observations": ["version/help", "installed native schema", "installed native hook engine component failure matrix"],
+    "fresh_agents": 0,
+    "model": null,
+    "mode": null,
+    "effective_live_attachment": "unobserved",
+    "provider_calls": 0
+  },
+  "carbon": {
+    "access": "unavailable in this session",
+    "client_version": null,
+    "effective_root_and_binding": "unobserved",
+    "natural_E01_E02_E13": "pending",
+    "native_control_acceptance": "pending",
+    "latency_improvement": "not claimed"
+  },
+  "iteration_notes": [
+    "Initial fixture tests exposed an import-time default root argument; corrected to use the verified current constant.",
+    "Installed-context test initially omitted its parametrized state argument; corrected test collection before execution.",
+    "Native beforeSubmitPrompt invalid-decision fixture corrected to exercise its actual continue schema, not an unrelated permission field.",
+    "Installed CLI inspection established cwd normalization; guard and negative tests cover both documented directory spellings."
+  ]
+}

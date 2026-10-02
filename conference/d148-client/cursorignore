@@ -1,0 +1,7 @@
+# D148 dedicated context client: no indexed project material.
+**
+!.cursor/
+.cursor/**
+!.cursor/rules/
+.cursor/rules/**
+!.cursor/rules/d148-read-only.mdc

@@ -1,0 +1,13 @@
+Deterministic second build matches byte-for-byte.
+CARBON-INSTALL.txt: OK
+acceptance-template.json: OK
+binding.mdc: OK
+control_fixture.py: OK
+cursorignore: OK
+guard: OK
+hooks.json: OK
+package.json: OK
+payload.json: OK
+qcoder-context: OK
+runtime.py: OK
+setup.py: OK

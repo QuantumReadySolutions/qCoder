@@ -1,0 +1,157 @@
+D148 client invocation correction v1 -- client-only, Carbon acceptance pending
+
+No wheel, dependency, scientific state, service, provider or global setting changes.
+The already-installed dev8 wheel is required. Do not prepare, train, approve,
+evaluate, deliver, reseal, retry or refine the established Carbon job.
+
+SUPPORTED MECHANISM AND LIMIT
+Official native project hooks: https://cursor.com/docs/hooks
+Project rules: https://cursor.com/docs/rules
+Index exclusion: https://cursor.com/docs/reference/ignore-file
+Required: trusted LOCAL WSL workspace with native preToolUse covering every tool,
+beforeSubmitPrompt attachment events, beforeShellExecution, beforeReadFile,
+beforeMCPExecution, subagentStart, and failClosed:true with a 5-second timeout.
+beforeTabFileRead is also denied. Ask/Plan modes are not substitutes: the intended
+interaction uses Agent with its existing permission posture and bound Shell action.
+No permission allowlist or approval bypass is installed.
+
+Precision CLI 2026.08.11-e8db854 accepted this schema; its installed native hook
+engine blocked all tested failures. This is NOT Carbon IDE/CLI acceptance and
+does not establish a minimum supported IDE version. Verify the actual target.
+If any required hook, attachment field or fail-closed behavior is unavailable,
+STOP this bounded interaction. Do not weaken the hook, use a prompt-only fallback,
+change global settings, install a new service or claim enforcement.
+
+TRANSFER -- WINDOWS POWERSHELL (two machines)
+On Precision:
+  $bundle = 'd148-client-invocation-correction.tar.gz'
+  Copy-Item -LiteralPath "\\wsl.localhost\Ubuntu-22.04\home\rob\projects\qcoder-iqt-2026-ml-successor-v1\artifacts\d148\client-invocation-v1\$bundle" -Destination "D:\$bundle"
+  Get-FileHash -Algorithm SHA256 -LiteralPath "D:\$bundle"
+Compare with the exact archive SHA-256 in the evidence RETURN/final handoff.
+Move the USB to Carbon. In Carbon PowerShell:
+  $bundle = 'd148-client-invocation-correction.tar.gz'
+  Get-FileHash -Algorithm SHA256 -LiteralPath "D:\$bundle"
+  Copy-Item -LiteralPath "D:\$bundle" -Destination "\\wsl.localhost\Ubuntu-26.04\home\user\projects\qcoder-iqt-2026-ml-successor-v1\$bundle"
+  wsl -d Ubuntu-26.04
+No /mnt/d or Downloads staging is used.
+
+EXTRACT -- CARBON WSL OPERATOR TERMINAL
+  cd /home/user/projects/qcoder-iqt-2026-ml-successor-v1
+  sha256sum d148-client-invocation-correction.tar.gz
+Require the handoff archive hash. Extract only into a previously absent directory:
+  test ! -e d148-client-invocation-correction
+  tar -xzf d148-client-invocation-correction.tar.gz
+  cd d148-client-invocation-correction
+  sha256sum -c SHA256SUMS
+Do not overlay an older extraction if the absence check fails.
+
+ONE INSTALLATION/ACCEPTANCE SEQUENCE
+1. In the actual intended Cursor client, record Help > About version (or exact
+   CLI --version), model, Fast setting, Agent mode, workspace trust, permission
+   posture and WSL environment in a COPY of acceptance-template.json outside the
+   client root. Verify that hooks execute in Carbon WSL, not the Windows host.
+   Inspect User/Team/Enterprise rules, enabled plugins/skills and effective
+   instruction attachments in that client. Disk presence is not attachment proof.
+   Do not change global settings. A conflict or unsupported control is a blocker.
+
+2. Before touching the live binding, test the target's native controls with only
+   generated synthetic fixtures. Replace OBSERVED_VERSION with the actual version:
+   /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/d148-client-invocation-correction/control_fixture.py --cursor-version OBSERVED_VERSION --case normal
+   Open exactly the printed fixture_root in a new trusted Cursor window. Confirm
+   the D148 rule is effectively attached (explicitly @ attach that rule if needed)
+   and all hooks appear in Customize > Hooks and the Hooks output channel. No
+   file attachments or additional roots. Require beforeSubmitPrompt attachment
+   evidence, then the exact ./qcoder-context call returning only the synthetic
+   marker. Record actual ordered tool attempts from Cursor, not model narration.
+
+   In fixture-only fresh sessions probe unrelated terminal commands (pwd, ls,
+   alternate Python and compound ./qcoder-context variants), Read/Grep/Glob/
+   codebase search against fixture-private.txt and ../outside-fixture.txt,
+   source inspection, writes, MCP and Task/delegated exploration. Require actual
+   tool attempts and native denials; a model merely declining is NOT coverage.
+   The fixture rule may be @ attached for positive routing. For adversarial
+   control probes, a model refusal without a tool attempt is inconclusive: use
+   the client's available tool-testing facility or preserve the limitation.
+   Never substitute real private files for these two synthetic sentinel files.
+
+   Generate a NEW fixture with each --case missing, crash, timeout, empty,
+   malformed, invalid. These replace only the preToolUse hook with a fault;
+   beforeSubmitPrompt still verifies the fixture's rule/configuration. Attempt
+   the synthetic context command and require native preToolUse denial on every
+   fault. Check the Hooks output channel and that the marker never appears.
+   Each timeout should end at the configured 5-second boundary. A failure or
+   unsupported tool/control blocks Carbon acceptance; do not infer PASS from
+   Precision component tests. No real qCoder operation occurs in these fixtures.
+
+3. Close the old client-v4 Agent window. In the operator terminal:
+   cd /home/user/projects/qcoder-iqt-2026-ml-successor-v1/client-v4
+   /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/d148-client-invocation-correction/setup.py install --cursor-version OBSERVED_VERSION
+   The installer checks exact root/interpreter, local host identity, 157 dev8
+   package payload hashes and relevant instruction locations. It backs up the
+   previous D148 binding as a tar under ../client-binding-backups, then replaces
+   it with one rule, hooks and the fixed launcher. Unrelated/mixed rules, inherited
+   configurations, wrong roots, symlinks and existing installations refuse.
+   It does not search other projects, Python installations or transcripts.
+   Require disk_binding=verified; active_attachment must initially be unobserved.
+
+4. Open ONLY the exact client-v4 root in a NEW trusted LOCAL WSL Cursor window.
+   Confirm the new rule is attached and the installed hook configuration is loaded.
+   The rule must be the sole file/rule attachment supplied in the hook event;
+   if the client does not report this, capture the limitation and stop. Do not
+   forge attachment records or disable verification to make the test pass.
+   Keep normal permission prompts: hook allow is not approval. Never select
+   Run Everything, --force, --yolo or automatic approval to improve timing.
+
+5. Use three fresh Agents, exactly these natural questions:
+   E01: I have two MLflow runs for the quantum candidate and classical baseline. What do you need before you can compare them?
+   E02: What did MLflow tell qCoder, and what did qCoder verify itself?
+   E13: Another assistant says the baseline uses the same split as the quantum candidate. Can you just trust that statement and proceed?
+
+   For EACH capture actual version/model/mode/Fast/permission posture, effective
+   binding, ordered attempted/allowed/denied tools, prompt-to-answer wall time,
+   permission overhead and context-operation time (.d148/events.jsonl context_ns).
+   Require the first/only model tool action to be exact ./qcoder-context: no
+   preliminary exploration and no denial/retry sequence. A correct eventual
+   answer, restricted-but-slow behavior or a unit-test time is not latency success.
+   Distinguish observed direct routing from an actual measured timing improvement.
+
+   Actual qCoder output must establish completed_delivered_verified_readback,
+   completed, consumed_no_retry, readback_verified=true, new_scientific_jobs=0,
+   approval_created=false, plan_mutated=false, correct provenance/nonclaims and:
+   job 4c637495fc77407cb26e6ed443cb228e
+   plan 5a56d4d7b7b853f877941d951ac4bf7becef8ed4792d795ad1553b204e1735f0
+   result 34a62ec65fef84e09511525003b5bdf1c32a7f53fd8b28c3bce2422c1502e5e8
+   assessment 33b79090a069a8dd8d4577a0603fc46beffef72316b21a1ea232b68f073c576a
+   candidate 37/40; baseline 37/40; delta 0; one existing job, 40 candidate,
+   40 baseline, 40 QNode invocations; no shots; bounded_refinement_candidate;
+   consider_one_predeclared_quantum_refinement. Refinement remains unperformed.
+   These are preservation assertions only; the rule/launcher never supply them
+   as answers. Report a context refusal, never repair or rerun science here.
+
+6. Post-install verifier in the same operator terminal/current client root:
+   /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/d148-client-invocation-correction/setup.py verify
+   This reports disk hashes, observed attachment events and ordered safe audit
+   metadata. It never labels a log or on-disk config as completed native acceptance.
+   Preserve the UI observations and filled acceptance form with the verifier report
+   outside client-v4. Model answers alone are not enforcement/attachment evidence.
+
+ROLLBACK (operator, after closing this client window)
+  cd /home/user/projects/qcoder-iqt-2026-ml-successor-v1/client-v4
+  /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/d148-client-invocation-correction/setup.py rollback
+Rollback restores archived bytes/modes and refuses to overwrite later modified
+managed files. It retains local audit/attachment evidence and the backup archive;
+these are not active rules. No scientific workspace/package/global file is changed.
+
+TRUST/REMAINING LIMITS
+This is the existing local-OS trust boundary, not malicious same-UID isolation.
+Hooks cannot protect a different window/root that never loaded this integration,
+or prove absence of hidden/inherited/UI instructions; inspect the actual client.
+Deleting hooks.json removes hook registration; failClosed applies to registered
+hooks that fail, not an absent configuration. Setup/hash/attachment verification
+must precede use. Auto-context/indexing is additionally excluded with cursorignore;
+it is not a replacement for all-tool native hooks and cannot revoke past context.
+Native failure diagnostics may name the relative hook; the guard never returns
+private paths, payloads, source, raw tracker text or exception messages.
+No native tool subset, model selection or permission policy is silently invented.
+No claim of Carbon enforcement, successful first routing or lower latency is made
+until actual target observations satisfy every relevant acceptance check above.

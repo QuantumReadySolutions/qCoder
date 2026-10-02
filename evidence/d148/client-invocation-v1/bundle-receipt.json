@@ -1,0 +1,61 @@
+{
+  "archive": "d148-client-invocation-correction.tar.gz",
+  "bytes": 23756,
+  "sha256": "9dcbd4113ef6f231ea33b761624de06312a92d828b5af505aecb69cd2ad9472f",
+  "members": {
+    "CARBON-INSTALL.txt": {
+      "bytes": 10930,
+      "sha256": "70bbd02dd501da2f3fe65140ecea97dad5caf7e593e29bf299c963abdcb06931"
+    },
+    "SHA256SUMS": {
+      "bytes": 958,
+      "sha256": "e2f08a84c5d86ada27c8d2b651d192a4f3ea826e74179b739e1113a6b84e35e3"
+    },
+    "acceptance-template.json": {
+      "bytes": 3389,
+      "sha256": "fecf9361ce199231675be23a4638b6d5471a1ce5f6305cf2fab7e22aae4785d5"
+    },
+    "binding.mdc": {
+      "bytes": 1449,
+      "sha256": "5f5d66e582e05976711fb57fb5c7515be41e14a51be72a1d7ef588fab16f6f51"
+    },
+    "control_fixture.py": {
+      "bytes": 3747,
+      "sha256": "8e8e54458810bb5312edd4db28cdf05f64f4dd183657ab1321cde8304e3f734b"
+    },
+    "cursorignore": {
+      "bytes": 153,
+      "sha256": "ca9b2b46038e7e8af774245061b774a1e6f1bf5258d233d12a3d7b41b4673096"
+    },
+    "guard": {
+      "bytes": 774,
+      "sha256": "6763b607aaaf56c4ff7b768f1c07c924135d1c1e807542d8db5df96c0a71cbf3"
+    },
+    "hooks.json": {
+      "bytes": 1075,
+      "sha256": "7a432500af5f3c80cf9f46764adbe74c9a454a8035c9cc042e0c45a325a9c47e"
+    },
+    "package.json": {
+      "bytes": 17347,
+      "sha256": "eb112d4e480f429c5232a73b0c85565df5b4c514034ae8f3e4518a69eed24e3d"
+    },
+    "payload.json": {
+      "bytes": 959,
+      "sha256": "296b2e171f32628e4ff5dfcd7f33293b994a196d71c2733bb67441af76911c6c"
+    },
+    "qcoder-context": {
+      "bytes": 491,
+      "sha256": "c71d0f81aaaeaa00c3f94b95324683f4533379671c19df6d806b1696f26cad81"
+    },
+    "runtime.py": {
+      "bytes": 12627,
+      "sha256": "cfdaf13c525cfdc3313075b8e07103ed74d7fc2b4e3367cf25764ffb3d35d77e"
+    },
+    "setup.py": {
+      "bytes": 8721,
+      "sha256": "366d3b80de0a94ad841e1bbb9568d9fc32a1afe33b585152c39d1da9cbe6398f"
+    }
+  },
+  "wheel_included": false,
+  "scientific_state_included": false
+}
