@@ -1,0 +1,91 @@
+{
+  "schema": "d148.pending_plan_summary.v1",
+  "status": "awaiting_real_Rob_origin_TTY_approval",
+  "executable_authority": false,
+  "plan_digest": "fcd115f49d3726c3a782725a4872a63e886295153a11a5c168d21f11ef25c9fc",
+  "job_id": "3445e7e975ac4c3ca8d3c9ac9a16084a",
+  "attempt_id": "7fb4324afecb403881d8b31a4e1c6b25",
+  "challenge": "a03f7b2af9654372bea1d3fd8738c415",
+  "code_digest": "89f7a7a767763d89ad3d2c630b15814d3b3a2cdfc5eda4c66d2b2f7fdb17cc0d",
+  "runtime_digest": "412fad0a43068e089f1a758b3ee8d0ad8c754c8fcad40649b639b3e88e6b8193",
+  "selected": {
+    "baseline": {
+      "external_reported": {
+        "checkpoint_digest": "6ea15ff9a817aef3dffce853e0cb901360326804584811d071060a88683ed8d9",
+        "fixture_digest": "eb533a76bf7da05382b3654599edfc95fb403847538abfb2e15316114b689301",
+        "preprocessing_digest": "c92c53de81d5c6cb748588aaffec91632fbc906d8edbbf2fd15dc9573572e418",
+        "recipe_digest": "05d320b20011f00fce3b4e824057b45e25395a76786e9345e309fee52997937b",
+        "role": "baseline",
+        "split_digest": "9441e7deaa67c80ca5e638b3873e3c4ce75ddb69aec69c0343437a12f5240f06"
+      },
+      "qcoder_verified_local_checkpoint_digest": "6ea15ff9a817aef3dffce853e0cb901360326804584811d071060a88683ed8d9",
+      "run_id": "c285ceb957b84ef49e475f37c5931d12"
+    },
+    "candidate": {
+      "external_reported": {
+        "checkpoint_digest": "3c681713c68f3dd8837db7506a4faef9c83de61ed8f656210b4a24a69d84f472",
+        "fixture_digest": "eb533a76bf7da05382b3654599edfc95fb403847538abfb2e15316114b689301",
+        "preprocessing_digest": "c92c53de81d5c6cb748588aaffec91632fbc906d8edbbf2fd15dc9573572e418",
+        "recipe_digest": "05d320b20011f00fce3b4e824057b45e25395a76786e9345e309fee52997937b",
+        "role": "candidate",
+        "split_digest": "9441e7deaa67c80ca5e638b3873e3c4ce75ddb69aec69c0343437a12f5240f06"
+      },
+      "qcoder_verified_local_checkpoint_digest": "3c681713c68f3dd8837db7506a4faef9c83de61ed8f656210b4a24a69d84f472",
+      "run_id": "5a8fbc24aa6845ceb08d1150ac495683"
+    }
+  },
+  "assessment_run_id": "9f820359e11b478b8fbb0bcc19305c90",
+  "experiment_id": "1",
+  "destination_identity_digest": "ae320dcdc5abd62294bab713e624515b496f62580eb0c3329e80df85b30d5ac6",
+  "protocol": {
+    "candidate_min_correct": 26,
+    "heldout_count": 40,
+    "id": "d148.result.v1",
+    "maximum_baseline_advantage_correct": 4,
+    "metric": "accuracy@logit>=0",
+    "shots": null
+  },
+  "budget": {
+    "baseline_model_invocations": 40,
+    "candidate_model_invocations": 40,
+    "qnode_invocations": 40,
+    "research_jobs": 1,
+    "timeout_seconds": 60
+  },
+  "identities": {
+    "data_digest": "2606f25d52bb7370b9b371ffde6fd4e732ae0cca88b5a5966aab0376c32dd7ef",
+    "file_sha256": {
+      "baseline-checkpoint.json": "187c6ef11805c71e941272573a088491a90f9ad9231d8368a5d6a0cc145d5e7c",
+      "baseline-run.json": "af59275058ad01ccb6adc90ec5530ab66b1cacaf2c1105043546b348818e00a5",
+      "candidate-checkpoint.json": "bea2ea7814ce4493f59bbcbb8ae752e29660b8017f526060ca9ce49688184bfa",
+      "candidate-run.json": "3c5313bfeb655cb4076c7aa0436ba6332cb1fee88e4f821abb57da7d37b0a286",
+      "fixture.json": "4383d24248a74755909dec0039ad76c62fbbdf646804f4d03a93b8965bf217b6",
+      "recipes.json": "cb784495843f4c61b0a321a020f89477e2398c55de3b21259be75d708c2ef79a",
+      "test.json": "b7db1000286d88e96448b56ef35933f56ee2db1eebdf33e59383b8c1d67ddc46",
+      "train.json": "819a590e1b26db9b10bb13a959ed68b908332004fad3510130f136a9e4d844ce",
+      "validation.json": "a97746162c446505c3e4d5dafd3afa1f413cdb1ab2f24bfb4148932ee1062295"
+    },
+    "fixture_digest": "eb533a76bf7da05382b3654599edfc95fb403847538abfb2e15316114b689301",
+    "labels_digest": "42d8d1eba20143f583791be0ea07c1f186b7e632ddefb9e9b7badca7e7e2fa1e",
+    "preprocessing_digest": "c92c53de81d5c6cb748588aaffec91632fbc906d8edbbf2fd15dc9573572e418",
+    "split_digest": "9441e7deaa67c80ca5e638b3873e3c4ce75ddb69aec69c0343437a12f5240f06"
+  },
+  "approval": null,
+  "entry": null,
+  "receipt": null,
+  "result": null,
+  "canonical_scientific_accounting": {
+    "research_job_attempts": 0,
+    "candidate_model_invocations": 0,
+    "baseline_model_invocations": 0,
+    "qnode_invocations": 0,
+    "heldout_examples_processed": 0,
+    "shots": null
+  },
+  "canonical_delivery_readback": null,
+  "fallback_recheck": {
+    "status": "not_established_path_requested",
+    "expected_sha256": "73f9c7d0f8e396338a62cfb964df0244a179c5cf4352d5773f0da95b0ac5138c",
+    "modified": false
+  }
+}

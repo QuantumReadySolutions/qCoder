@@ -13,10 +13,10 @@ except ModuleNotFoundError:  # pragma: no cover
 
 
 EXPECTED_SCHEMA = "qcoder.private_development_version.v1"
-EXPECTED_VERSION = "0.6.0a24.post0.dev2+openqasm3.local.evidence.v1"
-EXPECTED_PREDECESSOR = "0.6.0a24.post0.dev1+deterministic.evidence.usability.pack.v1"
+EXPECTED_VERSION = "0.6.0a24.post0.dev4+iqt.d148.ml.v1"
+EXPECTED_PREDECESSOR = "0.6.0a24.post0.dev3+protected.blueprint.v1"
 EXPECTED_BASIS = "0.6.0a24"
-EXPECTED_WORK_IDENTITY = "QCODER_OSS_OPENQASM3_AND_LOCAL_EVIDENCE_HARDENING_MARATHON_V1"
+EXPECTED_WORK_IDENTITY = "QCODER_IQT_2026_ML_RESEARCH_SUCCESSOR_IMPLEMENTATION_AND_PROOF_V1"
 
 
 def verify(root: Path) -> dict[str, object]:
@@ -55,7 +55,7 @@ def verify(root: Path) -> dict[str, object]:
         raise ValueError("public_release_record_changed")
     if development.get("work_identity") != EXPECTED_WORK_IDENTITY:
         raise ValueError("development_work_identity_invalid")
-    if development.get("identity_kind") != "private_unfrozen_development_successor":
+    if development.get("identity_kind") != "unpublished_local_research_successor":
         raise ValueError("development_identity_kind_invalid")
     if development.get("publication_permitted") is not False:
         raise ValueError("development_publication_must_be_prohibited")

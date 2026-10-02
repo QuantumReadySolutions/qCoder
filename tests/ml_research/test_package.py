@@ -1,4 +1,4 @@
-"""D-148 explicit successor package delta; frozen historical tests are unchanged."""
+"""D-148 explicit successor package delta against the inherited public inventory."""
 import ast
 import importlib.util
 import json

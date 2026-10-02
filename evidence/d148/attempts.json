@@ -45,6 +45,27 @@
       "passed": 123,
       "seconds": 57.95,
       "command": "PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q tests/ml_research tests/test_focused_loop_contracts_v1.py tests/test_focused_loop_package_isolation_v1.py tests/test_public_package_metadata.py"
+    },
+    {
+      "id": 6,
+      "stage": "installed_test_launch",
+      "result": "failed_before_tests",
+      "reason": "Relative test-copy path used with /tmp working directory; corrected to absolute worktree source path. No canonical job or tests ran in this failed launch."
+    },
+    {
+      "id": 7,
+      "stage": "installed_synthetic_tests",
+      "result": "passed",
+      "passed": 41,
+      "seconds": 55.29,
+      "command": "PYTHONDONTWRITEBYTECODE=1 /tmp/d148-installed-proof/venv/bin/python -I -m pytest -q -c /dev/null /tmp/d148-installed-proof/tests/test_d148.py"
+    },
+    {
+      "id": 8,
+      "stage": "package_version_regressions",
+      "result": "passed",
+      "command": "PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q tests/test_wi0441_public_build_allowlist_v1.py tests/test_release_version_consistency.py",
+      "output": "...........................................                              [100%]\n43 passed in 0.22s"
     }
   ],
   "canonical_heldout_jobs": 0
