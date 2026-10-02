@@ -156,7 +156,16 @@
     "src/qcoder/focused_loop/privacy.py",
     "src/qcoder/focused_loop/receipt.py",
     "src/qcoder/focused_loop/result_protocol.py",
-    "src/qcoder/focused_loop/reuse.py"
+    "src/qcoder/focused_loop/reuse.py",
+    "src/qcoder/ml_research/__init__.py",
+    "src/qcoder/ml_research/__main__.py",
+    "src/qcoder/ml_research/contracts.py",
+    "src/qcoder/ml_research/fixture.py",
+    "src/qcoder/ml_research/models.py",
+    "src/qcoder/ml_research/training.py",
+    "src/qcoder/ml_research/runtime.py",
+    "src/qcoder/ml_research/job.py",
+    "src/qcoder/ml_research/tracker.py"
   ],
   "allowed_package_data_filenames": [
     "src/qcoder/contracts/protected_blueprint_contract_v1.json",
@@ -183,7 +192,8 @@
     "qcoder.pro_preview",
     "qcoder.tools",
     "qcoder.executors",
-    "qcoder.focused_loop"
+    "qcoder.focused_loop",
+    "qcoder.ml_research"
   ],
   "forbidden_member_classes": [
     "absolute",

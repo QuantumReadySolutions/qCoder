@@ -158,3 +158,12 @@ prune src/qcoder/pro_v0
 exclude docs/pro-v0-install.md
 exclude docs/private-alpha-quickstart.md
 exclude docs/private-alpha-release-candidate-validation.md
+include src/qcoder/ml_research/__init__.py
+include src/qcoder/ml_research/__main__.py
+include src/qcoder/ml_research/contracts.py
+include src/qcoder/ml_research/fixture.py
+include src/qcoder/ml_research/models.py
+include src/qcoder/ml_research/training.py
+include src/qcoder/ml_research/runtime.py
+include src/qcoder/ml_research/job.py
+include src/qcoder/ml_research/tracker.py

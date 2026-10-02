@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qcoder"
-version = "0.6.0a24.post0.dev3+protected.blueprint.v1"
+version = "0.6.0a24.post0.dev4+iqt.d148.ml.v1"
 description = "Quantum circuit analysis and structured feature extraction tools."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -30,6 +30,7 @@ dependencies = ["numpy"]
 qiskit = ["qiskit>=1.0"]
 cirq = ["cirq-core>=1.4"]
 pennylane = ["pennylane>=0.44"]
+ml-research = ["numpy==2.2.6", "scipy==1.15.3", "scikit-learn==1.6.1", "pennylane==0.44.0", "torch==2.6.0+cpu", "mlflow==3.1.4", "SQLAlchemy==2.0.40", "gast==0.6.0", "astunparse==1.6.3", "pennylane-lightning==0.44.0"]
 
 [project.urls]
 Homepage = "https://qcoder.ai"
@@ -59,6 +60,7 @@ packages = [
     "qcoder.explorer",
     "qcoder.executors",
     "qcoder.focused_loop",
+    "qcoder.ml_research",
     "qcoder.model_packs",
     "qcoder.pipelines",
     "qcoder.pro_preview",

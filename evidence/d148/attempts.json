@@ -1,0 +1,51 @@
+{
+  "schema": "d148.implementation_attempts.v1",
+  "attempts": [
+    {
+      "id": 1,
+      "stage": "dependency_download",
+      "result": "failed",
+      "reason": "Sandbox DNS resolution unavailable; authorized network-enabled pip retry succeeded."
+    },
+    {
+      "id": 2,
+      "stage": "first_tests",
+      "result": "failed",
+      "counts": {
+        "passed": 16,
+        "failed": 1,
+        "errors": 18
+      },
+      "reason": "PennyLane import required gast; added gast==0.6.0 and astunparse==1.6.3; matched pennylane-lightning==0.44.0."
+    },
+    {
+      "id": 3,
+      "stage": "second_tests",
+      "result": "failed",
+      "counts": {
+        "passed": 17,
+        "errors": 18
+      },
+      "reason": "MLflow 3.1.4 imports removed SQLAlchemy 2.1 pool symbol; pinned SQLAlchemy==2.0.40."
+    },
+    {
+      "id": 4,
+      "stage": "third_tests",
+      "result": "failed",
+      "counts": {
+        "passed": 37,
+        "failed": 1
+      },
+      "reason": "Isolation test confused PyTorch model.eval() with Python eval(); restricted the executable-code assertion to bare eval calls."
+    },
+    {
+      "id": 5,
+      "stage": "fourth_tests",
+      "result": "passed",
+      "passed": 123,
+      "seconds": 57.95,
+      "command": "PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q tests/ml_research tests/test_focused_loop_contracts_v1.py tests/test_focused_loop_package_isolation_v1.py tests/test_public_package_metadata.py"
+    }
+  ],
+  "canonical_heldout_jobs": 0
+}
