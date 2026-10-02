@@ -13,8 +13,8 @@ except ModuleNotFoundError:  # pragma: no cover
 
 
 EXPECTED_SCHEMA = "qcoder.private_development_version.v1"
-EXPECTED_VERSION = "0.6.0a24.post0.dev4+iqt.d148.ml.v1"
-EXPECTED_PREDECESSOR = "0.6.0a24.post0.dev3+protected.blueprint.v1"
+EXPECTED_VERSION = "0.6.0a24.post0.dev5+iqt.d148.ml.tty.v2"
+EXPECTED_PREDECESSOR = "0.6.0a24.post0.dev4+iqt.d148.ml.v1"
 EXPECTED_BASIS = "0.6.0a24"
 EXPECTED_WORK_IDENTITY = "QCODER_IQT_2026_ML_RESEARCH_SUCCESSOR_IMPLEMENTATION_AND_PROOF_V1"
 

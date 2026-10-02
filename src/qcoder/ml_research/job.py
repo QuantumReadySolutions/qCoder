@@ -2,6 +2,7 @@
 from pathlib import Path
 import os
 import signal
+import stat
 import time
 import uuid
 
@@ -72,16 +73,37 @@ def approve(root):
         require(not (root / "entered.json").exists(), "attempt_consumed")
         require(not (root / "approval.json").exists(), "approval_already_exists")
         require(os.isatty(0) and os.isatty(1), "interactive_human_tty_required")
-        with open("/dev/tty", "r+", encoding="utf-8", buffering=1) as tty:
-            require(os.tcgetpgrp(tty.fileno()) == os.getpgrp(), "foreground_tty_required")
+        # Buffered text update mode requires seeking and fails on POSIX terminals.
+        # Open the existing controlling terminal without acquiring a new one.
+        fd = os.open("/dev/tty", os.O_RDWR | os.O_NOCTTY | os.O_CLOEXEC)
+        try:
+            require(stat.S_ISCHR(os.fstat(fd).st_mode) and os.isatty(fd), "character_tty_required")
+            require(os.tcgetpgrp(fd) == os.getpgrp(), "foreground_tty_required")
             prompt = "APPROVE " + plan["digest"] + " " + plan["challenge"]
-            tty.write("D-148: authorize ONE held-out research job (40 examples/model).\nPlan: " + plan["digest"] + "\nAttempt: " + plan["attempt_id"] + "\nType this exact line yourself:\n" + prompt + "\n> ")
-            response = tty.readline(256).rstrip("\n")
-            require(response == prompt, "exact_user_confirmation_required")
+            message = ("D-148: authorize ONE held-out research job (40 examples/model).\nPlan: " + plan["digest"] + "\nAttempt: " + plan["attempt_id"] + "\nType this exact line yourself:\n" + prompt + "\n> ").encode("ascii")
+            require(len(message) <= 2048, "approval_prompt_too_large")
+            offset = 0
+            while offset < len(message):
+                written = os.write(fd, message[offset:])
+                require(written > 0, "approval_prompt_write_failed")
+                offset += written
+            response = bytearray()
+            for _ in range(256):
+                part = os.read(fd, 1)
+                require(part, "approval_input_eof")
+                if part == b"\n":
+                    break
+                response.extend(part)
+            else:
+                require(False, "approval_input_too_large")
+            require(response == prompt.encode("ascii"), "exact_user_confirmation_required")
+            require(os.tcgetpgrp(fd) == os.getpgrp(), "foreground_tty_required")
             require(current(root) == plan, "plan_changed_during_approval")
-            record = seal({"schema": "d148.approval.v1", "origin": "local_foreground_tty_user", "plan_digest": plan["digest"], "attempt_id": plan["attempt_id"], "challenge": plan["challenge"], "approved_at": now(), "uid": os.getuid(), "tty": os.ttyname(tty.fileno()), "confirmation_digest": canonical_digest(response)})
+            record = seal({"schema": "d148.approval.v1", "origin": "local_foreground_tty_user", "plan_digest": plan["digest"], "attempt_id": plan["attempt_id"], "challenge": plan["challenge"], "approved_at": now(), "uid": os.getuid(), "tty": os.ttyname(fd), "confirmation_digest": canonical_digest(response.decode("ascii"))})
             write_new(root / "approval.json", record)
             return record
+        finally:
+            os.close(fd)
 
 
 def valid_approval(root, plan, *, completed=False):

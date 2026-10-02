@@ -66,6 +66,39 @@
       "result": "passed",
       "command": "PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q tests/test_wi0441_public_build_allowlist_v1.py tests/test_release_version_consistency.py",
       "output": "...........................................                              [100%]\n43 passed in 0.22s"
+    },
+    {
+      "id": 9,
+      "stage": "first_real_Rob_origin_approval",
+      "result": "failed_safely_before_authority",
+      "origin": "Rob_user_report",
+      "error": "io.UnsupportedOperation: File or stream is not seekable",
+      "plan_digest": "fcd115f49d3726c3a782725a4872a63e886295153a11a5c168d21f11ef25c9fc",
+      "evidence": "recut-v2/real-approval-failure.json",
+      "canonical_heldout_jobs": 0
+    },
+    {
+      "id": 10,
+      "stage": "recut_v2_initial_source_validation",
+      "result": "failed_contained_test_harness",
+      "counts": {
+        "passed": 155,
+        "failed": 1
+      },
+      "seconds": 71.83,
+      "reason": "Real PTY child used Python -I, which ignored PYTHONDONTWRITEBYTECODE and generated source caches. Source allowlist correctly refused bytecode. Set sys.dont_write_bytecode explicitly in child; removed only generated __pycache__ files before retest.",
+      "canonical_heldout_jobs": 0
+    },
+    {
+      "id": 11,
+      "stage": "recut_v2_corrected_source_validation",
+      "result": "passed",
+      "passed": 156,
+      "warnings": 8,
+      "seconds": 71.97,
+      "command": "PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q tests/ml_research tests/test_release_version_consistency.py tests/test_focused_loop_contracts_v1.py tests/test_focused_loop_package_isolation_v1.py tests/test_public_package_metadata.py",
+      "warning_explanation": "Python warns about forkpty from a multithreaded test parent; child immediately execs a fresh interpreter. All eight genuine PTY cases passed.",
+      "canonical_heldout_jobs": 0
     }
   ],
   "canonical_heldout_jobs": 0

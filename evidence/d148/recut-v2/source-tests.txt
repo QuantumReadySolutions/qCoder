@@ -1,0 +1,17 @@
+........................................................................ [ 46%]
+........................................................................ [ 92%]
+............                                                             [100%]
+=============================== warnings summary ===============================
+tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[exact]
+tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[fragmented]
+tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[generic]
+tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[digest_only]
+tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[wrong_challenge]
+tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[oversized]
+tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[eof]
+tests/ml_research/test_d148.py::test_real_nonseekable_tty_approval[changed_plan]
+  /usr/lib/python3.12/pty.py:95: DeprecationWarning: This process (pid=4) is multi-threaded, use of forkpty() may lead to deadlocks in the child.
+    pid, fd = os.forkpty()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+156 passed, 8 warnings in 71.97s (0:01:11)

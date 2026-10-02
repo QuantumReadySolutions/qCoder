@@ -254,21 +254,107 @@ def test_lazy_import():
     result = subprocess.run([sys.executable, "-c", "import qcoder, qcoder.ml_research; import sys; assert not any(n in sys.modules for n in ('torch','pennylane','mlflow'))"], env=env, capture_output=True)
     assert result.returncode == 0, result.stderr
 
-@pytest.mark.parametrize('answer', ['Okay, go ahead.', 'digest_only', 'assistant_token'])
-def test_tty_challenge_rejects_nonexact(prepared, monkeypatch, answer):
-    import io
-    import builtins
+@pytest.mark.parametrize("answer", ["exact", "fragmented", "generic", "digest_only", "wrong_challenge", "oversized", "eof", "changed_plan"])
+def test_real_nonseekable_tty_approval(prepared, answer):
+    """Real controlling PTY; automated test-only input, never canonical authority."""
+    import errno
+    import pty
+    import select
+    import signal
+    import time
     root, plan = prepared
-    value = plan['digest'] if answer == 'digest_only' else answer
-    class Terminal(io.StringIO):
-        def fileno(self): return 99
-        def write(self, text): return len(text)
-    original = builtins.open
-    monkeypatch.setattr(builtins, 'open', lambda path, *a, **k: Terminal(value+'\n') if path == '/dev/tty' else original(path,*a,**k))
-    monkeypatch.setattr(os, 'isatty', lambda fd: True)
-    monkeypatch.setattr(os, 'tcgetpgrp', lambda fd: os.getpgrp())
-    with pytest.raises(Refusal, match='exact_user_confirmation_required'): job.approve(root)
-    assert not (root/'approval.json').exists() and not (root/'entered.json').exists()
+    # Child exec avoids using inherited ML library/thread state after fork.
+    # The production CLI and /dev/tty open/read/write path are not mocked.
+    script = r"""
+import errno, io, os, stat, sys
+sys.dont_write_bytecode = True
+sys.path.insert(0, sys.argv.pop(1))
+fd = os.open('/dev/tty', os.O_RDWR | os.O_NOCTTY)
+try:
+    assert stat.S_ISCHR(os.fstat(fd).st_mode) and os.isatty(fd)
+    assert os.tcgetpgrp(fd) == os.getpgrp()
+    try:
+        os.lseek(fd, 0, os.SEEK_SET)
+    except OSError as exc:
+        assert exc.errno == errno.ESPIPE
+    else:
+        raise AssertionError('PTY unexpectedly seekable')
+finally:
+    os.close(fd)
+try:
+    with open('/dev/tty', 'r+', encoding='utf-8', buffering=1):
+        pass
+except io.UnsupportedOperation:
+    print('OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY', flush=True)
+else:
+    raise AssertionError('old text-update defect was not reproduced')
+from qcoder.ml_research.__main__ import main
+main()
+"""
+    pid, master = pty.fork()
+    if pid == 0:
+        os.execv(sys.executable, [sys.executable, "-I", "-c", script,
+                 str(Path(job.__file__).resolve().parents[2]), "--workspace", str(root), "approve"])
+    output = bytearray()
+    sent = False
+    status = None
+    deadline = time.monotonic() + 30
+    try:
+        while time.monotonic() < deadline:
+            ready, _, _ = select.select([master], [], [], 0.1)
+            if ready:
+                try:
+                    part = os.read(master, 4096)
+                except OSError as exc:
+                    if exc.errno != errno.EIO:
+                        raise
+                    break
+                if not part:
+                    break
+                output.extend(part)
+                if not sent and b"\n> " in output:
+                    exact = "APPROVE " + plan["digest"] + " " + plan["challenge"]
+                    if answer == "changed_plan":
+                        replace(root / "plan.json", reseal(plan, challenge="0" * 32))
+                    response = {"generic": "Okay, go ahead.", "digest_only": plan["digest"],
+                                "wrong_challenge": "APPROVE " + plan["digest"] + " wrong",
+                                "oversized": "x" * 300}.get(answer, exact)
+                    raw = b"\x04" if answer == "eof" else (response + "\n").encode()
+                    if answer == "fragmented":
+                        os.write(master, raw[:17])
+                        os.write(master, raw[17:])
+                    else:
+                        os.write(master, raw)
+                    sent = True
+            waited, status = os.waitpid(pid, os.WNOHANG)
+            if waited:
+                pid = None
+                break
+        if pid is not None:
+            waited, status = os.waitpid(pid, os.WNOHANG)
+            if waited:
+                pid = None
+            else:
+                raise AssertionError("TTY child did not finish: " + output.decode(errors="replace"))
+    finally:
+        os.close(master)
+        if pid is not None:
+            os.kill(pid, signal.SIGKILL)
+            os.waitpid(pid, 0)
+    assert b"OLD_DEFECT_REPRODUCED_ON_CHARACTER_TTY" in output
+    assert sent
+    if answer in ("exact", "fragmented"):
+        assert os.waitstatus_to_exitcode(status) == 0, output.decode(errors="replace")
+        record = job.valid_approval(root, plan)
+        assert record["origin"] == "local_foreground_tty_user"
+        assert record["confirmation_digest"] == canonical_digest("APPROVE " + plan["digest"] + " " + plan["challenge"])
+        # A second ceremony is refused by production code before any input.
+        with pytest.raises(Refusal, match="approval_already_exists"):
+            job.approve(root)
+    else:
+        assert os.waitstatus_to_exitcode(status) != 0, output.decode(errors="replace")
+        assert not (root / "approval.json").exists()
+    assert all(not (root / name).exists() for name in ("entered.json", "receipt.json", "result.json"))
 
 
 def test_training_cannot_read_heldout(tmp_path, monkeypatch):

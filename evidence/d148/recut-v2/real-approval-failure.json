@@ -1,0 +1,58 @@
+{
+  "schema": "d148.real_approval_failure.v1",
+  "origin": "Rob_user_report",
+  "time_of_real_attempt": "not_supplied",
+  "error_type": "io.UnsupportedOperation",
+  "error_message": "File or stream is not seekable",
+  "failed_operation": "open(\"/dev/tty\", \"r+\", encoding=\"utf-8\", buffering=1)",
+  "stage": "before_approval_record_and_science",
+  "old_plan_digest": "fcd115f49d3726c3a782725a4872a63e886295153a11a5c168d21f11ef25c9fc",
+  "old_attempt_id": "7fb4324afecb403881d8b31a4e1c6b25",
+  "old_challenge": "a03f7b2af9654372bea1d3fd8738c415",
+  "old_source_run_ids": {
+    "candidate": "5a8fbc24aa6845ceb08d1150ac495683",
+    "baseline": "c285ceb957b84ef49e475f37c5931d12"
+  },
+  "old_assessment_run_id": "9f820359e11b478b8fbb0bcc19305c90",
+  "absent_files_verified": {
+    "approval.json": true,
+    "entered.json": true,
+    "receipt.json": true,
+    "result.json": true
+  },
+  "canonical_accounting": {
+    "research_jobs": 0,
+    "candidate_model_invocations": 0,
+    "baseline_model_invocations": 0,
+    "qnode_invocations": 0,
+    "heldout_examples_processed": 0
+  },
+  "supersession": "Old checkpoints, training records, installed artifact and plan must not be used with corrected source. Preserve unchanged; recut in a new workspace.",
+  "old_workspace_files": {
+    "assessment-reservation-entered.json": "86e490b0bdb454798d11f96972eda27353e32ccb2bf6b299ce9daabfb83bcdf3",
+    "assessment-run.json": "9aa9a0df48c26a38d2d3d61bdec5e9d18962342ab93b9cc3844b46a6735bafdf",
+    "baseline-checkpoint.json": "187c6ef11805c71e941272573a088491a90f9ad9231d8368a5d6a0cc145d5e7c",
+    "baseline-run.json": "af59275058ad01ccb6adc90ec5530ab66b1cacaf2c1105043546b348818e00a5",
+    "baseline-tracking-entered.json": "1e545b1d83df9057aaf755a0e238e5187cd9afcb19fca6d44139135f952e380f",
+    "baseline-training-entered.json": "21931e43d16e72accaa452b01189130185813eb0b1bb8dbeb2921cb3f8bccc19",
+    "candidate-checkpoint.json": "bea2ea7814ce4493f59bbcbb8ae752e29660b8017f526060ca9ce49688184bfa",
+    "candidate-run.json": "3c5313bfeb655cb4076c7aa0436ba6332cb1fee88e4f821abb57da7d37b0a286",
+    "candidate-tracking-entered.json": "c89cec26584092a641d86bf49054d4dbf00b5dec8219da54abae25273c3e5095",
+    "candidate-training-entered.json": "a4bab61c22f2e047deca06059b52e2ac95b29084826f150604fe42545693f186",
+    "fixture.json": "4383d24248a74755909dec0039ad76c62fbbdf646804f4d03a93b8965bf217b6",
+    "plan.json": "9a73bc77fe031ac2e8500fa0a8ea7f94b8a986f6857b04aea3440f6448e5b160",
+    "recipes.json": "cb784495843f4c61b0a321a020f89477e2398c55de3b21259be75d708c2ef79a",
+    "research.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "test.json": "b7db1000286d88e96448b56ef35933f56ee2db1eebdf33e59383b8c1d67ddc46",
+    "tracker-artifacts/5a8fbc24aa6845ceb08d1150ac495683/artifacts/checkpoint-provenance.json": "42927c43dd91939e30e6d4e594499ae120d8232e40937325375a36a365343761",
+    "tracker-artifacts/c285ceb957b84ef49e475f37c5931d12/artifacts/checkpoint-provenance.json": "4517d455879cfb8cf13a3704c149166b0248c101df52f1f670d1510df6b030a9",
+    "tracker.json": "a26786863425fa1e5590f8e27253e04f6baf040e92b24dff74e2880a4068e302",
+    "tracking.sqlite": "e469c72a2bfd6441e7c675dde6f3410954debe352d1400cab71ab5c7e1b07fbc",
+    "train.json": "819a590e1b26db9b10bb13a959ed68b908332004fad3510130f136a9e4d844ce",
+    "validation.json": "a97746162c446505c3e4d5dafd3afa1f413cdb1ab2f24bfb4148932ee1062295"
+  },
+  "old_artifact_files": {
+    "qcoder-0.6.0a24.post0.dev4+iqt.d148.ml.v1-py3-none-any.whl": "1882df310346b83b65d0ccfaa4c41f1a3b7bf74dda1093ff42753ff553836025",
+    "qcoder-0.6.0a24.post0.dev4+iqt.d148.ml.v1.tar.gz": "42bae6edd589e3315debab985a0182a345a01177b7eaa9d66488f2bd3e7a5af4"
+  }
+}
