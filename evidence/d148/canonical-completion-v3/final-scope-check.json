@@ -1,0 +1,14 @@
+{
+  "schema": "d148.final_completion_scope_check.v1",
+  "canonical_science_total": 1,
+  "this_turn_new_canonical_science": 0,
+  "all_immutable_files_still_equal": true,
+  "client_projection_matches_real_readback": true,
+  "installed_payload_count": 156,
+  "fallback_sha256": "73f9c7d0f8e396338a62cfb964df0244a179c5cf4352d5773f0da95b0ac5138c",
+  "artifact_source_head": "4b09635c6512d5f93bd8c186a23652c5e3fe8fc1",
+  "starting_evidence_head": "3d3c3f2164162d38599aeb8f33809beb63cd7e33",
+  "production_source_changed": false,
+  "protected_or_other_worktree_modified": false,
+  "new_llm_or_provider_integration": false
+}

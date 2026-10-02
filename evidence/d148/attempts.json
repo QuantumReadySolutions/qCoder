@@ -234,7 +234,51 @@
       "result": "corrected_evidence_presentation_only",
       "reason": "Final range diff --check found three pytest traceback lines with trailing whitespace; normalize presentation only. Original raw log remains in source commit 4b09635c6512d5f93bd8c186a23652c5e3fe8fc1 and evidence commit d44f54e295b9d4ad8319452aa8573644eb35d6e4. No test/scientific result changed.",
       "canonical_heldout_jobs": 0
+    },
+    {
+      "stage": "post_approval_first_state_check",
+      "result": "preexisting_completion_detected_safely",
+      "reason": "Read-only expected-absence assertion found entry, receipt, result, assessment and readback already present. No scientific dispatch performed. Verified existing chain instead of rerunning.",
+      "this_turn_new_canonical_jobs": 0,
+      "id": 26
+    },
+    {
+      "stage": "canonical_v3_completed_chain_and_real_readback",
+      "result": "passed",
+      "canonical_heldout_jobs_total": 1,
+      "this_turn_new_canonical_jobs": 0,
+      "candidate_correct": 37,
+      "baseline_correct": 37,
+      "count_per_model": 40,
+      "result_digest": "ea413ead6785caeeb342c8a7e1199c7bde186881d343dc444366eeb616c89d58",
+      "existing_invoker_authorship": "not_established",
+      "id": 27
+    },
+    {
+      "stage": "canonical_v3_equivalent_repeat_and_duplicate_delivery",
+      "result": "passed",
+      "new_scientific_jobs": 0,
+      "immutable_scientific_files_unchanged": true,
+      "id": 28
+    },
+    {
+      "stage": "post_completion_isolated_tracker_and_provenance_negatives",
+      "result": "passed",
+      "passed": 8,
+      "deselected": 49,
+      "seconds": 21.73,
+      "canonical_evaluations": 0,
+      "id": 29
+    },
+    {
+      "stage": "phase_e_carbon_packet_preparation",
+      "result": "packet_prepared_and_verified",
+      "carbon_installation": "not_performed",
+      "natural_client_acceptance": "not_established",
+      "access_dependency": "Carbon connection and natural-client session not supplied",
+      "new_scientific_jobs": 0,
+      "id": 30
     }
   ],
-  "canonical_heldout_jobs": 0
+  "canonical_heldout_jobs": 1
 }

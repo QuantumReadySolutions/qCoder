@@ -1,0 +1,12 @@
+{
+  "schema": "d148.carbon_packet_receipt.v1",
+  "name": "d148-dev6-carbon-preparation.tar",
+  "bytes": 404889600,
+  "sha256": "b97835ef7bb1850bb1b2becdead8a7358316b423c4b77741c69f043cff2260fe",
+  "manifest_sha256": "17c368abd69a6497235a36ec9e3b2aeb170c7c6d4eefcbd23e1a4f4052dfa3e7",
+  "members": 113,
+  "payload_verified": true,
+  "carbon_installation": "not_performed",
+  "canonical_science_added": 0,
+  "contains_approval_or_job_state": false
+}

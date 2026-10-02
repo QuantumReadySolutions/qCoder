@@ -43,3 +43,13 @@ Validation includes synthetic held-out examples (never canonical test evaluation
 authority/currentness/timeout/no-retry negatives, real local MLflow integration,
 exact package inventories, RECORD and installed byte equality. Record failed and
 superseded attempts honestly. Commit and push durable valid checkpoints.
+
+## 2026-10-02 authorized continuation
+
+Rob confirmed the foreground approval and explicitly authorized continuing through
+Phase E after A–D. On re-entry, the canonical workspace already contained completed
+science and delivered/read-back assessment. The worker verified and reused that exact
+result with zero new science. Precision A–D is verified; the separate Carbon packet
+and client/provenance audit are prepared. Actual Carbon/client acceptance requires
+the existing Carbon connection/session, not another campaign authorization. See
+`evidence/d148/canonical-completion-v3/RETURN.md`.

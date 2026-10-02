@@ -1,0 +1,94 @@
+{
+  "assistant_inference": [],
+  "digest": "0123b756e2a21193a757cc8c16cad576bdf877f9b46712daba9130b7e02d2f29",
+  "external_reported": {
+    "baseline": {
+      "checkpoint_digest": "821199f89772f3614462401a6ec0b8820c3c67cbaf175118662f98e62eba67ff",
+      "fixture_digest": "eb533a76bf7da05382b3654599edfc95fb403847538abfb2e15316114b689301",
+      "preprocessing_digest": "c92c53de81d5c6cb748588aaffec91632fbc906d8edbbf2fd15dc9573572e418",
+      "recipe_digest": "05d320b20011f00fce3b4e824057b45e25395a76786e9345e309fee52997937b",
+      "role": "baseline",
+      "split_digest": "9441e7deaa67c80ca5e638b3873e3c4ce75ddb69aec69c0343437a12f5240f06"
+    },
+    "candidate": {
+      "checkpoint_digest": "2b6a5e672af2f7d1312289cef02079e6962a15d708e6253e4e993e33fdd870db",
+      "fixture_digest": "eb533a76bf7da05382b3654599edfc95fb403847538abfb2e15316114b689301",
+      "preprocessing_digest": "c92c53de81d5c6cb748588aaffec91632fbc906d8edbbf2fd15dc9573572e418",
+      "recipe_digest": "05d320b20011f00fce3b4e824057b45e25395a76786e9345e309fee52997937b",
+      "role": "candidate",
+      "split_digest": "9441e7deaa67c80ca5e638b3873e3c4ce75ddb69aec69c0343437a12f5240f06"
+    }
+  },
+  "new_scientific_jobs": 0,
+  "not_established": [
+    "quantum advantage",
+    "population/general performance",
+    "refinement outcome",
+    "authorship or test basis of excluded tracker free text"
+  ],
+  "projection_operation_seconds": 1.655518634011969,
+  "qcoder_established": {
+    "accounting": {
+      "baseline_model_invocations": 40,
+      "candidate_model_invocations": 40,
+      "device_count_provenance": "pennylane.Tracker; executions=circuits, simulations=statevector simulations",
+      "heldout_examples_per_model": 40,
+      "heldout_examples_unique": 40,
+      "heldout_model_example_pairs": 80,
+      "pennylane_tracker": {
+        "batches": 40,
+        "executions": 40,
+        "simulations": 40
+      },
+      "qnode_invocations": 40,
+      "research_job_attempts": 1,
+      "shots": null,
+      "shots_semantics": "not_applicable"
+    },
+    "assessment_digest": "ff993579f13858b7735a3b96015b580101eb5f049e42aab32e3f7d9cf2454415",
+    "assessment_run_id": "f1f44903b7b940f79b9b8a0af0d8cbab",
+    "currentness": "exact_inputs_verified",
+    "evaluation_state": "evaluation_complete",
+    "evaluation_time": 1790949668.7134252,
+    "evidence_conclusion": "bounded_refinement_candidate",
+    "job_id": "c8dd4466cd074862929440d01b99dbfa",
+    "limitations": [
+      "40 held-out examples",
+      "one fixed recipe per model",
+      "no advantage, generalization or QPU claim",
+      "no automatic refinement"
+    ],
+    "metrics": {
+      "baseline": {
+        "accuracy": 0.925,
+        "correct": 37,
+        "count": 40
+      },
+      "candidate": {
+        "accuracy": 0.925,
+        "correct": 37,
+        "count": 40
+      },
+      "delta": 0.0
+    },
+    "next_action": "consider_one_predeclared_quantum_refinement",
+    "plan_digest": "3ac1d897fded0ae589fb5a92f1ccd8ec5c70122d4d1daea90275867b1b9c1b3b",
+    "rationale": "Predeclared accuracy >=26/40 and baseline advantage <=4/40; descriptive comparison only.",
+    "readback_digest": "dcff3174ac5c195269b55f4a151abd97fcda902cc5a9dfd8852951e570622a94",
+    "receipt_digest": "eb84c23c1dc7eee12a7528e1fda7f700075343dd65f63e205e56e05b45f11b07",
+    "result_digest": "ea413ead6785caeeb342c8a7e1199c7bde186881d343dc444366eeb616c89d58",
+    "scientific_digests": {
+      "data_digest": "2606f25d52bb7370b9b371ffde6fd4e732ae0cca88b5a5966aab0376c32dd7ef",
+      "fixture_digest": "eb533a76bf7da05382b3654599edfc95fb403847538abfb2e15316114b689301",
+      "labels_digest": "42d8d1eba20143f583791be0ea07c1f186b7e632ddefb9e9b7badca7e7e2fa1e",
+      "preprocessing_digest": "c92c53de81d5c6cb748588aaffec91632fbc906d8edbbf2fd15dc9573572e418",
+      "split_digest": "9441e7deaa67c80ca5e638b3873e3c4ce75ddb69aec69c0343437a12f5240f06"
+    },
+    "source_run_ids": {
+      "baseline": "b66b4db874a6441f8a445f9476792ac9",
+      "candidate": "77262d59704048a6b3113c58ab47422d"
+    },
+    "tracker_write_time": 1790949708.39841
+  },
+  "schema": "d148.client_readback_projection.v1"
+}
