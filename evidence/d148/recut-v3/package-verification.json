@@ -1,0 +1,799 @@
+{
+  "sdist": {
+    "inventory": "PASS",
+    "path": "qcoder-0.6.0a24.post0.dev6+iqt.d148.human.v3.tar.gz",
+    "payload_count": 156
+  },
+  "source": {
+    "canonical_sha256": "381a1279e5dc0915d41feaf7e148c151ace1954258a9ff76528f70e36d9fb0c1",
+    "member_count": 156,
+    "members": [
+      {
+        "bytes": 83,
+        "path": "src/qcoder/__init__.py",
+        "sha256": "5eef5633d197dffb5786c36eecae3a812691957f4084529d3606390176a5dd11"
+      },
+      {
+        "bytes": 121,
+        "path": "src/qcoder/__main__.py",
+        "sha256": "33b67b47d8dfa41f54021846176fee994a30fe44da9aeeb5d7db8a201c2f5285"
+      },
+      {
+        "bytes": 978,
+        "path": "src/qcoder/algorithm_blueprint.py",
+        "sha256": "3389ad5243b1e7f8ebba01a962fb932fb6e0a385e88516133777a67f0a18bdf6"
+      },
+      {
+        "bytes": 1229,
+        "path": "src/qcoder/algorithm_blueprint_contract.py",
+        "sha256": "25c2729dc7b39001c11de4d34f8774be93955d1ef774f94882ac10579bb4defd"
+      },
+      {
+        "bytes": 3768,
+        "path": "src/qcoder/algorithm_blueprint_first_value.py",
+        "sha256": "86817ee2be907144cc5e465599f1f159a4815b5b4d78627175b60e1ec3861f00"
+      },
+      {
+        "bytes": 46546,
+        "path": "src/qcoder/algorithm_blueprint_public_oss.py",
+        "sha256": "d6fc0caa17c07b7d050117906b9db8638aab46b3ab0af42d23f5c3189dba3900"
+      },
+      {
+        "bytes": 736,
+        "path": "src/qcoder/algorithm_intent_recovery.py",
+        "sha256": "c67094c9033898c626baea97623ecd5ad6b4a3eac22e79fa5a7a7902727b3757"
+      },
+      {
+        "bytes": 19721,
+        "path": "src/qcoder/algorithm_intent_recovery_public_oss.py",
+        "sha256": "7d71b6119f29d928a431013ab2855e8808c3d0f59a5494f7adc346cea2cba398"
+      },
+      {
+        "bytes": 734,
+        "path": "src/qcoder/blueprint_decisions.py",
+        "sha256": "362701454d2c4d41682bb2e1071de609b61afdeb9a3c590093e20e468abbf05b"
+      },
+      {
+        "bytes": 90078,
+        "path": "src/qcoder/blueprint_decisions_public_oss.py",
+        "sha256": "dabf3734177d10118cefa4c5dab8d5e2d4a79f979384b7fcfc5e708a8d72f54a"
+      },
+      {
+        "bytes": 133943,
+        "path": "src/qcoder/cli.py",
+        "sha256": "1a5779645935afb328290ad1a7cc025036680c7328371949f0d5d6fb19a79b74"
+      },
+      {
+        "bytes": 18461,
+        "path": "src/qcoder/connected_assistant_conformance.py",
+        "sha256": "e0220b13c81916a076511bd07b4bfdf74e9dec2e17ae0d127d7e13f97d5458f7"
+      },
+      {
+        "bytes": 30162,
+        "path": "src/qcoder/context_bridge_connection.py",
+        "sha256": "5811675a085fcb05184002fa39720a5d3109d9045322d9082cbfabc907750ef7"
+      },
+      {
+        "bytes": 234908,
+        "path": "src/qcoder/context_bridge_mcp.py",
+        "sha256": "30a49b84739636cf82b8df9a8b507e2867afddb9e57498823cf797a0cc43b812"
+      },
+      {
+        "bytes": 44361,
+        "path": "src/qcoder/context_bridge_profiles.py",
+        "sha256": "08232bf095eb266fcf4e61c3f992d2190a74dd57d9d82cbad68065dc88e60c81"
+      },
+      {
+        "bytes": 15908,
+        "path": "src/qcoder/context_bridge_setup.py",
+        "sha256": "f4a395bd4ca09ff7d571f030ae99be8c3fc4b8450783ef138034397fa4a0be77"
+      },
+      {
+        "bytes": 731,
+        "path": "src/qcoder/context_loop.py",
+        "sha256": "e4e6f5d83b86d9b789dc26433d9a14ed932f72fde333c9dbe009bf12e884cbca"
+      },
+      {
+        "bytes": 88275,
+        "path": "src/qcoder/context_loop_public_oss.py",
+        "sha256": "dfa5f362bd9fd26abf36d610f281f8e62a4c80383a9ebe1bc2cb8f066b0ee896"
+      },
+      {
+        "bytes": 48,
+        "path": "src/qcoder/contracts/__init__.py",
+        "sha256": "152365d84c0f04e0d37780acfaa921668a5702ecf1459cda441b0897f23f11cf"
+      },
+      {
+        "bytes": 1917,
+        "path": "src/qcoder/contracts/protected_blueprint_contract_v1.json",
+        "sha256": "ec65b5bdca6036d4269d107a2ad3f1cf22948eed40e85547f02859e44a996836"
+      },
+      {
+        "bytes": 1627,
+        "path": "src/qcoder/contracts/protected_decision_contract_v1.json",
+        "sha256": "f791240c09fea28841b89f3504a44418b5272f9c77372e5b5631567366b440d2"
+      },
+      {
+        "bytes": 34,
+        "path": "src/qcoder/core/__init__.py",
+        "sha256": "0669b3abd57fa60f1ab415550eb0473a86dbd0f9e550c6ac21e46227ac969100"
+      },
+      {
+        "bytes": 372,
+        "path": "src/qcoder/core/context.py",
+        "sha256": "5cc6db2bf997daf1079823fbf6b3ce9fe661377d26e33d462ab55e3995fc2172"
+      },
+      {
+        "bytes": 50,
+        "path": "src/qcoder/core/qasm2/__init__.py",
+        "sha256": "63a4f87dbf4a63488a8a133823db87dcc1e93c5c6fadb4b56a2206ef6d692fd7"
+      },
+      {
+        "bytes": 4240,
+        "path": "src/qcoder/core/qasm2/adjoint_eligibility.py",
+        "sha256": "6fd929a6548d063a5a6f43c804861d018542ac361ba1a884730af3f6fe63587d"
+      },
+      {
+        "bytes": 8027,
+        "path": "src/qcoder/core/qasm2/mirror_build.py",
+        "sha256": "bd7a67bc76086e6d0b018fb08da31f8720b122cf9ceb8e23867d05b0f8c8327b"
+      },
+      {
+        "bytes": 2301,
+        "path": "src/qcoder/core/run_config.py",
+        "sha256": "24e9e650dac5f97563a559300b5f4733717004f165d77b0da956d8b7b170c479"
+      },
+      {
+        "bytes": 653,
+        "path": "src/qcoder/core/schema.py",
+        "sha256": "a9a719fea8ff2580a9330eb57f9c903dbeb40907082144fcd908235526b4984d"
+      },
+      {
+        "bytes": 11604,
+        "path": "src/qcoder/core/share_safe.py",
+        "sha256": "b24658b0ce2138937ee08c8179acf976087250434c91024231b264ed7b9f7a6a"
+      },
+      {
+        "bytes": 122260,
+        "path": "src/qcoder/current_loop.py",
+        "sha256": "7fdce1e9e6bfbf9bb2a3ee9c34d533a6923703b49cb06442fe657c90621fd2cf"
+      },
+      {
+        "bytes": 750,
+        "path": "src/qcoder/current_loop_adaptive_intent.py",
+        "sha256": "6c7edb4516c7eb8e87cb13974fe66fad188791d94b1fd49328e630be3b3939e7"
+      },
+      {
+        "bytes": 32940,
+        "path": "src/qcoder/current_loop_adaptive_intent_public_oss.py",
+        "sha256": "2d2afe000e15cb9d399dd41dfc49f72d39da41574082552d16c2e61e2fddb640"
+      },
+      {
+        "bytes": 3346,
+        "path": "src/qcoder/current_loop_artifact_satisfaction.py",
+        "sha256": "cde1ec23219744dce24e0980bdf61532c5b93af051ebf728e1a69ee54150f10e"
+      },
+      {
+        "bytes": 9414,
+        "path": "src/qcoder/current_loop_artifact_targets.py",
+        "sha256": "f82201ee7c08cd9e8c586156aeef8a48794fad5af8135da4bcc7d20fcee6b94a"
+      },
+      {
+        "bytes": 44586,
+        "path": "src/qcoder/current_loop_binding_mcp.py",
+        "sha256": "69a845ffd30b44f142a1248c0e489000a759f4f913dea73925b3281213f68ea5"
+      },
+      {
+        "bytes": 15047,
+        "path": "src/qcoder/current_loop_bootstrap.py",
+        "sha256": "4894cb93ca86a3e84943960ca69e74dae3b12585ace43fcb179712e99c0f3599"
+      },
+      {
+        "bytes": 41405,
+        "path": "src/qcoder/current_loop_bounded_control.py",
+        "sha256": "78200291f41001d6e6b0c4cb68f7fe0b196a9ad09fc8113588537101504399ab"
+      },
+      {
+        "bytes": 59436,
+        "path": "src/qcoder/current_loop_checkpoint_input.py",
+        "sha256": "5fce432ba4504d3c40c42876d83b1afc7db2231908412f9e68e87c2151249bc2"
+      },
+      {
+        "bytes": 33765,
+        "path": "src/qcoder/current_loop_contract.py",
+        "sha256": "36dd4aa251b457382ae9dbda44279b6b144902c14727934b3539bdcc2eb9e1ca"
+      },
+      {
+        "bytes": 43747,
+        "path": "src/qcoder/current_loop_contract_management.py",
+        "sha256": "d50096d849481073b07efbbe022cff4964bc06f3c19a562fa81fb9ea68bb3871"
+      },
+      {
+        "bytes": 48402,
+        "path": "src/qcoder/current_loop_contract_sidecar.py",
+        "sha256": "7010eedaa7d67bf38205047bf65e56d8a1f9887fb99e2eba24fcfae3dbfb1e4f"
+      },
+      {
+        "bytes": 670,
+        "path": "src/qcoder/current_loop_coordinator.py",
+        "sha256": "74b055413c64f69e8587c7476877c62c67d5cbbf712dcd4eed92cb3b0ac5b417"
+      },
+      {
+        "bytes": 668,
+        "path": "src/qcoder/current_loop_coordinator_contract.py",
+        "sha256": "966af4aaca34a856c253c4f6254a493868a9b835e4a660894bb10f07e1f39797"
+      },
+      {
+        "bytes": 756534,
+        "path": "src/qcoder/current_loop_coordinator_public_kernel.py",
+        "sha256": "cd6ca5f8d871d14a7fdc3808480dd3c46a578c3ae27330b3873bf28a672e1008"
+      },
+      {
+        "bytes": 37185,
+        "path": "src/qcoder/current_loop_derivation.py",
+        "sha256": "3787bf659730fbe97d79327d60a5217e2e949f9accd4abb9199b5fa2019d7f3c"
+      },
+      {
+        "bytes": 18528,
+        "path": "src/qcoder/current_loop_event_receipts.py",
+        "sha256": "22c6c71494a0619c5fbdd94a2b69a88efa0b762f7af0c53c5e82ccdd7a3d1222"
+      },
+      {
+        "bytes": 14696,
+        "path": "src/qcoder/current_loop_evidence_processing.py",
+        "sha256": "aff6bf796bf77d89b2a75cbd25d6940f2cac284109b70360064d6d52f795e11e"
+      },
+      {
+        "bytes": 15596,
+        "path": "src/qcoder/current_loop_evidence_reconciler.py",
+        "sha256": "c31990d27dea45e15834ce0cdb0f278c6098659b9bad1d87d5dbd709f4bc5553"
+      },
+      {
+        "bytes": 3843,
+        "path": "src/qcoder/current_loop_freshness.py",
+        "sha256": "9c8cd32bd95d1489241b16bb4dbefbd1a74adc0827402b424bd920c6175b5fb7"
+      },
+      {
+        "bytes": 22876,
+        "path": "src/qcoder/current_loop_invocation.py",
+        "sha256": "e61d77c1d734aefa39ede7bce047abe50541b1a736ea9c3b7ed6770f145dec98"
+      },
+      {
+        "bytes": 7259,
+        "path": "src/qcoder/current_loop_iteration.py",
+        "sha256": "b5443c43e70d69931b508a3a31a9ecf903ab18ab095b1fb054faca951cf29249"
+      },
+      {
+        "bytes": 11083,
+        "path": "src/qcoder/current_loop_pending_completion.py",
+        "sha256": "ec5bf082546fc7584fe8e81cd574b3964128975f251078086e85d8b22362ae6e"
+      },
+      {
+        "bytes": 22496,
+        "path": "src/qcoder/current_loop_quiet_workflow.py",
+        "sha256": "29eacd8ae878b0a8d7138c5c286f94f65de262a469df3cabd497e9e314869d00"
+      },
+      {
+        "bytes": 14050,
+        "path": "src/qcoder/current_loop_recovery.py",
+        "sha256": "191408c17b2b861c51a273fdea867744d8b06ac5831d7efca04b306f7c10ce31"
+      },
+      {
+        "bytes": 55143,
+        "path": "src/qcoder/current_loop_registration.py",
+        "sha256": "5dbe673e820e1d309c0da1b345512a887f138192770284e8f3ef24c3637ccd6a"
+      },
+      {
+        "bytes": 38720,
+        "path": "src/qcoder/current_loop_request_semantics.py",
+        "sha256": "d387b891eb1d33408026726ae48711b684f3b9d0a44368952d30e61fdf79a93f"
+      },
+      {
+        "bytes": 8208,
+        "path": "src/qcoder/current_loop_result_controls.py",
+        "sha256": "1418c33f3bdf4ef411c2a478169c98dc5b663f473389ec640e94c6eee56f223a"
+      },
+      {
+        "bytes": 8341,
+        "path": "src/qcoder/current_loop_result_envelope.py",
+        "sha256": "a83c5f449e3d6af1f75c3a14d7fc328459af74ea41fa4913a465a4f66e5a0ad7"
+      },
+      {
+        "bytes": 27951,
+        "path": "src/qcoder/current_loop_result_manifest.py",
+        "sha256": "08a365dd4b8a04950c7c87c5882f9fc8e3fe059e5b9ac229c29e0e1a941aa52c"
+      },
+      {
+        "bytes": 6758,
+        "path": "src/qcoder/current_loop_retention.py",
+        "sha256": "8d1904b15d92661967f36537ccc42dbc64413c3dcf70d244dadd4b311174201f"
+      },
+      {
+        "bytes": 38929,
+        "path": "src/qcoder/current_loop_run_summary.py",
+        "sha256": "543a12ef112e20deae08014bf273630057c007a8e2aaf0ab0db54545c16bb69d"
+      },
+      {
+        "bytes": 2893,
+        "path": "src/qcoder/current_loop_vocabulary.py",
+        "sha256": "42e7703d19639e4bd7042747c33fa7e8640b6fe064c613ac05375692680397b9"
+      },
+      {
+        "bytes": 14357,
+        "path": "src/qcoder/current_step_contract.py",
+        "sha256": "eb323a876f68701435b4be29fedd4241ab01b4c659e3613361e16f9bab3f6f1e"
+      },
+      {
+        "bytes": 39938,
+        "path": "src/qcoder/cursor_post_write_hook.py",
+        "sha256": "093329969c650b5481801008af201c011f740569367fbe74fb8dc0751ea3577a"
+      },
+      {
+        "bytes": 729,
+        "path": "src/qcoder/d079_workflows.py",
+        "sha256": "c78b72a04412490f92a1457b3724d419bba33cc578624614a39b03c460effee6"
+      },
+      {
+        "bytes": 77239,
+        "path": "src/qcoder/d079_workflows_public_oss.py",
+        "sha256": "1fb96b6b66bba1ea2f61e07d06e5b1b5e0fa659bdc3c3721800d058fa5d5059a"
+      },
+      {
+        "bytes": 64061,
+        "path": "src/qcoder/development_evidence.py",
+        "sha256": "5fce5dd6131ced17e1d5c24fc71b28670412f8f1087179a4cf3c557adb45595e"
+      },
+      {
+        "bytes": 187,
+        "path": "src/qcoder/engines/context/__init__.py",
+        "sha256": "67e01fe78ee1034f47be3c3b1c70bc01093742d0c54e5f7121f3c34b2a839b1e"
+      },
+      {
+        "bytes": 3937,
+        "path": "src/qcoder/engines/context/bundle.py",
+        "sha256": "23bc5551fad3126097268ff929a764f7676b4ac831b3302d676d7f1878c55f72"
+      },
+      {
+        "bytes": 5444,
+        "path": "src/qcoder/engines/context/markdown.py",
+        "sha256": "18c5df5ca30d18dd493d2d81e3f76cc770093525f5fe586108b74269a3bb403d"
+      },
+      {
+        "bytes": 89,
+        "path": "src/qcoder/engines/feature_extraction/adapters/__init__.py",
+        "sha256": "a396c8b7b556245f90dc3e176cd633d1e2de9f4a4e25eb9108ca42fd3153988f"
+      },
+      {
+        "bytes": 1833,
+        "path": "src/qcoder/engines/feature_extraction/adapters/cirq_intake.py",
+        "sha256": "d771d1c0d595791a8ef76ab67dccbe7119285b9938f844bda1c3e0d4f63840ec"
+      },
+      {
+        "bytes": 3333,
+        "path": "src/qcoder/engines/feature_extraction/adapters/pennylane_intake.py",
+        "sha256": "d841f286132efe1bb691f14916f16c816e3c9615e964bd1050a0ae4052b73e2e"
+      },
+      {
+        "bytes": 2213,
+        "path": "src/qcoder/engines/feature_extraction/adapters/qiskit_intake.py",
+        "sha256": "a9037cd086483046bb007cdffcd194bbc1d54549b39c001cdaf6d2b6a55f4c49"
+      },
+      {
+        "bytes": 1086,
+        "path": "src/qcoder/engines/feature_extraction/extractor.py",
+        "sha256": "9121b390202683d86761207ebb5a1516f5ef2c9b1aca69933912a35828abcf77"
+      },
+      {
+        "bytes": 5694,
+        "path": "src/qcoder/engines/feature_extraction/features/compute_v0.py",
+        "sha256": "45580774356836ef50b36f4f6d742fe12a91524be59ff65db4867a6ca02d9196"
+      },
+      {
+        "bytes": 5006,
+        "path": "src/qcoder/engines/feature_extraction/features/glossary_v0.py",
+        "sha256": "8ab3046d39d8b7dd7a0286cb41b293058d7a56780660198b3c642f5827e690da"
+      },
+      {
+        "bytes": 1976,
+        "path": "src/qcoder/engines/feature_extraction/features/schema_v0.py",
+        "sha256": "940159ff408f1eba377b2db72d33941dac6bf752e7fae06c7b4f26180821f5df"
+      },
+      {
+        "bytes": 1018,
+        "path": "src/qcoder/engines/feature_extraction/ir.py",
+        "sha256": "bd743de690948e1c56c869e190f92c719835f7761512d6f8748d75f886f087ae"
+      },
+      {
+        "bytes": 1902,
+        "path": "src/qcoder/engines/feature_extraction/labeling.py",
+        "sha256": "1f45452418bc2bc6183b4fee37ad1cf4fe4b618afcfc34a15b991c9ee93a7a88"
+      },
+      {
+        "bytes": 97947,
+        "path": "src/qcoder/engines/feature_extraction/openqasm3_bounded_parser.py",
+        "sha256": "c3a7e473d19f1fcb767a1ecb565bc6c2384936a50bcf3d4ac1c0162e8f35e67c"
+      },
+      {
+        "bytes": 45770,
+        "path": "src/qcoder/engines/feature_extraction/openqasm3_static_evidence.py",
+        "sha256": "e9c7f7542d6d66a1ec94b495104fa2449c5e246ede45a2783773e95c0cb499f4"
+      },
+      {
+        "bytes": 1121,
+        "path": "src/qcoder/engines/feature_extraction/parsers/__init__.py",
+        "sha256": "2b13c10be3610f2aa3c0ff04e1d892248338879e99d58e0bbe9128a15e8550ac"
+      },
+      {
+        "bytes": 6030,
+        "path": "src/qcoder/engines/feature_extraction/qasm2_regex_parser.py",
+        "sha256": "67735670543afe208839fe4057312e26251c46f37a45d913a82564782edd93f0"
+      },
+      {
+        "bytes": 2861,
+        "path": "src/qcoder/engines/feature_extraction/reps/cut_profile.py",
+        "sha256": "443eab92c2fd11be5607f48ee257383264b6daae8a36ec23712dbad594a184a9"
+      },
+      {
+        "bytes": 1331,
+        "path": "src/qcoder/engines/feature_extraction/reps/depth.py",
+        "sha256": "41ae334f3d7c2729ed957a5e845dc3ca98cd692df022d462bd14f895e74153d0"
+      },
+      {
+        "bytes": 1651,
+        "path": "src/qcoder/engines/feature_extraction/reps/entangling_layers.py",
+        "sha256": "33fdebc8b6c37a66ceffdfcd7ac95406125fa23390e6e2c90f1f99410cb9b277"
+      },
+      {
+        "bytes": 2698,
+        "path": "src/qcoder/engines/feature_extraction/reps/gate_set_stats.py",
+        "sha256": "94810725db45c3306d7cbdb2687f1ee37c828e749a48735aa25f367f2f7dde7d"
+      },
+      {
+        "bytes": 906,
+        "path": "src/qcoder/engines/feature_extraction/reps/interaction_graph.py",
+        "sha256": "3c35fb933675f5dcdb8cbfc23b9e0059def9e3b8b217c9d0e289f63e99043ba2"
+      },
+      {
+        "bytes": 3809,
+        "path": "src/qcoder/engines/feature_extraction/reps/interaction_graph_metrics.py",
+        "sha256": "7e2c64a646537453f8e1913ed60b511eccb8e6910304d343e8471b7374accdd6"
+      },
+      {
+        "bytes": 2311,
+        "path": "src/qcoder/engines/feature_extraction/reps/spans.py",
+        "sha256": "471d6074082f1a2b4c7e1cb02082b1961ab5ed3fee48a61c4ec53c4f7ca8f7cb"
+      },
+      {
+        "bytes": 122,
+        "path": "src/qcoder/engines/guidance/__init__.py",
+        "sha256": "49abc20e55b288fa13160936b49d2e0b7cad38283f67f0b65e3cef02d310ee38"
+      },
+      {
+        "bytes": 12210,
+        "path": "src/qcoder/engines/guidance/model_pack.py",
+        "sha256": "22c260bf01a66dad9defd0d57da12430f890d7d74207860bb51e00415fdf37ee"
+      },
+      {
+        "bytes": 11233,
+        "path": "src/qcoder/engines/guidance/resource.py",
+        "sha256": "ba9c5ebee7fac928ddd9f753b2fb1e734b96245346a1989c0afc53f51933addb"
+      },
+      {
+        "bytes": 2747,
+        "path": "src/qcoder/engines/guidance/structural_scores.py",
+        "sha256": "80dc0e808eb22eae20e937d8536e338e168bee8841f3746df21e4708d3a8c38d"
+      },
+      {
+        "bytes": 130,
+        "path": "src/qcoder/engines/profiles/__init__.py",
+        "sha256": "162ce68bef3a3691deb4b1c975de1b52c0a590754e2b1f7baf0c214f24e8431a"
+      },
+      {
+        "bytes": 9853,
+        "path": "src/qcoder/engines/profiles/feature_profiles_v0.py",
+        "sha256": "547db49c912659e78b2342c55e0d552b3a770457e3a916e5dcb643af38fda2b2"
+      },
+      {
+        "bytes": 362,
+        "path": "src/qcoder/engines/review/__init__.py",
+        "sha256": "d60cd236bb6e852516caf794b42a0f2e97b9870d1256946c7bb5c44257a2593a"
+      },
+      {
+        "bytes": 9093,
+        "path": "src/qcoder/engines/review/bundle.py",
+        "sha256": "ffc5279f1a13227c80504fe727c411aab9fdf351eaf7b9c1c357b64342292c1a"
+      },
+      {
+        "bytes": 2492,
+        "path": "src/qcoder/engines/review/counts_v0.py",
+        "sha256": "e1ee0e0c5efc1123cb8a9bb689b969811d6f76913ea0e9c642ff2ab87dd2e11d"
+      },
+      {
+        "bytes": 40187,
+        "path": "src/qcoder/engines/review/local_evidence.py",
+        "sha256": "b2a039a01963fb355f9827493cfd7945926f96d1c928251c3d18a1347e39f6ff"
+      },
+      {
+        "bytes": 11487,
+        "path": "src/qcoder/engines/review/local_evidence_markdown.py",
+        "sha256": "bceb932a01cfaf2f998bc30371bff5d5866bd18e0127291c45e9325239f74d86"
+      },
+      {
+        "bytes": 5041,
+        "path": "src/qcoder/engines/review/markdown.py",
+        "sha256": "b0f1dfe919c32d526725cf2b4f33f552fd1d6c000fad1e64b6f855d8916eb9f8"
+      },
+      {
+        "bytes": 7854,
+        "path": "src/qcoder/engines/review/openqasm3_manifestation.py",
+        "sha256": "b5ddbd30831be28de96088a33099cb6e922e214641c3994e8431b9a8d194efa4"
+      },
+      {
+        "bytes": 751,
+        "path": "src/qcoder/engines/review/qiskit_counts.py",
+        "sha256": "82b09c7a3e943bfb57f5a93092e13a4014f1c6de7601459fb80d321346e6bfb5"
+      },
+      {
+        "bytes": 40327,
+        "path": "src/qcoder/evidence_usability.py",
+        "sha256": "cb79e5e7f2317e795f8cb05f0c4ead4e8a361bcf2322961b7eb1db52944e58c5"
+      },
+      {
+        "bytes": 405,
+        "path": "src/qcoder/executors/__init__.py",
+        "sha256": "2a594d661f4011bb78b9bc3ad60c37220a01d21901a4e45199960c965c94ff74"
+      },
+      {
+        "bytes": 18918,
+        "path": "src/qcoder/executors/aer_stabilizer_v1.py",
+        "sha256": "2ed99e19c764906bdbc79d21be378b5f2d3721b9e2c66bc791bfca52f860542f"
+      },
+      {
+        "bytes": 44,
+        "path": "src/qcoder/explorer/__init__.py",
+        "sha256": "274559afb60fc3ca40bb28a23d3dae5d46237ed1fb1225b176057ac657afc846"
+      },
+      {
+        "bytes": 11304,
+        "path": "src/qcoder/explorer/derived_evidence.py",
+        "sha256": "17f07c631c3421ec7649b2edf5055d5a16ed04572843de25158b435d53066890"
+      },
+      {
+        "bytes": 25712,
+        "path": "src/qcoder/explorer/focused_loop_coordinator.py",
+        "sha256": "eeddcc8d4af592ee12560faee9b740ac47e2e07ee3230b22e9d6337cae981786"
+      },
+      {
+        "bytes": 781,
+        "path": "src/qcoder/focused_loop/__init__.py",
+        "sha256": "2c16883c1a1ed8e4049f910933dbd27fa4fac9317503e25eefbd8ec6f0555b22"
+      },
+      {
+        "bytes": 7040,
+        "path": "src/qcoder/focused_loop/applicability.py",
+        "sha256": "639fb9c705bdb90e944b3e69d1cc6dba309ac6d8e937d9331dc20157f6d2d98f"
+      },
+      {
+        "bytes": 5476,
+        "path": "src/qcoder/focused_loop/attempt_join.py",
+        "sha256": "6813ca32bab5d68fa7f7b957d93bc0a5da6dee9d546e1493e668c853cb77e6b8"
+      },
+      {
+        "bytes": 7841,
+        "path": "src/qcoder/focused_loop/authority.py",
+        "sha256": "d8d7571c46f78985d89a4564d6f518cb0bd6c925b568e1e7f1aa99b8e5c699a2"
+      },
+      {
+        "bytes": 6441,
+        "path": "src/qcoder/focused_loop/canonical.py",
+        "sha256": "a07486e793567241fca5a2a46cdeefa8647ff6859678b834020c79ebec29ca42"
+      },
+      {
+        "bytes": 13058,
+        "path": "src/qcoder/focused_loop/contracts.py",
+        "sha256": "165d48fab7e88990c25041fc700eeac507eecaacf0eaa7856a1822bd21a79695"
+      },
+      {
+        "bytes": 15048,
+        "path": "src/qcoder/focused_loop/fixtures.py",
+        "sha256": "9d0349b5513a3360d7fbaca0cfde3bf61b43d0d44b684042736517328c6daece"
+      },
+      {
+        "bytes": 2591,
+        "path": "src/qcoder/focused_loop/identities.py",
+        "sha256": "0e8be202788f77120e1be02b7fb91c21c3b9cb0ef2e98134e983483bfa0cec6f"
+      },
+      {
+        "bytes": 8388,
+        "path": "src/qcoder/focused_loop/mps_floor.py",
+        "sha256": "228a4b68216ea350493b9a248add13cfe3f4d520ff71763dd39f59f08cd1d5fa"
+      },
+      {
+        "bytes": 8165,
+        "path": "src/qcoder/focused_loop/plan.py",
+        "sha256": "69de51c08aae05f3e150e198ad8652d053ca747a5f456493b12727c62a680d89"
+      },
+      {
+        "bytes": 7250,
+        "path": "src/qcoder/focused_loop/privacy.py",
+        "sha256": "fa4ba7eba0ba11c85ab3c5f0c4c18187835184118cbee0b652c087a8f8c8aef5"
+      },
+      {
+        "bytes": 16757,
+        "path": "src/qcoder/focused_loop/receipt.py",
+        "sha256": "d18a9d544de4a683c21df4d1006df8962b6bcb4c6e9652a68d89029ed7d44685"
+      },
+      {
+        "bytes": 17061,
+        "path": "src/qcoder/focused_loop/result_protocol.py",
+        "sha256": "a0c96735364543ab8b9647dba5755e630ee422fe3f5c44de36fc58f08024ccc1"
+      },
+      {
+        "bytes": 7183,
+        "path": "src/qcoder/focused_loop/reuse.py",
+        "sha256": "85a95e90def0ee31c3457aaec164b5dbb15d2580e87e670b9341999e9004c28a"
+      },
+      {
+        "bytes": 10151,
+        "path": "src/qcoder/framework_native_evidence.py",
+        "sha256": "916c6cdb377d26a5660f890cddf492754afe454b01018e74e3ac0c104ff4a6ba"
+      },
+      {
+        "bytes": 162,
+        "path": "src/qcoder/ml_research/__init__.py",
+        "sha256": "eba6c386505b1b41a5b333892dce29a8f807c672cc4d0db681e12ae976038869"
+      },
+      {
+        "bytes": 1846,
+        "path": "src/qcoder/ml_research/__main__.py",
+        "sha256": "a10c68584568d4e3074d44b4f3aa8ef4d3389ece0d94dee3c425d183c785dee3"
+      },
+      {
+        "bytes": 4320,
+        "path": "src/qcoder/ml_research/contracts.py",
+        "sha256": "77fb73bfbf739a71055d00488fed1bed28f9d1c8021672786f19f51145c12aee"
+      },
+      {
+        "bytes": 4211,
+        "path": "src/qcoder/ml_research/fixture.py",
+        "sha256": "1ecdd9d22de4c3d753334b1309358ada9707dffffd06b7e5e6bb137f5ad3421d"
+      },
+      {
+        "bytes": 15811,
+        "path": "src/qcoder/ml_research/job.py",
+        "sha256": "9aa43dce7780a8194f6f352e928d8dac6c9763669169cc5bde2927a7c0e18654"
+      },
+      {
+        "bytes": 5754,
+        "path": "src/qcoder/ml_research/models.py",
+        "sha256": "74c75e7f850cfe95074c6b800ac2d954426f1013a12b3f8f9b14c3ce6b21aab4"
+      },
+      {
+        "bytes": 5122,
+        "path": "src/qcoder/ml_research/runtime.py",
+        "sha256": "0ae0c7ee6dac5d6d6031423fa3914c37d2e5ea62d98e97239f634ad61d691a4d"
+      },
+      {
+        "bytes": 9907,
+        "path": "src/qcoder/ml_research/tracker.py",
+        "sha256": "0cc5dd0717abd1fcff51ea5b4e6c75d007160b282696ae389eee8bf77f6fbb87"
+      },
+      {
+        "bytes": 2512,
+        "path": "src/qcoder/ml_research/training.py",
+        "sha256": "938305d77b77d52c9299c31027e2ba987bdbe1708ec07a0f234314d3deabce26"
+      },
+      {
+        "bytes": 61,
+        "path": "src/qcoder/model_packs/__init__.py",
+        "sha256": "d82ed6ae13f35c1a144ac42ed5531ddf76fbfce11c496ff573046fcef288ef2e"
+      },
+      {
+        "bytes": 4413,
+        "path": "src/qcoder/model_packs/resource_guidance_local_v0.json",
+        "sha256": "57e2a1c064e48cec4d3b2d990ca2f1fe08f9fb7b61028756f20effcb98821114"
+      },
+      {
+        "bytes": 5119,
+        "path": "src/qcoder/pipelines/analyze.py",
+        "sha256": "574296291433b452e6e61e37d170453ca78e3464b37ec37a29d0b86fabe83ed6"
+      },
+      {
+        "bytes": 1629,
+        "path": "src/qcoder/pipelines/batch.py",
+        "sha256": "a55b9b9b3ec4a8d8fe9eb30fd2dce8b17c69c6f2501b22cbe0f76e4cea9f3b78"
+      },
+      {
+        "bytes": 2238,
+        "path": "src/qcoder/pipelines/context.py",
+        "sha256": "fd089404e7b32802db2cedf630e2bbc16d76a6ed8c6a03cd7ef030ace05467c5"
+      },
+      {
+        "bytes": 4153,
+        "path": "src/qcoder/pipelines/review.py",
+        "sha256": "9ce33f1d628efff89a6b0ed6c4ad6fc215cfa69ba67c8b6be5035152c0ac5be5"
+      },
+      {
+        "bytes": 1297,
+        "path": "src/qcoder/pro_preview/__init__.py",
+        "sha256": "b3d83b4c91e262c47db9d5db75a77e00d5bef8424a146644a189e8cb26ecd268"
+      },
+      {
+        "bytes": 11036,
+        "path": "src/qcoder/pro_preview/client.py",
+        "sha256": "846f208f90a2de7f63604e5c9315e665ae1cff71a94700bb8ee2bee66efbd4e9"
+      },
+      {
+        "bytes": 2956,
+        "path": "src/qcoder/pro_preview/config.py",
+        "sha256": "2e6d3c6cbd6509bb2dcdcb0000a4724fdea10d5399ec3cc727054c7ac35b6b97"
+      },
+      {
+        "bytes": 239,
+        "path": "src/qcoder/pro_preview/errors.py",
+        "sha256": "82f2e09a24dec1cab032c8c5abd73298b35161e52e0885b3cf90000047f64943"
+      },
+      {
+        "bytes": 5131,
+        "path": "src/qcoder/pro_preview/manifest.py",
+        "sha256": "1de6b130606a8c1e181d59e25ad5af02d7d595ac0df37e64a1b0926b9131a913"
+      },
+      {
+        "bytes": 8720,
+        "path": "src/qcoder/protected_blueprint_contract.py",
+        "sha256": "29f6740e6dc704df0051b818ffe5ee8bdfd6a1c388ab46f7df797cc8f50ef704"
+      },
+      {
+        "bytes": 8972,
+        "path": "src/qcoder/protected_blueprint_native.py",
+        "sha256": "d7cca504e1c41c6f1cd12e0a31571f99470a97067e87c656745a195b71192c8a"
+      },
+      {
+        "bytes": 1688,
+        "path": "src/qcoder/protected_capability.py",
+        "sha256": "3ba1940e9b6c2d8f688c8204688bcfe5edf8c9566030488c04bd83a6135edba5"
+      },
+      {
+        "bytes": 7159,
+        "path": "src/qcoder/protected_decision_client.py",
+        "sha256": "2df60db815ab22875e42f68da315a1d36b57a208347de00fdf6e6d9c45e6a64d"
+      },
+      {
+        "bytes": 4510,
+        "path": "src/qcoder/protected_decision_contract.py",
+        "sha256": "41c3ba6ee9601f9483012d8afcc43a80fa37cbadec9558ef2a3c0359742d12ca"
+      },
+      {
+        "bytes": 7825,
+        "path": "src/qcoder/protected_decision_local_authority.py",
+        "sha256": "08e912f833b04457a471a9467ff2d3e48614c87ea105fcd98766d9237663ad2b"
+      },
+      {
+        "bytes": 7256,
+        "path": "src/qcoder/protected_decision_validation.py",
+        "sha256": "2ab4bef19dd3c183aa5fe3a5438af80d124cd6375e37b8ec5fc3a17d6ebe5291"
+      },
+      {
+        "bytes": 1146,
+        "path": "src/qcoder/public_motif_allowlist.py",
+        "sha256": "47d63e78f280f7b00ff1fc4dbb71d440be5444309c01cc30c8a6e9e05268d519"
+      },
+      {
+        "bytes": 77173,
+        "path": "src/qcoder/source_evidence_depth.py",
+        "sha256": "58242bd2e54db41fd47dee1bb02b8c9ed8e7a6ddd69e41886dbb5594b95577f1"
+      },
+      {
+        "bytes": 1209,
+        "path": "src/qcoder/tools/batch.py",
+        "sha256": "b587e1f7bf5573a4a37ab7bbb15e81bfe20f564ced48b0497d07031b4213007c"
+      }
+    ],
+    "schema_id": "qcoder.packaging.public_source_manifest.v1"
+  },
+  "wheel": {
+    "path": "qcoder-0.6.0a24.post0.dev6+iqt.d148.human.v3-py3-none-any.whl",
+    "payload_count": 156,
+    "record": "PASS"
+  }
+}

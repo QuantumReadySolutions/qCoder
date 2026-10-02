@@ -1,0 +1,61 @@
+{
+  "source_head": "4b09635c6512d5f93bd8c186a23652c5e3fe8fc1",
+  "source_tree": "dad19cdbf6ce11143e34c1a828bad22c71e7b8db",
+  "source_parent": "dca2a276b8b2510b064c0f1d0548201f22d7e82a",
+  "old_workspaces_and_artifacts_unchanged": true,
+  "old_files_rechecked": 46,
+  "canonical_absence_checks": {
+    "v1": {
+      "approval.json": true,
+      "entered.json": true,
+      "receipt.json": true,
+      "result.json": true,
+      "assessment.json": true,
+      "readback.json": true
+    },
+    "v2": {
+      "approval.json": true,
+      "entered.json": true,
+      "receipt.json": true,
+      "result.json": true,
+      "assessment.json": true,
+      "readback.json": true
+    },
+    "v3-preliminary": {
+      "approval.json": true,
+      "entered.json": true,
+      "receipt.json": true,
+      "result.json": true,
+      "assessment.json": true,
+      "readback.json": true
+    },
+    "v3": {
+      "approval.json": true,
+      "entered.json": true,
+      "receipt.json": true,
+      "result.json": true,
+      "assessment.json": true,
+      "readback.json": true
+    }
+  },
+  "fallback_name": "qcoder-0.6.0a24.post0.dev3+protected.blueprint.v1-py3-none-any.whl",
+  "fallback_sha256": "73f9c7d0f8e396338a62cfb964df0244a179c5cf4352d5773f0da95b0ac5138c",
+  "fallback_access": "hash-only read; no modification",
+  "source_payload_files": 156,
+  "wheel_members": 163,
+  "sdist_files": 169,
+  "artifacts": [
+    {
+      "name": "qcoder-0.6.0a24.post0.dev6+iqt.d148.human.v3-py3-none-any.whl",
+      "bytes": 726632,
+      "sha256": "ab8495fe8b009b5f2741115a562cd54ed0a5ce4db8ed29d77d1fc8547d5aa44c"
+    },
+    {
+      "name": "qcoder-0.6.0a24.post0.dev6+iqt.d148.human.v3.tar.gz",
+      "bytes": 664445,
+      "sha256": "c12b35e683329a5c91eac412b5a02018af283675ea509ebd39bcecdfdae63121"
+    }
+  ],
+  "dependencies_lock_sha256": "030734f988a6cc989a2b8c4719b7bd20ee88061a8414f441829df361a5c96d27",
+  "scope": "Only assigned successor source/workspace and temporary proof environments changed. No WI-0441/Tactical_38 or protected implementation changes. No Phase E."
+}

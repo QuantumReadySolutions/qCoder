@@ -193,6 +193,40 @@
       "plan_digest": "3ac1d897fded0ae589fb5a92f1ccd8ec5c70122d4d1daea90275867b1b9c1b3b",
       "id": 21,
       "canonical_heldout_jobs": 0
+    },
+    {
+      "stage": "v3_initial_installed_suite",
+      "result": "passed_but_cwd_proof_superseded",
+      "passed": 69,
+      "warnings": 19,
+      "seconds": 134.99,
+      "reason": "Isolated installed imports passed, but launch cwd was the repository. Repeated complete proof from /tmp for explicit outside-source execution.",
+      "id": 22,
+      "canonical_heldout_jobs": 0
+    },
+    {
+      "stage": "v3_final_installed_outside_source_suite",
+      "result": "passed",
+      "passed": 69,
+      "warnings": 19,
+      "seconds": 133.74,
+      "cwd": "/tmp",
+      "real_PTY_cases": 19,
+      "command": "/tmp/d148-installed-proof-v3/venv/bin/python -I -B -m pytest -q -c /dev/null /tmp/d148-installed-proof-v3/tests",
+      "id": 23,
+      "canonical_heldout_jobs": 0
+    },
+    {
+      "stage": "v3_artifact_and_preservation",
+      "result": "passed",
+      "source_payload_files": 156,
+      "wheel_members": 163,
+      "sdist_files": 169,
+      "old_files_unchanged": 46,
+      "fallback_sha256": "73f9c7d0f8e396338a62cfb964df0244a179c5cf4352d5773f0da95b0ac5138c",
+      "new_canonical_approval": "absent",
+      "id": 24,
+      "canonical_heldout_jobs": 0
     }
   ],
   "canonical_heldout_jobs": 0
