@@ -1,0 +1,19 @@
+{
+  "schema": "d148.superseded_preservation.v2",
+  "old_workspace_file_hashes_unchanged": true,
+  "old_workspace_file_count": 21,
+  "old_package_hashes_unchanged": true,
+  "old_package_hashes": {
+    "qcoder-0.6.0a24.post0.dev4+iqt.d148.ml.v1-py3-none-any.whl": "1882df310346b83b65d0ccfaa4c41f1a3b7bf74dda1093ff42753ff553836025",
+    "qcoder-0.6.0a24.post0.dev4+iqt.d148.ml.v1.tar.gz": "42bae6edd589e3315debab985a0182a345a01177b7eaa9d66488f2bd3e7a5af4"
+  },
+  "old_plan_digest": "fcd115f49d3726c3a782725a4872a63e886295153a11a5c168d21f11ef25c9fc",
+  "old_source_run_ids": {
+    "candidate": "5a8fbc24aa6845ceb08d1150ac495683",
+    "baseline": "c285ceb957b84ef49e475f37c5931d12"
+  },
+  "old_assessment_run_id": "9f820359e11b478b8fbb0bcc19305c90",
+  "superseded_not_reused": true,
+  "old_installed_payload_matches_old_wheel": true,
+  "old_installed_payload_count": 156
+}

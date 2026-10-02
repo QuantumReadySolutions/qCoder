@@ -1,0 +1,15 @@
+..............................................                           [100%]
+=============================== warnings summary ===============================
+::test_real_nonseekable_tty_approval[exact]
+::test_real_nonseekable_tty_approval[fragmented]
+::test_real_nonseekable_tty_approval[generic]
+::test_real_nonseekable_tty_approval[digest_only]
+::test_real_nonseekable_tty_approval[wrong_challenge]
+::test_real_nonseekable_tty_approval[oversized]
+::test_real_nonseekable_tty_approval[eof]
+::test_real_nonseekable_tty_approval[changed_plan]
+  /usr/lib/python3.12/pty.py:95: DeprecationWarning: This process (pid=10) is multi-threaded, use of forkpty() may lead to deadlocks in the child.
+    pid, fd = os.forkpty()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+46 passed, 8 warnings in 80.17s (0:01:20)

@@ -1,0 +1,1 @@
+{"digest":"8611e2c5e07656a5c3507318e89b0a84a30295a09e14555385e254389fe7b774","fixture_digest":"eb533a76bf7da05382b3654599edfc95fb403847538abfb2e15316114b689301","read_partitions":["train","validation"],"recipe_digest":"05d320b20011f00fce3b4e824057b45e25395a76786e9345e309fee52997937b","role":"candidate","schema":"d148.training_entry.v1"}

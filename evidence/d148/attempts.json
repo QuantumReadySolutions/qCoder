@@ -99,6 +99,29 @@
       "command": "PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q tests/ml_research tests/test_release_version_consistency.py tests/test_focused_loop_contracts_v1.py tests/test_focused_loop_package_isolation_v1.py tests/test_public_package_metadata.py",
       "warning_explanation": "Python warns about forkpty from a multithreaded test parent; child immediately execs a fresh interpreter. All eight genuine PTY cases passed.",
       "canonical_heldout_jobs": 0
+    },
+    {
+      "id": 12,
+      "stage": "recut_v2_installed_validation",
+      "result": "passed",
+      "passed": 46,
+      "warnings": 8,
+      "seconds": 80.17,
+      "command": "/tmp/d148-installed-proof-v2/venv/bin/python -I -B -m pytest -q -c /dev/null /tmp/d148-installed-proof-v2/tests/test_d148.py",
+      "production_file_monkeypatches": false,
+      "canonical_heldout_jobs": 0
+    },
+    {
+      "id": 13,
+      "stage": "recut_v2_deterministic_preparation",
+      "result": "exact_numeric_reproduction",
+      "changed_checkpoint_fields": [
+        "digest",
+        "training_code"
+      ],
+      "old_v_new_numeric_state_and_history_bytes_equal": true,
+      "evidence": "recut-v2/deterministic-comparison.json",
+      "canonical_heldout_jobs": 0
     }
   ],
   "canonical_heldout_jobs": 0

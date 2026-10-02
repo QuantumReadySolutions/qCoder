@@ -1,0 +1,59 @@
+{
+  "schema": "d148.recut_pending_plan_summary.v2",
+  "inert_not_authority": true,
+  "plan_digest": "3cc1c174cd8803b4fbf9354de94935ebf919ea0dbf9e67c5380a83bc173faf43",
+  "job_id": "dffa1df4f8054ddebf6ac0630c5cbc04",
+  "attempt_id": "779f57e6e7184578ad82b3332e4ed9c8",
+  "challenge": "5ac1b352e57b4bb5b44409b00b072d6d",
+  "selected": {
+    "baseline": {
+      "external_reported": {
+        "checkpoint_digest": "9ced20ed5f0919d2a674b7934ecd89d66c720968c91d345d6fd5a7410bf56657",
+        "fixture_digest": "eb533a76bf7da05382b3654599edfc95fb403847538abfb2e15316114b689301",
+        "preprocessing_digest": "c92c53de81d5c6cb748588aaffec91632fbc906d8edbbf2fd15dc9573572e418",
+        "recipe_digest": "05d320b20011f00fce3b4e824057b45e25395a76786e9345e309fee52997937b",
+        "role": "baseline",
+        "split_digest": "9441e7deaa67c80ca5e638b3873e3c4ce75ddb69aec69c0343437a12f5240f06"
+      },
+      "qcoder_verified_local_checkpoint_digest": "9ced20ed5f0919d2a674b7934ecd89d66c720968c91d345d6fd5a7410bf56657",
+      "run_id": "1c78b9fe3855479db40a3207d78201a2"
+    },
+    "candidate": {
+      "external_reported": {
+        "checkpoint_digest": "457897807be1bd9197fc54db66c3488af21cc765e84b5236624b3dd798b070e3",
+        "fixture_digest": "eb533a76bf7da05382b3654599edfc95fb403847538abfb2e15316114b689301",
+        "preprocessing_digest": "c92c53de81d5c6cb748588aaffec91632fbc906d8edbbf2fd15dc9573572e418",
+        "recipe_digest": "05d320b20011f00fce3b4e824057b45e25395a76786e9345e309fee52997937b",
+        "role": "candidate",
+        "split_digest": "9441e7deaa67c80ca5e638b3873e3c4ce75ddb69aec69c0343437a12f5240f06"
+      },
+      "qcoder_verified_local_checkpoint_digest": "457897807be1bd9197fc54db66c3488af21cc765e84b5236624b3dd798b070e3",
+      "run_id": "00c056af168c4309871beaed190fd93d"
+    }
+  },
+  "assessment_run_id": "0c0216d8fb3743ef876f4bad529f5202",
+  "experiment_id": "1",
+  "destination_identity_digest": "b4bcbecf62bfcc7514c596a8a77deb6bc149db91899edd23e3d5f3328d3891e2",
+  "code_digest": "4c7d54a69e4384c0230f42981ae1ddf362c3d4714ed76d7d9f65f04a9e45fe96",
+  "runtime_digest": "412fad0a43068e089f1a758b3ee8d0ad8c754c8fcad40649b639b3e88e6b8193",
+  "fixture_digest": "eb533a76bf7da05382b3654599edfc95fb403847538abfb2e15316114b689301",
+  "data_digest": "2606f25d52bb7370b9b371ffde6fd4e732ae0cca88b5a5966aab0376c32dd7ef",
+  "split_digest": "9441e7deaa67c80ca5e638b3873e3c4ce75ddb69aec69c0343437a12f5240f06",
+  "preprocessing_digest": "c92c53de81d5c6cb748588aaffec91632fbc906d8edbbf2fd15dc9573572e418",
+  "protocol": {
+    "candidate_min_correct": 26,
+    "heldout_count": 40,
+    "id": "d148.result.v1",
+    "maximum_baseline_advantage_correct": 4,
+    "metric": "accuracy@logit>=0",
+    "shots": null
+  },
+  "budget": {
+    "baseline_model_invocations": 40,
+    "candidate_model_invocations": 40,
+    "qnode_invocations": 40,
+    "research_jobs": 1,
+    "timeout_seconds": 60
+  },
+  "zero_science_proof_digest": "da19504bc6fcfe6eddd614cc0e36815acf9961e54091379521a1caad350fa9be"
+}
