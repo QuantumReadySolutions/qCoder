@@ -1,0 +1,1 @@
+spawnSync /home/rob/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python EPERM

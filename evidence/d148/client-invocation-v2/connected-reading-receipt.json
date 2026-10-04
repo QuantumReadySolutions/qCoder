@@ -1,0 +1,93 @@
+{
+  "date": "2026-10-04",
+  "authority": {
+    "repository": "QuantumReadySolutions/qcoder-internal",
+    "commit": "935af4d9fd3d5cf1e30c45a21757ab4ffb7ffd8d",
+    "path": "docs/private-notes/strategic-authorizations/qcoder-iqt-2026-ml-research-successor-implementation-and-proof-v1.md",
+    "read": "complete"
+  },
+  "work_order": {
+    "repository": "QuantumReadySolutions/qcoder-internal",
+    "commit": "b5b00071d5a76f148a84138d6ce65d1518cec51c",
+    "path": "docs/private-notes/tactical-conference-coordination/iqt-2026-d148-carbon-event-shape-and-fixture-correction-work-order-20261004.md",
+    "blob": "9008280bce56f3ad98ed3bf6871356c26117724a",
+    "read": "complete"
+  },
+  "preceding_finding": {
+    "commit": "b5b00071d5a76f148a84138d6ce65d1518cec51c",
+    "blob": "92e0078f0348b2a850699a8546d91e7adff0ebcc",
+    "interpretation": "Original no-audit observation does not establish Python execution; work-order F1/F2 correction governs."
+  },
+  "implementation": {
+    "repository": "QuantumReadySolutions/qCoder",
+    "commit": "beeb1eb0b0178e6db9882187e83931b8547403f1",
+    "files": [
+      {
+        "path": "conference/d148-client/control_fixture.py",
+        "blob": "eee00bf294a0ef90b93dee57fca9cd65763070a9",
+        "connected_content_bytes": 3747
+      },
+      {
+        "path": "conference/d148-client/guard",
+        "blob": "5403af7678841921ae1f50ffe7b6f121eb4fd398",
+        "connected_content_bytes": 774
+      },
+      {
+        "path": "conference/d148-client/runtime.py",
+        "blob": "bd0fe7d79471758d0f38c73af9f7d9c988de7586",
+        "connected_content_bytes": 12627
+      },
+      {
+        "path": "conference/d148-client/setup.py",
+        "blob": "dcee4b395702d1d5341d154b61f9bc6f935adb1f",
+        "connected_content_bytes": 8721
+      },
+      {
+        "path": "conference/d148-client/hooks.json",
+        "blob": "e8f202228f21407c0410adcd44814d3b160ddc75",
+        "connected_content_bytes": 1075
+      },
+      {
+        "path": "conference/d148-client/binding.mdc",
+        "blob": "019c72bc22db8921f48f2ef6a4fb366c35b32d46",
+        "connected_content_bytes": 1449
+      },
+      {
+        "path": "conference/d148-client/qcoder-context",
+        "blob": "764fe8c180fe45ef0e24694d8c200813bfa5e563",
+        "connected_content_bytes": 491
+      },
+      {
+        "path": "conference/d148-client/CARBON-INSTALL.txt",
+        "blob": "a97efdd8e479d215ad5809e3858c164eba32e209",
+        "connected_content_bytes": 10930
+      },
+      {
+        "path": "tests/client_invocation/test_client_invocation.py",
+        "blob": "c8eaf0a176e1c3c55b80f5d521508ff362314969",
+        "connected_content_bytes": 13073
+      },
+      {
+        "path": "tests/client_invocation/prove_native_hooks.cjs",
+        "blob": "70edc9aa5f61ca08f0ea4b30787d14259897c779",
+        "connected_content_bytes": 5277
+      },
+      {
+        "path": "tests/ml_research/test_client_invocation_installed.py",
+        "blob": "4124411b9a1ac4ad813104da2e167a682c510035",
+        "connected_content_bytes": 3070
+      },
+      {
+        "path": "scripts/build_d148_client_bundle.py",
+        "blob": "a94442e106473ff865e1b090ecded8bd9261c283",
+        "connected_content_bytes": 2656
+      },
+      {
+        "path": "evidence/d148/client-invocation-v1/RETURN.txt",
+        "blob": "a12165773f3a62989f82c39abc6b944377086513",
+        "connected_content_bytes": 9647
+      }
+    ]
+  },
+  "orientation": "TACTICAL_CONFERENCE.md read at pinned work-order commit; newer actual observations govern"
+}

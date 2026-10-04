@@ -1,0 +1,16 @@
+.FF                                                                      [100%]
+=================================== FAILURES ===================================
+__________ test_generated_interpreter_and_observed_basename[outside] ___________
+tests/client_invocation/test_carbon_correction.py:77: in test_generated_interpreter_and_observed_basename
+    assert value['continue'], value
+E   AssertionError: {'continue': False, 'user_message': 'Read-only context unavailable or inconsistent; no discovery or execution fallback.'}
+E   assert False
+___________ test_generated_interpreter_and_observed_basename[inside] ___________
+tests/client_invocation/test_carbon_correction.py:76: in test_generated_interpreter_and_observed_basename
+    assert p.returncode == 0
+E   assert 2 == 0
+E    +  where 2 = CompletedProcess(args=['/tmp/d148-cursor-control-fk1cfpv2/client-v4/.d148/guard', 'beforeSubmitPrompt'], returncode=2, stdout='{"continue":false,"user_message":"Read-only context unavailable."}\n', stderr='').returncode
+=========================== short test summary info ============================
+FAILED tests/client_invocation/test_carbon_correction.py::test_generated_interpreter_and_observed_basename[outside]
+FAILED tests/client_invocation/test_carbon_correction.py::test_generated_interpreter_and_observed_basename[inside]
+2 failed, 1 passed in 0.25s

@@ -1,0 +1,17 @@
+Deterministic second build matches byte-for-byte.
+13 regular members, distinct v2 prefix.
+CARBON-INSTALL.txt: OK
+acceptance-template.json: OK
+binding.mdc: OK
+control_fixture.py: OK
+cursorignore: OK
+guard: OK
+hooks.json: OK
+package.json: OK
+payload.json: OK
+qcoder-context: OK
+runtime.py: OK
+setup.py: OK
+Extracted generator preflight: verified_synthetic_denial_not_native_acceptance
+No successful attachment receipt created.
+No wheel, dependencies or science included.

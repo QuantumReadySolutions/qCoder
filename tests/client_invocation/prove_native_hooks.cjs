@@ -67,10 +67,50 @@ const shell={async *execute(_context,command,options){
  // accidentally omitted failClosed key instead of treating all errors as deny.
  const control=await engine.executeCommandHook('preToolUse', {command:'./crash',timeout:5},root,{}, {},'project',0);
  assert(!control.success,'Unexpected default: investigate changed engine');
+ // Real assembled guard through the same native engine, synthetic events only.
+ const python=process.argv[4], generator=process.argv[5];
+ const execFile=require('util').promisify(cp.execFile);
+ assert(python && generator, 'Pass the exact conference Python and control_fixture.py');
+ const assembled=[];
+ for(const fault of ['normal','missing','crash','timeout','empty','malformed','invalid']){
+  const created=JSON.parse((await execFile(python,['-I','-B',generator,'--cursor-version','3.23.12','--case',fault],{encoding:'utf8'})).stdout);
+  const fixture=created.fixture_root;
+  assert(created.launcher_preflight==='verified_synthetic_denial_not_native_acceptance');
+  const fixtureConfig=JSON.parse(fs.readFileSync(path.join(fixture,'.cursor/hooks.json'),'utf8'));
+  assert(schema.RV(fixtureConfig).isValid);
+  const fixtureEngine=new Engine({projectHooks:fixtureConfig},fixture,{cursor_version:'3.23.12'},shell,
+    undefined,undefined,undefined,{commandHookPayloadTransport:'stdin'});
+  const receipt=JSON.parse(fs.readFileSync(path.join(fixture,'.d148/installed.json'),'utf8'));
+  const observations=Object.fromEntries(['user_rules','team_rules','enterprise_rules','plugins_and_skills','other_attachments','same_name_sources'].map(k=>[k,'none_observed']));
+  fs.writeFileSync(path.join(fixture,'.d148/instruction-observation.json'),JSON.stringify({
+    schema:'cursor-3.23.12-single-rule-v1', root:fixture, cursor_version:'3.23.12',
+    rule_sha256:receipt.files['.cursor/rules/d148-read-only.mdc'], basis:'synthetic_component_test',observations}));
+  const common={workspace_roots:[fixture],cursor_version:'3.23.12',
+    conversation_id:'synthetic-engine-conversation',generation_id:'synthetic-engine-generation',cwd:fixture};
+  const run=async(name,extra={})=>fixtureEngine.executeCommandHook(name,fixtureConfig.hooks[name][0],fixture,{},
+    {...common,hook_event_name:name,...extra},'project',0);
+  const submit=await run('beforeSubmitPrompt',{prompt:'',attachments:[{type:'rule',file_path:'d148-read-only.mdc'}]});
+  assert(submit.success && submit.data.continue===true, 'Assembled submit failed '+fault);
+  const action=await run('preToolUse',{tool_name:'Shell',tool_input:{command:'./qcoder-context'}});
+  assert(action.success && action.data.permission===(fault==='normal'?'allow':'deny'), 'Assembled control failed '+fault);
+  let marker=false;
+  if(fault==='normal'){
+   const terminal=await run('beforeShellExecution',{command:'./qcoder-context'});
+   assert(terminal.success && terminal.data.permission==='allow');
+   assert((await execFile(path.join(fixture,'qcoder-context'),[],{cwd:fixture,encoding:'utf8'})).stdout.trim()==='D148_SYNTHETIC_CONTEXT_ONLY');
+   marker=true;
+   for(const [name,extra]of [['preToolUse',{tool_name:'Read',tool_input:{path:'fixture-private.txt'}}],
+      ['preToolUse',{tool_name:'Task',tool_input:{}}],['beforeShellExecution',{command:'./qcoder-context; pwd'}]]){
+    const denied=await run(name,extra);assert(denied.success && denied.data.permission==='deny');
+   }
+  }
+  assembled.push({case:fault,synthetic_submit_allowed:true,context_action:action.data.permission,marker_executed:marker,
+    launcher_preflight:created.launcher_preflight});
+ }
  const output={kind:'installed_native_engine_component_test_not_Agent_acceptance',
   client_build:path.basename(dir), index_sha256:crypto.createHash('sha256').update(source).digest('hex'),
   engine_chunk_sha256:crypto.createHash('sha256').update(fs.readFileSync(path.join(dir,'190.index.js'))).digest('hex'),
-  native_schema_accepted:true, exact_configuration_failClosed:true,
+  native_schema_accepted:true, exact_configuration_failClosed:true, assembled_synthetic_controls:assembled,
   failures:rows, allow_controls:7, omitted_failClosed_control:'fails_open_as_expected',
   model:null,mode:null,provider_calls:0,scientific_jobs:0};
  console.log(JSON.stringify(output,null,2));

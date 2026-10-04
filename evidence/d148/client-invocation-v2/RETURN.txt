@@ -1,0 +1,147 @@
+D148 Carbon client compatibility correction v2
+Target acceptance remains pending. READY disposition requires the final handoff's
+commit/push/remote verification; this file does not assert its own commit identity.
+
+AUTHORITY AND SOURCE
+Work order: QuantumReadySolutions/qcoder-internal
+b5b00071d5a76f148a84138d6ce65d1518cec51c
+Identity: QCODER_D148_CARBON_CLIENT_COMPATIBILITY_CORRECTION_V2
+Full D148 grant: 935af4d9fd3d5cf1e30c45a21757ab4ffb7ffd8d
+Connected reads/blobs: connected-reading-receipt.json.
+Repository: QuantumReadySolutions/qCoder
+Branch: conference/iqt-2026-ml-research-successor-v1
+Worktree: /home/rob/projects/qcoder-iqt-2026-ml-successor-v1
+Verified clean starting HEAD and correction parent:
+beeb1eb0b0178e6db9882187e83931b8547403f1
+Starting tree: ee8360c53b3b80b6d149bfa86f7c1a3e6902e39c
+Remote branch matched that head before edits. No later work required reconciliation.
+No applicable AGENTS.md found in ancestor chain or conference worktree search.
+Final commit/tree/parent and remote verification are supplied in the final handoff.
+Source file Git blob/SHA-256 identities: source-files.json.
+All changed/new paths: changed-paths.txt.
+
+FIXES AND TRUST BOUNDARY
+F1: the fixture constructs and shell-quotes the selected interpreter and generated
+runtime paths independently, replacing one complete fixed invocation. No cascading
+base replacement can rewrite the inserted interpreter. Generated guard preflight
+checks receipt agreement, invokes that actual shell guard, and requires a safe
+common:event_name denial AFTER disk/interpreter checks. It never creates attachment
+success or pretends a synthetic preflight is native acceptance.
+
+F2: supports the observed exact d148-read-only.mdc identifier only in the bounded
+Cursor 3.23.12 single-rule profile. The operator must first record actual clean UI
+instruction observations for the exact root/version/pinned rule. Local sole-rule
+and original instruction inventory checks remain required. Missing/unknown/conflict
+observations refuse. Real-client runtime rejects synthetic_component_test basis.
+Exact absolute representation remains supported. No path basename/suffix/substring
+normalization is used; no arbitrary relative/traversing/foreign-root path passes.
+The event must still report exactly one intended rule, with exact root/version and
+bounded conversation/generation IDs. Hash/host/interpreter checks remain unchanged.
+The per-generation attachment binds its representation and profile digest; changing
+the profile invalidates subsequent actions. A failed attachment resubmission clears
+the earlier same-conversation binding rather than reusing it.
+
+A basename means bound_identifier_reported, NOT proven absolute source origin or
+absence of hidden UI/team/plugin instructions. The observation command is an
+operator inventory, not a new authorization or an attachment event. No real Carbon
+observation file is manufactured here. Documentation requires fresh target checks.
+Old failed/diagnostic fixtures are preserved; v1/diagnostic receipts cannot be
+promoted by the new observation command. Global settings are never changed.
+
+Finite safe stage/reason diagnostics now distinguish bootstrap, input/deadline,
+disk verification, common-event and attachment failures. Failures remain denials.
+Prompt/email/transcript/raw model/plugin fields and exception text are not logged.
+The observed empty prompt is valid and does not bypass attachment requirements.
+
+CORRECTED HISTORICAL INTERPRETATION
+The old transformation exactly reproduces reported guard SHA-256
+8027eaaa9e18f4515d87bcfec08d522b52b2bdf2f3382bb51a779765f31a4f67.
+No-audit + short wrapper refusal did NOT establish Python validator execution.
+F1 explains a pre-Python failure route; F2 is a separate compatibility defect.
+The original finding remains intact with this explicit correction. Neither one
+blocked prompt nor the diagnostic deliberate block proves the native matrix.
+
+FOCUSED PROOF (PRECISION / SYNTHETIC COMPONENT ONLY)
+Baseline red: 2 failures, 1 pass in red-regressions.txt. Outside-base interpreter
+reaches F2; inside-base interpreter fails F1 with shell exit 2. Old hash reproduced.
+Final client suite: 129 passed (client-tests.txt). Includes actual generated shell
+subprocesses for both placement profiles, quoted interpreter paths, empty prompt,
+absolute and basename attachment positives, exact synthetic context marker,
+missing/extra/duplicate/wrong-type/malformed/traversal/foreign-root/same-name
+ambiguity, changed rule/runtime/guard/config/host/interpreter/IDs/version/root,
+profile missing/changed/unsupported, argument refusal, bootstrap crashes and
+internal stdin deadline. No raw synthetic private fields appear in audit output.
+
+Unchanged backend context suite: 33 passed (backend-context-tests.txt).
+Clean-installed dev8 external context integration: 2 passed in a new /tmp venv,
+outside source. All 157 installed payload hashes verified; installed package path,
+version and dependency reuse are in installed-runtime-identity.json. Existing-scope
+synthetic data/SQLite trackers only; no canonical science or existing MLflow writes.
+
+Native Precision CLI engine 2026.08.11-e8db854 component proof passed with final
+clean-extracted bundle: native schema; 42 fault denials; seven response positives;
+omitted-failClosed negative control. Additional assembled generated fixtures:
+normal permits basename submit -> exact Shell -> shell boundary -> synthetic
+marker; six faults missing/crash/timeout/empty/malformed/invalid deny at preToolUse,
+marker not executed. Read/Task/compound controls deny. Exact native engine hashes
+and all results: native-hook-engine.json. No provider/Agent or Carbon run.
+
+Bundle deterministic second build and clean extraction/member checks passed.
+Extracted generator's real guard preflight passed without an attachment receipt.
+13 regular archive members; 12 checksummed payload/manifest files.
+Iteration notes and actual limitations: iterations-and-limits.txt.
+
+EXACT COMMANDS
+From the conference worktree:
+.venv/bin/python -m pytest -q --tb=short tests/client_invocation
+.venv/bin/python -m pytest -q tests/ml_research/test_client_context.py
+.venv/bin/python scripts/build_d148_client_bundle.py --source conference/d148-client --destination artifacts/d148/client-invocation-v2
+The builder refuses to overwrite an existing archive; repeat in a NEW destination.
+
+Installed integration, cwd /tmp/d148-client-v2-installed-proof:
+D148_CLIENT_SOURCE=/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client /tmp/d148-client-v2-installed-proof/bin/python -I -B -m pytest -q tests/test_client_invocation_installed.py
+The proof environment contains the unchanged dev8 wheel installed --no-index
+--no-deps and the existing isolated dependency site-packages via a dedicated .pth.
+Tests copied there: test_d148.py, test_client_context.py, test_client_invocation_installed.py.
+
+Final native engine command, cwd conference worktree:
+node tests/client_invocation/prove_native_hooks.cjs /home/rob/.local/share/cursor-agent/versions/2026.08.11-e8db854 /tmp/d148-client-v2-bundle-proof-jpq07up_/clean/d148-client-invocation-correction-v2/hooks.json /home/rob/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python /tmp/d148-client-v2-bundle-proof-jpq07up_/clean/d148-client-invocation-correction-v2/control_fixture.py
+
+BUNDLE
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/client-invocation-v2/d148-client-invocation-correction-v2.tar.gz
+Bytes: 27945
+SHA-256: 99c95dce7d4f6642472b3d7d8264428af75013f4c39bacede32610771fceeee0
+Archive/member sizes and SHA-256: bundle-receipt.json.
+Inside: SHA256SUMS and payload.json. Extraction prefix is distinct v2.
+No wheel/dependencies/scientific state. This path is NOT proof of Carbon transfer.
+
+PRESERVATION
+660 prior tracked files checked; only nine existing client/test/build files changed.
+All 651 others, including src/qcoder, package version, scientific/backend tests and
+prior evidence, retain their SHA-256. Exact before/after evidence is supplied.
+Old v1 archive remains at its original path, 23756 bytes, SHA-256:
+9dcbd4113ef6f231ea33b761624de06312a92d828b5af505aecb69cd2ad9472f
+Unchanged dev8 wheel remains 731491 bytes, SHA-256:
+36818af120efa83b32cd6b1cf9101f06e308974b3a43a92ae16f2a23f49d7016
+Carbon established job/plan/result/assessment remain preservation assertions in
+CARBON-INSTALL.txt; no fresh Carbon reads, approval, plan, model/training/evaluation,
+MLflow delivery/read-back mutation or refinement occurred. No wheel rebuild,
+dependency change, pytest-evidence adapter, new scientific authority or release.
+Tactical_40/WI-0441, D147 and accepted video were not modified or used as test state.
+
+READY CARBON SEQUENCE
+Follow conference/d148-client/CARBON-INSTALL.txt (identical inside v2 archive):
+Precision Windows PowerShell WSL share -> USB D: -> Carbon PowerShell WSL share;
+verify this exact archive hash, absent v2 extraction directory, then SHA256SUMS.
+Run corrected normal fixture generator and require real launcher preflight before
+opening Cursor. Inspect actual client instruction surfaces and record the bounded
+observations; unknown/ambiguous mappings STOP. Submit one normal synthetic prompt;
+require exact first/only context marker. Capture any failure before another probe.
+Then actual target negative/native controls -> real client-only install with backup
+-> separate real-window instruction inventory/effective attachment -> E01/E02/E13
+and remaining applicable provenance. Keep ordinary deliberate operator permissions;
+no Run Everything, forced execution, global setting or sandbox removal for proof.
+Record actual tested posture. Existing permission history is not invented.
+
+No Carbon PASS, external-demo approval, release, qualification, independent review
+or latency improvement follows from this component correction.

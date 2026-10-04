@@ -21,6 +21,17 @@ VERSION = '0.6.0a24.post0.dev8+iqt.d148.context.v5'
 CONFIG_HOME = Path.home()
 ENTERPRISE = Path('/etc/cursor')
 MESSAGE = 'Read-only context unavailable or inconsistent; no discovery or execution fallback.'
+SYNTHETIC_FIXTURE = False
+PROFILE = 'cursor-3.23.12-single-rule-v1'
+OBSERVATION_KEYS = ('user_rules', 'team_rules', 'enterprise_rules',
+                    'plugins_and_skills', 'other_attachments', 'same_name_sources')
+REASONS = frozenset(('binding_mismatch', 'wrong_root', 'workspace_unavailable',
+    'missing_launcher', 'launcher_or_guard_not_executable', 'missing_binding',
+    'host_mismatch', 'wrong_interpreter', 'stale_binding_file',
+    'conflicting_or_changed_instruction_source', 'event_name', 'event_root',
+    'event_version', 'event_ids', 'attachment_shape', 'attachment_identifier',
+    'profile_required', 'profile_unsupported', 'profile_ambiguous',
+    'deadline', 'input_size', 'invalid_input', 'unavailable', 'action_denied'))
 EVENTS = ('preToolUse', 'beforeShellExecution', 'beforeReadFile',
           'beforeMCPExecution', 'subagentStart', 'beforeTabFileRead', 'beforeSubmitPrompt')
 
@@ -153,17 +164,45 @@ def bounded_token(value):
 
 
 def event_common(event, name, receipt):
-    require(isinstance(event, dict) and event.get('hook_event_name') == name)
-    require(event.get('workspace_roots') == [str(ROOT)])
-    require(event.get('cursor_version') == receipt['cursor_version'])
-    require(bounded_token(event.get('conversation_id')) and bounded_token(event.get('generation_id')))
+    require(isinstance(event, dict) and event.get('hook_event_name') == name, 'event_name')
+    require(event.get('workspace_roots') == [str(ROOT)], 'event_root')
+    require(event.get('cursor_version') == receipt['cursor_version'], 'event_version')
+    require(bounded_token(event.get('conversation_id')) and bounded_token(event.get('generation_id')), 'event_ids')
 
 
-def attachment(event):
+def instruction_profile(receipt):
+    require(receipt['cursor_version'] == '3.23.12', 'profile_unsupported')
+    path = ROOT/'.d148/instruction-observation.json'
+    require(path.is_file(), 'profile_required')
+    raw = regular(path)
+    value = parse(raw)
+    basis = value.get('basis') if isinstance(value, dict) else None
+    require(basis == 'operator_client_ui_observation' or
+            (SYNTHETIC_FIXTURE and basis == 'synthetic_component_test'), 'profile_required')
+    expected = {'schema': PROFILE, 'root': str(ROOT), 'cursor_version': '3.23.12',
+                'rule_sha256': receipt['files'][RULE], 'basis': basis,
+                'observations': {key: 'none_observed' for key in OBSERVATION_KEYS}}
+    require(value == expected, 'profile_ambiguous')
+    # A basename maps only to this pinned sole local rule. No inherited or
+    # extra known instruction source is compatible, even if resealed locally.
+    expected_inventory = {str(ROOT/name): receipt['files'][name]
+                          for name in (RULE, '.cursor/hooks.json')}
+    require(instruction_inventory(ROOT) == expected_inventory ==
+            receipt['instruction_inventory'], 'profile_ambiguous')
+    return digest(raw)
+
+
+def attachment(event, receipt):
     values = event.get('attachments')
-    require(isinstance(values, list))
-    # Attachment is evidence from Cursor's event, not a claim inferred from disk.
-    require(values == [{'type': 'rule', 'file_path': str(ROOT/RULE)}])
+    require(isinstance(values, list) and len(values) == 1, 'attachment_shape')
+    item = values[0]
+    require(isinstance(item, dict) and set(item) == {'type', 'file_path'} and
+            item['type'] == 'rule' and isinstance(item['file_path'], str), 'attachment_shape')
+    if item['file_path'] == str(ROOT/RULE):
+        return {'representation': 'exact_absolute_reported', 'profile_digest': None}
+    require(item['file_path'] == 'd148-read-only.mdc', 'attachment_identifier')
+    return {'representation': 'bound_identifier_reported',
+            'profile_digest': instruction_profile(receipt)}
 
 
 def session_path(event):
@@ -177,18 +216,24 @@ def exact_shell(command, cwd):
 def decide(event, name, receipt):
     event_common(event, name, receipt)
     if name == 'beforeSubmitPrompt':
-        attachment(event)
-        bound = {'conversation': event['conversation_id'], 'generation': event['generation_id'],
-                 'rule_hash': receipt['files'][RULE], 'cursor_version': event['cursor_version']}
         path = session_path(event)
         require(not path.is_symlink())
+        path.unlink(missing_ok=True)
+        evidence = attachment(event, receipt)
+        bound = {'conversation': event['conversation_id'], 'generation': event['generation_id'],
+                 'rule_hash': receipt['files'][RULE], 'cursor_version': event['cursor_version'],
+                 **evidence}
         fd = os.open(path, os.O_WRONLY|os.O_CREAT|os.O_TRUNC|os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, 'w') as stream:
             json.dump(bound, stream)
         return True
     bound = load(session_path(event))
+    representation = bound.get('representation')
+    require(representation in ('exact_absolute_reported', 'bound_identifier_reported'))
+    profile_digest = instruction_profile(receipt) if representation == 'bound_identifier_reported' else None
     require(bound == {'conversation': event['conversation_id'], 'generation': event['generation_id'],
-                      'rule_hash': receipt['files'][RULE], 'cursor_version': event['cursor_version']})
+                      'rule_hash': receipt['files'][RULE], 'cursor_version': event['cursor_version'],
+                      'representation': representation, 'profile_digest': profile_digest})
     if name == 'preToolUse':
         if event.get('tool_name') != 'Shell':
             return False
@@ -212,29 +257,44 @@ def decide(event, name, receipt):
 def hook(name):
     allowed = False
     event = {}
+    stage, reason = 'input', 'invalid_input'
     try:
         # Internal deadline precedes Cursor's 5-second outer deadline. Native
         # failClosed is still required for missing interpreter/guard or SIGKILL.
-        signal.signal(signal.SIGALRM, lambda *_: (_ for _ in ()).throw(Refused()))
+        signal.signal(signal.SIGALRM, lambda *_: (_ for _ in ()).throw(Refused('deadline')))
         signal.setitimer(signal.ITIMER_REAL, 3)
         raw = sys.stdin.buffer.read(65537)
-        require(len(raw) <= 65536)
+        require(len(raw) <= 65536, 'input_size')
         event = parse(raw)
         require(isinstance(event, dict))
+        stage = 'disk'
         receipt = verify(package=False)
+        stage = 'common'
+        event_common(event, name, receipt)
+        stage = 'attachment' if name == 'beforeSubmitPrompt' else 'action'
         allowed = decide(event, name, receipt)
+        reason = 'accepted' if allowed else 'action_denied'
         row = {'event': name, 'decision': 'allow' if allowed else 'deny',
+               'stage': stage, 'reason': reason,
                'conversation_hash': digest(str(event.get('conversation_id','')).encode()),
                'generation_hash': digest(str(event.get('generation_id','')).encode()),
                'exact_context_action': event.get('command') == ACTION or
                    (isinstance(event.get('tool_input'),dict) and event['tool_input'].get('command') == ACTION),
                'tool_class': event.get('tool_name') if event.get('tool_name') in ('Shell','Read','Grep','Task','Write','Delete','Glob') else 'other',
                'attachment_observed': name == 'beforeSubmitPrompt' and allowed,
-               'cursor_version': receipt['cursor_version'],
-               'model':event.get('model_id',event.get('model')) if bounded_token(event.get('model_id',event.get('model'))) else 'unreported'}
+               'attachment_representation': (attachment(event, receipt)['representation']
+                   if name == 'beforeSubmitPrompt' and allowed else 'not_observed'),
+               'synthetic_fixture': SYNTHETIC_FIXTURE}
         audit(row)
-    except BaseException:
+    except BaseException as error:
         allowed = False
+        reason = str(error) if isinstance(error, Refused) and str(error) in REASONS else 'unavailable'
+        # Failure diagnostics are fixed codes, with no raw payload/error fields.
+        try:
+            audit({'event': name, 'decision': 'deny', 'stage': stage, 'reason': reason,
+                   'attachment_observed': False, 'synthetic_fixture': SYNTHETIC_FIXTURE})
+        except BaseException:
+            pass
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)
     if name == 'beforeSubmitPrompt':
@@ -242,7 +302,7 @@ def hook(name):
     else:
         value = {'permission': 'allow' if allowed else 'deny'}
     if not allowed:
-        value['user_message'] = MESSAGE
+        value['user_message'] = MESSAGE + ' ['+stage+':'+reason+']'
         if name in ('preToolUse','beforeShellExecution','beforeMCPExecution'):
             value['agent_message'] = MESSAGE
     print(json.dumps(value), flush=True)
@@ -280,7 +340,42 @@ def context():
         return 2
 
 
+def observe_instructions():
+    """Operator UI inventory, not authorization or a native attachment event."""
+    try:
+        receipt = verify(package=False)
+        require(receipt['cursor_version'] == '3.23.12', 'profile_unsupported')
+        require(receipt.get('schema') in ('d148.client_binding.v2', 'd148.synthetic_client.v2'),
+                'profile_unsupported')
+        path = ROOT/'.d148/instruction-observation.json'
+        require(not os.path.lexists(path), 'profile_ambiguous')
+        print('Record actual Cursor 3.23.12 Agent instruction observations for this window.\n'
+              'Inspect User/Team/Enterprise rules, enabled plugins/skills and attachments.\n'
+              'Enter none_observed only after checking each surface. Unknown/conflict stops.\n'
+              'This does not prove rule attachment, source origin or hidden-instruction absence.', flush=True)
+        observations = {key: input(key+': ').strip() for key in OBSERVATION_KEYS}
+        require(all(value == 'none_observed' for value in observations.values()), 'profile_ambiguous')
+        expected_inventory = {str(ROOT/name): receipt['files'][name]
+                              for name in (RULE, '.cursor/hooks.json')}
+        require(instruction_inventory(ROOT) == expected_inventory, 'profile_ambiguous')
+        value = {'schema': PROFILE, 'root': str(ROOT), 'cursor_version': '3.23.12',
+                 'rule_sha256': receipt['files'][RULE], 'basis': 'operator_client_ui_observation',
+                 'observations': observations}
+        with path.open('x') as stream:
+            json.dump(value, stream, sort_keys=True, indent=2)
+            stream.write('\n')
+        path.chmod(0o600)
+        print(json.dumps({'instruction_profile': PROFILE, 'active_attachment': 'unobserved',
+                          'native_acceptance': 'pending', 'profile_digest': instruction_profile(receipt)}))
+        return 0
+    except BaseException:
+        print(json.dumps({'status': 'refused', 'reason': 'instruction_profile_not_established'}))
+        return 2
+
+
 if __name__ == '__main__':
+    if sys.argv[1:] == ['observe-instructions']:
+        raise SystemExit(observe_instructions())
     if sys.argv[1:] == ['context']:
         raise SystemExit(context())
     if len(sys.argv) == 3 and sys.argv[1] == 'hook' and sys.argv[2] in EVENTS:

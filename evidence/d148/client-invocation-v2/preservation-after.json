@@ -1,0 +1,27 @@
+{
+  "prior_tracked_files_checked": 660,
+  "changed_prior_files": [
+    "conference/d148-client/CARBON-INSTALL.txt",
+    "conference/d148-client/acceptance-template.json",
+    "conference/d148-client/control_fixture.py",
+    "conference/d148-client/guard",
+    "conference/d148-client/runtime.py",
+    "conference/d148-client/setup.py",
+    "scripts/build_d148_client_bundle.py",
+    "tests/client_invocation/prove_native_hooks.cjs",
+    "tests/client_invocation/test_client_invocation.py"
+  ],
+  "unchanged_prior_files": 651,
+  "src_qcoder_unchanged": true,
+  "package_version_and_dependency_lock_unchanged": true,
+  "prior_v1_archive_bytes": 23756,
+  "prior_v1_archive_sha256": "9dcbd4113ef6f231ea33b761624de06312a92d828b5af505aecb69cd2ad9472f",
+  "dev8_wheel_bytes": 731491,
+  "dev8_wheel_sha256": "36818af120efa83b32cd6b1cf9101f06e308974b3a43a92ae16f2a23f49d7016",
+  "canonical_scientific_operations": 0,
+  "existing_mlflow_mutations": 0,
+  "synthetic_test_trackers": "only existing-scope disposable pytest fixtures",
+  "carbon_state_rehashed": false,
+  "tactical_40_wi0441_worktrees_or_state_accessed": false,
+  "d147_and_video": "not modified; no rebuilt/relabelled artifacts"
+}

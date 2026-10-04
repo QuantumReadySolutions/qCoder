@@ -1,0 +1,19 @@
+Checked 2026-10-04: https://cursor.com/docs/hooks and https://cursor.com/docs/rules
+Official documentation describes rule/file attachments and illustrates absolute
+file paths. It also describes project, user and team instruction sources. It does
+not establish universal basename provenance. The captured event at the pinned
+internal work order supplies the sole basename for Cursor 3.23.12. That is the
+bounded target compatibility basis, combined with the pinned sole local rule,
+unchanged inventory and an operator's actual target instruction observations.
+
+No operator UI observation on Carbon is supplied by this implementation. Its
+absence blocks basename use until the target operator records it. The operator
+workflow is an observation, not new authorization or attachment evidence. Unknown
+or conflicting surfaces refuse; the profile cannot prove hidden-source absence.
+The runtime reports bound_identifier_reported, not a reconstructed absolute origin.
+
+Precision native engine build 2026.08.11-e8db854 is tested without CLI startup,
+provider credentials or an Agent. Its code identity and exact component results
+are in native-hook-engine.json. The shell adapter executes disposable synthetic
+scripts; the final run uses the clean-extracted v2 bundle. No Carbon/native Agent,
+end-to-end enforcement, effective attachment or latency PASS is implied.

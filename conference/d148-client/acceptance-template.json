@@ -111,5 +111,13 @@
       "routing_pass": null,
       "latency_observation": null
     }
-  ]
+  ],
+  "client_correction": "v2",
+  "instruction_profile": "cursor-3.23.12-single-rule-v1",
+  "instruction_observation_digest": null,
+  "attachment_representation": null,
+  "attachment_origin_claim": "not_established_by_basename_payload",
+  "launcher_preflight": null,
+  "failure_stage_reason": null,
+  "prior_fixtures_preserved": null
 }

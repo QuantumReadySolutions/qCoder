@@ -265,3 +265,13 @@ def test_generated_control_fixture_uses_real_guard_only(tmp_path):
     assert hook('preToolUse',tool_name='Task',tool_input={})['permission']=='deny'
     assert hook('beforeShellExecution',command='cat fixture-private.txt')['permission']=='deny'
     assert subprocess.check_output([str(root/'qcoder-context')],cwd=root).strip()==b'D148_SYNTHETIC_CONTEXT_ONLY'
+
+
+def test_real_client_rejects_synthetic_instruction_observation(installed):
+    receipt=r.verify()
+    receipt['cursor_version']='3.23.12'
+    (r.ROOT/'.d148/instruction-observation.json').write_text(json.dumps({
+        'basis':'synthetic_component_test'}))
+    assert r.SYNTHETIC_FIXTURE is False
+    with pytest.raises(r.Refused,match='profile_required'):
+        r.instruction_profile(receipt)

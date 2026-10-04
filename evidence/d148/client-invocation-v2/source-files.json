@@ -1,0 +1,46 @@
+{
+  "conference/d148-client/CARBON-INSTALL.txt": {
+    "git_blob": "2e0d316c985ba9806175650d094d0cb0b8fd52ff",
+    "sha256": "cb88d96ce7be9e5d7ee93d52167e71affb0b543cc43b4184730f5348ff3aa886"
+  },
+  "conference/d148-client/acceptance-template.json": {
+    "git_blob": "bf5bcae6202ee406e38fd0357cfcf2c172705fd9",
+    "sha256": "5a2a97cd648fe76e88fc9bab9f4d38e08ba1e7ab4f8418a6183daacda59f12f8"
+  },
+  "conference/d148-client/control_fixture.py": {
+    "git_blob": "e1fd8fafdce358d12a40ab71a25eee5a1570a78f",
+    "sha256": "bd94cb3be19f31ec6167874d7a32db804a31923798cc084f1e8e9d93c612f3f0"
+  },
+  "conference/d148-client/guard": {
+    "git_blob": "c5df19d0f4fc4e1d00a1ed7f5f6b4d15565216e5",
+    "sha256": "7bcfa2232c353c6a3aafd48fbe076c9305188c633bbcf30629a820d573d9c80c"
+  },
+  "conference/d148-client/runtime.py": {
+    "git_blob": "4d319cfe559bde07fc1ff07507b519052df95879",
+    "sha256": "28a87c5be0788980c2478fb305c71be959b70e11c1b33d46d4d760f3ac574fe8"
+  },
+  "conference/d148-client/setup.py": {
+    "git_blob": "d530706bb8bf9c538a27148a44ce129295cdc059",
+    "sha256": "16247d56ac6109e9a8809d2a60580fdfa9849f38e610ee891dafb7894ecc3949"
+  },
+  "scripts/build_d148_client_bundle.py": {
+    "git_blob": "25633b9dc17d8ffefd2db2478f7232e4bc481fa1",
+    "sha256": "714fc5907e65f35f5571ea7cc0177f11f91ce0917e6f8d209a16c9666b10f304"
+  },
+  "tests/client_invocation/fixtures/guard-v1": {
+    "git_blob": "5403af7678841921ae1f50ffe7b6f121eb4fd398",
+    "sha256": "6763b607aaaf56c4ff7b768f1c07c924135d1c1e807542d8db5df96c0a71cbf3"
+  },
+  "tests/client_invocation/prove_native_hooks.cjs": {
+    "git_blob": "861d39d535ad2b58a0ee54c6e0ef68735069c593",
+    "sha256": "d588a8e41e7deb14194ee72669bee5a638f58ea66afe8e4674190164d4fcabf2"
+  },
+  "tests/client_invocation/test_carbon_correction.py": {
+    "git_blob": "e0448dbbaa7265ce54326ac125144e72ca73cc14",
+    "sha256": "045223c745d8f61db7c983a6ceb5e4c78b212fd2a8821b618996b9ad7d1c0e18"
+  },
+  "tests/client_invocation/test_client_invocation.py": {
+    "git_blob": "d3ffbad6117297e35569b2240f5dcdf70c0c655d",
+    "sha256": "48b135ee831595cfff435f1d2e7cf2f88837830ecc35b4b48fa65b6daa53f78b"
+  }
+}

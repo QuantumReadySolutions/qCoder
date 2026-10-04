@@ -1,4 +1,4 @@
-D148 client invocation correction v1 -- client-only, Carbon acceptance pending
+D148 client invocation correction v2 -- client-only, Carbon acceptance pending
 
 No wheel, dependency, scientific state, service, provider or global setting changes.
 The already-installed dev8 wheel is required. Do not prepare, train, approve,
@@ -24,12 +24,12 @@ change global settings, install a new service or claim enforcement.
 
 TRANSFER -- WINDOWS POWERSHELL (two machines)
 On Precision:
-  $bundle = 'd148-client-invocation-correction.tar.gz'
-  Copy-Item -LiteralPath "\\wsl.localhost\Ubuntu-22.04\home\rob\projects\qcoder-iqt-2026-ml-successor-v1\artifacts\d148\client-invocation-v1\$bundle" -Destination "D:\$bundle"
+  $bundle = 'd148-client-invocation-correction-v2.tar.gz'
+  Copy-Item -LiteralPath "\\wsl.localhost\Ubuntu-22.04\home\rob\projects\qcoder-iqt-2026-ml-successor-v1\artifacts\d148\client-invocation-v2\$bundle" -Destination "D:\$bundle"
   Get-FileHash -Algorithm SHA256 -LiteralPath "D:\$bundle"
 Compare with the exact archive SHA-256 in the evidence RETURN/final handoff.
 Move the USB to Carbon. In Carbon PowerShell:
-  $bundle = 'd148-client-invocation-correction.tar.gz'
+  $bundle = 'd148-client-invocation-correction-v2.tar.gz'
   Get-FileHash -Algorithm SHA256 -LiteralPath "D:\$bundle"
   Copy-Item -LiteralPath "D:\$bundle" -Destination "\\wsl.localhost\Ubuntu-26.04\home\user\projects\qcoder-iqt-2026-ml-successor-v1\$bundle"
   wsl -d Ubuntu-26.04
@@ -37,16 +37,22 @@ No /mnt/d or Downloads staging is used.
 
 EXTRACT -- CARBON WSL OPERATOR TERMINAL
   cd /home/user/projects/qcoder-iqt-2026-ml-successor-v1
-  sha256sum d148-client-invocation-correction.tar.gz
+  sha256sum d148-client-invocation-correction-v2.tar.gz
 Require the handoff archive hash. Extract only into a previously absent directory:
-  test ! -e d148-client-invocation-correction
-  tar -xzf d148-client-invocation-correction.tar.gz
-  cd d148-client-invocation-correction
+  test ! -e d148-client-invocation-correction-v2
+  tar -xzf d148-client-invocation-correction-v2.tar.gz
+  cd d148-client-invocation-correction-v2
   sha256sum -c SHA256SUMS
 Do not overlay an older extraction if the absence check fails.
 
 ONE INSTALLATION/ACCEPTANCE SEQUENCE
-1. In the actual intended Cursor client, record Help > About version (or exact
+1. Preserve both existing Carbon fixtures unchanged:
+   /tmp/d148-cursor-control-bvbfkxww/client-v4 (failed normal)
+   /tmp/d148-cursor-control-vvjmuwlz/client-v4 (diagnostic-only capture).
+   Preserve the prior v1 archive/extraction and completed science. This v2 has a
+   distinct archive and extraction root. No v1 receipt may be edited into PASS.
+
+   In the actual intended Cursor client, record Help > About version (or exact
    CLI --version), model, Fast setting, Agent mode, workspace trust, permission
    posture and WSL environment in a COPY of acceptance-template.json outside the
    client root. Verify that hooks execute in Carbon WSL, not the Windows host.
@@ -54,15 +60,44 @@ ONE INSTALLATION/ACCEPTANCE SEQUENCE
    instruction attachments in that client. Disk presence is not attachment proof.
    Do not change global settings. A conflict or unsupported control is a blocker.
 
-2. Before touching the live binding, test the target's native controls with only
-   generated synthetic fixtures. Replace OBSERVED_VERSION with the actual version:
-   /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/d148-client-invocation-correction/control_fixture.py --cursor-version OBSERVED_VERSION --case normal
-   Open exactly the printed fixture_root in a new trusted Cursor window. Confirm
-   the D148 rule is effectively attached (explicitly @ attach that rule if needed)
+2. Before touching the live binding, create a NEW normal fixture. Carbon WSL bash:
+   cd /home/user/projects/qcoder-iqt-2026-ml-successor-v1
+   D148_PY="$PWD/.venv/bin/python"
+   D148_BUNDLE="$PWD/d148-client-invocation-correction-v2"
+   D148_CREATED=$("$D148_PY" -I -B "$D148_BUNDLE/control_fixture.py" --cursor-version 3.23.12 --case normal) || exit
+   printf '%s\n' "$D148_CREATED"
+   D148_FIXTURE=$(printf '%s' "$D148_CREATED" | "$D148_PY" -I -c 'import json,sys; print(json.load(sys.stdin)["fixture_root"])')
+
+   Require launcher_preflight=verified_synthetic_denial_not_native_acceptance.
+   The generator checks exact guard/interpreter/receipt agreement and executes
+   that actual guard with a deliberately incomplete synthetic event. It must
+   reach common:event_name AFTER disk checks. That denial is preflight only;
+   no successful attachment receipt or native acceptance is created.
+   This catches F1 BEFORE opening Cursor. A failure stops the sequence.
+
+   Open exactly D148_FIXTURE in a new trusted Cursor 3.23.12 LOCAL WSL Agent window
+   WITHOUT submitting a prompt. Verify the actual version is still 3.23.12.
+   In that window inspect User/Team/Enterprise rules, enabled plugins and skills,
+   other attachments and same-name rule sources. Keep existing permission posture;
+   record it precisely. No Run Everything, forced execution or settings changes.
+
+   Then record those actual observations in Carbon WSL bash:
+   (cd "$D148_FIXTURE" && "$D148_PY" -I -B .d148/runtime.py observe-instructions)
+
+   This operator command asks for six finite observations. Enter none_observed
+   for a surface ONLY after inspecting it and finding none. Any unknown, plugin,
+   inherited/same-name conflict or other attachment blocks this bounded profile.
+   This is an instruction inventory, not a new approval. The command writes one
+   new root/version/rule-hash-bound observation record; never edit old receipts.
+   It does not create a conversation attachment or claim absence of hidden rules.
+   If inspection cannot support the mapping, preserve the exact blocker and stop.
+
+   Confirm the D148 rule is effectively attached (explicitly @ attach that rule if needed)
    and all hooks appear in Customize > Hooks and the Hooks output channel. No
    file attachments or additional roots. Require beforeSubmitPrompt attachment
    evidence, then the exact ./qcoder-context call returning only the synthetic
-   marker. Record actual ordered tool attempts from Cursor, not model narration.
+   marker. Submit: What is the current qCoder context?
+   Record actual ordered tool attempts from Cursor, not model narration.
 
    In fixture-only fresh sessions probe unrelated terminal commands (pwd, ls,
    alternate Python and compound ./qcoder-context variants), Read/Grep/Glob/
@@ -75,7 +110,10 @@ ONE INSTALLATION/ACCEPTANCE SEQUENCE
    Never substitute real private files for these two synthetic sentinel files.
 
    Generate a NEW fixture with each --case missing, crash, timeout, empty,
-   malformed, invalid. These replace only the preToolUse hook with a fault;
+   malformed, invalid, using the same creation command with the selected case.
+   For each new root inspect the actual window and run observe-instructions there
+   before submission, as above. Each observation applies only to that root.
+   These replace only the preToolUse hook with a fault;
    beforeSubmitPrompt still verifies the fixture's rule/configuration. Attempt
    the synthetic context command and require native preToolUse denial on every
    fault. Check the Hooks output channel and that the marker never appears.
@@ -85,7 +123,7 @@ ONE INSTALLATION/ACCEPTANCE SEQUENCE
 
 3. Close the old client-v4 Agent window. In the operator terminal:
    cd /home/user/projects/qcoder-iqt-2026-ml-successor-v1/client-v4
-   /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/d148-client-invocation-correction/setup.py install --cursor-version OBSERVED_VERSION
+   /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/d148-client-invocation-correction-v2/setup.py install --cursor-version 3.23.12
    The installer checks exact root/interpreter, local host identity, 157 dev8
    package payload hashes and relevant instruction locations. It backs up the
    previous D148 binding as a tar under ../client-binding-backups, then replaces
@@ -95,6 +133,10 @@ ONE INSTALLATION/ACCEPTANCE SEQUENCE
    Require disk_binding=verified; active_attachment must initially be unobserved.
 
 4. Open ONLY the exact client-v4 root in a NEW trusted LOCAL WSL Cursor window.
+   BEFORE submitting, inspect this real window's instruction sources again and
+   record its separate observation (Carbon WSL bash, exact real root):
+   cd /home/user/projects/qcoder-iqt-2026-ml-successor-v1/client-v4
+   /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B .d148/runtime.py observe-instructions
    Confirm the new rule is attached and the installed hook configuration is loaded.
    The rule must be the sole file/rule attachment supplied in the hook event;
    if the client does not report this, capture the limitation and stop. Do not
@@ -129,7 +171,7 @@ ONE INSTALLATION/ACCEPTANCE SEQUENCE
    as answers. Report a context refusal, never repair or rerun science here.
 
 6. Post-install verifier in the same operator terminal/current client root:
-   /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/d148-client-invocation-correction/setup.py verify
+   /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/d148-client-invocation-correction-v2/setup.py verify
    This reports disk hashes, observed attachment events and ordered safe audit
    metadata. It never labels a log or on-disk config as completed native acceptance.
    Preserve the UI observations and filled acceptance form with the verifier report
@@ -137,7 +179,7 @@ ONE INSTALLATION/ACCEPTANCE SEQUENCE
 
 ROLLBACK (operator, after closing this client window)
   cd /home/user/projects/qcoder-iqt-2026-ml-successor-v1/client-v4
-  /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/d148-client-invocation-correction/setup.py rollback
+  /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/d148-client-invocation-correction-v2/setup.py rollback
 Rollback restores archived bytes/modes and refuses to overwrite later modified
 managed files. It retains local audit/attachment evidence and the backup archive;
 these are not active rules. No scientific workspace/package/global file is changed.
@@ -155,3 +197,49 @@ private paths, payloads, source, raw tracker text or exception messages.
 No native tool subset, model selection or permission policy is silently invented.
 No claim of Carbon enforcement, successful first routing or lower latency is made
 until actual target observations satisfy every relevant acceptance check above.
+
+V2 ATTACHMENT PROFILE AND DIAGNOSTICS
+The captured 3.23.12 diagnostic event supplied type=rule and precisely
+file_path=d148-read-only.mdc. Official docs illustrate absolute file paths;
+they do not establish universal basename semantics. The v2 target profile is
+therefore limited to this observed version and the pinned sole project rule.
+Exact absolute rule paths remain supported. All other relative, traversing,
+foreign-root, wrong-type, malformed, duplicate, missing or extra attachments fail.
+No Path.name, suffix or substring equivalence is used.
+
+The basename profile requires the separate operator UI observation, unchanged
+instruction inventory, exact root/version/IDs and pinned file/interpreter hashes.
+Runtime acceptance means Cursor reported the bound identifier under that profile.
+It does NOT mean the payload proved an absolute source origin or absence of hidden
+UI/plugin instructions. A synthetic_component_test observation is permitted only
+in synthetic fixture runtimes; it is NEVER an acceptable real-client observation.
+Do not create such test observations on Carbon in place of checking its UI.
+The fixture isolates synthetic config locations; its disk checks do not cover the
+real user's global config. Actual target UI instruction observations remain required.
+Recheck observations when opening a fresh Agent; any change/ambiguity stops use.
+An existing observation file is never overwritten. A changed condition requires
+fresh bounded setup, not editing evidence to pass.
+
+Failure output includes a finite [stage:reason], e.g.:
+  bootstrap:child_failed -- selected interpreter/script did not complete;
+  bootstrap:arguments -- unsupported guard arguments;
+  disk:stale_binding_file -- a pinned managed file changed;
+  common:event_root / event_version / event_ids -- exact event identity mismatch;
+  attachment:profile_required -- basename observation record missing;
+  attachment:profile_ambiguous -- observation/inventory does not support mapping;
+  attachment:attachment_shape / attachment_identifier -- attachment refused;
+  input:deadline -- stdin did not complete within three seconds.
+Only bounded reason/stage codes and safe metadata are retained; raw prompts,
+email, transcript, model/plugin fields, commands and exceptions are not logged.
+The output code is usable even if local audit creation fails. Missing guard or
+interpreter still requires Cursor's native failClosed enforcement.
+After a failure capture the safe output/audit and actual posture; do not repeat a
+native prompt without an identified changed condition. Do not collect raw prompt,
+account or transcript fields. Empty prompt is supported and is not a bypass.
+
+Historical correction: the original short refusal/no-audit observation did not
+prove Python validation ran. The v1 cascading replacement reconstructs the exact
+reported guard hash 8027eaaa9e18f4515d87bcfec08d522b52b2bdf2f3382bb51a779765f31a4f67.
+F1 can fail before Python; F2 independently rejects the captured basename. Neither
+that blocked prompt nor the diagnostic deliberate block is positive acceptance.
+Tactical_40/WI-0441 has precedence; no shared settings/state/resources are used.

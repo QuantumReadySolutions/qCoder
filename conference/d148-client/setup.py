@@ -98,7 +98,7 @@ def install(cursor_version):
             p.write_bytes(r.regular(HERE/source))
             p.chmod(0o755 if name in ('qcoder-context','.d148/guard') else 0o600)
             written.append(name)
-        receipt = {'schema':'d148.client_binding.v1', 'root':str(r.ROOT),
+        receipt = {'schema':'d148.client_binding.v2', 'root':str(r.ROOT),
                    'workspace':str(r.WORKSPACE), 'python':str(r.PYTHON),
                    'python_resolved':str(r.PYTHON.resolve()), 'python_sha256':r.digest(r.PYTHON.read_bytes()),
                    'host_id':r.host_id(), 'cursor_version':cursor_version,
@@ -165,7 +165,8 @@ def verify():
     if path.exists():
         observed = [json.loads(line) for line in r.regular(path).splitlines()]
     return {'disk_binding':'verified', 'cursor_version':receipt['cursor_version'],
-            'active_attachment':'observed_in_hook_event' if any(x.get('attachment_observed') for x in observed) else 'unobserved',
+            'active_attachment':'identifier_reported_in_hook_event' if any(x.get('attachment_observed') for x in observed) else 'unobserved',
+            'source_origin':'not_established_by_basename_payload',
             'ordered_events':observed, 'native_enforcement':'requires isolated client acceptance',
             'global_ui_team_instructions':'operator observation required; not inferred from disk',
             'scientific_state_accessed':False}

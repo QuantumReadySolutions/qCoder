@@ -1,0 +1,277 @@
+{
+  "kind": "installed_native_engine_component_test_not_Agent_acceptance",
+  "client_build": "2026.08.11-e8db854",
+  "index_sha256": "f6fd4e6bf3d6ecbf66cc2dcabcf708b8a7c37b400d10c82a58658b5e331c36d0",
+  "engine_chunk_sha256": "32b23d09b01bd346ffcca5fae8da5fdabac6d97d025a0ab5151ee2d9c97516cd",
+  "native_schema_accepted": true,
+  "exact_configuration_failClosed": true,
+  "assembled_synthetic_controls": [
+    {
+      "case": "normal",
+      "synthetic_submit_allowed": true,
+      "context_action": "allow",
+      "marker_executed": true,
+      "launcher_preflight": "verified_synthetic_denial_not_native_acceptance"
+    },
+    {
+      "case": "missing",
+      "synthetic_submit_allowed": true,
+      "context_action": "deny",
+      "marker_executed": false,
+      "launcher_preflight": "verified_synthetic_denial_not_native_acceptance"
+    },
+    {
+      "case": "crash",
+      "synthetic_submit_allowed": true,
+      "context_action": "deny",
+      "marker_executed": false,
+      "launcher_preflight": "verified_synthetic_denial_not_native_acceptance"
+    },
+    {
+      "case": "timeout",
+      "synthetic_submit_allowed": true,
+      "context_action": "deny",
+      "marker_executed": false,
+      "launcher_preflight": "verified_synthetic_denial_not_native_acceptance"
+    },
+    {
+      "case": "empty",
+      "synthetic_submit_allowed": true,
+      "context_action": "deny",
+      "marker_executed": false,
+      "launcher_preflight": "verified_synthetic_denial_not_native_acceptance"
+    },
+    {
+      "case": "malformed",
+      "synthetic_submit_allowed": true,
+      "context_action": "deny",
+      "marker_executed": false,
+      "launcher_preflight": "verified_synthetic_denial_not_native_acceptance"
+    },
+    {
+      "case": "invalid",
+      "synthetic_submit_allowed": true,
+      "context_action": "deny",
+      "marker_executed": false,
+      "launcher_preflight": "verified_synthetic_denial_not_native_acceptance"
+    }
+  ],
+  "failures": [
+    {
+      "event": "preToolUse",
+      "failure": "missing",
+      "blocked": true
+    },
+    {
+      "event": "preToolUse",
+      "failure": "crash",
+      "blocked": true
+    },
+    {
+      "event": "preToolUse",
+      "failure": "timeout",
+      "blocked": true
+    },
+    {
+      "event": "preToolUse",
+      "failure": "empty",
+      "blocked": true
+    },
+    {
+      "event": "preToolUse",
+      "failure": "malformed",
+      "blocked": true
+    },
+    {
+      "event": "preToolUse",
+      "failure": "invalid",
+      "blocked": true
+    },
+    {
+      "event": "beforeShellExecution",
+      "failure": "missing",
+      "blocked": true
+    },
+    {
+      "event": "beforeShellExecution",
+      "failure": "crash",
+      "blocked": true
+    },
+    {
+      "event": "beforeShellExecution",
+      "failure": "timeout",
+      "blocked": true
+    },
+    {
+      "event": "beforeShellExecution",
+      "failure": "empty",
+      "blocked": true
+    },
+    {
+      "event": "beforeShellExecution",
+      "failure": "malformed",
+      "blocked": true
+    },
+    {
+      "event": "beforeShellExecution",
+      "failure": "invalid",
+      "blocked": true
+    },
+    {
+      "event": "beforeReadFile",
+      "failure": "missing",
+      "blocked": true
+    },
+    {
+      "event": "beforeReadFile",
+      "failure": "crash",
+      "blocked": true
+    },
+    {
+      "event": "beforeReadFile",
+      "failure": "timeout",
+      "blocked": true
+    },
+    {
+      "event": "beforeReadFile",
+      "failure": "empty",
+      "blocked": true
+    },
+    {
+      "event": "beforeReadFile",
+      "failure": "malformed",
+      "blocked": true
+    },
+    {
+      "event": "beforeReadFile",
+      "failure": "invalid",
+      "blocked": true
+    },
+    {
+      "event": "beforeMCPExecution",
+      "failure": "missing",
+      "blocked": true
+    },
+    {
+      "event": "beforeMCPExecution",
+      "failure": "crash",
+      "blocked": true
+    },
+    {
+      "event": "beforeMCPExecution",
+      "failure": "timeout",
+      "blocked": true
+    },
+    {
+      "event": "beforeMCPExecution",
+      "failure": "empty",
+      "blocked": true
+    },
+    {
+      "event": "beforeMCPExecution",
+      "failure": "malformed",
+      "blocked": true
+    },
+    {
+      "event": "beforeMCPExecution",
+      "failure": "invalid",
+      "blocked": true
+    },
+    {
+      "event": "subagentStart",
+      "failure": "missing",
+      "blocked": true
+    },
+    {
+      "event": "subagentStart",
+      "failure": "crash",
+      "blocked": true
+    },
+    {
+      "event": "subagentStart",
+      "failure": "timeout",
+      "blocked": true
+    },
+    {
+      "event": "subagentStart",
+      "failure": "empty",
+      "blocked": true
+    },
+    {
+      "event": "subagentStart",
+      "failure": "malformed",
+      "blocked": true
+    },
+    {
+      "event": "subagentStart",
+      "failure": "invalid",
+      "blocked": true
+    },
+    {
+      "event": "beforeTabFileRead",
+      "failure": "missing",
+      "blocked": true
+    },
+    {
+      "event": "beforeTabFileRead",
+      "failure": "crash",
+      "blocked": true
+    },
+    {
+      "event": "beforeTabFileRead",
+      "failure": "timeout",
+      "blocked": true
+    },
+    {
+      "event": "beforeTabFileRead",
+      "failure": "empty",
+      "blocked": true
+    },
+    {
+      "event": "beforeTabFileRead",
+      "failure": "malformed",
+      "blocked": true
+    },
+    {
+      "event": "beforeTabFileRead",
+      "failure": "invalid",
+      "blocked": true
+    },
+    {
+      "event": "beforeSubmitPrompt",
+      "failure": "missing",
+      "blocked": true
+    },
+    {
+      "event": "beforeSubmitPrompt",
+      "failure": "crash",
+      "blocked": true
+    },
+    {
+      "event": "beforeSubmitPrompt",
+      "failure": "timeout",
+      "blocked": true
+    },
+    {
+      "event": "beforeSubmitPrompt",
+      "failure": "empty",
+      "blocked": true
+    },
+    {
+      "event": "beforeSubmitPrompt",
+      "failure": "malformed",
+      "blocked": true
+    },
+    {
+      "event": "beforeSubmitPrompt",
+      "failure": "invalid",
+      "blocked": true
+    }
+  ],
+  "allow_controls": 7,
+  "omitted_failClosed_control": "fails_open_as_expected",
+  "model": null,
+  "mode": null,
+  "provider_calls": 0,
+  "scientific_jobs": 0
+}

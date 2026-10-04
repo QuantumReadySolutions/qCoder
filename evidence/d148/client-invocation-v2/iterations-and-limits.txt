@@ -1,0 +1,31 @@
+The first new test harness substituted an apostrophe-containing source base inside
+Python literals, failing in the harness before any source defect. Corrected the
+fixture to substitute a simple disposable source root and added a separate real
+shell-quoting regression. The retained red-regressions.txt is the subsequent valid
+baseline: outside-source Python reaches the absolute-only rejection; inside-source
+Python fails with wrapper exit 2. No source fix preceded that red run.
+
+The native engine harness initially used Node spawnSync for fixture creation.
+This environment returned EPERM from spawnSync even though a minimal child printed
+its Python version. The failed diagnostic is retained in native-hook-engine-stderr.txt.
+Switched that harness step to asynchronous execFile, consistent with the already
+working async native shell adapter. No sandbox/global setting was changed. The
+final native-hook-engine.json is a successful run on the extracted v2 payload.
+
+Synthetic component observations, IDs and roots are constructed test data. No
+actual prompts, account values, raw IDs or transcripts from Carbon were collected.
+The shape fixture uses an empty prompt; arbitrary model/plugin fields are ignored
+and absent from operational logs. IDs are hashed in safe audit rows.
+
+Existing test scope alone: 33 unchanged backend context regressions and two real
+installed-dev8 integration tests use disposable synthetic data/local trackers;
+no canonical training/evaluation, model replay, existing tracker mutation or new
+pytest-evidence adapter. The installed proof uses a new /tmp environment and the
+unchanged wheel; dependencies are reused from the isolated conference environment.
+Temporary fixtures/proof environment remain in /tmp for inspection; no persistent
+server/provider or background Agent was started. Carbon was not accessed.
+
+Tactical_40/WI-0441 has precedence. Only git worktree metadata was consulted to
+verify the conference checkout; no other worktree source/state was inspected.
+D147, accepted video, scientific/package authority and global Cursor settings
+remain outside the correction. No independent review or external-demo approval.
