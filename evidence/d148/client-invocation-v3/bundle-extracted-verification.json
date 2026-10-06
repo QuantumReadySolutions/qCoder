@@ -1,0 +1,52 @@
+{
+  "proof_root": "/tmp/d148-client-v3-bundle-proof-0poms5la",
+  "archive": "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/client-invocation-v3/d148-client-invocation-correction-v3.tar.gz",
+  "bytes": 28530,
+  "sha256": "7f204b99df61bea1940e3ce15d4ff105075937ebb7c4257f4b1789845a3f06fe",
+  "deterministic_repeat": true,
+  "members": 13,
+  "member_checks": [
+    "CARBON-INSTALL.txt: OK",
+    "acceptance-template.json: OK",
+    "binding.mdc: OK",
+    "control_fixture.py: OK",
+    "cursorignore: OK",
+    "guard: OK",
+    "hooks.json: OK",
+    "package.json: OK",
+    "payload.json: OK",
+    "qcoder-context: OK",
+    "runtime.py: OK",
+    "setup.py: OK"
+  ],
+  "operator_command": [
+    "../.venv/bin/python",
+    "-I",
+    "-B",
+    "control_fixture.py",
+    "--cursor-version",
+    "3.23.12",
+    "--case",
+    "normal"
+  ],
+  "cwd": "/tmp/d148-client-v3-bundle-proof-0poms5la/d148-client-invocation-correction-v3",
+  "created": {
+    "fixture_root": "/tmp/d148-cursor-control-rhi9dy7w/client-v4",
+    "case": "normal",
+    "scientific_state_accessed": false,
+    "expected_context": "D148_SYNTHETIC_CONTEXT_ONLY",
+    "acceptance": "unobserved",
+    "launcher_preflight": "verified_synthetic_denial_not_native_acceptance",
+    "instruction_observation": "required_for_basename"
+  },
+  "recorded_python": "/tmp/d148-client-v3-bundle-proof-0poms5la/.venv/bin/python",
+  "recorded_python_resolved": "/usr/bin/python3.12",
+  "guard_rc": 0,
+  "guard_result": {
+    "continue": false,
+    "user_message": "Read-only context unavailable or inconsistent; no discovery or execution fallback. [common:event_name]"
+  },
+  "attachment_receipts": 0,
+  "synthetic_workspace_empty": true,
+  "production_binding_files_unchanged": true
+}

@@ -1,0 +1,50 @@
+[
+  {
+    "root": "/tmp/d148-client-v3-red-hiv0vR/d148-cursor-control-howike3l/client-v4",
+    "recorded_python": "/tmp/d148-client-v3-red-hiv0vR/pytest-of-rob/pytest-0/test_lexical_venv_guard_prefli14/source/extracted-v3/../venv space's/bin/python",
+    "child_python": "/tmp/d148-client-v3-red-hiv0vR/pytest-of-rob/pytest-0/test_lexical_venv_guard_prefli14/source/venv space's/bin/python",
+    "python_resolved": "/usr/bin/python3.12",
+    "guard_rc": 0,
+    "guard": {
+      "continue": false,
+      "user_message": "Read-only context unavailable or inconsistent; no discovery or execution fallback. [disk:wrong_interpreter]"
+    },
+    "attachments": 0
+  },
+  {
+    "root": "/tmp/d148-client-v3-red-hiv0vR/d148-cursor-control-laj8b3mf/client-v4",
+    "recorded_python": "/tmp/d148-client-v3-red-hiv0vR/pytest-of-rob/pytest-0/test_lexical_venv_guard_prefli15/external/extracted-v3/../venv space's/bin/python",
+    "child_python": "/tmp/d148-client-v3-red-hiv0vR/pytest-of-rob/pytest-0/test_lexical_venv_guard_prefli15/external/venv space's/bin/python",
+    "python_resolved": "/usr/bin/python3.12",
+    "guard_rc": 0,
+    "guard": {
+      "continue": false,
+      "user_message": "Read-only context unavailable or inconsistent; no discovery or execution fallback. [disk:wrong_interpreter]"
+    },
+    "attachments": 0
+  },
+  {
+    "root": "/tmp/d148-client-v3-red-hiv0vR/d148-cursor-control-o14fzhjn/client-v4",
+    "recorded_python": "/tmp/d148-client-v3-red-hiv0vR/pytest-of-rob/pytest-0/test_lexical_venv_guard_prefli6/source/extracted-v3/../.venv/bin/python",
+    "child_python": "/tmp/d148-client-v3-red-hiv0vR/pytest-of-rob/pytest-0/test_lexical_venv_guard_prefli6/source/.venv/bin/python",
+    "python_resolved": "/usr/bin/python3.12",
+    "guard_rc": 0,
+    "guard": {
+      "continue": false,
+      "user_message": "Read-only context unavailable or inconsistent; no discovery or execution fallback. [disk:wrong_interpreter]"
+    },
+    "attachments": 0
+  },
+  {
+    "root": "/tmp/d148-client-v3-red-hiv0vR/d148-cursor-control-rs7n0ko6/client-v4",
+    "recorded_python": "/tmp/d148-client-v3-red-hiv0vR/pytest-of-rob/pytest-0/test_lexical_venv_guard_prefli7/external/extracted-v3/../.venv/bin/python",
+    "child_python": "/tmp/d148-client-v3-red-hiv0vR/pytest-of-rob/pytest-0/test_lexical_venv_guard_prefli7/external/.venv/bin/python",
+    "python_resolved": "/usr/bin/python3.12",
+    "guard_rc": 0,
+    "guard": {
+      "continue": false,
+      "user_message": "Read-only context unavailable or inconsistent; no discovery or execution fallback. [disk:wrong_interpreter]"
+    },
+    "attachments": 0
+  }
+]

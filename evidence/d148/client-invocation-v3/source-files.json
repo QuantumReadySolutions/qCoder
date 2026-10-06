@@ -1,0 +1,22 @@
+{
+  "conference/d148-client/CARBON-INSTALL.txt": {
+    "bytes": 18060,
+    "sha256": "f20dc172ccc856d949ed4310c1a2d9363fdf26ce28e03302e0e46a5b7b765ce2",
+    "git_blob": "ea88945ecac97f04eadea8e8c35c40118c8a011e"
+  },
+  "conference/d148-client/control_fixture.py": {
+    "bytes": 6168,
+    "sha256": "1f70827c0552d2341834170c6db79ba611a802308ab3f2f8db64bff2427a70d0",
+    "git_blob": "a0a18deec8e61727dba90921d9f7c874597517ea"
+  },
+  "scripts/build_d148_client_bundle.py": {
+    "bytes": 2665,
+    "sha256": "818af23e55e6de08b3691842d8e5d5ff5fa790d16bc13f706210f08dddba0ca4",
+    "git_blob": "2eb235c9c52626e15fbb71c56ddb807ea22b5afa"
+  },
+  "tests/client_invocation/test_lexical_interpreter.py": {
+    "bytes": 6536,
+    "sha256": "9c9d995d4441222096c8c4d4f8950a3e369c269f333ec6ce22f025088cb366d1",
+    "git_blob": "a00a5e23bf4504f7dc6f1c10f236672396db6793"
+  }
+}

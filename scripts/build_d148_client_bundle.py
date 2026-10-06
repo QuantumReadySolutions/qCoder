@@ -19,11 +19,11 @@ def build(source, destination):
     files['SHA256SUMS'] = ''.join(hashlib.sha256(value).hexdigest()+'  '+name+'\n'
                                   for name,value in sorted(files.items())).encode()
     destination.mkdir(parents=True,exist_ok=True)
-    archive=destination/'d148-client-invocation-correction-v2.tar.gz'
+    archive=destination/'d148-client-invocation-correction-v3.tar.gz'
     stream=io.BytesIO()
     with tarfile.open(fileobj=stream,mode='w',format=tarfile.USTAR_FORMAT) as tar:
         for name,value in sorted(files.items()):
-            item=tarfile.TarInfo('d148-client-invocation-correction-v2/'+name)
+            item=tarfile.TarInfo('d148-client-invocation-correction-v3/'+name)
             item.size=len(value);item.mtime=1790899200
             item.mode=0o755 if name in ('guard','qcoder-context') else 0o644
             tar.addfile(item,io.BytesIO(value))
@@ -40,7 +40,7 @@ def build(source, destination):
         assert len(tar.getmembers())==len(files)
         for member in tar:
             assert member.isfile()
-            name=member.name.removeprefix('d148-client-invocation-correction-v2/')
+            name=member.name.removeprefix('d148-client-invocation-correction-v3/')
             assert tar.extractfile(member).read()==files[name]
     return receipt
 

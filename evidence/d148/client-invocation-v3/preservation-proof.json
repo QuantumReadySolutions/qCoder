@@ -1,0 +1,31 @@
+{
+  "prior_tracked_files": 681,
+  "changed_prior_files": [
+    "conference/d148-client/CARBON-INSTALL.txt",
+    "conference/d148-client/control_fixture.py",
+    "scripts/build_d148_client_bundle.py"
+  ],
+  "unchanged_prior_files": 678,
+  "prior_v1_v2_evidence_preserved": true,
+  "production_binding_runtime_guard_setup_preserved": true,
+  "backend_scientific_package_source_preserved": true,
+  "artifact_identities_unchanged": {
+    "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/client-invocation-v1/d148-client-invocation-correction.tar.gz": {
+      "bytes": 23756,
+      "sha256": "9dcbd4113ef6f231ea33b761624de06312a92d828b5af505aecb69cd2ad9472f"
+    },
+    "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/client-invocation-v2/d148-client-invocation-correction-v2.tar.gz": {
+      "bytes": 27945,
+      "sha256": "99c95dce7d4f6642472b3d7d8264428af75013f4c39bacede32610771fceeee0"
+    },
+    "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/packages-v5/qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5-py3-none-any.whl": {
+      "bytes": 731491,
+      "sha256": "36818af120efa83b32cd6b1cf9101f06e308974b3a43a92ae16f2a23f49d7016"
+    }
+  },
+  "carbon_accessed": false,
+  "canonical_science_run": false,
+  "existing_mlflow_state_mutated": false,
+  "provider_calls": 0,
+  "wi0441_source_state_resources_used": false
+}

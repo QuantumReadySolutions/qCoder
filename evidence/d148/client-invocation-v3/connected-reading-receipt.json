@@ -1,0 +1,58 @@
+{
+  "date": "2026-10-05",
+  "method": "connected GitHub fetch_file complete reads; exact-ref blobs checked against local files",
+  "work_order": {
+    "repository": "QuantumReadySolutions/qcoder-internal",
+    "commit": "504c8438045f2319e5b0fa2fbd9d765636208248",
+    "path": "docs/private-notes/tactical-conference-coordination/iqt-2026-d148-carbon-lexical-interpreter-correction-work-order-20261005.md",
+    "blob": "d2ed9c259cb19ffc7a8e63c6fe100ef613eeb843",
+    "read": "complete"
+  },
+  "authority": {
+    "repository": "QuantumReadySolutions/qcoder-internal",
+    "commit": "935af4d9fd3d5cf1e30c45a21757ab4ffb7ffd8d",
+    "path": "docs/private-notes/strategic-authorizations/qcoder-iqt-2026-ml-research-successor-implementation-and-proof-v1.md",
+    "blob": "b76bc9ac764c9dadf3e8ed93cb166a15c321841e",
+    "read": "complete"
+  },
+  "implementation": {
+    "repository": "QuantumReadySolutions/qCoder",
+    "branch": "conference/iqt-2026-ml-research-successor-v1",
+    "head": "efc801a4d8bd0f65a5008b8f966527ddb19d26bd",
+    "tree": "5853d2823cf9aee4ab3de80593dcbb46b477dfca",
+    "parent": "beeb1eb0b0178e6db9882187e83931b8547403f1",
+    "files": [
+      {
+        "path": "evidence/d148/client-invocation-v2/RETURN.txt",
+        "blob": "69823cb01abf6193702ec90acad09a3c1870452a",
+        "read": "complete"
+      },
+      {
+        "path": "conference/d148-client/control_fixture.py",
+        "blob": "e1fd8fafdce358d12a40ab71a25eee5a1570a78f",
+        "read": "complete"
+      },
+      {
+        "path": "conference/d148-client/runtime.py",
+        "blob": "4d319cfe559bde07fc1ff07507b519052df95879",
+        "read": "complete"
+      },
+      {
+        "path": "conference/d148-client/guard",
+        "blob": "c5df19d0f4fc4e1d00a1ed7f5f6b4d15565216e5",
+        "read": "complete"
+      },
+      {
+        "path": "tests/client_invocation/test_carbon_correction.py",
+        "blob": "e0448dbbaa7265ce54326ac125144e72ca73cc14",
+        "read": "complete"
+      },
+      {
+        "path": "conference/d148-client/CARBON-INSTALL.txt",
+        "blob": "2e0d316c985ba9806175650d094d0cb0b8fd52ff",
+        "read": "complete"
+      }
+    ]
+  },
+  "isolation": "Existing dedicated conference worktree; no applicable AGENTS.md; initial checkout clean; remote branch verified with git ls-remote. Tactical_40/WI-0441 precedence; no other worktree source/state/provider/credentials/quota/locks/review capacity used."
+}

@@ -1,0 +1,45 @@
+Exact unchanged efc801a source in /tmp/d148-client-v3-baseline-am_8f6nn
+......FF........FF........                                               [100%]
+=================================== FAILURES ===================================
+_______ test_lexical_venv_guard_preflight[plain-relative_parent-inside] ________
+tests/client_invocation/test_lexical_interpreter.py:53: in test_lexical_venv_guard_preflight
+    root, python, created = fixture_through_venv(tmp_path, placement, spelling, quoted)
+tests/client_invocation/test_lexical_interpreter.py:44: in fixture_through_venv
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: {"status": "refused", "stage": "preflight", "reason": "launcher_or_disk_verification_failed"}
+E
+E   assert 2 == 0
+E    +  where 2 = CompletedProcess(args=['../.venv/bin/python', '-I', '-B', '/tmp/pytest-of-rob/pytest-205/test_lexical_venv_guard_prefl...2, stdout='{"status": "refused", "stage": "preflight", "reason": "launcher_or_disk_verification_failed"}\n', stderr='').returncode
+_______ test_lexical_venv_guard_preflight[plain-relative_parent-outside] _______
+tests/client_invocation/test_lexical_interpreter.py:53: in test_lexical_venv_guard_preflight
+    root, python, created = fixture_through_venv(tmp_path, placement, spelling, quoted)
+tests/client_invocation/test_lexical_interpreter.py:44: in fixture_through_venv
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: {"status": "refused", "stage": "preflight", "reason": "launcher_or_disk_verification_failed"}
+E
+E   assert 2 == 0
+E    +  where 2 = CompletedProcess(args=['../.venv/bin/python', '-I', '-B', '/tmp/pytest-of-rob/pytest-205/test_lexical_venv_guard_prefl...2, stdout='{"status": "refused", "stage": "preflight", "reason": "launcher_or_disk_verification_failed"}\n', stderr='').returncode
+_ test_lexical_venv_guard_preflight[spaces_apostrophe-relative_parent-inside] __
+tests/client_invocation/test_lexical_interpreter.py:53: in test_lexical_venv_guard_preflight
+    root, python, created = fixture_through_venv(tmp_path, placement, spelling, quoted)
+tests/client_invocation/test_lexical_interpreter.py:44: in fixture_through_venv
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: {"status": "refused", "stage": "preflight", "reason": "launcher_or_disk_verification_failed"}
+E
+E   assert 2 == 0
+E    +  where 2 = CompletedProcess(args=["../venv space's/bin/python", '-I', '-B', '/tmp/pytest-of-rob/pytest-205/test_lexical_venv_guar...2, stdout='{"status": "refused", "stage": "preflight", "reason": "launcher_or_disk_verification_failed"}\n', stderr='').returncode
+_ test_lexical_venv_guard_preflight[spaces_apostrophe-relative_parent-outside] _
+tests/client_invocation/test_lexical_interpreter.py:53: in test_lexical_venv_guard_preflight
+    root, python, created = fixture_through_venv(tmp_path, placement, spelling, quoted)
+tests/client_invocation/test_lexical_interpreter.py:44: in fixture_through_venv
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: {"status": "refused", "stage": "preflight", "reason": "launcher_or_disk_verification_failed"}
+E
+E   assert 2 == 0
+E    +  where 2 = CompletedProcess(args=["../venv space's/bin/python", '-I', '-B', '/tmp/pytest-of-rob/pytest-205/test_lexical_venv_guar...2, stdout='{"status": "refused", "stage": "preflight", "reason": "launcher_or_disk_verification_failed"}\n', stderr='').returncode
+=========================== short test summary info ============================
+FAILED tests/client_invocation/test_lexical_interpreter.py::test_lexical_venv_guard_preflight[plain-relative_parent-inside]
+FAILED tests/client_invocation/test_lexical_interpreter.py::test_lexical_venv_guard_preflight[plain-relative_parent-outside]
+FAILED tests/client_invocation/test_lexical_interpreter.py::test_lexical_venv_guard_preflight[spaces_apostrophe-relative_parent-inside]
+FAILED tests/client_invocation/test_lexical_interpreter.py::test_lexical_venv_guard_preflight[spaces_apostrophe-relative_parent-outside]
+4 failed, 22 passed in 6.68s

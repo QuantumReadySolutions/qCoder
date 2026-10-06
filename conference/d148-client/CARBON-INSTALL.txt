@@ -1,4 +1,4 @@
-D148 client invocation correction v2 -- client-only, Carbon acceptance pending
+D148 lexical interpreter correction v3 -- client-only, Carbon acceptance pending
 
 No wheel, dependency, scientific state, service, provider or global setting changes.
 The already-installed dev8 wheel is required. Do not prepare, train, approve,
@@ -24,12 +24,12 @@ change global settings, install a new service or claim enforcement.
 
 TRANSFER -- WINDOWS POWERSHELL (two machines)
 On Precision:
-  $bundle = 'd148-client-invocation-correction-v2.tar.gz'
-  Copy-Item -LiteralPath "\\wsl.localhost\Ubuntu-22.04\home\rob\projects\qcoder-iqt-2026-ml-successor-v1\artifacts\d148\client-invocation-v2\$bundle" -Destination "D:\$bundle"
+  $bundle = 'd148-client-invocation-correction-v3.tar.gz'
+  Copy-Item -LiteralPath "\\wsl.localhost\Ubuntu-22.04\home\rob\projects\qcoder-iqt-2026-ml-successor-v1\artifacts\d148\client-invocation-v3\$bundle" -Destination "D:\$bundle"
   Get-FileHash -Algorithm SHA256 -LiteralPath "D:\$bundle"
 Compare with the exact archive SHA-256 in the evidence RETURN/final handoff.
 Move the USB to Carbon. In Carbon PowerShell:
-  $bundle = 'd148-client-invocation-correction-v2.tar.gz'
+  $bundle = 'd148-client-invocation-correction-v3.tar.gz'
   Get-FileHash -Algorithm SHA256 -LiteralPath "D:\$bundle"
   Copy-Item -LiteralPath "D:\$bundle" -Destination "\\wsl.localhost\Ubuntu-26.04\home\user\projects\qcoder-iqt-2026-ml-successor-v1\$bundle"
   wsl -d Ubuntu-26.04
@@ -37,20 +37,22 @@ No /mnt/d or Downloads staging is used.
 
 EXTRACT -- CARBON WSL OPERATOR TERMINAL
   cd /home/user/projects/qcoder-iqt-2026-ml-successor-v1
-  sha256sum d148-client-invocation-correction-v2.tar.gz
+  sha256sum d148-client-invocation-correction-v3.tar.gz
 Require the handoff archive hash. Extract only into a previously absent directory:
-  test ! -e d148-client-invocation-correction-v2
-  tar -xzf d148-client-invocation-correction-v2.tar.gz
-  cd d148-client-invocation-correction-v2
+  test ! -e d148-client-invocation-correction-v3
+  tar -xzf d148-client-invocation-correction-v3.tar.gz
+  cd d148-client-invocation-correction-v3
   sha256sum -c SHA256SUMS
 Do not overlay an older extraction if the absence check fails.
 
 ONE INSTALLATION/ACCEPTANCE SEQUENCE
-1. Preserve both existing Carbon fixtures unchanged:
+1. Preserve all existing Carbon fixtures unchanged:
    /tmp/d148-cursor-control-bvbfkxww/client-v4 (failed normal)
    /tmp/d148-cursor-control-vvjmuwlz/client-v4 (diagnostic-only capture).
-   Preserve the prior v1 archive/extraction and completed science. This v2 has a
-   distinct archive and extraction root. No v1 receipt may be edited into PASS.
+   /tmp/d148-cursor-control-fe4e93ad/client-v4 (v2 lexical-path failure).
+   Preserve both prior v1/v2 archives, extractions and evidence, and completed
+   science. This v3 has a distinct archive and extraction root. No prior receipt
+   may be edited into PASS.
 
    In the actual intended Cursor client, record Help > About version (or exact
    CLI --version), model, Fast setting, Agent mode, workspace trust, permission
@@ -61,10 +63,10 @@ ONE INSTALLATION/ACCEPTANCE SEQUENCE
    Do not change global settings. A conflict or unsupported control is a blocker.
 
 2. Before touching the live binding, create a NEW normal fixture. Carbon WSL bash:
-   cd /home/user/projects/qcoder-iqt-2026-ml-successor-v1
-   D148_PY="$PWD/.venv/bin/python"
-   D148_BUNDLE="$PWD/d148-client-invocation-correction-v2"
-   D148_CREATED=$("$D148_PY" -I -B "$D148_BUNDLE/control_fixture.py" --cursor-version 3.23.12 --case normal) || exit
+   cd /home/user/projects/qcoder-iqt-2026-ml-successor-v1/d148-client-invocation-correction-v3
+   D148_CREATED=$(../.venv/bin/python -I -B control_fixture.py --cursor-version 3.23.12 --case normal) || exit
+   D148_PY="$(cd .. && pwd)/.venv/bin/python"
+   D148_BUNDLE="$PWD"
    printf '%s\n' "$D148_CREATED"
    D148_FIXTURE=$(printf '%s' "$D148_CREATED" | "$D148_PY" -I -c 'import json,sys; print(json.load(sys.stdin)["fixture_root"])')
 
@@ -73,7 +75,12 @@ ONE INSTALLATION/ACCEPTANCE SEQUENCE
    that actual guard with a deliberately incomplete synthetic event. It must
    reach common:event_name AFTER disk checks. That denial is preflight only;
    no successful attachment receipt or native acceptance is created.
-   This catches F1 BEFORE opening Cursor. A failure stops the sequence.
+   Require the new receipt's python to equal exactly:
+   /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python
+   The v3 generator normalizes lexical . and .. once and preserves the venv path;
+   runtime, guard, receipt and byte-hash source use that exact path. The resolved
+   uv/base target is retained separately for integrity. No manual fixture repair.
+   This catches F1/F3 BEFORE opening Cursor. A failure stops the sequence.
 
    Open exactly D148_FIXTURE in a new trusted Cursor 3.23.12 LOCAL WSL Agent window
    WITHOUT submitting a prompt. Verify the actual version is still 3.23.12.
@@ -123,7 +130,7 @@ ONE INSTALLATION/ACCEPTANCE SEQUENCE
 
 3. Close the old client-v4 Agent window. In the operator terminal:
    cd /home/user/projects/qcoder-iqt-2026-ml-successor-v1/client-v4
-   /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/d148-client-invocation-correction-v2/setup.py install --cursor-version 3.23.12
+   /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/d148-client-invocation-correction-v3/setup.py install --cursor-version 3.23.12
    The installer checks exact root/interpreter, local host identity, 157 dev8
    package payload hashes and relevant instruction locations. It backs up the
    previous D148 binding as a tar under ../client-binding-backups, then replaces
@@ -171,7 +178,7 @@ ONE INSTALLATION/ACCEPTANCE SEQUENCE
    as answers. Report a context refusal, never repair or rerun science here.
 
 6. Post-install verifier in the same operator terminal/current client root:
-   /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/d148-client-invocation-correction-v2/setup.py verify
+   /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/d148-client-invocation-correction-v3/setup.py verify
    This reports disk hashes, observed attachment events and ordered safe audit
    metadata. It never labels a log or on-disk config as completed native acceptance.
    Preserve the UI observations and filled acceptance form with the verifier report
@@ -179,7 +186,7 @@ ONE INSTALLATION/ACCEPTANCE SEQUENCE
 
 ROLLBACK (operator, after closing this client window)
   cd /home/user/projects/qcoder-iqt-2026-ml-successor-v1/client-v4
-  /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/d148-client-invocation-correction-v2/setup.py rollback
+  /home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python -I -B /home/user/projects/qcoder-iqt-2026-ml-successor-v1/d148-client-invocation-correction-v3/setup.py rollback
 Rollback restores archived bytes/modes and refuses to overwrite later modified
 managed files. It retains local audit/attachment evidence and the backup archive;
 these are not active rules. No scientific workspace/package/global file is changed.
@@ -243,3 +250,16 @@ reported guard hash 8027eaaa9e18f4515d87bcfec08d522b52b2bdf2f3382bb51a779765f31a
 F1 can fail before Python; F2 independently rejects the captured basename. Neither
 that blocked prompt nor the diagnostic deliberate block is positive acceptance.
 Tactical_40/WI-0441 has precedence; no shared settings/state/resources are used.
+
+V3 LEXICAL INTERPRETER CORRECTION
+F3 was the v2 generator's raw sys.executable containing extraction/../.venv while
+its generated child normalized that lexical path. Equivalent bytes/target did not
+satisfy exact interpreter equality. This v3 changes only fixture creation: one
+os.path.abspath normalization before embedding or hashing, without resolving the
+venv symlink for interpreter identity. Production runtime/guard/setup and their
+exact interpreter, resolved-target and byte-integrity checks are unchanged.
+The binding/observation schemas and bounded v2 attachment profile remain intact.
+First require transfer/hash/member verification and the fresh normal preflight
+using the ../.venv operator command above; only then open Cursor and continue the
+existing instruction-observation and native-control sequence. No real install
+before that preflight passes. Precision proof is not Carbon acceptance.

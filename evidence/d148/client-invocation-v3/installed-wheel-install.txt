@@ -1,0 +1,4 @@
+Processing ./artifacts/d148/packages-v5/qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5-py3-none-any.whl
+Installing collected packages: qcoder
+Successfully installed qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5
+WARNING: The directory '/home/rob/.cache/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.

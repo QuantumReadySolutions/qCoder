@@ -1,0 +1,164 @@
+D148_CARBON_LEXICAL_INTERPRETER_CORRECTION_READY__TARGET_ACCEPTANCE_PENDING
+
+Identity: QCODER_D148_CARBON_LEXICAL_INTERPRETER_CORRECTION_V3
+This return is ready only with the accompanying final commit/push/remote proof.
+The final handoff supplies this file's commit/tree identity; no self-identity is
+claimed inside its own commit. Carbon was not accessed; target acceptance pending.
+
+AUTHORITY / EXACT BASIS
+Connected GitHub work order read completely:
+QuantumReadySolutions/qcoder-internal @ 504c8438045f2319e5b0fa2fbd9d765636208248
+docs/private-notes/tactical-conference-coordination/iqt-2026-d148-carbon-lexical-interpreter-correction-work-order-20261005.md
+Blob: d2ed9c259cb19ffc7a8e63c6fe100ef613eeb843
+Operative D-148 grant read completely: 935af4d9fd3d5cf1e30c45a21757ab4ffb7ffd8d
+Read identities: connected-reading-receipt.json.
+
+Repository: QuantumReadySolutions/qCoder
+Branch: conference/iqt-2026-ml-research-successor-v1
+Precision worktree: /home/rob/projects/qcoder-iqt-2026-ml-successor-v1
+Verified initial head / direct correction parent:
+efc801a4d8bd0f65a5008b8f966527ddb19d26bd
+Initial tree: 5853d2823cf9aee4ab3de80593dcbb46b477dfca
+Initial parent: beeb1eb0b0178e6db9882187e83931b8547403f1
+Checkout initially clean; GitHub branch matched initial head via git ls-remote.
+No applicable AGENTS.md found in ancestor chain or conference checkout.
+
+IMPLEMENTATION
+control_fixture.create() computes one absolute lexical path with os.path.abspath
+before generating any fixture. It collapses . and .. and retains the selected
+venv symlink identity. The same Path supplies generated runtime PYTHON, rendered
+shell guard, receipt python and python byte hash. resolve() supplies only the
+separate python_resolved integrity field. Empty executable refuses.
+
+Production runtime.py, guard, setup.py, qcoder-context, hooks.json, package.json
+and their exact interpreter/integrity checks retain the pinned original bytes.
+The v3 artifact retains v2 binding/observation schemas and attachment behavior.
+The builder emits a distinct v3 archive/extraction prefix and refuses overwrite.
+CARBON-INSTALL.txt uses the exact ../.venv operator form and preserves old fixtures.
+
+Changed implementation paths:
+conference/d148-client/control_fixture.py
+conference/d148-client/CARBON-INSTALL.txt
+scripts/build_d148_client_bundle.py
+tests/client_invocation/test_lexical_interpreter.py
+New bundle:
+artifacts/d148/client-invocation-v3/d148-client-invocation-correction-v3.tar.gz
+New evidence: evidence/d148/client-invocation-v3/*
+Full path list: changed-paths.txt. Source blobs/hash/bytes: source-files.json.
+
+RED / GREEN AND TEST COMMANDS
+Initial 22-case baseline: 4 failed, 18 passed; red-regressions.txt.
+All four actual failed generated guards return disk:wrong_interpreter, with
+receipt ../ lexical paths, normalized child identity and no attachment receipts:
+red-assembled-guard.json.
+Expanded 26-case matrix against an isolated copy of exact efc801a source:
+4 failed, 22 passed; red-final-matrix.txt. This Python normalizes ./ and absolute
+lexical invocations at initial startup; the bundle-style relative ../ invocation
+exposes F3. All supported spellings still receive explicit green coverage.
+The baseline wrapper mistakenly expected eight failures; that count assertion
+failed after recording the correct red pytest result. No fixture/test defect
+or source change follows from that mistaken expectation.
+
+Final command, cwd conference worktree:
+.venv/bin/python -m pytest -q --tb=short tests/client_invocation
+155 passed in 32.62s; client-tests.txt.
+Includes 20 actual real-venv generator/guard cases: canonical, absolute ../,
+absolute ./, relative ../, relative ./; inside/outside source base; plain and
+spaces/apostrophe names. Each requires normalized receipt/runtime/guard identity,
+distinct resolved target, byte hash, matching child sys.executable, actual guard
+common:event_name denial, no attachment and empty synthetic science directory.
+Six additional integrity denials cover a different lexical interpreter with the
+same target bytes, changed python receipt/hash/resolved identity, guard/runtime.
+All 129 v2 attachment/profile/native/bootstrap/action controls remain intact.
+
+.venv/bin/python -m pytest -q tests/ml_research/test_client_context.py
+33 passed in 78.84s; backend-context-tests.txt.
+
+Installed integration, cwd /tmp/d148-client-v3-installed-proof-z42pfr4u:
+D148_CLIENT_SOURCE=/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client /tmp/d148-client-v3-installed-proof-z42pfr4u/bin/python -I -B -m pytest -q tests/test_client_invocation_installed.py
+2 passed in 13.75s; installed-context-integration.txt.
+Unchanged dev8 wheel installed --no-index --no-deps into a fresh /tmp venv.
+Existing isolated conference dependencies reused through a dedicated .pth.
+All 157 installed package hashes verified; installed-runtime-identity.json.
+Only established test-owned synthetic numeric data and disposable SQLite trackers
+were prepared; no canonical training/evaluation or existing MLflow state used.
+
+BUNDLE AND CLEAN-EXTRACTED NATIVE PROOF
+Build, cwd conference worktree:
+.venv/bin/python scripts/build_d148_client_bundle.py --source conference/d148-client --destination artifacts/d148/client-invocation-v3
+Do not repeat into this existing destination; use a new destination.
+Deterministic second build matched byte-for-byte; 13 regular members, all twelve
+SHA256SUMS entries passed after clean extraction. Member hashes: bundle-receipt.json.
+Clean extraction: /tmp/d148-client-v3-bundle-proof-0poms5la/d148-client-invocation-correction-v3
+A fresh venv at its parent was used for this exact command from extraction:
+../.venv/bin/python -I -B control_fixture.py --cursor-version 3.23.12 --case normal
+Automatic and explicit launcher_preflight both verified. Actual guard reached
+common:event_name after disk verification, no attachment receipt, empty synthetic
+workspace. bundle-extracted-verification.json records exact fixture/interpreter.
+
+Native command, cwd that clean extraction:
+node /home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/prove_native_hooks.cjs /home/rob/.local/share/cursor-agent/versions/2026.08.11-e8db854 hooks.json ../.venv/bin/python control_fixture.py
+Passed: native schema, 42 fault denials, seven response positives, omitted-failClosed
+negative control. Assembled fixtures: normal submits and routes exact context
+marker; missing/crash/timeout/empty/malformed/invalid each deny without executing
+the marker. Read/Task/compound controls deny. Native engine hashes and results:
+native-hook-engine.json; stderr empty. No provider/Agent or Carbon acceptance.
+
+Bundle absolute Precision path:
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/client-invocation-v3/d148-client-invocation-correction-v3.tar.gz
+Bytes: 28530
+SHA-256: 7f204b99df61bea1940e3ce15d4ff105075937ebb7c4257f4b1789845a3f06fe
+No wheel, dependency or scientific state included.
+
+PRESERVATION / LIMITS
+681 prior tracked files checked; only the three named prior implementation files
+changed, all 678 others preserved. This includes all v1/v2 evidence, production
+binding runtime/guard/setup, src/qcoder and scientific/backend/package files.
+Prior bundles unchanged:
+v1 23756 bytes SHA-256 9dcbd4113ef6f231ea33b761624de06312a92d828b5af505aecb69cd2ad9472f
+v2 27945 bytes SHA-256 99c95dce7d4f6642472b3d7d8264428af75013f4c39bacede32610771fceeee0
+Dev8 wheel unchanged:
+731491 bytes SHA-256 36818af120efa83b32cd6b1cf9101f06e308974b3a43a92ae16f2a23f49d7016
+Exact before/after hashes: preservation-*.json and preserved-artifacts-*.json.
+
+No wheel rebuild, canonical science, existing MLflow mutation, pytest-evidence
+adapter, global Cursor change, provider operation, real Carbon install, approval,
+new plan, refinement, public release or external-demo claim. Tactical_40/WI-0441
+has precedence; no source/state/provider/credentials/quota/locks/review capacity
+was inspected or used. D147 and accepted video remain outside this correction.
+Only conference git metadata was inspected. Task-owned proof fixtures/environments
+remain in /tmp for inspection; no task-owned provider/server/Agent persists.
+
+CARBON TRANSFER / FIRST ACCEPTANCE GATE
+Precision Windows PowerShell:
+  $bundle = 'd148-client-invocation-correction-v3.tar.gz'
+  Copy-Item -LiteralPath "\\wsl.localhost\Ubuntu-22.04\home\rob\projects\qcoder-iqt-2026-ml-successor-v1\artifacts\d148\client-invocation-v3\$bundle" -Destination "D:\$bundle"
+  Get-FileHash -Algorithm SHA256 -LiteralPath "D:\$bundle"
+Require exactly the bundle hash above; then move USB to Carbon.
+Carbon Windows PowerShell:
+  $bundle = 'd148-client-invocation-correction-v3.tar.gz'
+  Get-FileHash -Algorithm SHA256 -LiteralPath "D:\$bundle"
+  Copy-Item -LiteralPath "D:\$bundle" -Destination "\\wsl.localhost\Ubuntu-26.04\home\user\projects\qcoder-iqt-2026-ml-successor-v1\$bundle"
+  wsl -d Ubuntu-26.04
+
+Carbon WSL bash (stop on any failed check; preserve all v1/v2 extractions/fixtures):
+  cd /home/user/projects/qcoder-iqt-2026-ml-successor-v1
+  printf '%s  %s\n' '7f204b99df61bea1940e3ce15d4ff105075937ebb7c4257f4b1789845a3f06fe' 'd148-client-invocation-correction-v3.tar.gz' | sha256sum -c - || exit
+  test ! -e d148-client-invocation-correction-v3 || exit
+  tar -xzf d148-client-invocation-correction-v3.tar.gz || exit
+  cd d148-client-invocation-correction-v3
+  sha256sum -c SHA256SUMS || exit
+  D148_CREATED=$(../.venv/bin/python -I -B control_fixture.py --cursor-version 3.23.12 --case normal) || exit
+  printf '%s\n' "$D148_CREATED"
+  D148_FIXTURE=$(printf '%s' "$D148_CREATED" | ../.venv/bin/python -I -c 'import json,sys; v=json.load(sys.stdin); assert v["launcher_preflight"]=="verified_synthetic_denial_not_native_acceptance"; print(v["fixture_root"])') || exit
+  ../.venv/bin/python -I -B control_fixture.py --preflight-root "$D148_FIXTURE" || exit
+  ../.venv/bin/python -I -c 'import json,sys; from pathlib import Path; p=Path(sys.argv[1])/".d148"; r=json.loads((p/"installed.json").read_text()); assert r["python"]=="/home/user/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python"; assert not list(p.glob("attachment-*.json")); print("normalized_venv_identity_verified_no_attachment")' "$D148_FIXTURE" || exit
+
+Require launcher_preflight=verified_synthetic_denial_not_native_acceptance.
+Only then open exactly D148_FIXTURE in Cursor and follow CARBON-INSTALL.txt:
+actual window/version/posture/instruction observations -> bounded observation
+record -> effective attachment -> normal marker -> native negative/fault controls.
+Do not install the real client before this gate passes. Real install and E01/E02/E13
+continue under the unchanged v2 sequence only after actual target control evidence.
+No Carbon PASS, client qualification, external-demo approval or latency claim
+follows from this Precision correction.

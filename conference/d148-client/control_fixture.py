@@ -44,6 +44,13 @@ def launcher_preflight(root):
 
 
 def create(version, case):
+    if not sys.executable:
+        raise ValueError('interpreter_unavailable')
+    # Collapse lexical . and .. once, retaining the selected venv symlink path.
+    # resolve() is only for the separate target-integrity field in the receipt.
+    python = Path(os.path.abspath(sys.executable))
+    if not python.is_absolute():
+        raise ValueError('interpreter_not_absolute')
     base = Path(tempfile.mkdtemp(prefix='d148-cursor-control-'))
     root = base/'client-v4'
     root.mkdir()
@@ -53,12 +60,12 @@ def create(version, case):
     (base/'outside-fixture.txt').write_text('D148 SYNTHETIC OUTSIDE SENTINEL\n')
     (root/'fixture-private.txt').write_text('D148 SYNTHETIC PRIVATE SENTINEL\n')
     runtime = (HERE/'runtime.py').read_text().replace('Path('+repr(CARBON)+')','Path('+repr(str(base))+')')
-    runtime = runtime.replace("PYTHON = BASE / '.venv/bin/python'",'PYTHON = Path('+repr(sys.executable)+')')
+    runtime = runtime.replace("PYTHON = BASE / '.venv/bin/python'",'PYTHON = Path('+repr(str(python))+')')
     runtime = runtime.replace('CONFIG_HOME = Path.home()', 'CONFIG_HOME = BASE / "fixture-home"')
     runtime = runtime.replace("ENTERPRISE = Path('/etc/cursor')",'ENTERPRISE = BASE / "fixture-enterprise"')
     runtime = runtime.replace('SYNTHETIC_FIXTURE = False', 'SYNTHETIC_FIXTURE = True')
     (root/'.d148/runtime.py').write_text(runtime)
-    guard = render_guard(sys.executable, root)
+    guard = render_guard(python, root)
     (root/'.d148/guard').write_text(guard)
     (root/'.d148/guard').chmod(0o700)
     # The only allowed operation is a synthetic marker; no qCoder operation,
@@ -79,8 +86,8 @@ def create(version, case):
     (root/'.cursor/hooks.json').write_text(json.dumps(config,indent=2)+'\n')
     files={p.relative_to(root).as_posix():sha(p.read_bytes()) for p in root.rglob('*') if p.is_file()}
     inventory={str(root/n):files[n] for n in ('.cursor/hooks.json','.cursor/rules/d148-read-only.mdc')}
-    receipt={'schema':'d148.synthetic_client.v2','root':str(root),'workspace':str(base/'carbon-canonical-v4'),'python':sys.executable,
-             'python_resolved':str(Path(sys.executable).resolve()),'python_sha256':sha(Path(sys.executable).read_bytes()),
+    receipt={'schema':'d148.synthetic_client.v2','root':str(root),'workspace':str(base/'carbon-canonical-v4'),'python':str(python),
+             'python_resolved':str(python.resolve()),'python_sha256':sha(python.read_bytes()),
              'host_id':sha(Path('/etc/machine-id').read_bytes()+socket.gethostname().encode()),
              'cursor_version':version,'files':files,'instruction_inventory':inventory}
     (root/'.d148/installed.json').write_text(json.dumps(receipt,indent=2)+'\n')
