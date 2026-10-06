@@ -21,10 +21,9 @@ r = setup.runtime
 @pytest.fixture
 def installed(tmp_path, monkeypatch):
     base = tmp_path/'successor'
-    root = base/'client-v4'
+    root = base/'client-v5'
     workspace = base/'carbon-canonical-v4'
-    root.mkdir(parents=True)
-    workspace.mkdir()
+    workspace.mkdir(parents=True)
     (workspace/'scientific-sentinel').write_text('must never be read or changed by setup')
     monkeypatch.setattr(r, 'BASE', base)
     monkeypatch.setattr(r, 'ROOT', root)
@@ -32,8 +31,7 @@ def installed(tmp_path, monkeypatch):
     monkeypatch.setattr(r, 'PYTHON', Path(sys.executable))
     monkeypatch.setattr(r, 'CONFIG_HOME', tmp_path/'home')
     monkeypatch.setattr(r, 'ENTERPRISE', tmp_path/'enterprise')
-    monkeypatch.setattr(r, 'host_id', lambda: 'fixture-host')
-    monkeypatch.chdir(root)
+    monkeypatch.chdir(base)
     # Test the installer with a tiny identity-covered installed-package fixture.
     payload = tmp_path/'payload'
     payload.mkdir()
@@ -41,19 +39,19 @@ def installed(tmp_path, monkeypatch):
         if p.is_file(): (payload/p.name).write_bytes(p.read_bytes())
     package = tmp_path/'site-packages/qcoder'
     package.mkdir(parents=True)
-    (package/'__init__.py').write_text('# synthetic identity-covered package\n')
-    (payload/'package.json').write_text(json.dumps({'qcoder/__init__.py':r.digest((package/'__init__.py').read_bytes())}))
+    for i in range(157):
+        (package/('__init__.py' if i == 0 else 'file'+str(i)+'.py')).write_text('# synthetic identity-covered package\n')
+    (payload/'package.json').write_text(json.dumps({'qcoder/'+p.name:r.digest(p.read_bytes()) for p in package.iterdir()}))
     monkeypatch.setattr(setup, 'HERE', payload)
     monkeypatch.setattr(r.importlib.metadata, 'distribution', lambda _: SimpleNamespace(version=r.VERSION, locate_file=lambda name: package.parent/name))
     monkeypatch.setattr(r.importlib.metadata, 'version', lambda _:r.VERSION)
     manifest = {p.name:r.digest(p.read_bytes()) for p in payload.iterdir() if p.is_file() and p.name != 'payload.json'}
     (payload/'payload.json').write_text(json.dumps(manifest))
-    # A real legacy D148 binding is replaced, not appended.
-    (root/'.cursor/rules').mkdir(parents=True)
-    (root/'.cursor/rules/old.mdc').write_text('D-148 legacy binding\n')
-    (root/'qcoder-context').write_text('# old wrapper\n')
+    sums = {**manifest, 'payload.json': r.digest((payload/'payload.json').read_bytes())}
+    (payload/'SHA256SUMS').write_text(''.join(sha+'  '+n+'\n' for n,sha in sorted(sums.items())))
     before = snapshot(root)
-    result = setup.install('fixture-1')
+    result = setup.install()
+    monkeypatch.chdir(root)
     assert result['active_attachment'] == 'unobserved'
     return root, before
 
@@ -79,15 +77,16 @@ def test_install_verify_rollback_preserves_scope(installed):
     root, before = installed
     preserved = snapshot(r.WORKSPACE)
     receipt = r.verify()
-    assert Path(receipt['backup']).parent == r.BASE/'client-binding-backups'
-    assert not (root/'.cursor/rules/old.mdc').exists()
-    assert setup.verify()['active_attachment'] == 'unobserved'
-    setup.rollback()
-    assert snapshot(root) == before
+    assert 'cursor_version' not in receipt and 'backup' not in receipt
+    assert setup.verify()['latest']['attachment_observed'] is False
+    assert setup.verify()['disk_binding'] == 'verified'
+    setup.remove()
+    # Installer preflight audit is historical evidence, never active authority.
+    assert set(snapshot(root)) == {'.d148/events.jsonl'}
     assert snapshot(r.WORKSPACE) == preserved
 
 
-@pytest.mark.parametrize('change',['wrong_root','launcher_missing','rule_stale','extra_rule','inherited_rule','host','python','package','symlink'])
+@pytest.mark.parametrize('change',['wrong_root','launcher_missing','rule_stale','host','python','package','symlink'])
 def test_binding_refuses_without_discovery(installed, monkeypatch, change):
     root,_ = installed
     if change == 'wrong_root': monkeypatch.chdir(root.parent)
@@ -107,7 +106,7 @@ def test_binding_refuses_without_discovery(installed, monkeypatch, change):
 
 
 def test_exact_action_needs_active_attachment(installed):
-    with pytest.raises(OSError): r.decide(event(), 'preToolUse', r.verify())
+    with pytest.raises(r.Refused, match='session_missing'): r.decide(event(), 'preToolUse', r.verify())
     attach()
     assert r.decide(event(), 'preToolUse', r.verify())
     assert r.decide(event(tool_input={'command':r.ACTION,'cwd':str(r.ROOT),'timeout':120000}), 'preToolUse', r.verify())
@@ -201,7 +200,7 @@ def test_context_uses_only_fixed_operation(installed,monkeypatch,capsys):
 
 def test_rollback_preserves_later_legitimate_edit(installed):
     (r.ROOT/r.RULE).write_text('later legitimate edit')
-    with pytest.raises(r.Refused): setup.rollback()
+    with pytest.raises(r.Refused): setup.remove()
     assert (r.ROOT/r.RULE).read_text()=='later legitimate edit'
 
 
@@ -218,20 +217,29 @@ def test_duplicate_fields_are_not_repaired():
 
 @pytest.mark.parametrize('text',['unrelated rule','D-147 fallback rule','D148 plus D147 mixed'])
 def test_install_conflicts_do_not_change_files(installed,text):
-    setup.rollback()
+    setup.remove()
+    (r.ROOT/'.cursor/rules').mkdir(parents=True, exist_ok=True)
     (r.ROOT/'.cursor/rules/extra.mdc').write_text(text)
     before=snapshot(r.ROOT)
-    with pytest.raises(r.Refused):setup.install('fixture-1')
+    with pytest.raises(r.Refused):setup.install()
     assert snapshot(r.ROOT)==before
 
 
-def test_failed_install_restores_old_binding(installed,monkeypatch):
-    setup.rollback()
-    before=snapshot(r.ROOT)
-    def failure(*a,**k):raise r.Refused()
-    monkeypatch.setattr(r,'verify',failure)
-    with pytest.raises(r.Refused):setup.install('fixture-1')
-    assert snapshot(r.ROOT)==before
+def test_failed_install_preserves_unrelated_material(installed, monkeypatch):
+    setup.remove()
+    # Remove only the known test-created preflight audit to make the root absent.
+    (r.ROOT/'.d148/events.jsonl').unlink()
+    (r.ROOT/'.d148').rmdir()
+    r.ROOT.rmdir()
+    monkeypatch.chdir(r.BASE)
+    preserved = snapshot(r.WORKSPACE)
+    def failure(*a, **k):
+        raise r.Refused()
+    monkeypatch.setattr(r, 'verify', failure)
+    with pytest.raises(r.Refused):
+        setup.install()
+    assert not r.ROOT.exists()
+    assert snapshot(r.WORKSPACE) == preserved
 
 
 def test_unavailable_context_does_not_fall_back(installed,monkeypatch,capsys):
@@ -267,11 +275,8 @@ def test_generated_control_fixture_uses_real_guard_only(tmp_path):
     assert subprocess.check_output([str(root/'qcoder-context')],cwd=root).strip()==b'D148_SYNTHETIC_CONTEXT_ONLY'
 
 
-def test_real_client_rejects_synthetic_instruction_observation(installed):
-    receipt=r.verify()
-    receipt['cursor_version']='3.23.12'
-    (r.ROOT/'.d148/instruction-observation.json').write_text(json.dumps({
-        'basis':'synthetic_component_test'}))
-    assert r.SYNTHETIC_FIXTURE is False
-    with pytest.raises(r.Refused,match='profile_required'):
-        r.instruction_profile(receipt)
+def test_real_client_has_no_instruction_survey(installed):
+    assert not hasattr(r, 'observe_instructions') and not hasattr(r, 'instruction_profile')
+    assert 'cursor_version' not in r.verify()
+    attach()
+    assert r.decide(event(), 'preToolUse', r.verify())

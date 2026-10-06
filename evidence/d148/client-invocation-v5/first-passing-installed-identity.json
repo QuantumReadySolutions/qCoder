@@ -1,0 +1,12 @@
+{
+  "package_file": "/tmp/d148-client-v5-installed-proof-6t07tmav/.venv/lib/python3.12/site-packages/qcoder/__init__.py",
+  "sys_executable": "/tmp/d148-client-v5-installed-proof-6t07tmav/.venv/bin/python",
+  "version": "0.6.0a24.post0.dev8+iqt.d148.context.v5",
+  "payload_hashes_verified": 157,
+  "proof_root": "/tmp/d148-client-v5-installed-proof-6t07tmav",
+  "wheel": "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/packages-v5/qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5-py3-none-any.whl",
+  "wheel_bytes": 731491,
+  "wheel_sha256": "36818af120efa83b32cd6b1cf9101f06e308974b3a43a92ae16f2a23f49d7016",
+  "dependency_source": "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/.venv/lib/python3.12/site-packages",
+  "canonical_science": 0
+}

@@ -1,0 +1,56 @@
+[
+  {
+    "cwd": "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1",
+    "command": ".venv/bin/python -m pytest -q --tb=short tests/client_invocation",
+    "result": "258 passed in 80.36s",
+    "evidence": "client-tests.txt"
+  },
+  {
+    "cwd": "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1",
+    "command": ".venv/bin/python -m pytest -q tests/ml_research/test_client_context.py",
+    "result": "33 passed in 73.20s",
+    "evidence": "backend-context-tests.txt"
+  },
+  {
+    "cwd": "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1",
+    "command": "D148_CLIENT_SOURCE=/tmp/d148-client-v5-bundle-proof-wgb47kts/d148-client-invocation-resilient-v5 .venv/bin/python -B tests/client_invocation/prove_installed_dev8.py",
+    "result": "2 passed in 49.33s; fresh unchanged dev8 install; actual one-command doctor, installed successor lifecycle and byte-preserved completed synthetic context",
+    "evidence": "installed-context-integration.txt"
+  },
+  {
+    "cwd": "/tmp/d148-client-v5-installed-proof-ym6bedxe",
+    "command": "D148_CLIENT_SOURCE=/tmp/d148-client-v5-bundle-proof-wgb47kts/d148-client-invocation-resilient-v5 D148_PROOF_EVIDENCE=/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/evidence/d148/client-invocation-v5/successor-doctor-lifecycle.json /tmp/d148-client-v5-installed-proof-ym6bedxe/.venv/bin/python -I -B -m pytest -q --tb=short -c /dev/null --basetemp /tmp/d148-client-v5-installed-proof-ym6bedxe/test-state tests/test_client_invocation_installed.py",
+    "result": "2 passed in 49.33s",
+    "evidence": "installed-context-integration.txt"
+  },
+  {
+    "cwd": "/tmp/d148-client-v5-bundle-proof-wgb47kts/d148-client-invocation-resilient-v5",
+    "command": "node /home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/prove_native_hooks.cjs /home/rob/.local/share/cursor-agent/versions/2026.08.11-e8db854 hooks.json ../.venv/bin/python control_fixture.py",
+    "result": "native schema accepted; 42/42 faults denied; 7 positive response controls; 7 assembled fixtures; 9 evolved contract controls; omitted failClosed negative control detected; empty stderr; zero providers/science",
+    "evidence": "native-hook-engine.json"
+  },
+  {
+    "cwd": "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1",
+    "command": ".venv/bin/python -B /tmp/d148-v5-bundle-proof.py",
+    "implementation_copy": "tests/client_invocation/prove_bundle.py",
+    "result": "final distinct artifact built, byte-identical second build, 14 regular members, 13 checksum entries passed, clean extraction and actual ../.venv preflight",
+    "evidence": "bundle-extracted-verification.json"
+  },
+  {
+    "cwd": "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1",
+    "command": ".venv/bin/python scripts/build_d148_client_bundle.py --source conference/d148-client --destination /tmp/d148-v5-cli-build-20261006",
+    "result": "CLI archive/receipt byte-identical to final artifact",
+    "evidence": "deterministic-cli-build.json"
+  },
+  {
+    "cwd": "/tmp/d148-client-v5-bundle-proof-wgb47kts/d148-client-invocation-resilient-v5",
+    "command": "../.venv/bin/python -I -B control_fixture.py --case normal",
+    "result": "verified_synthetic_denial_not_native_acceptance; normalized exact venv; no attachment; no synthetic science",
+    "evidence": "bundle-extracted-verification.json"
+  },
+  {
+    "cwd": "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1",
+    "command": "git diff --check",
+    "result": "passed"
+  }
+]

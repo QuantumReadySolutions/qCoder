@@ -71,7 +71,7 @@ const shell={async *execute(_context,command,options){
  const python=process.argv[4], generator=process.argv[5];
  const execFile=require('util').promisify(cp.execFile);
  assert(python && generator, 'Pass the exact conference Python and control_fixture.py');
- const assembled=[];
+ const assembled=[], evolved=[];
  for(const fault of ['normal','missing','crash','timeout','empty','malformed','invalid']){
   const created=JSON.parse((await execFile(python,['-I','-B',generator,'--cursor-version','3.23.12','--case',fault],{encoding:'utf8'})).stdout);
   const fixture=created.fixture_root;
@@ -80,11 +80,6 @@ const shell={async *execute(_context,command,options){
   assert(schema.RV(fixtureConfig).isValid);
   const fixtureEngine=new Engine({projectHooks:fixtureConfig},fixture,{cursor_version:'3.23.12'},shell,
     undefined,undefined,undefined,{commandHookPayloadTransport:'stdin'});
-  const receipt=JSON.parse(fs.readFileSync(path.join(fixture,'.d148/installed.json'),'utf8'));
-  const observations=Object.fromEntries(['user_rules','team_rules','enterprise_rules','plugins_and_skills','other_attachments','same_name_sources'].map(k=>[k,'none_observed']));
-  fs.writeFileSync(path.join(fixture,'.d148/instruction-observation.json'),JSON.stringify({
-    schema:'cursor-3.23.12-single-rule-v1', root:fixture, cursor_version:'3.23.12',
-    rule_sha256:receipt.files['.cursor/rules/d148-read-only.mdc'], basis:'synthetic_component_test',observations}));
   const common={workspace_roots:[fixture],cursor_version:'3.23.12',
     conversation_id:'synthetic-engine-conversation',generation_id:'synthetic-engine-generation',cwd:fixture};
   const run=async(name,extra={})=>fixtureEngine.executeCommandHook(name,fixtureConfig.hooks[name][0],fixture,{},
@@ -99,6 +94,24 @@ const shell={async *execute(_context,command,options){
    assert(terminal.success && terminal.data.permission==='allow');
    assert((await execFile(path.join(fixture,'qcoder-context'),[],{cwd:fixture,encoding:'utf8'})).stdout.trim()==='D148_SYNTHETIC_CONTEXT_ONLY');
    marker=true;
+   for(const version of ['3.23.12','3.23.23','3.24.0']){
+    for(const identifier of [path.join(fixture,'.cursor/rules/d148-read-only.mdc'),'.cursor/rules/d148-read-only.mdc','d148-read-only.mdc']){
+     common.cursor_version=version;
+     common.conversation_id='native-evolution-'+evolved.length;
+     const attached=await run('beforeSubmitPrompt',{attachments:[
+      {type:'file',file_path:'unrelated.txt'}, {type:'rule',file_path:identifier,future_metadata:true},
+      {type:'rule',file_path:'unrelated.mdc'}]});
+     assert(attached.success && attached.data.continue===true);
+     const exact=await run('preToolUse',{tool_name:'Shell',tool_input:{command:'./qcoder-context'}});
+     assert(exact.success && exact.data.permission==='allow');
+     const terminal=await run('beforeShellExecution',{command:'./qcoder-context'});
+     assert(terminal.success && terminal.data.permission==='allow');
+     const changed=await run('preToolUse',{cursor_version:'different-version',tool_name:'Shell',tool_input:{command:'./qcoder-context'}});
+     assert(changed.success && changed.data.permission==='deny');
+     evolved.push({version,representation:identifier===path.join(fixture,'.cursor/rules/d148-read-only.mdc')?'absolute':identifier.startsWith('.cursor/')?'project_relative':'basename',
+       extra_metadata_and_unrelated_attachments:true,exact_action_allowed:true,version_mismatch_denied:true});
+    }
+   }
    for(const [name,extra]of [['preToolUse',{tool_name:'Read',tool_input:{path:'fixture-private.txt'}}],
       ['preToolUse',{tool_name:'Task',tool_input:{}}],['beforeShellExecution',{command:'./qcoder-context; pwd'}]]){
     const denied=await run(name,extra);assert(denied.success && denied.data.permission==='deny');
@@ -110,7 +123,7 @@ const shell={async *execute(_context,command,options){
  const output={kind:'installed_native_engine_component_test_not_Agent_acceptance',
   client_build:path.basename(dir), index_sha256:crypto.createHash('sha256').update(source).digest('hex'),
   engine_chunk_sha256:crypto.createHash('sha256').update(fs.readFileSync(path.join(dir,'190.index.js'))).digest('hex'),
-  native_schema_accepted:true, exact_configuration_failClosed:true, assembled_synthetic_controls:assembled,
+  native_schema_accepted:true, exact_configuration_failClosed:true, assembled_synthetic_controls:assembled, evolved_contract_controls:evolved,
   failures:rows, allow_controls:7, omitted_failClosed_control:'fails_open_as_expected',
   model:null,mode:null,provider_calls:0,scientific_jobs:0};
  console.log(JSON.stringify(output,null,2));

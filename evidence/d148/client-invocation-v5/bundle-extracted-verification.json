@@ -1,0 +1,46 @@
+{
+  "archive": "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/client-invocation-v5/d148-client-invocation-resilient-v5.tar.gz",
+  "bytes": 26802,
+  "sha256": "265acc59f7650bafb0a60629f95fb94b6898a540e936dac94ee770fb17876d4d",
+  "member_count": 14,
+  "deterministic_build_byte_identical": true,
+  "extraction": "/tmp/d148-client-v5-bundle-proof-wgb47kts/d148-client-invocation-resilient-v5",
+  "generator_command": [
+    "../.venv/bin/python",
+    "-I",
+    "-B",
+    "control_fixture.py",
+    "--case",
+    "normal"
+  ],
+  "generated_fixture": {
+    "fixture_root": "/tmp/d148-cursor-control-xntte9pr/client-v5",
+    "case": "normal",
+    "scientific_state_accessed": false,
+    "expected_context": "D148_SYNTHETIC_CONTEXT_ONLY",
+    "acceptance": "unobserved",
+    "launcher_preflight": "verified_synthetic_denial_not_native_acceptance",
+    "version_binding": "native_event_per_generation"
+  },
+  "explicit_preflight": {
+    "launcher_preflight": "verified_synthetic_denial_not_native_acceptance"
+  },
+  "normalized_python": "/tmp/d148-client-v5-bundle-proof-wgb47kts/.venv/bin/python",
+  "no_attachment_receipt": true,
+  "no_synthetic_science_access": true,
+  "member_checks": [
+    "CARBON-INSTALL.txt: OK",
+    "acceptance-template.json: OK",
+    "binding.mdc: OK",
+    "carbon-context.json: OK",
+    "control_fixture.py: OK",
+    "cursorignore: OK",
+    "guard: OK",
+    "hooks.json: OK",
+    "package.json: OK",
+    "payload.json: OK",
+    "qcoder-context: OK",
+    "runtime.py: OK",
+    "setup.py: OK"
+  ]
+}

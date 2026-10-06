@@ -1,0 +1,73 @@
+QCODER_D148_RESILIENT_CLIENT_CLOSEOUT_V5 — bounded client scaffold audit
+
+Cursor patch binding: no install receipt Cursor version, PROFILE, allowlist or
+operator survey. Safe native version tokens (ASCII alphanumeric, '.', '_', '+',
+'-', length 1..80) are learned on submit and compared exactly on later events.
+Missing/empty/malformed/overlong values deny. New conversation/generation binding
+is independent of the install. IDs remain bounded; no semantic version claim.
+
+Attachment evolution: list <=128 within the 64 KiB hook input limit; three exact
+paths only, exactly one qCoder rule candidate. Extra metadata and unrelated
+attachments ignored for authority. Detection of qCoder-like near/foreign/traversal
+names (case insensitive detection only) rejects ambiguity; never authorizes by
+suffix, substring or general basename. Enum/hash/version/IDs are pinned locally.
+Absolute is only what the event actually reported. Basename/relative identifiers
+never become fabricated absolute source or hidden-instruction absence claims.
+
+Environment coexistence: instruction_inventory and old_binding are retired.
+Only exact qCoder-managed bytes gate use. No home/parent/plugin/UI rule scan.
+Unrelated instructions, rules, configuration and symlinks are preserved. Fresh
+client-v5 is created only if absent; any occupied managed path yields a bounded
+collision refusal. client-v4 has no backup/rollback/rewrite involvement. Removal
+verifies all owned bytes before deletion and retains unrelated/audit material.
+Failed installation removes only its own unchanged writes and empty directories.
+
+Rendering/root identity: lexical interpreter normalization happens once without
+resolving the selected venv symlink for identity. Resolved target and bytes remain
+separately checked. Shell interpreter/runtime invocations are replaced as one
+quoted unit. Runtime assignments render once by declaration, including already-
+rendered payloads; no inserted path becomes a subsequent replacement key. Exact
+root/cwd, host, venv, rule, runtime, guard, hooks, package and ignore bytes remain
+checked. The unchanged dev8 version and its 157 payload hashes remain mandatory.
+No private backend source changed; the wheel remains byte-for-byte identical.
+
+Tool contract: only Shell exactly ./qcoder-context at the exact root. No arguments,
+prefixes, chaining, alternate actions, discovery, Read/search, MCP, write or
+Task/delegation. Unknown Shell argument semantics still reject. Every registered
+native hook remains timeout=5/failClosed=true; internal deadline=3. A new prompt
+invalidates the prior conversation attachment before structural/disk checks when
+its bounded conversation ID is available. No invalid resubmit reuses that binding.
+
+Diagnostics: safe submit metadata is retained on both acceptance and refusal:
+version, root-match boolean, attachment/qCoder/extra counts, enum, stage/reason.
+Tool metadata uses fixed class/action/decision fields and hashed IDs. No prompt,
+email, transcript, arbitrary path/name, account, model payload or exception text.
+Diagnose runs trusted bundle code rather than importing the installed runtime,
+so missing/crashed/stale runtime is diagnosable. It reads <=64 KiB audit tail and
+returns <=20 allowlisted sanitized rows, with disk status. Bootstrap failures may
+have no new row; safe native bootstrap output plus disk status remains necessary.
+
+Doctor: payload/member consistency, exact interpreter/dev8, actual generated
+normal guard preflight, 9 version/representation combinations including harmless
+metadata/unrelated attachments, exact action allows and alternate/tool denies.
+Preflight alone creates no attachment; probes only invoke synthetic marker, and
+the fresh returned normal root has no successful attachment receipt or science.
+Real doctor calls only unchanged dev8 client_context and verifies its digest,
+verified/completed/readback/consumed state, Carbon IDs, 37/40 vs 37/40 delta 0,
+accounting and zero mutation flags. This expectation file asserts preservation;
+answers always come from actual context. Fresh real read-back digest/time may
+change while scientific content/identities remain identical. The installed proof
+compares every other context field and every scientific/tracker file byte.
+
+Acceptance: one Carbon doctor, one normal synthetic prompt, one representative
+native denial if naturally attempted (model refusal is recorded as a limitation),
+fresh successor install/real doctor, E01/E02/E13, verify/doctor/diagnose. No manual
+seven-fixture replay, global settings change, model/Fast/sandbox/permission pin or
+instruction/plugin survey. Precision proves the full native fault matrix.
+
+Scope: no Carbon access or native IDE acceptance claim; no canonical science,
+wheel build, existing MLflow mutation, new real approval/plan/refinement,
+pytest/JUnit product addition, public release or external-demo approval. Regression
+SQLite trackers and numeric states are disposable synthetic fixtures. Tactical_42/
+WI-0441 has precedence; its state/resources were not accessed. Existing local OS
+trust applies, not malicious same-UID isolation or general client qualification.

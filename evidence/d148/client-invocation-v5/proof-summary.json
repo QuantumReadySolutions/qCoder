@@ -1,0 +1,115 @@
+{
+  "identity": "QCODER_D148_RESILIENT_CLIENT_CLOSEOUT_V5",
+  "disposition": "D148_RESILIENT_CLIENT_CLOSEOUT_READY__TARGET_ACCEPTANCE_PENDING",
+  "starting_head": "fac07b6d9aaae3f5045fc8af00c619ebb51f45ee",
+  "starting_tree": "0358bfb2457d722c5f9f4f209824378cf96f78bc",
+  "client_regressions": {
+    "passed": 258,
+    "seconds": 80.36
+  },
+  "backend_context_regressions": {
+    "passed": 33,
+    "seconds": 73.2
+  },
+  "fresh_installed_integrations": {
+    "passed": 2,
+    "seconds": 49.33
+  },
+  "native_fault_denials": 42,
+  "assembled_native_controls": 7,
+  "dynamic_native_controls": 9,
+  "bundle": {
+    "archive": "d148-client-invocation-resilient-v5.tar.gz",
+    "bytes": 26802,
+    "sha256": "265acc59f7650bafb0a60629f95fb94b6898a540e936dac94ee770fb17876d4d",
+    "members": {
+      "CARBON-INSTALL.txt": {
+        "bytes": 8831,
+        "sha256": "bc12bcd69d54c824a224aa7088cbe6f387c18980a55abb8c642a361598160554"
+      },
+      "SHA256SUMS": {
+        "bytes": 1044,
+        "sha256": "3b5613f8e9a8521004254725cb85738a0a238166d6627d69f8bc348674605ac2"
+      },
+      "acceptance-template.json": {
+        "bytes": 3280,
+        "sha256": "c5c6ba207ffa35544c984de9dab63e8952204a1fc399e5503c798f21cbf664bd"
+      },
+      "binding.mdc": {
+        "bytes": 1449,
+        "sha256": "38b2029da5c047b850787b3b4c9c23c297e0d4caf075809acccf207fcaf332a3"
+      },
+      "carbon-context.json": {
+        "bytes": 818,
+        "sha256": "b3e41f95ff268d5a17b873f4786350c58432b39181c66eda1272733334ccf3f2"
+      },
+      "control_fixture.py": {
+        "bytes": 7161,
+        "sha256": "acb0a1da3f47753f9583da172cac6a4d2519791ca3aad7ce9976a863ca75b0a4"
+      },
+      "cursorignore": {
+        "bytes": 153,
+        "sha256": "ca9b2b46038e7e8af774245061b774a1e6f1bf5258d233d12a3d7b41b4673096"
+      },
+      "guard": {
+        "bytes": 846,
+        "sha256": "4bf1fd856a11a47973035b38dbda1a39948375bad1d0921a6622bc768bdc8257"
+      },
+      "hooks.json": {
+        "bytes": 1075,
+        "sha256": "7a432500af5f3c80cf9f46764adbe74c9a454a8035c9cc042e0c45a325a9c47e"
+      },
+      "package.json": {
+        "bytes": 17347,
+        "sha256": "eb112d4e480f429c5232a73b0c85565df5b4c514034ae8f3e4518a69eed24e3d"
+      },
+      "payload.json": {
+        "bytes": 1052,
+        "sha256": "dd05259b7e098eba14c415e9cc1b9eeb93433c099f1ed7cc49b9db2a1615fb2b"
+      },
+      "qcoder-context": {
+        "bytes": 491,
+        "sha256": "e7ab5814cc1129c4be4612dcc3049be624a75c951abcb3445c5d7036309b8b59"
+      },
+      "runtime.py": {
+        "bytes": 15875,
+        "sha256": "19fcff7300947a47a9916e700ba28ad6d44415344e8a1beb7fddeea001bc153b"
+      },
+      "setup.py": {
+        "bytes": 17498,
+        "sha256": "e4dec2b8ac5f7c86eb3b07599cec66d0f9a4cfd6bd62a670e8dd8ac589fb40cf"
+      }
+    },
+    "wheel_included": false,
+    "scientific_state_included": false
+  },
+  "source_paths": [
+    "conference/d148-client/CARBON-INSTALL.txt",
+    "conference/d148-client/acceptance-template.json",
+    "conference/d148-client/binding.mdc",
+    "conference/d148-client/carbon-context.json",
+    "conference/d148-client/control_fixture.py",
+    "conference/d148-client/guard",
+    "conference/d148-client/qcoder-context",
+    "conference/d148-client/runtime.py",
+    "conference/d148-client/setup.py",
+    "scripts/build_d148_client_bundle.py",
+    "tests/client_invocation/prove_bundle.py",
+    "tests/client_invocation/prove_installed_dev8.py",
+    "tests/client_invocation/prove_native_hooks.cjs",
+    "tests/client_invocation/test_carbon_correction.py",
+    "tests/client_invocation/test_client_invocation.py",
+    "tests/client_invocation/test_resilient_v5.py",
+    "tests/ml_research/test_client_invocation_installed.py"
+  ],
+  "Carbon_acceptance": "pending; no actual target accessed",
+  "canonical_science": 0,
+  "wheel_builds": 0,
+  "existing_MLflow_mutations": 0,
+  "real_approvals_created": 0,
+  "real_plan_mutations": 0,
+  "refinement": false,
+  "global_Cursor_settings_changed": false,
+  "pytest_JUnit_product_addition": false,
+  "WI_0441_access": false
+}

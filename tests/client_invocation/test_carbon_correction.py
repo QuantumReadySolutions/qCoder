@@ -6,10 +6,17 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
 
 import pytest
 
-CLIENT = Path(__file__).resolve().parents[2]/'conference/d148-client'
+# Retained V3 profile regressions run against the immutable historical bundle.
+HISTORY = Path(__file__).resolve().parents[2]/'artifacts/d148/client-invocation-v3/d148-client-invocation-correction-v3.tar.gz'
+HISTORICAL_ROOT = Path(tempfile.mkdtemp(prefix='d148-v3-historical-tests-'))
+with tarfile.open(HISTORY) as archive:
+    archive.extractall(HISTORICAL_ROOT, filter='data')
+CLIENT = HISTORICAL_ROOT/'d148-client-invocation-correction-v3'
 CARBON = '/home/user/projects/qcoder-iqt-2026-ml-successor-v1'
 RULE = '.cursor/rules/d148-read-only.mdc'
 PROFILE = 'cursor-3.23.12-single-rule-v1'

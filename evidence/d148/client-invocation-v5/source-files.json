@@ -1,0 +1,70 @@
+{
+  "conference/d148-client/CARBON-INSTALL.txt": {
+    "bytes": 8831,
+    "sha256": "bc12bcd69d54c824a224aa7088cbe6f387c18980a55abb8c642a361598160554"
+  },
+  "conference/d148-client/acceptance-template.json": {
+    "bytes": 3280,
+    "sha256": "c5c6ba207ffa35544c984de9dab63e8952204a1fc399e5503c798f21cbf664bd"
+  },
+  "conference/d148-client/binding.mdc": {
+    "bytes": 1449,
+    "sha256": "38b2029da5c047b850787b3b4c9c23c297e0d4caf075809acccf207fcaf332a3"
+  },
+  "conference/d148-client/carbon-context.json": {
+    "bytes": 818,
+    "sha256": "b3e41f95ff268d5a17b873f4786350c58432b39181c66eda1272733334ccf3f2"
+  },
+  "conference/d148-client/control_fixture.py": {
+    "bytes": 7161,
+    "sha256": "acb0a1da3f47753f9583da172cac6a4d2519791ca3aad7ce9976a863ca75b0a4"
+  },
+  "conference/d148-client/guard": {
+    "bytes": 846,
+    "sha256": "4bf1fd856a11a47973035b38dbda1a39948375bad1d0921a6622bc768bdc8257"
+  },
+  "conference/d148-client/qcoder-context": {
+    "bytes": 491,
+    "sha256": "e7ab5814cc1129c4be4612dcc3049be624a75c951abcb3445c5d7036309b8b59"
+  },
+  "conference/d148-client/runtime.py": {
+    "bytes": 15875,
+    "sha256": "19fcff7300947a47a9916e700ba28ad6d44415344e8a1beb7fddeea001bc153b"
+  },
+  "conference/d148-client/setup.py": {
+    "bytes": 17498,
+    "sha256": "e4dec2b8ac5f7c86eb3b07599cec66d0f9a4cfd6bd62a670e8dd8ac589fb40cf"
+  },
+  "scripts/build_d148_client_bundle.py": {
+    "bytes": 2684,
+    "sha256": "3d82acef0b88b3fa7418451573b9a95641679ba9a736955dc241aa5401c29be3"
+  },
+  "tests/client_invocation/prove_bundle.py": {
+    "bytes": 2697,
+    "sha256": "e22f98455a2fdc28f39e9058a1df843ea3d0d5f9d796486f9cca0d757474a47e"
+  },
+  "tests/client_invocation/prove_installed_dev8.py": {
+    "bytes": 2675,
+    "sha256": "602ba8005a3d972e3a117eb0fae091f0215a8b46631b5eddc55dde4d27b08d52"
+  },
+  "tests/client_invocation/prove_native_hooks.cjs": {
+    "bytes": 9408,
+    "sha256": "795905df9e215dc09a8a0897bff0c8f2401f89ca0d43190af7d16dd621eaf9dd"
+  },
+  "tests/client_invocation/test_carbon_correction.py": {
+    "bytes": 14515,
+    "sha256": "fd4682398097e0b3ecf1677596794d4c0323c9caa132922d70fe5a8ab1f0c3b8"
+  },
+  "tests/client_invocation/test_client_invocation.py": {
+    "bytes": 13711,
+    "sha256": "95d196c20047bcd4e94986ad378038f5c2ff61a73c97c6283e6f56f362e6b172"
+  },
+  "tests/client_invocation/test_resilient_v5.py": {
+    "bytes": 18299,
+    "sha256": "79732707314b321eed80bb8e7edffd58fe968ddb618d8f4dd31eaa0380bff3ed"
+  },
+  "tests/ml_research/test_client_invocation_installed.py": {
+    "bytes": 9103,
+    "sha256": "6f8842631e70c963014aca2936f1a832fa6efd3e38cf64e6cae100fae18b6afc"
+  }
+}

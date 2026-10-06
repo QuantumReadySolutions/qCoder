@@ -1,0 +1,30 @@
+{
+  "identities": {
+    "job_id": "4c637495fc77407cb26e6ed443cb228e",
+    "plan_digest": "5a56d4d7b7b853f877941d951ac4bf7becef8ed4792d795ad1553b204e1735f0",
+    "result_digest": "34a62ec65fef84e09511525003b5bdf1c32a7f53fd8b28c3bce2422c1502e5e8",
+    "assessment_digest": "33b79090a069a8dd8d4577a0603fc46beffef72316b21a1ea232b68f073c576a"
+  },
+  "metrics": {
+    "baseline": {
+      "accuracy": 0.925,
+      "correct": 37,
+      "count": 40
+    },
+    "candidate": {
+      "accuracy": 0.925,
+      "correct": 37,
+      "count": 40
+    },
+    "delta": 0.0
+  },
+  "accounting": {
+    "research_job_attempts": 1,
+    "candidate_model_invocations": 40,
+    "baseline_model_invocations": 40,
+    "qnode_invocations": 40,
+    "heldout_examples_per_model": 40,
+    "shots": null,
+    "shots_semantics": "not_applicable"
+  }
+}

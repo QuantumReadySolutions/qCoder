@@ -1,0 +1,20 @@
+........................................................................ [ 41%]
+...............................................................F........ [ 82%]
+............................F.                                           [100%]
+=================================== FAILURES ===================================
+_________ test_failed_resubmit_invalidates_earlier_generation[extra3] __________
+tests/client_invocation/test_resilient_v5.py:132: in test_failed_resubmit_invalidates_earlier_generation
+    assert hook(generated, **extra)['continue'] is False
+E   assert True is False
+________ test_doctor_rejects_any_changed_completed_context[accounting] _________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_resilient_v5.py:306: in test_doctor_rejects_any_changed_completed_context
+    setup.context_doctor()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/setup.py:160: in context_doctor
+    r.require(all(accounting.get(key) == item for key, item in expected['accounting'].items()), 'completed_metrics_mismatch')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/setup.py:160: in <genexpr>
+    r.require(all(accounting.get(key) == item for key, item in expected['accounting'].items()), 'completed_metrics_mismatch')
+E   AttributeError: 'str' object has no attribute 'get'
+=========================== short test summary info ============================
+FAILED tests/client_invocation/test_resilient_v5.py::test_failed_resubmit_invalidates_earlier_generation[extra3]
+FAILED tests/client_invocation/test_resilient_v5.py::test_doctor_rejects_any_changed_completed_context[accounting]
+2 failed, 172 passed in 58.59s

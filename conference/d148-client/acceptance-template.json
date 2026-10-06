@@ -9,28 +9,9 @@
   "workspace_trusted": null,
   "effective_rule_hash": null,
   "hooks_ui_evidence": null,
-  "inherited_ui_team_plugin_instructions_review": null,
   "controls": {
-    "exact_action": null,
-    "shell_discovery": null,
-    "compound_shell": null,
-    "raw_read": null,
-    "file_search": null,
-    "codebase_search": null,
-    "outside_search": null,
-    "source_inspection": null,
-    "delegation": null,
-    "write": null,
-    "MCP": null,
-    "missing_guard": null,
-    "crash": null,
-    "timeout": null,
-    "empty_output": null,
-    "malformed_output": null,
-    "invalid_decision": null,
-    "wrong_root": null,
-    "missing_launcher": null,
-    "stale_binding": null
+    "synthetic_route": null,
+    "representative_denial_or_model_refusal_limitation": null
   },
   "sessions": [
     {
@@ -112,12 +93,14 @@
       "latency_observation": null
     }
   ],
-  "client_correction": "v2",
-  "instruction_profile": "cursor-3.23.12-single-rule-v1",
-  "instruction_observation_digest": null,
+  "client_correction": "v5",
   "attachment_representation": null,
   "attachment_origin_claim": "not_established_by_basename_payload",
   "launcher_preflight": null,
   "failure_stage_reason": null,
-  "prior_fixtures_preserved": null
+  "prior_fixtures_preserved": null,
+  "version_binding": "actual_native_event_per_generation",
+  "doctor_status": null,
+  "real_doctor_status": null,
+  "diagnosis": null
 }

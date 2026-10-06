@@ -1,0 +1,99 @@
+{
+  "identity": "QCODER_D148_RESILIENT_CLIENT_CLOSEOUT_V5",
+  "work_order": {
+    "repository": "QuantumReadySolutions/qcoder-internal",
+    "commit": "7002ed387d0c70b5efef106b01c062b80c402163",
+    "tree": "dfaa56b5c0b3451acf91200852a0444620dfd329",
+    "path": "docs/private-notes/tactical-conference-coordination/iqt-2026-d148-resilient-client-closeout-v5-work-order-20261006.md",
+    "blob": "a155b22517820bd370add1076a8ac4e3387bcc52",
+    "read": "complete_connected_GitHub_before_edits"
+  },
+  "superseded": {
+    "commit": "a0c31817fc758b5b31d6f717712de38111718bdd",
+    "path": "docs/private-notes/tactical-conference-coordination/iqt-2026-d148-carbon-acceptance-simplification-v4-work-order-20261005.md",
+    "blob": "1b9ae4e9ca6793f55ce5ca8413399762b88223d8",
+    "read": "complete_connected_GitHub"
+  },
+  "authority": {
+    "commit": "935af4d9fd3d5cf1e30c45a21757ab4ffb7ffd8d",
+    "blob": "b76bc9ac764c9dadf3e8ed93cb166a15c321841e",
+    "path": "docs/private-notes/strategic-authorizations/qcoder-iqt-2026-ml-research-successor-implementation-and-proof-v1.md",
+    "read": "complete_connected_GitHub"
+  },
+  "implementation": {
+    "repository": "QuantumReadySolutions/qCoder",
+    "branch": "conference/iqt-2026-ml-research-successor-v1",
+    "head": "fac07b6d9aaae3f5045fc8af00c619ebb51f45ee",
+    "tree": "0358bfb2457d722c5f9f4f209824378cf96f78bc",
+    "parent": "efc801a4d8bd0f65a5008b8f966527ddb19d26bd",
+    "files": [
+      {
+        "path": "evidence/d148/client-invocation-v3/RETURN.txt",
+        "blob": "4f614dfd4d6eda1b32e3978503056d1786f3c355",
+        "complete_bytes": 10817,
+        "read": "complete_local_before_edits_and_complete_connected_response_exact_starting_ref"
+      },
+      {
+        "path": "conference/d148-client/runtime.py",
+        "blob": "4d319cfe559bde07fc1ff07507b519052df95879",
+        "complete_bytes": 18464,
+        "read": "complete_local_before_edits_and_complete_connected_response_exact_starting_ref"
+      },
+      {
+        "path": "conference/d148-client/control_fixture.py",
+        "blob": "a0a18deec8e61727dba90921d9f7c874597517ea",
+        "complete_bytes": 6168,
+        "read": "complete_local_before_edits_and_complete_connected_response_exact_starting_ref"
+      },
+      {
+        "path": "conference/d148-client/setup.py",
+        "blob": "d530706bb8bf9c538a27148a44ce129295cdc059",
+        "complete_bytes": 8799,
+        "read": "complete_local_before_edits_and_complete_connected_response_exact_starting_ref"
+      },
+      {
+        "path": "conference/d148-client/guard",
+        "blob": "c5df19d0f4fc4e1d00a1ed7f5f6b4d15565216e5",
+        "complete_bytes": 846,
+        "read": "complete_local_before_edits_and_complete_connected_response_exact_starting_ref"
+      },
+      {
+        "path": "conference/d148-client/hooks.json",
+        "blob": "e8f202228f21407c0410adcd44814d3b160ddc75",
+        "complete_bytes": 1075,
+        "read": "complete_local_before_edits_and_complete_connected_response_exact_starting_ref"
+      },
+      {
+        "path": "conference/d148-client/binding.mdc",
+        "blob": "019c72bc22db8921f48f2ef6a4fb366c35b32d46",
+        "complete_bytes": 1449,
+        "read": "complete_local_before_edits_and_complete_connected_response_exact_starting_ref"
+      },
+      {
+        "path": "conference/d148-client/CARBON-INSTALL.txt",
+        "blob": "ea88945ecac97f04eadea8e8c35c40118c8a011e",
+        "complete_bytes": 18060,
+        "read": "complete_local_before_edits_and_complete_connected_response_exact_starting_ref"
+      },
+      {
+        "path": "tests/client_invocation/test_client_invocation.py",
+        "blob": "d3ffbad6117297e35569b2240f5dcdf70c0c655d",
+        "complete_bytes": 13472,
+        "read": "complete_local_before_edits_and_complete_connected_response_exact_starting_ref"
+      },
+      {
+        "path": "tests/client_invocation/test_carbon_correction.py",
+        "blob": "e0448dbbaa7265ce54326ac125144e72ca73cc14",
+        "complete_bytes": 14112,
+        "read": "complete_local_before_edits_and_complete_connected_response_exact_starting_ref"
+      },
+      {
+        "path": "tests/client_invocation/test_lexical_interpreter.py",
+        "blob": "a00a5e23bf4504f7dc6f1c10f236672396db6793",
+        "complete_bytes": 6536,
+        "read": "complete_local_before_edits_and_complete_connected_response_exact_starting_ref"
+      }
+    ]
+  },
+  "isolation": "Initially clean dedicated conference worktree. No applicable AGENTS.md. Remote branch checked by connected GitHub and escalated read-only git ls-remote. No WI-0441 source, state, resources, credentials, quota, locks or provider operations accessed."
+}

@@ -1,0 +1,612 @@
+........FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF..................F. [ 97%]
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+__________________ test_exact_action_needs_active_attachment ___________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:109: in test_exact_action_needs_active_attachment
+    with pytest.raises(r.Refused, match='session_missing'): r.decide(event(), 'preToolUse', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+
+During handling of the above exception, another exception occurred:
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:109: in test_exact_action_needs_active_attachment
+    with pytest.raises(r.Refused, match='session_missing'): r.decide(event(), 'preToolUse', r.verify())
+E   AssertionError: Regex pattern did not match.
+E    Regex: 'session_missing'
+E    Input: 'event_version'
+_______________________ test_shell_variants_denied[pwd] ________________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+________________________ test_shell_variants_denied[ls] ________________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+___________________ test_shell_variants_denied[which python] ___________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+_________________ test_shell_variants_denied[python -m qcoder] _________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+_______________ test_shell_variants_denied[cat /private/SECRET] ________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+________________ test_shell_variants_denied[./qcoder-context x] ________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+______________ test_shell_variants_denied[./qcoder-context; pwd] _______________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+_____________ test_shell_variants_denied[./qcoder-context && pwd] ______________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+______________ test_shell_variants_denied[./qcoder-context\npwd] _______________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+______________ test_shell_variants_denied[$(pwd)/qcoder-context] _______________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+_______________ test_shell_variants_denied[env ./qcoder-context] _______________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+______________ test_shell_variants_denied[./qcoder-context | cat] ______________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+______________ test_shell_variants_denied[./qcoder-context > out] ______________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+________________ test_shell_variants_denied[(./qcoder-context)] ________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+________________ test_shell_variants_denied[ ./qcoder-context] _________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+________________ test_shell_variants_denied[./qcoder-context &] ________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+_____________ test_shell_variants_denied[./qcoder-context || true] _____________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+______________ test_shell_variants_denied[bash ./qcoder-context] _______________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+____________ test_shell_variants_denied[/different/qcoder-context] _____________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+_______________ test_shell_variants_denied[./qcoder-context\x00] _______________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:124: in test_shell_variants_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+____________________ test_every_other_tool_is_denied[Read] _____________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:131: in test_every_other_tool_is_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+____________________ test_every_other_tool_is_denied[Grep] _____________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:131: in test_every_other_tool_is_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+____________________ test_every_other_tool_is_denied[Glob] _____________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:131: in test_every_other_tool_is_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+_____________________ test_every_other_tool_is_denied[LS] ______________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:131: in test_every_other_tool_is_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+_______________ test_every_other_tool_is_denied[SemanticSearch] ________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:131: in test_every_other_tool_is_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+____________________ test_every_other_tool_is_denied[Task] _____________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:131: in test_every_other_tool_is_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+____________________ test_every_other_tool_is_denied[Write] ____________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:131: in test_every_other_tool_is_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+___________________ test_every_other_tool_is_denied[Delete] ____________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:131: in test_every_other_tool_is_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+__________________ test_every_other_tool_is_denied[WebFetch] ___________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:131: in test_every_other_tool_is_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+___________________ test_every_other_tool_is_denied[MCP:any] ___________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:131: in test_every_other_tool_is_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+___________________ test_every_other_tool_is_denied[unknown] ___________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:131: in test_every_other_tool_is_denied
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+_________________ test_secondary_controls_deny[beforeReadFile] _________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:137: in test_secondary_controls_deny
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+_______________ test_secondary_controls_deny[beforeMCPExecution] _______________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:137: in test_secondary_controls_deny
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+_________________ test_secondary_controls_deny[subagentStart] __________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:137: in test_secondary_controls_deny
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+_______________ test_secondary_controls_deny[beforeTabFileRead] ________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:137: in test_secondary_controls_deny
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+__________________ test_unverified_event_refuses[overrides0] ___________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:148: in test_unverified_event_refuses
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+__________________ test_unverified_event_refuses[overrides1] ___________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:148: in test_unverified_event_refuses
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+__________________ test_unverified_event_refuses[overrides2] ___________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:148: in test_unverified_event_refuses
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+__________________ test_unverified_event_refuses[overrides3] ___________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:148: in test_unverified_event_refuses
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+__________________ test_unverified_event_refuses[overrides4] ___________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:148: in test_unverified_event_refuses
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+__________________ test_unverified_event_refuses[overrides5] ___________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:148: in test_unverified_event_refuses
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+__________________ test_unverified_event_refuses[overrides6] ___________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:148: in test_unverified_event_refuses
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+__________________ test_unverified_event_refuses[overrides7] ___________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:148: in test_unverified_event_refuses
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+_______________ test_failed_install_preserves_unrelated_material _______________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:237: in failure
+    raise r.Refused()
+E   d148_runtime.Refused
+
+During handling of the above exception, another exception occurred:
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:240: in test_failed_install_preserves_unrelated_material
+    setup.install()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/setup.py:119: in install
+    for directory in reversed(created_dirs) + [r.ROOT]:
+E   TypeError: unsupported operand type(s) for +: 'list_reverseiterator' and 'list'
+_____________ test_generated_control_fixture_uses_real_guard_only ______________
+tests/client_invocation/test_client_invocation.py:269: in test_generated_control_fixture_uses_real_guard_only
+    assert hook('beforeSubmitPrompt',attachments=[{'type':'rule','file_path':str(root/r.RULE)}])['continue']
+E   assert False
+__________________ test_real_client_has_no_instruction_survey __________________
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:281: in test_real_client_has_no_instruction_survey
+    attach()
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/test_client_invocation.py:73: in attach
+    assert r.decide(ev, 'beforeSubmitPrompt', r.verify())
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:213: in decide
+    event_common(event, name, receipt)
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:139: in event_common
+    require(bounded_version(event.get('cursor_version')), 'event_version')
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/conference/d148-client/runtime.py:48: in require
+    raise Refused(code)
+E   d148_runtime.Refused: event_version
+=========================== short test summary info ============================
+FAILED tests/client_invocation/test_client_invocation.py::test_exact_action_needs_active_attachment
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[pwd]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[ls]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[which python]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[python -m qcoder]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[cat /private/SECRET]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[./qcoder-context x]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[./qcoder-context; pwd]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[./qcoder-context && pwd]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[./qcoder-context\npwd]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[$(pwd)/qcoder-context]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[env ./qcoder-context]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[./qcoder-context | cat]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[./qcoder-context > out]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[(./qcoder-context)]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[ ./qcoder-context]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[./qcoder-context &]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[./qcoder-context || true]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[bash ./qcoder-context]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[/different/qcoder-context]
+FAILED tests/client_invocation/test_client_invocation.py::test_shell_variants_denied[./qcoder-context\x00]
+FAILED tests/client_invocation/test_client_invocation.py::test_every_other_tool_is_denied[Read]
+FAILED tests/client_invocation/test_client_invocation.py::test_every_other_tool_is_denied[Grep]
+FAILED tests/client_invocation/test_client_invocation.py::test_every_other_tool_is_denied[Glob]
+FAILED tests/client_invocation/test_client_invocation.py::test_every_other_tool_is_denied[LS]
+FAILED tests/client_invocation/test_client_invocation.py::test_every_other_tool_is_denied[SemanticSearch]
+FAILED tests/client_invocation/test_client_invocation.py::test_every_other_tool_is_denied[Task]
+FAILED tests/client_invocation/test_client_invocation.py::test_every_other_tool_is_denied[Write]
+FAILED tests/client_invocation/test_client_invocation.py::test_every_other_tool_is_denied[Delete]
+FAILED tests/client_invocation/test_client_invocation.py::test_every_other_tool_is_denied[WebFetch]
+FAILED tests/client_invocation/test_client_invocation.py::test_every_other_tool_is_denied[MCP:any]
+FAILED tests/client_invocation/test_client_invocation.py::test_every_other_tool_is_denied[unknown]
+FAILED tests/client_invocation/test_client_invocation.py::test_secondary_controls_deny[beforeReadFile]
+FAILED tests/client_invocation/test_client_invocation.py::test_secondary_controls_deny[beforeMCPExecution]
+FAILED tests/client_invocation/test_client_invocation.py::test_secondary_controls_deny[subagentStart]
+FAILED tests/client_invocation/test_client_invocation.py::test_secondary_controls_deny[beforeTabFileRead]
+FAILED tests/client_invocation/test_client_invocation.py::test_unverified_event_refuses[overrides0]
+FAILED tests/client_invocation/test_client_invocation.py::test_unverified_event_refuses[overrides1]
+FAILED tests/client_invocation/test_client_invocation.py::test_unverified_event_refuses[overrides2]
+FAILED tests/client_invocation/test_client_invocation.py::test_unverified_event_refuses[overrides3]
+FAILED tests/client_invocation/test_client_invocation.py::test_unverified_event_refuses[overrides4]
+FAILED tests/client_invocation/test_client_invocation.py::test_unverified_event_refuses[overrides5]
+FAILED tests/client_invocation/test_client_invocation.py::test_unverified_event_refuses[overrides6]
+FAILED tests/client_invocation/test_client_invocation.py::test_unverified_event_refuses[overrides7]
+FAILED tests/client_invocation/test_client_invocation.py::test_failed_install_preserves_unrelated_material
+FAILED tests/client_invocation/test_client_invocation.py::test_generated_control_fixture_uses_real_guard_only
+FAILED tests/client_invocation/test_client_invocation.py::test_real_client_has_no_instruction_survey
+47 failed, 27 passed in 15.53s

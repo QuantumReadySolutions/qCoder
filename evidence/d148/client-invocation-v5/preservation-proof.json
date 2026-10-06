@@ -1,0 +1,32 @@
+{
+  "tracked_start_files": 706,
+  "changed_prior_files": [
+    "conference/d148-client/CARBON-INSTALL.txt",
+    "conference/d148-client/acceptance-template.json",
+    "conference/d148-client/binding.mdc",
+    "conference/d148-client/control_fixture.py",
+    "conference/d148-client/guard",
+    "conference/d148-client/qcoder-context",
+    "conference/d148-client/runtime.py",
+    "conference/d148-client/setup.py",
+    "scripts/build_d148_client_bundle.py",
+    "tests/client_invocation/prove_native_hooks.cjs",
+    "tests/client_invocation/test_carbon_correction.py",
+    "tests/client_invocation/test_client_invocation.py",
+    "tests/ml_research/test_client_invocation_installed.py"
+  ],
+  "preserved_prior_files": 693,
+  "src_qcoder_byte_preserved": true,
+  "prior_evidence_byte_preserved": true,
+  "prior_bundles_and_dev8_byte_preserved": true,
+  "historical_fixtures": "no prior fixture path written; unique new temporary roots only",
+  "Carbon": "not accessed; doctor target identities remain pinned to prior accepted evidence",
+  "existing_MLflow": "no operation against an existing canonical tracker; regression trackers are disposable synthetic test state",
+  "new_canonical_science": 0,
+  "new_Carbon_approval": 0,
+  "plan_mutation": false,
+  "refinement": false,
+  "wheel_builds": 0,
+  "global_Cursor_changes": 0,
+  "WI_0441_access": false
+}

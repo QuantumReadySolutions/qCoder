@@ -1,0 +1,50 @@
+{
+  "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/carbon-correction-v5/d148-dev8-carbon-correction.tar.gz": {
+    "bytes": 1404563,
+    "sha256": "11dc63cea755f657a14f1699f41164fce7a2e994df52eb0b2cb94526174e4498"
+  },
+  "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/carbon-correction-v5/d148-dev8-carbon-correction.tar.gz.sha256": {
+    "bytes": 101,
+    "sha256": "764bdf96433cb619406a7b52e987823ed2829a49e4c1c7f5baaa6dda90c93adc"
+  },
+  "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/carbon-correction-v5/d148-dev8-carbon-correction/qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5-py3-none-any.whl": {
+    "bytes": 731491,
+    "sha256": "36818af120efa83b32cd6b1cf9101f06e308974b3a43a92ae16f2a23f49d7016"
+  },
+  "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/carbon-correction-v5/d148-dev8-carbon-correction/qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5.tar.gz": {
+    "bytes": 667943,
+    "sha256": "fdb700b4cb78d580c3739f8837beb80542627bb6a776dd05c0cc691a629f2641"
+  },
+  "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/client-invocation-v1/bundle-receipt.json": {
+    "bytes": 1977,
+    "sha256": "86bb5ead1a672b4ef6c579021bff361f9c48f2f85f8eeadee4a7e16ce181a9d9"
+  },
+  "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/client-invocation-v1/d148-client-invocation-correction.tar.gz": {
+    "bytes": 23756,
+    "sha256": "9dcbd4113ef6f231ea33b761624de06312a92d828b5af505aecb69cd2ad9472f"
+  },
+  "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/client-invocation-v2/bundle-receipt.json": {
+    "bytes": 1980,
+    "sha256": "3a499b493abb06c162dcc96cf1c9b803895e9b609d5ba021559b8c41597d9ef1"
+  },
+  "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/client-invocation-v2/d148-client-invocation-correction-v2.tar.gz": {
+    "bytes": 27945,
+    "sha256": "99c95dce7d4f6642472b3d7d8264428af75013f4c39bacede32610771fceeee0"
+  },
+  "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/client-invocation-v3/bundle-receipt.json": {
+    "bytes": 1980,
+    "sha256": "0cf4d76b1b28c764e45e82f77d0301682a42dffd89cb461d51e34589c84fb312"
+  },
+  "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/client-invocation-v3/d148-client-invocation-correction-v3.tar.gz": {
+    "bytes": 28530,
+    "sha256": "7f204b99df61bea1940e3ce15d4ff105075937ebb7c4257f4b1789845a3f06fe"
+  },
+  "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/packages-v5/qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5-py3-none-any.whl": {
+    "bytes": 731491,
+    "sha256": "36818af120efa83b32cd6b1cf9101f06e308974b3a43a92ae16f2a23f49d7016"
+  },
+  "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/packages-v5/qcoder-0.6.0a24.post0.dev8+iqt.d148.context.v5.tar.gz": {
+    "bytes": 667943,
+    "sha256": "fdb700b4cb78d580c3739f8837beb80542627bb6a776dd05c0cc691a629f2641"
+  }
+}

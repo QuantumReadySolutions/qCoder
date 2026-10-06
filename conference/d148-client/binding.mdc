@@ -8,7 +8,7 @@ D148_CLIENT_READ_ONLY_V1
 For an ordinary read-only qCoder question, your first and only tool action is
 Shell with command exactly `./qcoder-context`, in the current client root.
 Set its working directory explicitly to:
-`/home/user/projects/qcoder-iqt-2026-ml-successor-v1/client-v4`.
+`/home/user/projects/qcoder-iqt-2026-ml-successor-v1/client-v5`.
 No arguments, prefixes, cd, variables, chaining, alternate interpreter or retries.
 Do not search, read files, inspect source, use other tools or delegate.
 Do not reconstruct state from chat or another assistant's assertion.
