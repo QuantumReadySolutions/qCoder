@@ -1,0 +1,14 @@
+{
+  "command": [
+    "/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/.venv/bin/python",
+    "scripts/build_d148_client_bundle.py",
+    "--source",
+    "conference/d148-client",
+    "--destination",
+    "/tmp/d148-v6-cli-build-qm84q973"
+  ],
+  "receipt_matches": true,
+  "archive_byte_identical": true,
+  "sha256": "1e7b58144fe3c28f3d81ad503de4e084eb6524ef974a9c16531ce48f1b5687bf",
+  "stderr": ""
+}

@@ -1,0 +1,65 @@
+{
+  "archive": "d148-client-invocation-resilient-v6.tar.gz",
+  "bytes": 27327,
+  "sha256": "1e7b58144fe3c28f3d81ad503de4e084eb6524ef974a9c16531ce48f1b5687bf",
+  "members": {
+    "CARBON-INSTALL.txt": {
+      "bytes": 9002,
+      "sha256": "72c4e3830f1afcf95d31ee95628bcb2b80586d5b039dcbae66bc5cda7db80c0f"
+    },
+    "SHA256SUMS": {
+      "bytes": 1044,
+      "sha256": "1c0a7522cb74e8909ae77e9d9d96b2e3e8f5bd9b357189839ca31d49a271b59e"
+    },
+    "acceptance-template.json": {
+      "bytes": 3280,
+      "sha256": "c5c6ba207ffa35544c984de9dab63e8952204a1fc399e5503c798f21cbf664bd"
+    },
+    "binding.mdc": {
+      "bytes": 1449,
+      "sha256": "38b2029da5c047b850787b3b4c9c23c297e0d4caf075809acccf207fcaf332a3"
+    },
+    "carbon-context.json": {
+      "bytes": 818,
+      "sha256": "b3e41f95ff268d5a17b873f4786350c58432b39181c66eda1272733334ccf3f2"
+    },
+    "control_fixture.py": {
+      "bytes": 7161,
+      "sha256": "acb0a1da3f47753f9583da172cac6a4d2519791ca3aad7ce9976a863ca75b0a4"
+    },
+    "cursorignore": {
+      "bytes": 153,
+      "sha256": "ca9b2b46038e7e8af774245061b774a1e6f1bf5258d233d12a3d7b41b4673096"
+    },
+    "guard": {
+      "bytes": 846,
+      "sha256": "4bf1fd856a11a47973035b38dbda1a39948375bad1d0921a6622bc768bdc8257"
+    },
+    "hooks.json": {
+      "bytes": 1075,
+      "sha256": "7a432500af5f3c80cf9f46764adbe74c9a454a8035c9cc042e0c45a325a9c47e"
+    },
+    "package.json": {
+      "bytes": 17347,
+      "sha256": "eb112d4e480f429c5232a73b0c85565df5b4c514034ae8f3e4518a69eed24e3d"
+    },
+    "payload.json": {
+      "bytes": 1052,
+      "sha256": "f0106c01e65b657399a577e4dc6da58dd03b45626b16bcf8a2faf61974fdaec7"
+    },
+    "qcoder-context": {
+      "bytes": 491,
+      "sha256": "e7ab5814cc1129c4be4612dcc3049be624a75c951abcb3445c5d7036309b8b59"
+    },
+    "runtime.py": {
+      "bytes": 18066,
+      "sha256": "a3acc807306ec13dcdc32fb9918dc7f3ba0fb3ad357a5a45caa82344c42dbeed"
+    },
+    "setup.py": {
+      "bytes": 17135,
+      "sha256": "51cd53659e063f29a97f02a149cf273083c0485f2647a9d6d3822dc72cac60e3"
+    }
+  },
+  "wheel_included": false,
+  "scientific_state_included": false
+}

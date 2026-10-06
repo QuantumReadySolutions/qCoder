@@ -1,0 +1,113 @@
+QCODER_D148_PACKAGE_STORAGE_COMPATIBILITY_V6
+
+Exact work order: qcoder-internal 6e428dfa6c35941d5aab201e0bc4eac5d759bc4f
+Tree: 141311086785a44d4a07698e360decf7c939d5d5
+Identity: QCODER_D148_PACKAGE_STORAGE_COMPATIBILITY_V6
+Authority: 935af4d9fd3d5cf1e30c45a21757ab4ffb7ffd8d
+Starting qCoder: 9e06d815910f3523978d82ffc1c73b2c26fd6d91
+Tree: 7cfea6fa980a67f0185a0d4b60c1399d55e777ad
+
+The full work order, all seven required V5 source/evidence files and the operative
+D-148 authorization were read completely through connected GitHub before edits.
+The seven starting local Git blobs match the full connected responses. The clean
+dedicated conference checkout and remote branch matched the exact starting head.
+No applicable AGENTS.md was found in this checkout or its ancestors.
+
+CLASSIFICATION OF ALL regular()/st_nlink/locate_file USES
+
+Installed distribution: exactly two production callers previously used regular()
+for installed package payload: runtime.verify(package=True) and setup.environment().
+Both now call verify_installed_payload(distribution, expected) in runtime.py.
+This enforces exact VERSION and exactly 157 manifest entries for both callers.
+Each entry uses installed_package_bytes, the same production reader exercised by
+the explicit storage tests and fresh installed proofs. No other installed-package
+single-link assumption was found. Full occurrence list: storage-boundary-occurrences.txt.
+
+Installed reader: canonical relative qcoder/ names; reject empty, dot, traversal,
+absolute, backslash and NUL names and invalid SHA-256 values. Resolve the exact
+distribution.locate_file('') root and candidate; require candidate containment
+within that resolved root. lstat rejects leaf symlink and every non-regular type.
+Regular hardlinks with nlink >= 1 are accepted. Harmless ancestor symlinks are
+accepted only inside the resolved distribution root. O_NOFOLLOW/O_NONBLOCK plus
+fstat check the same regular inode before its bytes are read and hashed exactly.
+No basename, suffix, PATH, glob or alternative package discovery is used.
+
+Package reasons are finite, included in runtime's bounded diagnostic allowlist:
+  dev8_version_mismatch
+  installed_dev8_payload_manifest
+  installed_dev8_payload_missing_or_type
+  installed_dev8_payload_escape
+  installed_dev8_payload_mismatch
+They reach doctor, context and safe diagnosis without exposing package paths.
+An unreadable/unresolvable package file becomes missing_or_type, never a raw OS
+exception string or binding_mismatch. Managed manifest tampering still fails its
+own strict managed-file integrity boundary before package verification.
+
+Extracted task-owned bundle: regular() and hashes() retain nlink == 1, regular
+leaf, and resolved == lexical absolute semantics for payload.json, SHA256SUMS and
+every payload member. setup.check_payload enforces exact member/hash membership.
+The builder emits 14 regular members; clean extraction verifies all 13 checksum
+entries, which also bind payload.json. No installed distribution file enters this
+class. No wheel, dependency or scientific state is included in V6.
+
+Managed client-v5: regular()/hashes()/load() stay strict for runtime, guard,
+launcher, hooks, rule, ignore, copied package.json and installed receipt. Install
+and remove verify those owned bytes; unchanged cleanup checks retain the same
+invariant. The new tests explicitly hardlink every MANAGED file and the installed
+receipt and require refusal. Existing symlink/root/collision/tampering negatives
+are retained. regular() itself is byte-for-byte unchanged from the starting head.
+
+Audit/session/locator: audit's open/fstat nlink == 1, session load/invalidation's
+regular(), diagnose's open/fstat nlink == 1, and doctor's locator open/fstat
+nlink == 1 all remain unchanged. A hardlinked audit is explicitly refused by
+regular() in the new tests. These mutable managed paths retain their trust model.
+
+Interpreter identity: intentional selected venv symlink handling remains separate
+from managed-file and package payload rules. Exact lexical interpreter, resolved
+target and executable bytes remain checked. No interpreter or root discovery was
+added. Generator/test fixture reads and archive construction reads are task-owned
+scaffold operations; none supplies an installed-package single-link gate.
+
+V5 RESILIENCE RETAINED
+
+Dynamic per-conversation/generation Cursor-version binding, no survey/instruction
+inventory, bounded tolerant attachments with exact three rule representations,
+fresh absent client-v5, strict exact ./qcoder-context boundary, doctor/diagnose,
+full native fault matrix and reduced Carbon ceremony remain intact. client-v4
+and previous fixtures/archives/evidence are untouched. The bundle successor is V6;
+the real successor directory, binding schemas and unchanged installed dev8 remain
+client-v5/V5. This avoids creating a new wheel or changing the backend contract.
+
+PROOF / MATERIAL INITIAL FAILURES
+
+The initial new-test run produced 51 pass / 3 fail. One was the sandbox refusing
+creation of a disposable Unix socket; the other two were tests mutating a mock
+distribution that the fixture recreated on each lookup. The tests now retain
+that same instance. Production code did not change for these failures. The final
+54 storage tests passed with socket creation permitted. Initial output is retained
+in initial-package-storage-tests.txt; final output is in package-storage-tests.txt.
+
+The two fresh dev8 installs use the unchanged existing wheel, no index/dependency
+installation, and task-owned /tmp roots. One creates an actual second hardlink to
+the installed qcoder/__init__.py before the production verifier or doctor runs.
+Its inode's observed nlink is 2 and exact hash equals the 157-entry manifest.
+Both prepared and completed integrations exercise runtime.context(). Completed
+integrations exercise the generated real launcher, install, doctor-real, doctor,
+the actual standalone setup.py doctor subprocess and safe remove. Every retained
+scientific/tracker byte and the historical client-v4 sentinel remains identical.
+Only read-back digest/time are correctly fresh; scientific identities/content
+remain identical. Disposable regression training/tracker state is synthetic;
+no existing MLflow/canonical science/approval/plan/refinement is mutated.
+
+All preserved tracked files are compared by SHA-256 against the starting map.
+src/qcoder, wheels, packaging/dependencies, prior v1-v5 archives/evidence and
+canonical conference state are unchanged. No global Cursor settings or provider
+calls, no WI-0441 state/resources/worktree execution, no release or merge.
+
+NEXT TARGET ACTION
+
+Transfer V6 once, verify archive and members, run ONE setup.py doctor command.
+D148_CARBON_READY_FOR_CURSOR admits the already-defined actual Cursor synthetic
+route, followed by real client-v5 E01/E02/E13. No operator survey, instruction
+inventory or manual seven-fixture replay is introduced. No Carbon access or actual
+IDE acceptance is claimed. Target routing/latency evidence remains pending.

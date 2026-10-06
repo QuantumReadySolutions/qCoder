@@ -1,0 +1,106 @@
+D148_PACKAGE_STORAGE_COMPATIBILITY_READY__TARGET_ACCEPTANCE_PENDING
+
+Identity: QCODER_D148_PACKAGE_STORAGE_COMPATIBILITY_V6
+Repository: QuantumReadySolutions/qCoder
+Branch: conference/iqt-2026-ml-research-successor-v1
+Precision: /home/rob/projects/qcoder-iqt-2026-ml-successor-v1
+Exact starting head / direct parent: 9e06d815910f3523978d82ffc1c73b2c26fd6d91
+Starting tree: 7cfea6fa980a67f0185a0d4b60c1399d55e777ad
+Controlling qcoder-internal work order: 6e428dfa6c35941d5aab201e0bc4eac5d759bc4f
+Tree: 141311086785a44d4a07698e360decf7c939d5d5
+Blob: 729da6eabef78feae947c0e8ad264a86fa093785
+Existing D-148 authority: 935af4d9fd3d5cf1e30c45a21757ab4ffb7ffd8d
+The final handoff supplies the exact committed/pushed/remotely verified head,
+tree and parent. This committed file makes no circular self-identity claim.
+No Carbon access or actual IDE acceptance is claimed.
+
+FIX
+One shared verify_installed_payload() now gates setup.environment() and
+runtime.verify(package=True). Exact unchanged dev8 version, exactly 157 manifest
+entries and every exact pinned SHA-256 remain required. The production reader
+allows regular hardlinked package files with st_nlink >= 1 and harmless ancestor
+symlinks inside the resolved distribution root. It rejects leaf symlink, every
+special/non-regular type, missing/unreadable file, root escape, traversal/absolute/
+malformed manifest name and hash mismatch. Bounded package-specific reasons reach
+doctor/runtime/diagnose. regular() and every managed single-link check stay intact.
+Complete adjacent-use classification: storage-boundary-audit.txt and occurrences.
+
+PROOF
+54 explicit production-helper/storage tests passed in 4.00s.
+Full client suite: 312 passed in 113.54s (0:01:53).
+Backend context: 33 passed in 133.52s (0:02:13).
+Fresh installed-dev8 prepared/completed integrations: 2 passed in 69.34s (0:01:09).
+Separate fresh hardlinked-dev8 integrations: 2 passed in 69.22s (0:01:09).
+Actual generated guards: full suite, extracted preflight, standalone doctors and
+native engine proof passed. Native schema accepted; 42/42 faults denied; 7 positive
+response controls; 7 assembled fixtures; 9 evolved version/attachment controls;
+omitted-failClosed negative control detected; empty stderr; zero providers/science.
+Fresh client-v5 install/doctor-real/standalone doctor/remove lifecycle passed in
+both installed proof environments. client-v4 and all scientific/tracker bytes are
+preserved. The actual standalone doctor returned D148_CARBON_READY_FOR_CURSOR in
+each synthetic completed environment. Every scientific projection field/identity
+is identical; only read-back digest/time are legitimately fresh.
+Deterministic two builds plus third CLI build: archives and receipts byte-identical.
+Clean extraction: 14 regular members, 13 SHA256SUMS entries passed; actual lexical
+../.venv interpreter/generated guard preflight passed; no active attachment receipt.
+git diff --check passed. Exact commands/results: test-results.json and raw logs.
+Initial 51 pass / 3 test-fixture/sandbox failures are retained and explained in
+storage-boundary-audit.txt. Final proofs pass without waiving any negative case.
+
+HARDLINK-SPECIFIC PROOF
+Fresh root: /tmp/d148-client-v6-hardlink-proof-8wqqqh8k
+Installed file:
+/tmp/d148-client-v6-hardlink-proof-8wqqqh8k/.venv/lib/python3.12/site-packages/qcoder/__init__.py
+Actual os.link created before production verification; asserted nlink >= 2.
+Observed nlink: 2; leaf symlink: false.
+SHA-256: b7911fde04ee9559c5b742a87d37bd584d7198ac660e4f7e3c72ff50a5971f23
+Version: 0.6.0a24.post0.dev8+iqt.d148.context.v5
+157/157 exact payload hashes verified by the shared production helper.
+Runtime/context, real generated launcher, install, doctor-real, doctor, actual
+setup.py doctor subprocess and remove all passed with that installed inode.
+Evidence: hardlink-runtime-identity.json, hardlink-successor-doctor-lifecycle.json,
+hardlink-context-integration.txt and hardlink-proof.txt.
+
+BUNDLE
+/home/rob/projects/qcoder-iqt-2026-ml-successor-v1/artifacts/d148/client-invocation-v6/d148-client-invocation-resilient-v6.tar.gz
+Bytes: 27327
+SHA-256: 1e7b58144fe3c28f3d81ad503de4e084eb6524ef974a9c16531ce48f1b5687bf
+Members: 14 regular files. Exact member bytes/hashes/names: bundle-members.txt;
+structured receipt: bundle-receipt.json. The installed client directory remains
+client-v5 and the unchanged wheel version remains dev8+iqt.d148.context.v5.
+This is a distinct client-only V6 archive, containing no wheel/dependencies/science.
+
+PRESERVATION
+746 starting tracked files checked; 7 intended existing files changed; all 739
+others byte-identical, including src/qcoder, prior artifacts/evidence, packaging
+and canonical conference state. No prior v1-v5 archive/evidence changed.
+Existing MLflow state, global Cursor settings and WI-0441 are untouched.
+Existing dev8 wheel: 731491 bytes; SHA-256
+36818af120efa83b32cd6b1cf9101f06e308974b3a43a92ae16f2a23f49d7016.
+No new wheel, canonical science, real approval, plan mutation or refinement.
+Regression numeric/SQLite fixtures are disposable synthetic state in fresh /tmp
+roots. No release, merge, new provider call or external-demo approval.
+
+SHORTEST USB TRANSFER (USB D:)
+Precision PowerShell:
+  $b = 'd148-client-invocation-resilient-v6.tar.gz'
+  Copy-Item "\\wsl.localhost\Ubuntu-22.04\home\rob\projects\qcoder-iqt-2026-ml-successor-v1\artifacts\d148\client-invocation-v6\$b" "D:\$b"
+Move USB to Carbon. Carbon PowerShell:
+  $b = 'd148-client-invocation-resilient-v6.tar.gz'
+  Copy-Item "D:\$b" "\\wsl.localhost\Ubuntu-26.04\home\user\projects\qcoder-iqt-2026-ml-successor-v1\$b"
+  wsl -d Ubuntu-26.04
+Carbon WSL bash:
+  cd /home/user/projects/qcoder-iqt-2026-ml-successor-v1
+  printf '%s  %s\n' '1e7b58144fe3c28f3d81ad503de4e084eb6524ef974a9c16531ce48f1b5687bf' 'd148-client-invocation-resilient-v6.tar.gz' | sha256sum -c - || exit
+  test ! -e d148-client-invocation-resilient-v6 || exit
+  tar -xzf d148-client-invocation-resilient-v6.tar.gz || exit
+  cd d148-client-invocation-resilient-v6
+  sha256sum -c SHA256SUMS || exit
+ONE Carbon doctor command:
+  ../.venv/bin/python -I -B setup.py doctor
+Require D148_CARBON_READY_FOR_CURSOR, then proceed directly to the already-defined
+actual Cursor synthetic route and real client-v5 E01/E02/E13 in CARBON-INSTALL.txt.
+No survey, manual fault-fixture replay or global Cursor changes are added.
+If refused, return the bounded doctor result. Target acceptance remains pending.
+
+Full changed paths: changed-paths.txt. Exact source proof bytes: source-files.json.

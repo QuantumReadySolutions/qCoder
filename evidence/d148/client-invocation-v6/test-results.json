@@ -1,0 +1,77 @@
+{
+  "identity": "QCODER_D148_PACKAGE_STORAGE_COMPATIBILITY_V6",
+  "scope": "Precision_contained_client_only_proof__Carbon_acceptance_pending",
+  "tests": [
+    {
+      "command": ".venv/bin/python -m pytest -q --tb=short tests/client_invocation/test_package_storage_v6.py",
+      "result": "54 passed in 4.00s",
+      "exit_code": 0,
+      "evidence": "package-storage-tests.txt"
+    },
+    {
+      "command": ".venv/bin/python -m pytest -q --tb=short tests/client_invocation",
+      "result": "312 passed in 113.54s (0:01:53)",
+      "exit_code": 0,
+      "evidence": "client-tests.txt"
+    },
+    {
+      "command": ".venv/bin/python -m pytest -q tests/ml_research/test_client_context.py",
+      "result": "33 passed in 133.52s (0:02:13)",
+      "exit_code": 0,
+      "evidence": "backend-context-tests.txt"
+    },
+    {
+      "command": "D148_CLIENT_SOURCE=/tmp/d148-client-v6-bundle-proof-etod9tnu/d148-client-invocation-resilient-v6 .venv/bin/python -B tests/client_invocation/prove_installed_dev8.py",
+      "result": "2 passed in 69.34s (0:01:09)",
+      "exit_code": 0,
+      "evidence": "installed-context-integration.txt"
+    },
+    {
+      "command": "D148_CLIENT_SOURCE=/tmp/d148-client-v6-bundle-proof-etod9tnu/d148-client-invocation-resilient-v6 .venv/bin/python -B tests/client_invocation/prove_installed_dev8.py --hardlink",
+      "result": "2 passed in 69.22s (0:01:09)",
+      "exit_code": 0,
+      "evidence": "hardlink-context-integration.txt"
+    },
+    {
+      "command": "node /home/rob/projects/qcoder-iqt-2026-ml-successor-v1/tests/client_invocation/prove_native_hooks.cjs /home/rob/.local/share/cursor-agent/versions/2026.08.11-e8db854 hooks.json ../.venv/bin/python control_fixture.py",
+      "cwd": "/tmp/d148-client-v6-bundle-proof-etod9tnu/d148-client-invocation-resilient-v6",
+      "result": "42/42 native faults denied; 7 allow controls; 7 assembled fixtures; 9 evolved controls; omitted-failClosed negative control detected; empty stderr; zero providers/science",
+      "exit_code": 0,
+      "evidence": "native-hook-engine.json"
+    },
+    {
+      "command": ".venv/bin/python -B tests/client_invocation/prove_bundle.py",
+      "result": "two byte-identical builds; 14 regular members; 13 checksum entries passed; clean extraction; actual generated guard preflight using ../.venv/bin/python",
+      "exit_code": 0,
+      "evidence": "bundle-extracted-verification.json"
+    },
+    {
+      "result": "third CLI build archive and receipt byte-identical",
+      "exit_code": 0,
+      "evidence": "deterministic-cli-build.json"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed; no diagnostics",
+      "exit_code": 0
+    }
+  ],
+  "hardlink_proof": {
+    "actual_installed_init_nlink": 2,
+    "init_sha256": "b7911fde04ee9559c5b742a87d37bd584d7198ac660e4f7e3c72ff50a5971f23",
+    "version": "0.6.0a24.post0.dev8+iqt.d148.context.v5",
+    "payload_entries": 157,
+    "same_production_verifier": true,
+    "runtime_context": true,
+    "doctor_status": "D148_CARBON_READY_FOR_CURSOR",
+    "actual_standalone_doctor_subprocess": true,
+    "client_v5_install_doctor_remove": true
+  },
+  "new_canonical_science": 0,
+  "new_wheel": false,
+  "prior_v1_v5_artifacts_evidence_unchanged": true,
+  "src_qcoder_unchanged": true,
+  "existing_mlflow_unchanged": true,
+  "global_cursor_changes": 0,
+  "wi0441_state_accessed": false
+}

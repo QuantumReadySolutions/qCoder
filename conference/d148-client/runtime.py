@@ -31,6 +31,8 @@ REASONS = frozenset(('binding_mismatch', 'wrong_root', 'workspace_unavailable',
     'event_root', 'event_version', 'event_ids', 'attachment_shape',
     'attachment_identifier', 'attachment_multiple', 'session_missing',
     'session_mismatch', 'dev8_version_mismatch', 'installed_dev8_payload_mismatch',
+    'installed_dev8_payload_missing_or_type', 'installed_dev8_payload_escape',
+    'installed_dev8_payload_manifest',
     'deadline', 'input_size', 'invalid_input', 'unavailable', 'action_denied',
     'context_invalid', 'context_unavailable', 'context_digest'))
 STAGES = frozenset(('input', 'disk', 'common', 'attachment', 'session', 'action', 'context'))
@@ -59,6 +61,50 @@ def regular(path):
     require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1)
     require(p.resolve() == p.absolute())
     return p.read_bytes()
+
+
+def installed_package_bytes(distribution, name, expected_sha):
+    # Distribution content identity permits hardlinks and harmless ancestor
+    # symlinks. Managed client/bundle identity still uses strict regular().
+    manifest_reason = 'installed_dev8_payload_manifest'
+    require(isinstance(name, str) and '\\' not in name and '\x00' not in name,
+            manifest_reason)
+    parts = name.split('/')
+    require(len(parts) >= 2 and parts[0] == 'qcoder' and
+            all(part not in ('', '.', '..') for part in parts) and
+            not Path(name).is_absolute(), manifest_reason)
+    require(isinstance(expected_sha, str) and
+            re.fullmatch('[a-f0-9]{64}', expected_sha) is not None, manifest_reason)
+    type_reason = 'installed_dev8_payload_missing_or_type'
+    try:
+        root = Path(distribution.locate_file('')).resolve(strict=True)
+        require(root.is_dir(), type_reason)
+        candidate = Path(distribution.locate_file(name))
+        info = candidate.lstat()
+        require(stat.S_ISREG(info.st_mode) and info.st_nlink >= 1, type_reason)
+        resolved = candidate.resolve(strict=True)
+        require(resolved.is_relative_to(root), 'installed_dev8_payload_escape')
+        # Never follow a leaf replacement or block on a special file. Hash the
+        # same regular inode that was checked, rather than reopening by name.
+        fd = os.open(resolved, os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+        with os.fdopen(fd, 'rb') as stream:
+            opened = os.fstat(stream.fileno())
+            require(stat.S_ISREG(opened.st_mode) and opened.st_nlink >= 1 and
+                    (opened.st_dev, opened.st_ino) == (info.st_dev, info.st_ino), type_reason)
+            data = stream.read()
+    except (OSError, RuntimeError, ValueError):
+        raise Refused(type_reason) from None
+    require(digest(data) == expected_sha, 'installed_dev8_payload_mismatch')
+    return data
+
+
+def verify_installed_payload(distribution, expected):
+    # Both setup doctor and the real context launcher use this exact verifier.
+    require(distribution.version == VERSION, 'dev8_version_mismatch')
+    require(isinstance(expected, dict) and len(expected) == 157,
+            'installed_dev8_payload_manifest')
+    for name, sha in expected.items():
+        installed_package_bytes(distribution, name, sha)
 
 
 def host_id():
@@ -109,10 +155,7 @@ def verify(root=None, package=True):
     if package:
         expected = load(root/'.d148/package.json')
         distribution = importlib.metadata.distribution('qcoder')
-        require(distribution.version == VERSION, 'dev8_version_mismatch')
-        for name, sha in expected.items():
-            require(name.startswith('qcoder/') and '..' not in Path(name).parts)
-            require(digest(regular(Path(distribution.locate_file(name)))) == sha, 'installed_dev8_payload_mismatch')
+        verify_installed_payload(distribution, expected)
     return receipt
 
 

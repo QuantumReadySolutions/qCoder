@@ -1,0 +1,47 @@
+tests/ml_research/test_client_invocation_installed.py:32:    distribution = r.importlib.metadata.distribution('qcoder')
+tests/ml_research/test_client_invocation_installed.py:33:    init = Path(distribution.locate_file('qcoder/__init__.py'))
+tests/ml_research/test_client_invocation_installed.py:36:    assert init.lstat().st_nlink >= minimum_links
+tests/ml_research/test_client_invocation_installed.py:148:                'installed_init_link_count': init.lstat().st_nlink,
+tests/client_invocation/test_client_invocation.py:46:    monkeypatch.setattr(r.importlib.metadata, 'distribution', lambda _: SimpleNamespace(version=r.VERSION, locate_file=lambda name: package.parent/name))
+tests/client_invocation/test_client_invocation.py:100:        p = Path(r.importlib.metadata.distribution('qcoder').locate_file('qcoder/__init__.py'))
+tests/client_invocation/prove_installed_dev8.py:30:    assert (site/'qcoder/__init__.py').lstat().st_nlink >= 2
+tests/client_invocation/prove_installed_dev8.py:37:d = importlib.metadata.distribution('qcoder')
+tests/client_invocation/prove_installed_dev8.py:44:init = Path(d.locate_file('qcoder/__init__.py'))
+tests/client_invocation/prove_installed_dev8.py:45:assert init.lstat().st_nlink >= (2 if sys.argv[2] == 'hardlink' else 1)
+tests/client_invocation/prove_installed_dev8.py:48:    'init_link_count':init.lstat().st_nlink, 'init_sha256':r.digest(init.read_bytes()),
+tests/client_invocation/test_package_storage_v6.py:23:    distribution = SimpleNamespace(version=r.VERSION, locate_file=lambda name: root/name)
+tests/client_invocation/test_package_storage_v6.py:29:    assert candidate.stat().st_nlink == 1
+tests/client_invocation/test_package_storage_v6.py:38:    assert candidate.lstat().st_nlink == links
+tests/client_invocation/test_package_storage_v6.py:41:        r.regular(candidate)
+tests/client_invocation/test_package_storage_v6.py:75:    distribution.locate_file = lambda name: root_alias/name
+tests/client_invocation/test_package_storage_v6.py:97:        distribution.locate_file = lambda name: root if name == '' else outside/'__init__.py'
+tests/client_invocation/test_package_storage_v6.py:139:    distribution = r.importlib.metadata.distribution('qcoder')
+tests/client_invocation/test_package_storage_v6.py:140:    candidate = Path(distribution.locate_file(NAME))
+tests/client_invocation/test_package_storage_v6.py:142:    assert candidate.lstat().st_nlink == 2
+tests/client_invocation/test_package_storage_v6.py:155:    distribution = r.importlib.metadata.distribution('qcoder')
+tests/client_invocation/test_package_storage_v6.py:157:    candidate = Path(distribution.locate_file(NAME))
+tests/client_invocation/test_package_storage_v6.py:171:            original = distribution.locate_file
+tests/client_invocation/test_package_storage_v6.py:172:            distribution.locate_file = lambda name: outside if name == NAME else original(name)
+tests/client_invocation/test_package_storage_v6.py:207:    assert candidate.lstat().st_nlink == 2
+tests/client_invocation/test_package_storage_v6.py:209:        r.regular(candidate)
+conference/d148-client/setup.py:38:    sums = r.regular(HERE/'SHA256SUMS').decode('ascii').splitlines()
+conference/d148-client/setup.py:39:    expected_sums = {**manifest, 'payload.json': r.digest(r.regular(HERE/'payload.json'))}
+conference/d148-client/setup.py:50:    distribution = r.importlib.metadata.distribution('qcoder')
+conference/d148-client/setup.py:73:               '.cursor/hooks.json': r.regular(HERE/'hooks.json'),
+conference/d148-client/setup.py:75:               '.cursorignore': r.regular(HERE/'cursorignore'),
+conference/d148-client/setup.py:78:               '.d148/package.json': r.regular(HERE/'package.json')}
+conference/d148-client/setup.py:114:            if os.path.lexists(p) and r.digest(r.regular(p)) == sha:
+conference/d148-client/setup.py:230:        r.require(stat.S_ISREG(os.fstat(stream.fileno()).st_mode) and os.fstat(stream.fileno()).st_nlink == 1, 'doctor_locator_conflict')
+conference/d148-client/setup.py:285:            r.require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1, 'diagnose_audit_invalid')
+conference/d148-client/runtime.py:57:def regular(path):
+conference/d148-client/runtime.py:61:    require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1)
+conference/d148-client/runtime.py:68:    # symlinks. Managed client/bundle identity still uses strict regular().
+conference/d148-client/runtime.py:80:        root = Path(distribution.locate_file('')).resolve(strict=True)
+conference/d148-client/runtime.py:82:        candidate = Path(distribution.locate_file(name))
+conference/d148-client/runtime.py:84:        require(stat.S_ISREG(info.st_mode) and info.st_nlink >= 1, type_reason)
+conference/d148-client/runtime.py:92:            require(stat.S_ISREG(opened.st_mode) and opened.st_nlink >= 1 and
+conference/d148-client/runtime.py:125:    return parse(regular(path))
+conference/d148-client/runtime.py:132:            actual = digest(regular(root / name))
+conference/d148-client/runtime.py:157:        distribution = importlib.metadata.distribution('qcoder')
+conference/d148-client/runtime.py:169:        require(stat.S_ISREG(os.fstat(fd).st_mode) and os.fstat(fd).st_nlink == 1)
+conference/d148-client/runtime.py:251:            regular(path)

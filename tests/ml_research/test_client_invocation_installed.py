@@ -29,6 +29,13 @@ def test_external_runtime_real_installed_context(prepared,monkeypatch,capsys,tmp
     spec=importlib.util.spec_from_file_location('external_runtime',CLIENT/'runtime.py')
     r=importlib.util.module_from_spec(spec)
     spec.loader.exec_module(r)
+    distribution = r.importlib.metadata.distribution('qcoder')
+    init = Path(distribution.locate_file('qcoder/__init__.py'))
+    minimum_links = int(os.environ.get('D148_EXPECT_INIT_NLINK', '1'))
+    # Observe the actual installed inode before every doctor/runtime check.
+    assert init.lstat().st_nlink >= minimum_links
+    assert not init.is_symlink()
+    r.verify_installed_payload(distribution, json.loads((CLIENT/'package.json').read_text()))
     root=tmp_path/'dedicated-client'
     (root/'.cursor/rules').mkdir(parents=True)
     (root/'.d148').mkdir()
@@ -138,6 +145,13 @@ def test_external_runtime_real_installed_context(prepared,monkeypatch,capsys,tmp
         assert snapshot(workspace) == before
         if os.environ.get('D148_PROOF_EVIDENCE'):
             proof = {'scope': 'fresh_installed_dev8_synthetic_completed_context_not_Carbon',
+                'installed_init_link_count': init.lstat().st_nlink,
+                'installed_init_minimum_links_asserted': minimum_links,
+                'installed_init_sha256': r.digest(init.read_bytes()),
+                'installed_payload_entries_verified': 157,
+                'runtime_context_verified': True, 'client_v5_install_verified': True,
+                'doctor_real_verified': True, 'one_command_doctor_verified': True,
+                'remove_verified': False,
                 'doctor_command': command, 'doctor_result': command_value,
                 'direct_successor_scientific_projection_identical': True,
                 'volatile_readback_fields': ['digest', 'readback_digest', 'readback_verified_at'],
@@ -150,3 +164,6 @@ def test_external_runtime_real_installed_context(prepared,monkeypatch,capsys,tmp
         assert (live.ROOT/'unrelated.txt').read_text() == 'keep this unrelated material'
         assert snapshot(old) == preserved_old
         assert snapshot(workspace) == before
+        if os.environ.get('D148_PROOF_EVIDENCE'):
+            proof['remove_verified'] = True
+            Path(os.environ['D148_PROOF_EVIDENCE']).write_text(json.dumps(proof, indent=2)+'\n')

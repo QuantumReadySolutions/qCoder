@@ -1,4 +1,4 @@
-D148 resilient client closeout V5 — target acceptance pending
+D148 installed-package storage compatibility V6 — target acceptance pending
 
 The unchanged installed dev8 is required. This client projects the SAME completed
 carbon-canonical-v4. It creates no scientific job, approval, plan, tracker write or
@@ -7,22 +7,22 @@ Tactical_42/WI-0441 has precedence if a live resource conflict returns.
 
 TRANSFER
 Precision PowerShell (USB assumed D:; adapt only the drive letter):
-  $bundle = 'd148-client-invocation-resilient-v5.tar.gz'
-  Copy-Item -LiteralPath "\\wsl.localhost\Ubuntu-22.04\home\rob\projects\qcoder-iqt-2026-ml-successor-v1\artifacts\d148\client-invocation-v5\$bundle" -Destination "D:\$bundle"
+  $bundle = 'd148-client-invocation-resilient-v6.tar.gz'
+  Copy-Item -LiteralPath "\\wsl.localhost\Ubuntu-22.04\home\rob\projects\qcoder-iqt-2026-ml-successor-v1\artifacts\d148\client-invocation-v6\$bundle" -Destination "D:\$bundle"
   Get-FileHash -Algorithm SHA256 -LiteralPath "D:\$bundle"
 Require the exact archive SHA-256 in the final handoff. Move USB to Carbon.
 Carbon PowerShell:
-  $bundle = 'd148-client-invocation-resilient-v5.tar.gz'
+  $bundle = 'd148-client-invocation-resilient-v6.tar.gz'
   Get-FileHash -Algorithm SHA256 -LiteralPath "D:\$bundle"
   Copy-Item -LiteralPath "D:\$bundle" -Destination "\\wsl.localhost\Ubuntu-26.04\home\user\projects\qcoder-iqt-2026-ml-successor-v1\$bundle"
   wsl -d Ubuntu-26.04
 Carbon WSL bash, stop on any failed command:
   cd /home/user/projects/qcoder-iqt-2026-ml-successor-v1
-  sha256sum d148-client-invocation-resilient-v5.tar.gz
+  sha256sum d148-client-invocation-resilient-v6.tar.gz
 Require the exact handoff hash before extraction. Preserve every prior extraction.
-  test ! -e d148-client-invocation-resilient-v5 || exit
-  tar -xzf d148-client-invocation-resilient-v5.tar.gz || exit
-  cd d148-client-invocation-resilient-v5
+  test ! -e d148-client-invocation-resilient-v6 || exit
+  tar -xzf d148-client-invocation-resilient-v6.tar.gz || exit
+  cd d148-client-invocation-resilient-v6
   sha256sum -c SHA256SUMS || exit
   D148_BASE=/home/user/projects/qcoder-iqt-2026-ml-successor-v1
   D148_PY="$D148_BASE/.venv/bin/python"
@@ -33,6 +33,8 @@ ONE DOCTOR COMMAND BEFORE CURSOR
 Require status D148_CARBON_READY_FOR_CURSOR. A refusal includes one bounded
 stage/reason: stop and return that output. No manual fixture repair or science.
 This verifies bundle/payload, exact lexical venv and 157 dev8 file hashes; runs
+the shared installed-payload verifier (regular hardlinks allowed, exact version/
+hashes required, leaf symlinks/special/missing/escaping files denied); runs
 actual generated shell guards on three dynamic versions and all three exact rule
 representations with extra metadata/unrelated attachments, exact action allows,
 alternate/tool denies; and checks the completed read-only real context's digest,

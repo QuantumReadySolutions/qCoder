@@ -48,12 +48,8 @@ def environment():
     r.require(r.BASE.is_dir() and r.BASE.resolve() == r.BASE, 'wrong_root')
     r.require(r.WORKSPACE.is_dir() and r.WORKSPACE.resolve() == r.WORKSPACE, 'workspace_unavailable')
     distribution = r.importlib.metadata.distribution('qcoder')
-    r.require(distribution.version == r.VERSION, 'dev8_version_mismatch')
     expected = r.load(HERE/'package.json')
-    r.require(isinstance(expected, dict) and len(expected) == 157, 'package_identity')
-    for name, sha in expected.items():
-        r.require(name.startswith('qcoder/') and '..' not in Path(name).parts, 'package_identity')
-        r.require(r.digest(r.regular(Path(distribution.locate_file(name)))) == sha, 'installed_dev8_payload_mismatch')
+    r.verify_installed_payload(distribution, expected)
 
 
 def preflight():

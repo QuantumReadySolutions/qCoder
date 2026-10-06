@@ -1,0 +1,22 @@
+{
+  "starting_tracked_files": 746,
+  "changed_existing_paths": [
+    "conference/d148-client/CARBON-INSTALL.txt",
+    "conference/d148-client/runtime.py",
+    "conference/d148-client/setup.py",
+    "scripts/build_d148_client_bundle.py",
+    "tests/client_invocation/prove_bundle.py",
+    "tests/client_invocation/prove_installed_dev8.py",
+    "tests/ml_research/test_client_invocation_installed.py"
+  ],
+  "preserved_starting_files": 739,
+  "all_other_starting_bytes_identical": true,
+  "regular_function_identical": true,
+  "prior_artifacts_and_evidence_unchanged": true,
+  "src_qcoder_unchanged": true,
+  "existing_mlflow_unchanged": true,
+  "new_wheel": false,
+  "new_canonical_science": 0,
+  "global_cursor_changes": 0,
+  "wi0441_state_accessed": false
+}

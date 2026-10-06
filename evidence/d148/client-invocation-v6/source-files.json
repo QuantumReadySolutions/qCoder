@@ -1,0 +1,34 @@
+{
+  "conference/d148-client/CARBON-INSTALL.txt": {
+    "bytes": 9002,
+    "sha256": "72c4e3830f1afcf95d31ee95628bcb2b80586d5b039dcbae66bc5cda7db80c0f"
+  },
+  "conference/d148-client/runtime.py": {
+    "bytes": 18066,
+    "sha256": "a3acc807306ec13dcdc32fb9918dc7f3ba0fb3ad357a5a45caa82344c42dbeed"
+  },
+  "conference/d148-client/setup.py": {
+    "bytes": 17135,
+    "sha256": "51cd53659e063f29a97f02a149cf273083c0485f2647a9d6d3822dc72cac60e3"
+  },
+  "scripts/build_d148_client_bundle.py": {
+    "bytes": 2684,
+    "sha256": "99bb227cc6e098e7b1761501e30a0017564caaf32db7ef05642565a2b67119e7"
+  },
+  "tests/client_invocation/prove_bundle.py": {
+    "bytes": 2697,
+    "sha256": "f19a6c045947390d5499e59eac990c7681a88eb6cd07741275dc1c3cf0e35360"
+  },
+  "tests/client_invocation/prove_installed_dev8.py": {
+    "bytes": 3737,
+    "sha256": "ff31c0580536ca0be4ae779030cc870ad6053289947405e88437374297e3031a"
+  },
+  "tests/client_invocation/test_package_storage_v6.py": {
+    "bytes": 8660,
+    "sha256": "6ecb409e0828995e381700c80bd3e3076ee84c5d788c29f385a9a3834add4165"
+  },
+  "tests/ml_research/test_client_invocation_installed.py": {
+    "bytes": 10225,
+    "sha256": "10abe22f3646bedbf58d27cc0d05e94ec61eb29120505d28e06ad1b9ff926fb5"
+  }
+}
